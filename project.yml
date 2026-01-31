@@ -1,0 +1,65 @@
+name: PeerDrop
+options:
+  bundleIdPrefix: com.peerdrop
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+packages:
+  WebRTC:
+    url: https://github.com/stasel/WebRTC
+    exactVersion: 125.0.0
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+
+targets:
+  PeerDrop:
+    type: application
+    platform: iOS
+    sources:
+      - PeerDrop
+    dependencies:
+      - package: WebRTC
+    settings:
+      base:
+        INFOPLIST_FILE: PeerDrop/App/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.app
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+    info:
+      path: PeerDrop/App/Info.plist
+      properties:
+        CFBundleDisplayName: PeerDrop
+        UILaunchScreen: {}
+        NSLocalNetworkUsageDescription: "PeerDrop uses the local network to discover and connect to nearby devices for file transfer and voice calls."
+        NSBonjourServices:
+          - "_peerdrop._tcp"
+        NSMicrophoneUsageDescription: "PeerDrop needs microphone access for voice calls."
+
+  PeerDropTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - PeerDropTests
+    dependencies:
+      - target: PeerDrop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+  PeerDropUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - PeerDropUITests
+    dependencies:
+      - target: PeerDrop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
