@@ -54,6 +54,23 @@ struct DiscoveryView: View {
                 } header: {
                     Text("Tailscale / Manual")
                 }
+
+                if let error = connectionManager.certificateManager.setupError {
+                    Section {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Security Degraded")
+                                    .font(.subheadline.bold())
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "exclamationmark.shield.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
             }
             .animation(.easeInOut(duration: 0.25), value: connectionManager.discoveredPeers)
             .refreshable {

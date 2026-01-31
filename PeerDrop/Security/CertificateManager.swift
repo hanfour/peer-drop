@@ -9,7 +9,11 @@ final class CertificateManager {
     private(set) var identity: SecIdentity?
     private(set) var certificate: SecCertificate?
     private(set) var fingerprint: String?
+    private(set) var setupError: String?
     private var privateKey: SecKey?
+
+    /// Whether the security layer initialized successfully (at minimum a fingerprint).
+    var isReady: Bool { fingerprint != nil }
 
     init() {
         generateEphemeralKeyPair()
@@ -30,18 +34,24 @@ final class CertificateManager {
 
         var error: Unmanaged<CFError>?
         guard let privKey = SecKeyCreateRandomKey(keyAttributes as CFDictionary, &error) else {
-            print("[CertificateManager] Failed to create private key: \(error!.takeRetainedValue())")
+            let msg = "Failed to create private key: \(error!.takeRetainedValue())"
+            print("[CertificateManager] \(msg)")
+            setupError = msg
             return
         }
         self.privateKey = privKey
 
         guard let publicKey = SecKeyCopyPublicKey(privKey) else {
-            print("[CertificateManager] Failed to get public key")
+            let msg = "Failed to derive public key"
+            print("[CertificateManager] \(msg)")
+            setupError = msg
             return
         }
 
         guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
-            print("[CertificateManager] Failed to export public key")
+            let msg = "Failed to export public key"
+            print("[CertificateManager] \(msg)")
+            setupError = msg
             return
         }
 

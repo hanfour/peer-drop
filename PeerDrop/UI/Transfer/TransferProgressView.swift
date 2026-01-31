@@ -11,8 +11,16 @@ struct TransferProgressView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.blue)
 
+            if let name = connectionManager.fileTransfer?.currentFileName {
+                Text(name)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
             Text(transferLabel)
-                .font(.headline)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
             if let transfer = connectionManager.fileTransfer {
                 ProgressView(value: transfer.progress)
@@ -32,8 +40,8 @@ struct TransferProgressView: View {
 
             Spacer()
 
-            Button("Cancel") {
-                connectionManager.disconnect()
+            Button("Cancel Transfer") {
+                connectionManager.fileTransfer?.cancelTransfer()
             }
             .buttonStyle(.bordered)
             .tint(.red)

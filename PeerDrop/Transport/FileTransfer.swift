@@ -6,10 +6,12 @@ final class FileTransfer: ObservableObject {
     @Published private(set) var progress: Double = 0
     @Published private(set) var isTransferring = false
     @Published private(set) var lastError: String?
+    @Published private(set) var currentFileName: String?
     @Published var receivedFileURL: URL?
 
     private weak var connectionManager: ConnectionManager?
     private let chunkSize = Data.defaultChunkSize
+    private var isCancelled = false
 
     // Receive state
     private var receiveBuffer = Data()
@@ -30,11 +32,14 @@ final class FileTransfer: ObservableObject {
         }
 
         isTransferring = true
+        isCancelled = false
         progress = 0
         lastError = nil
+        currentFileName = url.lastPathComponent
 
         defer {
             isTransferring = false
+            currentFileName = nil
         }
 
         let data = try Data(contentsOf: url)
@@ -58,6 +63,7 @@ final class FileTransfer: ObservableObject {
         // Send chunks
         let chunks = data.chunks(ofSize: chunkSize)
         for (index, chunk) in chunks.enumerated() {
+            guard !isCancelled else { throw FileTransferError.cancelled }
             let chunkMsg = PeerMessage.fileChunk(chunk, senderID: "local")
             try await manager.sendMessage(chunkMsg)
             progress = Double(index + 1) / Double(chunks.count)
@@ -91,6 +97,7 @@ final class FileTransfer: ObservableObject {
         receiveBuffer = Data()
         receiveHasher = HashVerifier()
         receivedBytes = 0
+        currentFileName = metadata.fileName
 
         // Auto-accept for now (consent already given at connection level)
         Task {
@@ -100,6 +107,18 @@ final class FileTransfer: ObservableObject {
             progress = 0
             connectionManager?.showTransferProgress = true
         }
+    }
+
+    /// Cancel an in-progress transfer without disconnecting.
+    func cancelTransfer() {
+        isCancelled = true
+        isTransferring = false
+        currentFileName = nil
+        receiveBuffer = Data()
+        receiveMetadata = nil
+        lastError = "Transfer cancelled"
+        connectionManager?.showTransferProgress = false
+        connectionManager?.transition(to: .connected)
     }
 
     func handleFileAccept() {
@@ -149,6 +168,7 @@ final class FileTransfer: ObservableObject {
         connectionManager?.latestToast = record
 
         isTransferring = false
+        currentFileName = nil
         receiveBuffer = Data()
         receiveMetadata = nil
 
@@ -163,12 +183,14 @@ enum FileTransferError: Error, LocalizedError {
     case notConnected
     case hashMismatch
     case transferRejected
+    case cancelled
 
     var errorDescription: String? {
         switch self {
         case .notConnected: return "Not connected to a peer"
         case .hashMismatch: return "File integrity check failed"
         case .transferRejected: return "File transfer was rejected"
+        case .cancelled: return "Transfer cancelled"
         }
     }
 }

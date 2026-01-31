@@ -36,7 +36,9 @@ struct ConnectionView: View {
                             .buttonStyle(.borderedProminent)
 
                             Button {
-                                connectionManager.showVoiceCall = true
+                                Task {
+                                    await connectionManager.voiceCallManager?.startCall()
+                                }
                             } label: {
                                 Label("Voice Call", systemImage: "phone.fill")
                                     .frame(maxWidth: .infinity)

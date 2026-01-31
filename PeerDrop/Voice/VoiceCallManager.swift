@@ -59,6 +59,7 @@ final class VoiceCallManager: ObservableObject {
         webRTCClient.setup()
         isInCall = true
         connectionManager?.transition(to: .voiceCall)
+        connectionManager?.showVoiceCall = true
 
         // Send call request over TCP
         let request = PeerMessage(type: .callRequest, senderID: "local")

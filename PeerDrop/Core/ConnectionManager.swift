@@ -33,7 +33,7 @@ final class ConnectionManager: ObservableObject {
     private var activeConnection: NWConnection?
     private var cancellables = Set<AnyCancellable>()
     private let localIdentity: PeerIdentity
-    private let certificateManager = CertificateManager()
+    let certificateManager = CertificateManager()
     private var lastConnectedPeer: DiscoveredPeer?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var requestingTimeoutTask: Task<Void, Never>?
