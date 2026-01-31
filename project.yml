@@ -41,6 +41,9 @@ targets:
         NSBonjourServices:
           - "_peerdrop._tcp"
         NSMicrophoneUsageDescription: "PeerDrop needs microphone access for voice calls."
+        UIBackgroundModes:
+          - audio
+          - voip
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

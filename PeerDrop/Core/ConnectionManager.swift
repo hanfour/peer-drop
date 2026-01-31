@@ -287,7 +287,9 @@ final class ConnectionManager: ObservableObject {
                 try await connection.waitReady()
                 let helloMsg = try await connection.receiveMessage()
 
-                guard helloMsg.type == .hello, let payload = helloMsg.payload else {
+                guard helloMsg.type == .hello, helloMsg.version == .current,
+                      let payload = helloMsg.payload else {
+                    print("[ConnectionManager] Incompatible protocol version or invalid hello")
                     connection.cancel()
                     return
                 }

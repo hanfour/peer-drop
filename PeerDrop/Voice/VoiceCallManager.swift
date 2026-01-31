@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import WebRTC
 
 /// Coordinates WebRTC + CallKit for voice call lifecycle.
@@ -196,5 +197,3 @@ final class VoiceCallManager: ObservableObject {
         }
     }
 }
-
-import AVFoundation

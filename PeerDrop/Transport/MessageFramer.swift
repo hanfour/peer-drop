@@ -5,6 +5,8 @@ import Network
 /// Wire format: [4-byte big-endian length][JSON payload]
 final class PeerDropFramer: NWProtocolFramerImplementation {
     static let label = "PeerDrop"
+    /// Maximum allowed message size (100 MB).
+    static let maxMessageSize: UInt32 = 100 * 1024 * 1024
 
     static let definition = NWProtocolFramer.Definition(implementation: PeerDropFramer.self)
 
@@ -39,6 +41,11 @@ final class PeerDropFramer: NWProtocolFramerImplementation {
 
             let length = tempHeader.withUnsafeBytes { bytes in
                 bytes.load(as: UInt32.self).bigEndian
+            }
+
+            guard length > 0, length <= Self.maxMessageSize else {
+                print("[PeerDropFramer] Rejecting message with invalid size: \(length) bytes")
+                return 0
             }
 
             let message = NWProtocolFramer.Message(peerDropMessageLength: length)

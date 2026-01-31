@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 struct PeerIdentity: Codable, Identifiable, Hashable {
     let id: String
@@ -19,5 +20,3 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
         )
     }
 }
-
-import UIKit

@@ -55,13 +55,19 @@ final class BonjourDiscovery: DiscoveryBackend {
                 domain: Self.serviceDomain
             )
 
-            listener.stateUpdateHandler = { state in
+            listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
                     break
                 case .failed(let error):
-                    print("[BonjourDiscovery] Listener failed: \(error)")
+                    print("[BonjourDiscovery] Listener failed: \(error), restarting...")
                     listener.cancel()
+                    // Restart after brief delay
+                    self?.queue.asyncAfter(deadline: .now() + 2.0) {
+                        self?.startAdvertising()
+                    }
+                case .cancelled:
+                    break
                 default:
                     break
                 }
@@ -96,13 +102,18 @@ final class BonjourDiscovery: DiscoveryBackend {
         params.includePeerToPeer = true
 
         let browser = NWBrowser(for: descriptor, using: params)
-        browser.stateUpdateHandler = { state in
+        browser.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
                 break
             case .failed(let error):
-                print("[BonjourDiscovery] Browser failed: \(error)")
+                print("[BonjourDiscovery] Browser failed: \(error), restarting...")
                 browser.cancel()
+                self?.queue.asyncAfter(deadline: .now() + 2.0) {
+                    self?.startBrowsing()
+                }
+            case .cancelled:
+                break
             default:
                 break
             }
