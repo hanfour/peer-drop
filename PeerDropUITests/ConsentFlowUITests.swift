@@ -8,35 +8,42 @@ final class ConsentFlowUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launch()
+
+        // Wait for launch screen to dismiss and main UI to appear
+        let navBar = app.navigationBars["PeerDrop"]
+        XCTAssertTrue(navBar.waitForExistence(timeout: 5))
     }
 
     func testAppLaunches() {
-        // Verify the main view loads
         XCTAssertTrue(app.navigationBars["PeerDrop"].exists)
     }
 
     func testManualConnectButtonExists() {
         let button = app.buttons["Connect by IP Address"]
-        XCTAssertTrue(button.exists)
+        XCTAssertTrue(button.waitForExistence(timeout: 3))
     }
 
     func testManualConnectSheetAppears() {
-        app.buttons["Connect by IP Address"].tap()
+        let button = app.buttons["Connect by IP Address"]
+        XCTAssertTrue(button.waitForExistence(timeout: 3))
+        button.tap()
 
-        // Verify the manual connect sheet appears
         let navBar = app.navigationBars["Manual Connect"]
-        XCTAssertTrue(navBar.waitForExistence(timeout: 2))
+        XCTAssertTrue(navBar.waitForExistence(timeout: 3))
     }
 
     func testManualConnectCanCancel() {
-        app.buttons["Connect by IP Address"].tap()
+        let connectButton = app.buttons["Connect by IP Address"]
+        XCTAssertTrue(connectButton.waitForExistence(timeout: 3))
+        connectButton.tap()
 
         let cancelButton = app.buttons["Cancel"]
-        XCTAssertTrue(cancelButton.waitForExistence(timeout: 2))
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 3))
         cancelButton.tap()
 
-        // Sheet should dismiss
+        // Sheet should dismiss — wait briefly for animation
         let navBar = app.navigationBars["Manual Connect"]
-        XCTAssertFalse(navBar.exists)
+        let dismissed = navBar.waitForNonExistence(timeout: 3)
+        XCTAssertTrue(dismissed)
     }
 }
