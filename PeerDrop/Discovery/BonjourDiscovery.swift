@@ -15,11 +15,13 @@ final class BonjourDiscovery: DiscoveryBackend {
     private var listener: NWListener?
     private let listenerPort: NWEndpoint.Port
     private let localPeerName: String
+    private let tlsOptions: NWProtocolTLS.Options?
     private let queue = DispatchQueue(label: "com.peerdrop.bonjour")
 
-    init(port: UInt16 = 0, localPeerName: String) {
+    init(port: UInt16 = 0, localPeerName: String, tlsOptions: NWProtocolTLS.Options? = nil) {
         self.listenerPort = port == 0 ? .any : NWEndpoint.Port(rawValue: port)!
         self.localPeerName = localPeerName
+        self.tlsOptions = tlsOptions
     }
 
     var actualPort: UInt16? {
@@ -43,7 +45,7 @@ final class BonjourDiscovery: DiscoveryBackend {
 
     private func startAdvertising() {
         do {
-            let params = NWParameters.peerDrop()
+            let params = NWParameters.peerDrop(tls: tlsOptions)
             params.includePeerToPeer = true
 
             let listener = try NWListener(using: params, on: listenerPort)

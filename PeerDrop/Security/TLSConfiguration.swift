@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Security
+import CryptoKit
 
 /// Creates NWProtocolTLS.Options with certificate pinning for peer connections.
 enum TLSConfiguration {
@@ -84,8 +85,9 @@ enum TLSConfiguration {
             return false
         }
 
-        let certManager = CertificateManager()
-        let fingerprint = certManager.computeFingerprint(of: cert)
+        let data = SecCertificateCopyData(cert) as Data
+        let hash = SHA256.hash(data: data)
+        let fingerprint = hash.map { String(format: "%02x", $0) }.joined()
         return fingerprint == expected.lowercased()
     }
 }

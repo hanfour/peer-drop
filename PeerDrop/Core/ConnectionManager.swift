@@ -30,6 +30,7 @@ final class ConnectionManager: ObservableObject {
     private var activeConnection: NWConnection?
     private var cancellables = Set<AnyCancellable>()
     private let localIdentity: PeerIdentity
+    private let certificateManager = CertificateManager()
 
     // MARK: - Submanagers (set after init)
 
@@ -37,7 +38,8 @@ final class ConnectionManager: ObservableObject {
     var voiceCallManager: VoiceCallManager?
 
     init() {
-        self.localIdentity = .local()
+        let certManager = CertificateManager()
+        self.localIdentity = .local(certificateFingerprint: certManager.fingerprint)
     }
 
     // MARK: - State Transitions
@@ -54,7 +56,15 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Discovery
 
     func startDiscovery() {
-        let bonjour = BonjourDiscovery(localPeerName: localIdentity.displayName)
+        // Create TLS-enabled listener if we have an identity
+        let tlsOpts: NWProtocolTLS.Options?
+        if let identity = certificateManager.identity {
+            tlsOpts = TLSConfiguration.serverOptions(identity: identity)
+        } else {
+            tlsOpts = nil
+        }
+
+        let bonjour = BonjourDiscovery(localPeerName: localIdentity.displayName, tlsOptions: tlsOpts)
         bonjour.onIncomingConnection = { [weak self] connection in
             Task { @MainActor in
                 self?.handleIncomingConnection(connection)
@@ -100,7 +110,11 @@ final class ConnectionManager: ObservableObject {
             endpoint = .hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!)
         }
 
-        let params = NWParameters.peerDrop()
+        // Use TLS for outgoing connections (trust-on-first-use)
+        let clientTLS = TLSConfiguration.clientOptions(
+            identity: certificateManager.identity
+        )
+        let params = NWParameters.peerDrop(tls: clientTLS)
         let connection = NWConnection(to: endpoint, using: params)
 
         connection.stateUpdateHandler = { [weak self] state in

@@ -39,6 +39,11 @@ targets:
         NSBonjourServices:
           - "_peerdrop._tcp"
         NSMicrophoneUsageDescription: "PeerDrop needs microphone access for voice calls."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortraitUpsideDown
 
   PeerDropTests:
     type: bundle.unit-test
