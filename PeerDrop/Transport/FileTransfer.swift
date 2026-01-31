@@ -6,6 +6,7 @@ final class FileTransfer: ObservableObject {
     @Published private(set) var progress: Double = 0
     @Published private(set) var isTransferring = false
     @Published private(set) var lastError: String?
+    @Published var receivedFileURL: URL?
 
     private weak var connectionManager: ConnectionManager?
     private let chunkSize = Data.defaultChunkSize
@@ -115,13 +116,15 @@ final class FileTransfer: ObservableObject {
         let computedHash = receiveHasher.finalize()
 
         if computedHash == metadata.sha256Hash {
-            // Save to temp directory
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(metadata.fileName)
             try? receiveBuffer.write(to: tempURL)
+            receivedFileURL = tempURL
             lastError = nil
+            HapticManager.transferComplete()
         } else {
             lastError = "Hash verification failed"
+            HapticManager.transferFailed()
         }
 
         isTransferring = false

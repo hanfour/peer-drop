@@ -4,6 +4,8 @@ struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var showShareSheet = false
+    @State private var receivedFileURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -36,12 +38,18 @@ struct ContentView: View {
                 VoiceCallView()
                     .environmentObject(connectionManager)
             }
-            .alert("Connection Error", isPresented: $showError) {
-                Button("Retry") {
-                    connectionManager.transition(to: .discovering)
-                    connectionManager.restartDiscovery()
+            .sheet(isPresented: $showShareSheet) {
+                if let url = receivedFileURL {
+                    ShareSheet(items: [url])
                 }
-                Button("Dismiss", role: .cancel) {
+            }
+            .alert("Connection Error", isPresented: $showError) {
+                if connectionManager.canReconnect {
+                    Button("Reconnect") {
+                        connectionManager.reconnect()
+                    }
+                }
+                Button("Back to Discovery", role: .cancel) {
                     connectionManager.transition(to: .discovering)
                     connectionManager.restartDiscovery()
                 }
@@ -58,7 +66,25 @@ struct ContentView: View {
                     showError = true
                 }
             }
+            .onChange(of: connectionManager.fileTransfer?.receivedFileURL) { _ in
+                if let url = connectionManager.fileTransfer?.receivedFileURL {
+                    receivedFileURL = url
+                    showShareSheet = true
+                    connectionManager.fileTransfer?.receivedFileURL = nil
+                }
+            }
         }
         .animation(.easeInOut(duration: 0.3), value: connectionManager.state)
     }
+}
+
+/// UIKit share sheet wrapper for saving/sharing received files.
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

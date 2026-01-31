@@ -4,6 +4,7 @@ import SwiftUI
 struct PeerDropApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var connectionManager = ConnectionManager()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
 
     var body: some Scene {
@@ -24,6 +25,9 @@ struct PeerDropApp: App {
                     showLaunch = false
                 }
             }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            connectionManager.handleScenePhaseChange(newPhase)
         }
     }
 }

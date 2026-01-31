@@ -89,6 +89,14 @@ struct CallButton: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityHint(isDestructive ? "Ends the current call" : "")
+    }
+
+    private var accessibilityDescription: String {
+        if isDestructive { return "End call" }
+        if isActive { return "\(label), active" }
+        return label
     }
 
     private var backgroundColor: Color {

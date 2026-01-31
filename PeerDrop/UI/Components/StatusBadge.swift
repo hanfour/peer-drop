@@ -16,6 +16,8 @@ struct StatusBadge: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(color.opacity(0.1), in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Status: \(label)")
     }
 
     private var label: String {

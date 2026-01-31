@@ -13,6 +13,8 @@ struct PeerAvatar: View {
                 .font(.system(.callout, weight: .semibold))
                 .foregroundStyle(.white)
         }
+        .accessibilityLabel("Avatar for \(name)")
+        .accessibilityHidden(true)
     }
 
     private var initials: String {

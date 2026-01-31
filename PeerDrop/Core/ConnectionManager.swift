@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Combine
 import SwiftUI
+import UIKit
 
 /// Incoming connection request for the consent sheet.
 struct IncomingRequest: Identifiable {
@@ -31,6 +32,8 @@ final class ConnectionManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let localIdentity: PeerIdentity
     private let certificateManager = CertificateManager()
+    private var lastConnectedPeer: DiscoveredPeer?
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
     // MARK: - Submanagers (set after init)
 
@@ -51,6 +54,24 @@ final class ConnectionManager: ObservableObject {
             return
         }
         state = newState
+        triggerHaptic(for: newState)
+    }
+
+    private func triggerHaptic(for newState: ConnectionState) {
+        switch newState {
+        case .connected:
+            HapticManager.connectionAccepted()
+        case .rejected:
+            HapticManager.connectionRejected()
+        case .failed:
+            HapticManager.transferFailed()
+        case .incomingRequest:
+            HapticManager.incomingRequest()
+        case .voiceCall:
+            HapticManager.callStarted()
+        default:
+            break
+        }
     }
 
     // MARK: - Discovery
@@ -97,9 +118,63 @@ final class ConnectionManager: ObservableObject {
         discoveryCoordinator?.addManualPeer(host: host, port: port, name: name)
     }
 
+    // MARK: - Reconnect
+
+    /// Attempt to reconnect to the last connected peer.
+    func reconnect() {
+        guard let peer = lastConnectedPeer else { return }
+        requestConnection(to: peer)
+    }
+
+    /// Whether a reconnect is possible (we have a last-connected peer).
+    var canReconnect: Bool {
+        lastConnectedPeer != nil
+    }
+
+    // MARK: - App Lifecycle
+
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            endBackgroundTask()
+            if case .idle = state {
+                // Resume discovery if we were idle
+            } else if case .discovering = state {
+                restartDiscovery()
+            }
+        case .background:
+            // Keep alive if transferring or on a call
+            if case .transferring = state {
+                beginBackgroundTask()
+            } else if case .voiceCall = state {
+                beginBackgroundTask()
+            } else {
+                stopDiscovery()
+            }
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    private func beginBackgroundTask() {
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask { [weak self] in
+            self?.endBackgroundTask()
+        }
+    }
+
+    private func endBackgroundTask() {
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
+    }
+
     // MARK: - Connection Request (Outgoing)
 
     func requestConnection(to peer: DiscoveredPeer) {
+        lastConnectedPeer = peer
         transition(to: .requesting)
 
         let endpoint: NWEndpoint
@@ -220,6 +295,7 @@ final class ConnectionManager: ObservableObject {
             }
             activeConnection = nil
             connectedPeer = nil
+            endBackgroundTask()
             transition(to: .disconnected)
         }
     }

@@ -1,0 +1,840 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00B142038F40DF47651DE3FC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6333149EDC27AFE4F386D892 /* ContentView.swift */; };
+		086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09411CC81953144963CB18 /* PeerRowView.swift */; };
+		13BDBEF232701A8D65911FA4 /* Data+Chunking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC40206FC32B2304A187E87 /* Data+Chunking.swift */; };
+		18E7D2A8006C6991A961376A /* VoiceCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50393228F69F31F111E2B37B /* VoiceCallView.swift */; };
+		1D2D5FAE4893C5D84F9C1A20 /* TCPTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73122425C58B15567D7F7F9D /* TCPTransport.swift */; };
+		208295A89E6A1DA82C9D7856 /* LaunchScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A69B497E85725EA8A5E9C1D /* LaunchScreen.swift */; };
+		23049AA320595802D640748B /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A979FF3DD437916760AAC312 /* DiscoveryView.swift */; };
+		2782480390204B1B5A7D7AB9 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D513DA2C80E63FB9BB413B42 /* CallKitManager.swift */; };
+		3FFBC03FD91DD4BFB1DFD135 /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 673CA4547FC92F153E75739C /* WebRTCClient.swift */; };
+		4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21815A246EC26999D8D31534 /* VoiceCallManager.swift */; };
+		53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */; };
+		5418D2C8E97B7FA61101B692 /* ConsentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923FD5FA87FD257ADB28D0D2 /* ConsentSheet.swift */; };
+		63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */; };
+		6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */; };
+		6BC209FDB9F4AA0CED375FA9 /* NWConnection+Async.swift in Sources */ = {isa = PBXBuildFile; fileRef = 515ABAB80F2FAFFA147E539E /* NWConnection+Async.swift */; };
+		74DA55958F74974AA3086DC6 /* ConnectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D629FA007356EBA90D5F5A /* ConnectionState.swift */; };
+		78EF5354C89CF51473FD7D49 /* FilePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8034F4F86233093A4E36905 /* FilePickerView.swift */; };
+		791E5E35499FE4796FFDB4B8 /* MessageType.swift in Sources */ = {isa = PBXBuildFile; fileRef = C292EE90B82150846F8F75E6 /* MessageType.swift */; };
+		7C0D9050750875F998E05FCD /* ProtocolVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5C32BB0A6648236791F0B /* ProtocolVersion.swift */; };
+		82AB0A2711658311B6373371 /* MessageFramerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8895CA9BCA992CBB0102A3C7 /* MessageFramerTests.swift */; };
+		88DEFED6EF2E7F1872648030 /* TLSConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5488BDB916346C1C0D52034F /* TLSConfiguration.swift */; };
+		8FB470518247A3ABB9341C15 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1547C59857B7BD88CF8516D /* Assets.xcassets */; };
+		9110550525FA92103FF5B86A /* DiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB9C675EFD739621740F9F9 /* DiscoveryService.swift */; };
+		91CAFCE77CB2258986637357 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B620D00284A700C480C5E5 /* ConnectionManager.swift */; };
+		9469CA1EC0E6DCCE708ED7E6 /* HashVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED89221EA62C36E1FA97B61 /* HashVerifier.swift */; };
+		9C46933AE9ED40CF1729A0D9 /* LoopbackIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */; };
+		9F91E409FC12B0F37B21F566 /* MessageFramer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */; };
+		A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */; };
+		AAEB94525DFB07657E10BEFF /* TailscalePeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D979E35021B42ECC2F105F /* TailscalePeer.swift */; };
+		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
+		C8610709388D003A0C81EB85 /* ManualConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */; };
+		C9430870CEECA6E54B1F6086 /* ConsentFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5109FA0E4C4ED974F8FDDFE5 /* ConsentFlowUITests.swift */; };
+		CF75E0F98348446155AFC727 /* TransportProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C92E76445C07EBDC65FE04 /* TransportProtocol.swift */; };
+		D382B38045C3F4ED6239D259 /* FileTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D28254D09D4993B28316CD /* FileTransfer.swift */; };
+		D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */; };
+		D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */; };
+		D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */; };
+		DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F68921A1EFE5717EFF8690 /* PeerMessage.swift */; };
+		DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */; };
+		E55B24C969A12E4905A98F0D /* TransferProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C2478F20C10D5FB383E756 /* TransferProgressView.swift */; };
+		E6A5A1F6F088625901B7665A /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */; };
+		EB33CCE006494C0D7838038F /* CertificateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB3DE12412A72AA37C495B3 /* CertificateManager.swift */; };
+		EE390C95FDFF883F3922C30D /* MockTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883D84FF5E1F966F1CED7BC2 /* MockTransport.swift */; };
+		F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90A9DA5F16B00839A9012834 /* FileTransferTests.swift */; };
+		F21394B4FF3FCF7E66AE4035 /* PeerIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */; };
+		F422276653E0728E859B9BC9 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C17EA9E6BE4797FC20EBBBC /* WebRTC */; };
+		F906D35D0D3CD0586BC5B046 /* BonjourDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 834914784D4C95CFABAA0C27 /* BonjourDiscovery.swift */; };
+		FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D3096AC5F3A6FEA67284EC /* SDPSignaling.swift */; };
+		FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */; };
+		FFAED0C0D33E4E57C00B905B /* TransferMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2B17F4DCD10261C5D277FE35 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 68DA42402509F8E5D3003CEA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0A0CD5FF6A828E9185B2315B;
+			remoteInfo = PeerDrop;
+		};
+		6D96F107E9874BCB904A1FAA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 68DA42402509F8E5D3003CEA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0A0CD5FF6A828E9185B2315B;
+			remoteInfo = PeerDrop;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManagerTests.swift; sourceTree = "<group>"; };
+		0CB9C675EFD739621740F9F9 /* DiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryService.swift; sourceTree = "<group>"; };
+		0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockDiscovery.swift; sourceTree = "<group>"; };
+		107432E165DB757DDBC416BC /* PeerDropTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1AB3DE12412A72AA37C495B3 /* CertificateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CertificateManager.swift; sourceTree = "<group>"; };
+		21815A246EC26999D8D31534 /* VoiceCallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallManager.swift; sourceTree = "<group>"; };
+		2AC40206FC32B2304A187E87 /* Data+Chunking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Chunking.swift"; sourceTree = "<group>"; };
+		37D3096AC5F3A6FEA67284EC /* SDPSignaling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDPSignaling.swift; sourceTree = "<group>"; };
+		38C2478F20C10D5FB383E756 /* TransferProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferProgressView.swift; sourceTree = "<group>"; };
+		395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerMessageTests.swift; sourceTree = "<group>"; };
+		4E541AC353B141C1ABC8F38B /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		50393228F69F31F111E2B37B /* VoiceCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallView.swift; sourceTree = "<group>"; };
+		5109FA0E4C4ED974F8FDDFE5 /* ConsentFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentFlowUITests.swift; sourceTree = "<group>"; };
+		515ABAB80F2FAFFA147E539E /* NWConnection+Async.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NWConnection+Async.swift"; sourceTree = "<group>"; };
+		53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackIntegrationTests.swift; sourceTree = "<group>"; };
+		5488BDB916346C1C0D52034F /* TLSConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSConfiguration.swift; sourceTree = "<group>"; };
+		5ED89221EA62C36E1FA97B61 /* HashVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifier.swift; sourceTree = "<group>"; };
+		62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateMachineTests.swift; sourceTree = "<group>"; };
+		62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerIdentity.swift; sourceTree = "<group>"; };
+		6333149EDC27AFE4F386D892 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		673CA4547FC92F153E75739C /* WebRTCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCClient.swift; sourceTree = "<group>"; };
+		68F68921A1EFE5717EFF8690 /* PeerMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerMessage.swift; sourceTree = "<group>"; };
+		6A69B497E85725EA8A5E9C1D /* LaunchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreen.swift; sourceTree = "<group>"; };
+		73122425C58B15567D7F7F9D /* TCPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCPTransport.swift; sourceTree = "<group>"; };
+		77C92E76445C07EBDC65FE04 /* TransportProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportProtocol.swift; sourceTree = "<group>"; };
+		78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerAvatar.swift; sourceTree = "<group>"; };
+		834914784D4C95CFABAA0C27 /* BonjourDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscovery.swift; sourceTree = "<group>"; };
+		84D629FA007356EBA90D5F5A /* ConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionState.swift; sourceTree = "<group>"; };
+		883D84FF5E1F966F1CED7BC2 /* MockTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockTransport.swift; sourceTree = "<group>"; };
+		8895CA9BCA992CBB0102A3C7 /* MessageFramerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFramerTests.swift; sourceTree = "<group>"; };
+		90A9DA5F16B00839A9012834 /* FileTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferTests.swift; sourceTree = "<group>"; };
+		923FD5FA87FD257ADB28D0D2 /* ConsentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentSheet.swift; sourceTree = "<group>"; };
+		A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifierTests.swift; sourceTree = "<group>"; };
+		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A8034F4F86233093A4E36905 /* FilePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerView.swift; sourceTree = "<group>"; };
+		A979FF3DD437916760AAC312 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
+		B6F5C32BB0A6648236791F0B /* ProtocolVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolVersion.swift; sourceTree = "<group>"; };
+		B9B620D00284A700C480C5E5 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadata.swift; sourceTree = "<group>"; };
+		C292EE90B82150846F8F75E6 /* MessageType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageType.swift; sourceTree = "<group>"; };
+		C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFramer.swift; sourceTree = "<group>"; };
+		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
+		D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
+		D4D28254D09D4993B28316CD /* FileTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransfer.swift; sourceTree = "<group>"; };
+		D513DA2C80E63FB9BB413B42 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
+		D9D4B08876FBC62C951D3E1F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
+		F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PeerDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1547C59857B7BD88CF8516D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F5D979E35021B42ECC2F105F /* TailscalePeer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscalePeer.swift; sourceTree = "<group>"; };
+		FB09411CC81953144963CB18 /* PeerRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerRowView.swift; sourceTree = "<group>"; };
+		FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualConnectView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D1A099F337100A5A1FBCA211 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F422276653E0728E859B9BC9 /* WebRTC in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		013E4227A0A5D1D75404C655 = {
+			isa = PBXGroup;
+			children = (
+				55E7323601F0EA90C2773FDC /* PeerDrop */,
+				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
+				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
+				B852FD7C848E2615AF9BF284 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		064824BD5CF2C9050CC2DA84 /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				D513DA2C80E63FB9BB413B42 /* CallKitManager.swift */,
+				37D3096AC5F3A6FEA67284EC /* SDPSignaling.swift */,
+				21815A246EC26999D8D31534 /* VoiceCallManager.swift */,
+				673CA4547FC92F153E75739C /* WebRTCClient.swift */,
+			);
+			path = Voice;
+			sourceTree = "<group>";
+		};
+		1CA06EF41717621E8FFA387D /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				C292EE90B82150846F8F75E6 /* MessageType.swift */,
+				68F68921A1EFE5717EFF8690 /* PeerMessage.swift */,
+				B6F5C32BB0A6648236791F0B /* ProtocolVersion.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
+		38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */ = {
+			isa = PBXGroup;
+			children = (
+				0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */,
+				90A9DA5F16B00839A9012834 /* FileTransferTests.swift */,
+				A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */,
+				53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */,
+				8895CA9BCA992CBB0102A3C7 /* MessageFramerTests.swift */,
+				46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */,
+				62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */,
+				A66FD4290A348E85E7D37D0F /* Mocks */,
+			);
+			path = PeerDropTests;
+			sourceTree = "<group>";
+		};
+		55E7323601F0EA90C2773FDC /* PeerDrop */ = {
+			isa = PBXGroup;
+			children = (
+				8DA12F4BD84134F6E5093D55 /* App */,
+				EAB42E3CEAFF4757E0BE2F50 /* Core */,
+				7987B664786336C54930C91D /* Discovery */,
+				EE90AC247CF9EF1486B5CAD0 /* Extensions */,
+				1CA06EF41717621E8FFA387D /* Protocol */,
+				BA213164A62E9FAD2ECC8336 /* Security */,
+				647C5D035A2DE94FCA21D357 /* Transport */,
+				6BEDEDA3BDAB0A9589800AD6 /* UI */,
+				064824BD5CF2C9050CC2DA84 /* Voice */,
+			);
+			path = PeerDrop;
+			sourceTree = "<group>";
+		};
+		62B141FB933FBF791D8759AB /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */,
+				4E541AC353B141C1ABC8F38B /* StatusBadge.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		62FB26D62C14854B8052057B /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				50393228F69F31F111E2B37B /* VoiceCallView.swift */,
+			);
+			path = Voice;
+			sourceTree = "<group>";
+		};
+		647C5D035A2DE94FCA21D357 /* Transport */ = {
+			isa = PBXGroup;
+			children = (
+				D4D28254D09D4993B28316CD /* FileTransfer.swift */,
+				C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */,
+				73122425C58B15567D7F7F9D /* TCPTransport.swift */,
+				BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */,
+				77C92E76445C07EBDC65FE04 /* TransportProtocol.swift */,
+			);
+			path = Transport;
+			sourceTree = "<group>";
+		};
+		6BEDEDA3BDAB0A9589800AD6 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				6333149EDC27AFE4F386D892 /* ContentView.swift */,
+				6A69B497E85725EA8A5E9C1D /* LaunchScreen.swift */,
+				62B141FB933FBF791D8759AB /* Components */,
+				F56F45F22B8B559848A80502 /* Connection */,
+				9E38D04C95D6ED7C23584D56 /* Discovery */,
+				DF45C77A513EB8AC88DBFA61 /* Transfer */,
+				62FB26D62C14854B8052057B /* Voice */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		7987B664786336C54930C91D /* Discovery */ = {
+			isa = PBXGroup;
+			children = (
+				834914784D4C95CFABAA0C27 /* BonjourDiscovery.swift */,
+				0CB9C675EFD739621740F9F9 /* DiscoveryService.swift */,
+				F5D979E35021B42ECC2F105F /* TailscalePeer.swift */,
+			);
+			path = Discovery;
+			sourceTree = "<group>";
+		};
+		8D255639E6CD70E3B1F87B26 /* PeerDropUITests */ = {
+			isa = PBXGroup;
+			children = (
+				5109FA0E4C4ED974F8FDDFE5 /* ConsentFlowUITests.swift */,
+			);
+			path = PeerDropUITests;
+			sourceTree = "<group>";
+		};
+		8DA12F4BD84134F6E5093D55 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */,
+				F1547C59857B7BD88CF8516D /* Assets.xcassets */,
+				D9D4B08876FBC62C951D3E1F /* Info.plist */,
+				CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		9E38D04C95D6ED7C23584D56 /* Discovery */ = {
+			isa = PBXGroup;
+			children = (
+				A979FF3DD437916760AAC312 /* DiscoveryView.swift */,
+				FB09411CC81953144963CB18 /* PeerRowView.swift */,
+			);
+			path = Discovery;
+			sourceTree = "<group>";
+		};
+		A66FD4290A348E85E7D37D0F /* Mocks */ = {
+			isa = PBXGroup;
+			children = (
+				0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */,
+				883D84FF5E1F966F1CED7BC2 /* MockTransport.swift */,
+			);
+			path = Mocks;
+			sourceTree = "<group>";
+		};
+		B852FD7C848E2615AF9BF284 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */,
+				107432E165DB757DDBC416BC /* PeerDropTests.xctest */,
+				A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BA213164A62E9FAD2ECC8336 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				1AB3DE12412A72AA37C495B3 /* CertificateManager.swift */,
+				5ED89221EA62C36E1FA97B61 /* HashVerifier.swift */,
+				5488BDB916346C1C0D52034F /* TLSConfiguration.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		DF45C77A513EB8AC88DBFA61 /* Transfer */ = {
+			isa = PBXGroup;
+			children = (
+				A8034F4F86233093A4E36905 /* FilePickerView.swift */,
+				38C2478F20C10D5FB383E756 /* TransferProgressView.swift */,
+			);
+			path = Transfer;
+			sourceTree = "<group>";
+		};
+		EAB42E3CEAFF4757E0BE2F50 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				B9B620D00284A700C480C5E5 /* ConnectionManager.swift */,
+				84D629FA007356EBA90D5F5A /* ConnectionState.swift */,
+				D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */,
+				62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		EE90AC247CF9EF1486B5CAD0 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				2AC40206FC32B2304A187E87 /* Data+Chunking.swift */,
+				515ABAB80F2FAFFA147E539E /* NWConnection+Async.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		F56F45F22B8B559848A80502 /* Connection */ = {
+			isa = PBXGroup;
+			children = (
+				E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */,
+				923FD5FA87FD257ADB28D0D2 /* ConsentSheet.swift */,
+				FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */,
+			);
+			path = Connection;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0A0CD5FF6A828E9185B2315B /* PeerDrop */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A6D2CBF0BC213CE52AB59EB6 /* Build configuration list for PBXNativeTarget "PeerDrop" */;
+			buildPhases = (
+				BFDCA49D51CD11CE894181B9 /* Sources */,
+				E78A165535EFA9DA51657305 /* Resources */,
+				D1A099F337100A5A1FBCA211 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PeerDrop;
+			packageProductDependencies = (
+				4C17EA9E6BE4797FC20EBBBC /* WebRTC */,
+			);
+			productName = PeerDrop;
+			productReference = F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */;
+			productType = "com.apple.product-type.application";
+		};
+		17F1F675B19F95104979A7B9 /* PeerDropUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FFDC5675EFAEBD6C12B09175 /* Build configuration list for PBXNativeTarget "PeerDropUITests" */;
+			buildPhases = (
+				65F30F597E3FDBC4923F1545 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D65D4E0692A0741B608566D4 /* PBXTargetDependency */,
+			);
+			name = PeerDropUITests;
+			packageProductDependencies = (
+			);
+			productName = PeerDropUITests;
+			productReference = A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		7BAE530F5224EBE36DDA1247 /* PeerDropTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 32BCE88FB37DC4C57F8AEFA6 /* Build configuration list for PBXNativeTarget "PeerDropTests" */;
+			buildPhases = (
+				929B92F444E58B352DEA1B85 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3A3E2E23549391CAB4F492BC /* PBXTargetDependency */,
+			);
+			name = PeerDropTests;
+			packageProductDependencies = (
+			);
+			productName = PeerDropTests;
+			productReference = 107432E165DB757DDBC416BC /* PeerDropTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		68DA42402509F8E5D3003CEA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					17F1F675B19F95104979A7B9 = {
+						TestTargetID = 0A0CD5FF6A828E9185B2315B;
+					};
+				};
+			};
+			buildConfigurationList = 5C30CACFA082BB7B05A984AA /* Build configuration list for PBXProject "PeerDrop" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 013E4227A0A5D1D75404C655;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0A0CD5FF6A828E9185B2315B /* PeerDrop */,
+				7BAE530F5224EBE36DDA1247 /* PeerDropTests */,
+				17F1F675B19F95104979A7B9 /* PeerDropUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E78A165535EFA9DA51657305 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8FB470518247A3ABB9341C15 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		65F30F597E3FDBC4923F1545 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C9430870CEECA6E54B1F6086 /* ConsentFlowUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		929B92F444E58B352DEA1B85 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */,
+				F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */,
+				D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */,
+				9C46933AE9ED40CF1729A0D9 /* LoopbackIntegrationTests.swift in Sources */,
+				82AB0A2711658311B6373371 /* MessageFramerTests.swift in Sources */,
+				6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */,
+				EE390C95FDFF883F3922C30D /* MockTransport.swift in Sources */,
+				FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */,
+				DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BFDCA49D51CD11CE894181B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */,
+				F906D35D0D3CD0586BC5B046 /* BonjourDiscovery.swift in Sources */,
+				2782480390204B1B5A7D7AB9 /* CallKitManager.swift in Sources */,
+				EB33CCE006494C0D7838038F /* CertificateManager.swift in Sources */,
+				91CAFCE77CB2258986637357 /* ConnectionManager.swift in Sources */,
+				74DA55958F74974AA3086DC6 /* ConnectionState.swift in Sources */,
+				D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */,
+				5418D2C8E97B7FA61101B692 /* ConsentSheet.swift in Sources */,
+				00B142038F40DF47651DE3FC /* ContentView.swift in Sources */,
+				13BDBEF232701A8D65911FA4 /* Data+Chunking.swift in Sources */,
+				9110550525FA92103FF5B86A /* DiscoveryService.swift in Sources */,
+				23049AA320595802D640748B /* DiscoveryView.swift in Sources */,
+				78EF5354C89CF51473FD7D49 /* FilePickerView.swift in Sources */,
+				D382B38045C3F4ED6239D259 /* FileTransfer.swift in Sources */,
+				E6A5A1F6F088625901B7665A /* HapticManager.swift in Sources */,
+				9469CA1EC0E6DCCE708ED7E6 /* HashVerifier.swift in Sources */,
+				208295A89E6A1DA82C9D7856 /* LaunchScreen.swift in Sources */,
+				C8610709388D003A0C81EB85 /* ManualConnectView.swift in Sources */,
+				9F91E409FC12B0F37B21F566 /* MessageFramer.swift in Sources */,
+				791E5E35499FE4796FFDB4B8 /* MessageType.swift in Sources */,
+				6BC209FDB9F4AA0CED375FA9 /* NWConnection+Async.swift in Sources */,
+				63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */,
+				A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */,
+				F21394B4FF3FCF7E66AE4035 /* PeerIdentity.swift in Sources */,
+				DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */,
+				086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */,
+				7C0D9050750875F998E05FCD /* ProtocolVersion.swift in Sources */,
+				FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */,
+				B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */,
+				1D2D5FAE4893C5D84F9C1A20 /* TCPTransport.swift in Sources */,
+				88DEFED6EF2E7F1872648030 /* TLSConfiguration.swift in Sources */,
+				AAEB94525DFB07657E10BEFF /* TailscalePeer.swift in Sources */,
+				FFAED0C0D33E4E57C00B905B /* TransferMetadata.swift in Sources */,
+				E55B24C969A12E4905A98F0D /* TransferProgressView.swift in Sources */,
+				CF75E0F98348446155AFC727 /* TransportProtocol.swift in Sources */,
+				4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */,
+				18E7D2A8006C6991A961376A /* VoiceCallView.swift in Sources */,
+				3FFBC03FD91DD4BFB1DFD135 /* WebRTCClient.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3A3E2E23549391CAB4F492BC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0A0CD5FF6A828E9185B2315B /* PeerDrop */;
+			targetProxy = 2B17F4DCD10261C5D277FE35 /* PBXContainerItemProxy */;
+		};
+		D65D4E0692A0741B608566D4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0A0CD5FF6A828E9185B2315B /* PeerDrop */;
+			targetProxy = 6D96F107E9874BCB904A1FAA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		06C2004AE46B11574EE053F3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PeerDrop.app/PeerDrop";
+			};
+			name = Release;
+		};
+		08A86CE434EB16589354EA40 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PeerDrop.app/PeerDrop";
+			};
+			name = Debug;
+		};
+		3FB50FBFFD369381936C328C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PeerDrop;
+			};
+			name = Release;
+		};
+		4DE45F8ECBA380BFD256AE5B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PeerDrop;
+			};
+			name = Debug;
+		};
+		7E74B2CC3908D83E08101866 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = PeerDrop/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = PeerDrop/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AF54BF708F3B499BE65CF7DF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		D3C89E51C09A625FE31292FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		32BCE88FB37DC4C57F8AEFA6 /* Build configuration list for PBXNativeTarget "PeerDropTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				08A86CE434EB16589354EA40 /* Debug */,
+				06C2004AE46B11574EE053F3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5C30CACFA082BB7B05A984AA /* Build configuration list for PBXProject "PeerDrop" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D3C89E51C09A625FE31292FA /* Debug */,
+				AF54BF708F3B499BE65CF7DF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A6D2CBF0BC213CE52AB59EB6 /* Build configuration list for PBXNativeTarget "PeerDrop" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				80EB7FBA76991A74CA5A81F7 /* Debug */,
+				7E74B2CC3908D83E08101866 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FFDC5675EFAEBD6C12B09175 /* Build configuration list for PBXNativeTarget "PeerDropUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4DE45F8ECBA380BFD256AE5B /* Debug */,
+				3FB50FBFFD369381936C328C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC";
+			requirement = {
+				kind = exactVersion;
+				version = 125.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4C17EA9E6BE4797FC20EBBBC /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 68DA42402509F8E5D3003CEA /* Project object */;
+}

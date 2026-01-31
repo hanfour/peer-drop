@@ -67,6 +67,11 @@ struct DiscoveryView: View {
                     connectionManager.startDiscovery()
                 }
             }
+            .onChange(of: connectionManager.discoveredPeers.count) { _ in
+                if !connectionManager.discoveredPeers.isEmpty {
+                    HapticManager.peerDiscovered()
+                }
+            }
 
             // Connection-in-progress overlay
             if isConnecting {

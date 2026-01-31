@@ -27,6 +27,9 @@ struct PeerRowView: View {
             }
             .padding(.vertical, 4)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(peer.displayName), \(sourceLabel)")
+        .accessibilityHint("Tap to connect to this device")
     }
 
     private var sourceLabel: String {
