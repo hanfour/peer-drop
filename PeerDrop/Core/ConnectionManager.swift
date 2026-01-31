@@ -23,6 +23,8 @@ final class ConnectionManager: ObservableObject {
     @Published var showVoiceCall = false
     @Published private(set) var transferProgress: Double = 0
     @Published private(set) var connectedPeer: PeerIdentity?
+    @Published var transferHistory: [TransferRecord] = []
+    @Published var latestToast: TransferRecord?
 
     // MARK: - Internal
 
@@ -34,6 +36,8 @@ final class ConnectionManager: ObservableObject {
     private let certificateManager = CertificateManager()
     private var lastConnectedPeer: DiscoveredPeer?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var requestingTimeoutTask: Task<Void, Never>?
+    private var connectingTimeoutTask: Task<Void, Never>?
 
     // MARK: - Submanagers (set after init)
 
@@ -171,10 +175,56 @@ final class ConnectionManager: ObservableObject {
         backgroundTaskID = .invalid
     }
 
+    // MARK: - Timeout Helpers
+
+    private func cancelTimeouts() {
+        requestingTimeoutTask?.cancel()
+        requestingTimeoutTask = nil
+        connectingTimeoutTask?.cancel()
+        connectingTimeoutTask = nil
+    }
+
+    private func startRequestingTimeout() {
+        requestingTimeoutTask?.cancel()
+        requestingTimeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                guard let self, !Task.isCancelled else { return }
+                if case .requesting = self.state {
+                    print("[ConnectionManager] Connection request timed out after 15s")
+                    self.activeConnection?.cancel()
+                    self.activeConnection = nil
+                    self.transition(to: .failed(reason: "Connection timed out"))
+                }
+            } catch {
+                // Task was cancelled, nothing to do
+            }
+        }
+    }
+
+    private func startConnectingTimeout() {
+        connectingTimeoutTask?.cancel()
+        connectingTimeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                guard let self, !Task.isCancelled else { return }
+                if case .connecting = self.state {
+                    print("[ConnectionManager] Connection setup timed out after 10s")
+                    self.activeConnection?.cancel()
+                    self.activeConnection = nil
+                    self.transition(to: .failed(reason: "Connection setup timed out"))
+                }
+            } catch {
+                // Task was cancelled, nothing to do
+            }
+        }
+    }
+
     // MARK: - Connection Request (Outgoing)
 
     func requestConnection(to peer: DiscoveredPeer) {
         lastConnectedPeer = peer
+        cancelTimeouts()
         transition(to: .requesting)
 
         let endpoint: NWEndpoint
@@ -201,6 +251,8 @@ final class ConnectionManager: ObservableObject {
         connection.start(queue: .global(qos: .userInitiated))
         activeConnection = connection
 
+        startRequestingTimeout()
+
         Task {
             do {
                 try await connection.waitReady()
@@ -210,6 +262,7 @@ final class ConnectionManager: ObservableObject {
                 try await connection.sendMessage(request)
                 startReceiving()
             } catch {
+                cancelTimeouts()
                 transition(to: .failed(reason: error.localizedDescription))
             }
         }
@@ -257,6 +310,7 @@ final class ConnectionManager: ObservableObject {
         pendingIncomingRequest = nil
         connectedPeer = request.peerIdentity
         transition(to: .connecting)
+        startConnectingTimeout()
 
         Task {
             do {
@@ -264,9 +318,11 @@ final class ConnectionManager: ObservableObject {
                 try await request.connection.sendMessage(accept)
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await request.connection.sendMessage(hello)
+                cancelTimeouts()
                 transition(to: .connected)
                 startReceiving()
             } catch {
+                cancelTimeouts()
                 transition(to: .failed(reason: error.localizedDescription))
             }
         }
@@ -287,6 +343,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func disconnect() {
+        cancelTimeouts()
         Task {
             if let connection = activeConnection {
                 let msg = PeerMessage.disconnect(senderID: localIdentity.id)
@@ -324,6 +381,7 @@ final class ConnectionManager: ObservableObject {
     private func handleMessage(_ message: PeerMessage) {
         switch message.type {
         case .connectionAccept:
+            cancelTimeouts()
             if let payload = message.payload,
                let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
                 connectedPeer = identity
@@ -331,6 +389,7 @@ final class ConnectionManager: ObservableObject {
             transition(to: .connected)
 
         case .connectionReject:
+            cancelTimeouts()
             activeConnection?.cancel()
             activeConnection = nil
             transition(to: .rejected)
@@ -382,13 +441,23 @@ final class ConnectionManager: ObservableObject {
 
     private func handleConnectionStateChange(_ nwState: NWConnection.State) {
         switch nwState {
+        case .setup:
+            print("[ConnectionManager] Network connection initializing")
+        case .waiting(let error):
+            print("[ConnectionManager] Network connection waiting: \(error.localizedDescription)")
+        case .preparing:
+            print("[ConnectionManager] Network connection preparing (TLS handshake in progress)")
+        case .ready:
+            print("[ConnectionManager] Network connection established and ready")
         case .failed(let error):
+            cancelTimeouts()
             activeConnection = nil
             transition(to: .failed(reason: error.localizedDescription))
         case .cancelled:
+            cancelTimeouts()
             activeConnection = nil
-        default:
-            break
+        @unknown default:
+            print("[ConnectionManager] Unknown network connection state")
         }
     }
 

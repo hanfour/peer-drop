@@ -67,6 +67,16 @@ final class FileTransfer: ObservableObject {
         let complete = try PeerMessage.fileComplete(hash: hash, senderID: "local")
         try await manager.sendMessage(complete)
         progress = 1.0
+
+        let record = TransferRecord(
+            fileName: fileName,
+            fileSize: fileSize,
+            direction: .sent,
+            timestamp: Date(),
+            success: true
+        )
+        manager.transferHistory.insert(record, at: 0)
+        manager.latestToast = record
     }
 
     // MARK: - Receiving (called from ConnectionManager message loop)
@@ -114,8 +124,9 @@ final class FileTransfer: ObservableObject {
         guard let metadata = receiveMetadata else { return }
 
         let computedHash = receiveHasher.finalize()
+        let success = computedHash == metadata.sha256Hash
 
-        if computedHash == metadata.sha256Hash {
+        if success {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(metadata.fileName)
             try? receiveBuffer.write(to: tempURL)
@@ -126,6 +137,16 @@ final class FileTransfer: ObservableObject {
             lastError = "Hash verification failed"
             HapticManager.transferFailed()
         }
+
+        let record = TransferRecord(
+            fileName: metadata.fileName,
+            fileSize: metadata.fileSize,
+            direction: .received,
+            timestamp: Date(),
+            success: success
+        )
+        connectionManager?.transferHistory.insert(record, at: 0)
+        connectionManager?.latestToast = record
 
         isTransferring = false
         receiveBuffer = Data()

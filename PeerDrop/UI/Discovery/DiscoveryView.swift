@@ -3,6 +3,7 @@ import SwiftUI
 struct DiscoveryView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var showManualConnect = false
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -61,6 +62,18 @@ struct DiscoveryView: View {
             .sheet(isPresented: $showManualConnect) {
                 ManualConnectView()
                     .environmentObject(connectionManager)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
             }
             .onAppear {
                 if case .idle = connectionManager.state {

@@ -12,8 +12,9 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
     }
 
     static func local(certificateFingerprint: String? = nil) -> PeerIdentity {
-        PeerIdentity(
-            displayName: UIDevice.current.name,
+        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName") ?? UIDevice.current.name
+        return PeerIdentity(
+            displayName: name,
             certificateFingerprint: certificateFingerprint
         )
     }

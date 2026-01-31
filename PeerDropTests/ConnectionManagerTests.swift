@@ -54,6 +54,21 @@ final class ConnectionManagerTests: XCTestCase {
         XCTAssertEqual(manager.state, .disconnected)
     }
 
+    func testHandleScenePhaseBackground() {
+        let manager = ConnectionManager()
+        // Should not crash even from idle state
+        manager.handleScenePhaseChange(.background)
+        // State remains idle since discovery was never started
+        XCTAssertEqual(manager.state, .idle)
+    }
+
+    func testHandleScenePhaseActive() {
+        let manager = ConnectionManager()
+        // Should not crash even from idle state
+        manager.handleScenePhaseChange(.active)
+        XCTAssertEqual(manager.state, .idle)
+    }
+
     func testFailedRecovery() {
         let manager = ConnectionManager()
         manager.transition(to: .discovering)
