@@ -2,14 +2,9 @@ import SwiftUI
 
 struct VoiceCallView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
-    @StateObject private var callManager: VoiceCallManager
 
-    init() {
-        // Placeholder — actual init happens via environment
-        _callManager = StateObject(wrappedValue: VoiceCallManager(
-            connectionManager: ConnectionManager(),
-            callKitManager: CallKitManager()
-        ))
+    private var callManager: VoiceCallManager? {
+        connectionManager.voiceCallManager
     }
 
     var body: some View {
@@ -23,7 +18,7 @@ struct VoiceCallView: View {
                 Text(peer.displayName)
                     .font(.title.bold())
 
-                Text(callManager.isInCall ? "Connected" : "Calling...")
+                Text(callManager?.isInCall == true ? "Connected" : "Calling...")
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -33,19 +28,19 @@ struct VoiceCallView: View {
             // Call controls
             HStack(spacing: 40) {
                 CallButton(
-                    icon: callManager.isMuted ? "mic.slash.fill" : "mic.fill",
+                    icon: callManager?.isMuted == true ? "mic.slash.fill" : "mic.fill",
                     label: "Mute",
-                    isActive: callManager.isMuted
+                    isActive: callManager?.isMuted == true
                 ) {
-                    callManager.isMuted.toggle()
+                    callManager?.isMuted.toggle()
                 }
 
                 CallButton(
                     icon: "speaker.wave.3.fill",
                     label: "Speaker",
-                    isActive: callManager.isSpeakerOn
+                    isActive: callManager?.isSpeakerOn == true
                 ) {
-                    callManager.isSpeakerOn.toggle()
+                    callManager?.isSpeakerOn.toggle()
                 }
 
                 CallButton(
@@ -53,17 +48,12 @@ struct VoiceCallView: View {
                     label: "End",
                     isDestructive: true
                 ) {
-                    callManager.endCall()
+                    callManager?.endCall()
                 }
             }
             .padding(.bottom, 48)
         }
         .padding()
-        .onAppear {
-            if connectionManager.voiceCallManager != nil {
-                // Voice call manager is available from connectionManager
-            }
-        }
     }
 }
 

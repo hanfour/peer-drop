@@ -21,6 +21,10 @@ struct PeerDropApp: App {
             }
             .animation(.easeOut(duration: 0.4), value: showLaunch)
             .onAppear {
+                // Wire CallKit into ConnectionManager
+                if let callKit = appDelegate.callKitManager {
+                    connectionManager.configureVoiceCalling(callKitManager: callKit)
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     showLaunch = false
                 }

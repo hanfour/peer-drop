@@ -41,12 +41,20 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Submanagers (set after init)
 
-    var fileTransfer: FileTransfer?
-    var voiceCallManager: VoiceCallManager?
+    private(set) var fileTransfer: FileTransfer?
+    private(set) var voiceCallManager: VoiceCallManager?
 
     init() {
         let certManager = CertificateManager()
         self.localIdentity = .local(certificateFingerprint: certManager.fingerprint)
+
+        // Deferred init — fileTransfer needs `self`
+        self.fileTransfer = FileTransfer(connectionManager: self)
+    }
+
+    /// Call once after init to wire up CallKit (requires AppDelegate reference).
+    func configureVoiceCalling(callKitManager: CallKitManager) {
+        self.voiceCallManager = VoiceCallManager(connectionManager: self, callKitManager: callKitManager)
     }
 
     // MARK: - State Transitions
