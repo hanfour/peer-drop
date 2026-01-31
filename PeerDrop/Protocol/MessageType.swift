@@ -14,6 +14,10 @@ enum MessageType: String, Codable {
     case fileChunk
     case fileComplete
 
+    // Multi-file batch transfer
+    case batchStart
+    case batchComplete
+
     // Voice call signaling
     case sdpOffer
     case sdpAnswer

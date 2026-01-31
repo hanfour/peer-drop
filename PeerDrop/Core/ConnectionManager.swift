@@ -446,6 +446,9 @@ final class ConnectionManager: ObservableObject {
         case .connectionRequest:
             // Already handled during handshake
             break
+        case .batchStart, .batchComplete:
+            // Multi-file batch markers — handled by FileTransfer internally
+            break
         }
     }
 

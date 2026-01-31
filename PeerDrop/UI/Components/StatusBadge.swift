@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct StatusBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
     let state: ConnectionState
 
     var body: some View {
@@ -15,7 +16,7 @@ struct StatusBadge: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(color.opacity(0.1), in: Capsule())
+        .background(color.opacity(colorScheme == .dark ? 0.2 : 0.1), in: Capsule())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Status: \(label)")
     }

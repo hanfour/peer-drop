@@ -54,6 +54,16 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .fileComplete, payload: data, senderID: senderID)
     }
 
+    static func batchStart(metadata: BatchMetadata, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(metadata)
+        return PeerMessage(type: .batchStart, payload: data, senderID: senderID)
+    }
+
+    static func batchComplete(batchID: String, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(["batchID": batchID])
+        return PeerMessage(type: .batchComplete, payload: data, senderID: senderID)
+    }
+
     static func disconnect(senderID: String) -> PeerMessage {
         PeerMessage(type: .disconnect, senderID: senderID)
     }

@@ -28,6 +28,11 @@
 	<string>PeerDrop uses the local network to discover and connect to nearby devices for file transfer and voice calls.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PeerDrop needs microphone access for voice calls.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>voip</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

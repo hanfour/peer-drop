@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct LaunchScreen: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    Color(red: 0.22, green: 0.49, blue: 0.98),
-                    Color(red: 0.28, green: 0.38, blue: 0.95)
-                ],
+                colors: colorScheme == .dark
+                    ? [Color(red: 0.12, green: 0.32, blue: 0.78), Color(red: 0.16, green: 0.24, blue: 0.72)]
+                    : [Color(red: 0.22, green: 0.49, blue: 0.98), Color(red: 0.28, green: 0.38, blue: 0.95)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )

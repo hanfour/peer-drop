@@ -1,10 +1,13 @@
 import SwiftUI
+import UIKit
 
 struct ConnectionView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var showDisconnectConfirm = false
     @State private var showToast = false
     @State private var toastRecord: TransferRecord?
+    @State private var hasClipboardContent = false
+    @State private var showClipboardShare = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -34,6 +37,17 @@ struct ConnectionView: View {
                                     .padding(.vertical, 12)
                             }
                             .buttonStyle(.borderedProminent)
+
+                            Button {
+                                showClipboardShare = true
+                            } label: {
+                                Label("Clipboard", systemImage: "doc.on.clipboard")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.orange)
+                            .disabled(!hasClipboardContent)
 
                             Button {
                                 Task {
@@ -95,7 +109,17 @@ struct ConnectionView: View {
                 }
             }
         }
+        .sheet(isPresented: $showClipboardShare) {
+            ClipboardShareView()
+                .environmentObject(connectionManager)
+        }
         .animation(.easeInOut(duration: 0.25), value: connectionManager.state)
+        .onAppear {
+            checkClipboardContent()
+        }
+        .onChange(of: connectionManager.state) { _ in
+            checkClipboardContent()
+        }
         .onChange(of: connectionManager.latestToast?.id) { _ in
             guard let record = connectionManager.latestToast else { return }
             toastRecord = record
@@ -110,4 +134,12 @@ struct ConnectionView: View {
             }
         }
     }
+
+    // MARK: - Clipboard Helper
+
+    private func checkClipboardContent() {
+        let pasteboard = UIPasteboard.general
+        hasClipboardContent = pasteboard.hasStrings || pasteboard.hasImages
+    }
+
 }

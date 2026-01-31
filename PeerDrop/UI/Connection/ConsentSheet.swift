@@ -30,6 +30,9 @@ struct ConsentSheet: View {
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
                 }
                 .padding(.horizontal)
             }

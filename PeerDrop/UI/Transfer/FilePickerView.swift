@@ -6,9 +6,9 @@ struct FilePickerView: UIViewControllerRepresentable {
     @EnvironmentObject var connectionManager: ConnectionManager
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item, .folder])
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = true
         return picker
     }
 
@@ -26,16 +26,32 @@ struct FilePickerView: UIViewControllerRepresentable {
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
-
-            guard url.startAccessingSecurityScopedResource() else { return }
-            defer { url.stopAccessingSecurityScopedResource() }
+            guard !urls.isEmpty else { return }
 
             Task { @MainActor in
                 connectionManager.showTransferProgress = true
                 connectionManager.transition(to: .transferring(progress: 0))
                 do {
-                    try await connectionManager.fileTransfer?.sendFile(at: url)
+                    // Process URLs - zip directories if needed
+                    var processedURLs: [URL] = []
+
+                    var directoryFlags: [URL: Bool] = [:]
+
+                    for url in urls {
+                        guard url.startAccessingSecurityScopedResource() else { continue }
+                        defer { url.stopAccessingSecurityScopedResource() }
+
+                        if url.hasDirectoryPath {
+                            let zippedURL = try url.zipDirectory()
+                            processedURLs.append(zippedURL)
+                            directoryFlags[zippedURL] = true
+                        } else {
+                            processedURLs.append(url)
+                            directoryFlags[url] = false
+                        }
+                    }
+
+                    try await connectionManager.fileTransfer?.sendFiles(at: processedURLs, directoryFlags: directoryFlags)
                     connectionManager.transition(to: .connected)
                 } catch {
                     connectionManager.transition(to: .failed(reason: error.localizedDescription))

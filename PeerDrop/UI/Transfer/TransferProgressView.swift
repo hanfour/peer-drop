@@ -18,6 +18,12 @@ struct TransferProgressView: View {
                     .truncationMode(.middle)
             }
 
+            if let transfer = connectionManager.fileTransfer, transfer.totalFileCount > 1 {
+                Text("File \(transfer.currentFileIndex) of \(transfer.totalFileCount)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
             Text(transferLabel)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

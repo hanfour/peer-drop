@@ -18,8 +18,10 @@
 		2782480390204B1B5A7D7AB9 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D513DA2C80E63FB9BB413B42 /* CallKitManager.swift */; };
 		3FFBC03FD91DD4BFB1DFD135 /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 673CA4547FC92F153E75739C /* WebRTCClient.swift */; };
 		4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21815A246EC26999D8D31534 /* VoiceCallManager.swift */; };
+		4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */; };
 		53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */; };
 		5418D2C8E97B7FA61101B692 /* ConsentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923FD5FA87FD257ADB28D0D2 /* ConsentSheet.swift */; };
+		5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */; };
 		5D59113DCD6E53DE9974640F /* TransferHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC682C14084D950A4869B2CE /* TransferHistoryView.swift */; };
 		63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */; };
 		6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */; };
@@ -39,6 +41,7 @@
 		9C46933AE9ED40CF1729A0D9 /* LoopbackIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */; };
 		9F91E409FC12B0F37B21F566 /* MessageFramer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */; };
 		A31C96C072B1CDD392201E15 /* HapticManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */; };
+		A74847A67B418445595E82AF /* URL+Zip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4140F87FED34F546E01E5EDC /* URL+Zip.swift */; };
 		A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */; };
 		AAEB94525DFB07657E10BEFF /* TailscalePeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D979E35021B42ECC2F105F /* TailscalePeer.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
@@ -97,7 +100,9 @@
 		37D3096AC5F3A6FEA67284EC /* SDPSignaling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDPSignaling.swift; sourceTree = "<group>"; };
 		38C2478F20C10D5FB383E756 /* TransferProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferProgressView.swift; sourceTree = "<group>"; };
 		395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		4140F87FED34F546E01E5EDC /* URL+Zip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+Zip.swift"; sourceTree = "<group>"; };
 		41DCF1ACEEF25E8262FC1291 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardShareView.swift; sourceTree = "<group>"; };
 		46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerMessageTests.swift; sourceTree = "<group>"; };
 		4E541AC353B141C1ABC8F38B /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		50393228F69F31F111E2B37B /* VoiceCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallView.swift; sourceTree = "<group>"; };
@@ -135,6 +140,7 @@
 		C292EE90B82150846F8F75E6 /* MessageType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageType.swift; sourceTree = "<group>"; };
 		C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFramer.swift; sourceTree = "<group>"; };
 		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
+		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		D4D28254D09D4993B28316CD /* FileTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransfer.swift; sourceTree = "<group>"; };
 		D513DA2C80E63FB9BB413B42 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
@@ -196,6 +202,7 @@
 			children = (
 				B07C0E24C95366B78FAFC44E /* CertificateManagerTests.swift */,
 				0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */,
+				D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */,
 				90A9DA5F16B00839A9012834 /* FileTransferTests.swift */,
 				712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */,
 				A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */,
@@ -342,6 +349,7 @@
 		DF45C77A513EB8AC88DBFA61 /* Transfer */ = {
 			isa = PBXGroup;
 			children = (
+				464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */,
 				A8034F4F86233093A4E36905 /* FilePickerView.swift */,
 				FC682C14084D950A4869B2CE /* TransferHistoryView.swift */,
 				38C2478F20C10D5FB383E756 /* TransferProgressView.swift */,
@@ -365,6 +373,7 @@
 			children = (
 				2AC40206FC32B2304A187E87 /* Data+Chunking.swift */,
 				515ABAB80F2FAFFA147E539E /* NWConnection+Async.swift */,
+				4140F87FED34F546E01E5EDC /* URL+Zip.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -502,6 +511,7 @@
 			files = (
 				20790589AF70549A2AD0380D /* CertificateManagerTests.swift in Sources */,
 				53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */,
+				4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */,
 				F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */,
 				A31C96C072B1CDD392201E15 /* HapticManagerTests.swift in Sources */,
 				D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */,
@@ -524,6 +534,7 @@
 				F906D35D0D3CD0586BC5B046 /* BonjourDiscovery.swift in Sources */,
 				2782480390204B1B5A7D7AB9 /* CallKitManager.swift in Sources */,
 				EB33CCE006494C0D7838038F /* CertificateManager.swift in Sources */,
+				5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */,
 				91CAFCE77CB2258986637357 /* ConnectionManager.swift in Sources */,
 				74DA55958F74974AA3086DC6 /* ConnectionState.swift in Sources */,
 				D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */,
@@ -559,6 +570,7 @@
 				E55B24C969A12E4905A98F0D /* TransferProgressView.swift in Sources */,
 				B67BE936119A20744D591C90 /* TransferRecord.swift in Sources */,
 				CF75E0F98348446155AFC727 /* TransportProtocol.swift in Sources */,
+				A74847A67B418445595E82AF /* URL+Zip.swift in Sources */,
 				4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */,
 				18E7D2A8006C6991A961376A /* VoiceCallView.swift in Sources */,
 				3FFBC03FD91DD4BFB1DFD135 /* WebRTCClient.swift in Sources */,
