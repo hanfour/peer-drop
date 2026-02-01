@@ -18,8 +18,9 @@ final class FileTransfer: ObservableObject {
     private let chunkSize = Data.defaultChunkSize
     private var isCancelled = false
 
-    // Receive state
-    private var receiveBuffer = Data()
+    // Receive state — stream to disk instead of buffering in RAM
+    private var receiveFileHandle: FileHandle?
+    private var receiveTempURL: URL?
     private var receiveMetadata: TransferMetadata?
     private var receiveHasher = HashVerifier()
     private var receivedBytes: Int64 = 0
@@ -75,10 +76,12 @@ final class FileTransfer: ObservableObject {
             isCurrentTransferDirectory = false
         }
 
-        let data = try Data(contentsOf: url)
-        let hash = HashVerifier.sha256(data)
         let fileName = url.lastPathComponent
-        let fileSize = Int64(data.count)
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = (attrs[.size] as? Int64) ?? 0
+
+        // Stream hash computation from disk
+        let hash = try HashVerifier.sha256(fileAt: url, chunkSize: chunkSize)
 
         let metadata = TransferMetadata(
             fileName: fileName,
@@ -92,15 +95,19 @@ final class FileTransfer: ObservableObject {
         let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: "local")
         try await manager.sendMessage(offer)
 
-        // Wait for accept/reject is handled by the message loop calling handleFileAccept/Reject
+        // Stream chunks from disk via FileHandle (constant memory usage)
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { handle.closeFile() }
 
-        // Send chunks
-        let chunks = data.chunks(ofSize: chunkSize)
-        for (index, chunk) in chunks.enumerated() {
+        let totalChunks = max(1, Int((fileSize + Int64(chunkSize) - 1) / Int64(chunkSize)))
+        var chunkIndex = 0
+
+        for chunk in FileChunkIterator(handle: handle, chunkSize: chunkSize, totalSize: fileSize) {
             guard !isCancelled else { throw FileTransferError.cancelled }
             let chunkMsg = PeerMessage.fileChunk(chunk, senderID: "local")
             try await manager.sendMessage(chunkMsg)
-            progress = Double(index + 1) / Double(chunks.count)
+            chunkIndex += 1
+            progress = Double(chunkIndex) / Double(totalChunks)
         }
 
         // Send completion
@@ -128,11 +135,17 @@ final class FileTransfer: ObservableObject {
         }
 
         receiveMetadata = metadata
-        receiveBuffer = Data()
         receiveHasher = HashVerifier()
         receivedBytes = 0
         currentFileName = metadata.displayName
         isCurrentTransferDirectory = metadata.isDirectory
+
+        // Prepare a temp file for streaming chunks to disk
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + "_" + metadata.fileName)
+        FileManager.default.createFile(atPath: tempURL.path, contents: nil)
+        receiveTempURL = tempURL
+        receiveFileHandle = try? FileHandle(forWritingTo: tempURL)
 
         // Auto-accept for now (consent already given at connection level)
         Task {
@@ -146,15 +159,35 @@ final class FileTransfer: ObservableObject {
 
     /// Cancel an in-progress transfer without disconnecting.
     func cancelTransfer() {
+        cleanupReceiveState(error: "Transfer cancelled")
+        connectionManager?.showTransferProgress = false
+        connectionManager?.transition(to: .connected)
+    }
+
+    /// Called by ConnectionManager when the connection drops unexpectedly.
+    func handleConnectionFailure() {
+        cleanupReceiveState(error: "Connection lost during transfer")
+    }
+
+    private func cleanupReceiveState(error: String) {
         isCancelled = true
         isTransferring = false
         currentFileName = nil
         isCurrentTransferDirectory = false
-        receiveBuffer = Data()
+        receiveFileHandle?.closeFile()
+        receiveFileHandle = nil
+        if let tempURL = receiveTempURL {
+            try? FileManager.default.removeItem(at: tempURL)
+        }
+        receiveTempURL = nil
         receiveMetadata = nil
-        lastError = "Transfer cancelled"
-        connectionManager?.showTransferProgress = false
-        connectionManager?.transition(to: .connected)
+        batchMetadata = nil
+        batchReceivedURLs = []
+        batchFilesCompleted = 0
+        overallProgress = 0
+        totalFileCount = 0
+        currentFileIndex = 0
+        lastError = error
     }
 
     func handleFileAccept() {
@@ -169,7 +202,7 @@ final class FileTransfer: ObservableObject {
     func handleFileChunk(_ message: PeerMessage) {
         guard let data = message.payload, let metadata = receiveMetadata else { return }
 
-        receiveBuffer.append(data)
+        receiveFileHandle?.write(data)
         receiveHasher.update(with: data)
         receivedBytes += Int64(data.count)
         progress = Double(receivedBytes) / Double(metadata.fileSize)
@@ -178,31 +211,39 @@ final class FileTransfer: ObservableObject {
     func handleFileComplete(_ message: PeerMessage) {
         guard let metadata = receiveMetadata else { return }
 
+        receiveFileHandle?.closeFile()
+        receiveFileHandle = nil
+
         let computedHash = receiveHasher.finalize()
         let success = computedHash == metadata.sha256Hash
 
-        if success {
-            let tempURL = FileManager.default.temporaryDirectory
+        if success, let tempURL = receiveTempURL {
+            let destURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(metadata.fileName)
-            try? receiveBuffer.write(to: tempURL)
+            try? FileManager.default.removeItem(at: destURL)
+            try? FileManager.default.moveItem(at: tempURL, to: destURL)
 
-            // If the file is a zipped directory, unzip it
-            if metadata.isDirectory {
-                if let unzippedURL = try? tempURL.unzipFile() {
-                    receivedFileURL = unzippedURL
-                    // Clean up the intermediate zip
-                    try? FileManager.default.removeItem(at: tempURL)
-                } else {
-                    // Fallback: present the zip if unzip fails
-                    receivedFileURL = tempURL
-                }
+            let finalURL: URL
+            if metadata.isDirectory, let unzippedURL = try? destURL.unzipFile() {
+                finalURL = unzippedURL
+                try? FileManager.default.removeItem(at: destURL)
             } else {
-                receivedFileURL = tempURL
+                finalURL = destURL
+            }
+
+            if batchMetadata != nil {
+                batchReceivedURLs.append(finalURL)
+                batchFilesCompleted += 1
+            } else {
+                receivedFileURL = finalURL
             }
 
             lastError = nil
             HapticManager.transferComplete()
         } else {
+            if let tempURL = receiveTempURL {
+                try? FileManager.default.removeItem(at: tempURL)
+            }
             lastError = "Hash verification failed"
             HapticManager.transferFailed()
         }
@@ -217,14 +258,22 @@ final class FileTransfer: ObservableObject {
         connectionManager?.transferHistory.insert(record, at: 0)
         connectionManager?.latestToast = record
 
-        isTransferring = false
-        currentFileName = nil
-        receiveBuffer = Data()
+        receiveTempURL = nil
         receiveMetadata = nil
 
-        Task {
-            connectionManager?.showTransferProgress = false
-            connectionManager?.transition(to: .connected)
+        if batchMetadata == nil {
+            isTransferring = false
+            currentFileName = nil
+            isCurrentTransferDirectory = false
+
+            Task {
+                connectionManager?.showTransferProgress = false
+                connectionManager?.transition(to: .connected)
+            }
+        } else {
+            currentFileName = nil
+            isCurrentTransferDirectory = false
+            progress = 0
         }
     }
 }

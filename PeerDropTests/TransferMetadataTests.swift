@@ -33,6 +33,33 @@ final class TransferMetadataTests: XCTestCase {
         XCTAssertEqual(decoded.fileName, "photo.jpg")
     }
 
+    func testCodableWithDirectory() throws {
+        let metadata = TransferMetadata(
+            fileName: "MyFolder.zip",
+            fileSize: 2_048,
+            mimeType: nil,
+            sha256Hash: "dir123",
+            isDirectory: true
+        )
+        let data = try JSONEncoder().encode(metadata)
+        let decoded = try JSONDecoder().decode(TransferMetadata.self, from: data)
+
+        XCTAssertTrue(decoded.isDirectory)
+        XCTAssertEqual(decoded.displayName, "MyFolder")
+        XCTAssertEqual(decoded.fileName, "MyFolder.zip")
+    }
+
+    func testDisplayNameForRegularFile() {
+        let metadata = TransferMetadata(
+            fileName: "report.pdf",
+            fileSize: 1024,
+            mimeType: nil,
+            sha256Hash: "file123"
+        )
+        XCTAssertFalse(metadata.isDirectory)
+        XCTAssertEqual(metadata.displayName, "report.pdf")
+    }
+
     func testFormattedSize() {
         let small = TransferMetadata(fileName: "a.txt", fileSize: 500, mimeType: nil, sha256Hash: "x")
         XCTAssertFalse(small.formattedSize.isEmpty)

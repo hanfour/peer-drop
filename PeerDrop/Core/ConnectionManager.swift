@@ -379,6 +379,7 @@ final class ConnectionManager: ObservableObject {
                     handleMessage(message)
                 } catch {
                     if activeConnection != nil {
+                        fileTransfer?.handleConnectionFailure()
                         transition(to: .failed(reason: error.localizedDescription))
                         activeConnection = nil
                     }
@@ -464,6 +465,7 @@ final class ConnectionManager: ObservableObject {
             print("[ConnectionManager] Network connection established and ready")
         case .failed(let error):
             cancelTimeouts()
+            fileTransfer?.handleConnectionFailure()
             activeConnection = nil
             transition(to: .failed(reason: error.localizedDescription))
         case .cancelled:
