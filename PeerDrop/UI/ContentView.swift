@@ -2,79 +2,90 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
+    @State private var selectedTab = 0
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var showShareSheet = false
     @State private var receivedFileURL: URL?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                switch connectionManager.state {
-                case .connected, .transferring, .voiceCall:
-                    ConnectionView()
-                default:
-                    DiscoveryView()
-                }
+        TabView(selection: $selectedTab) {
+            NavigationStack {
+                NearbyTab()
             }
-            .navigationTitle("PeerDrop")
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    if connectionManager.state != .idle {
-                        StatusBadge(state: connectionManager.state)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
+            .tabItem {
+                Label("Nearby", systemImage: "wifi")
             }
-            .sheet(item: $connectionManager.pendingIncomingRequest) { request in
-                ConsentSheet(request: request)
-                    .environmentObject(connectionManager)
+            .tag(0)
+
+            NavigationStack {
+                ConnectedTab()
             }
-            .sheet(isPresented: $connectionManager.showTransferProgress) {
-                TransferProgressView()
-                    .environmentObject(connectionManager)
+            .tabItem {
+                Label("Connected", systemImage: "link")
             }
-            .sheet(isPresented: $connectionManager.showVoiceCall) {
-                VoiceCallView()
-                    .environmentObject(connectionManager)
+            .tag(1)
+
+            NavigationStack {
+                LibraryTab()
             }
-            .sheet(isPresented: $showShareSheet) {
-                if let url = receivedFileURL {
-                    ShareSheet(items: [url])
-                }
+            .tabItem {
+                Label("Library", systemImage: "archivebox")
             }
-            .alert("Connection Error", isPresented: $showError) {
-                if connectionManager.canReconnect {
-                    Button("Reconnect") {
-                        connectionManager.reconnect()
-                    }
-                }
-                Button("Back to Discovery", role: .cancel) {
-                    connectionManager.transition(to: .discovering)
-                    connectionManager.restartDiscovery()
-                }
-            } message: {
-                Text(errorMessage ?? "An unknown error occurred.")
-            }
-            .onChange(of: connectionManager.state) { _ in
-                if case .failed(let reason) = connectionManager.state {
-                    errorMessage = reason
-                    showError = true
-                }
-                if case .rejected = connectionManager.state {
-                    errorMessage = "The peer declined your connection request."
-                    showError = true
-                }
-            }
-            .onChange(of: connectionManager.fileTransfer?.receivedFileURL) { _ in
-                if let url = connectionManager.fileTransfer?.receivedFileURL {
-                    receivedFileURL = url
-                    showShareSheet = true
-                    connectionManager.fileTransfer?.receivedFileURL = nil
-                }
+            .tag(2)
+        }
+        .sheet(item: $connectionManager.pendingIncomingRequest) { request in
+            ConsentSheet(request: request)
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $connectionManager.showTransferProgress) {
+            TransferProgressView()
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $connectionManager.showVoiceCall) {
+            VoiceCallView()
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = receivedFileURL {
+                ShareSheet(items: [url])
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: connectionManager.state)
+        .alert("Connection Error", isPresented: $showError) {
+            if connectionManager.canReconnect {
+                Button("Reconnect") {
+                    connectionManager.reconnect()
+                }
+            }
+            Button("Back to Discovery", role: .cancel) {
+                connectionManager.transition(to: .discovering)
+                connectionManager.restartDiscovery()
+                selectedTab = 0
+            }
+        } message: {
+            Text(errorMessage ?? "An unknown error occurred.")
+        }
+        .onChange(of: connectionManager.state) { _ in
+            switch connectionManager.state {
+            case .connected, .transferring, .voiceCall:
+                selectedTab = 1
+            case .failed(let reason):
+                errorMessage = reason
+                showError = true
+            case .rejected:
+                errorMessage = "The peer declined your connection request."
+                showError = true
+            default:
+                break
+            }
+        }
+        .onChange(of: connectionManager.fileTransfer?.receivedFileURL) { _ in
+            if let url = connectionManager.fileTransfer?.receivedFileURL {
+                receivedFileURL = url
+                showShareSheet = true
+                connectionManager.fileTransfer?.receivedFileURL = nil
+            }
+        }
     }
 }
 

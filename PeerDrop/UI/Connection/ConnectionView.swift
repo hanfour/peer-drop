@@ -97,18 +97,6 @@ struct ConnectionView: View {
                     .zIndex(1)
             }
         }
-        .navigationTitle("Connection")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink {
-                    TransferHistoryView()
-                        .environmentObject(connectionManager)
-                } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                }
-            }
-        }
         .sheet(isPresented: $showClipboardShare) {
             ClipboardShareView()
                 .environmentObject(connectionManager)

@@ -43,6 +43,7 @@ final class ConnectionManager: ObservableObject {
 
     private(set) var fileTransfer: FileTransfer?
     private(set) var voiceCallManager: VoiceCallManager?
+    let deviceStore = DeviceRecordStore()
 
     init() {
         let certManager = CertificateManager()
@@ -55,6 +56,29 @@ final class ConnectionManager: ObservableObject {
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
     func configureVoiceCalling(callKitManager: CallKitManager) {
         self.voiceCallManager = VoiceCallManager(connectionManager: self, callKitManager: callKitManager)
+    }
+
+    private func recordConnectedDevice() {
+        guard let peer = connectedPeer else { return }
+        let sourceType: String
+        let host: String?
+        let port: UInt16?
+        if let lastPeer = lastConnectedPeer {
+            switch lastPeer.source {
+            case .bonjour: sourceType = "bonjour"
+            case .manual: sourceType = "manual"
+            }
+            switch lastPeer.endpoint {
+            case .manual(let h, let p):
+                host = h; port = p
+            case .bonjour:
+                host = nil; port = nil
+            }
+        } else {
+            sourceType = "bonjour"; host = nil; port = nil
+        }
+        let id = lastConnectedPeer?.id ?? peer.id
+        deviceStore.addOrUpdate(id: id, displayName: peer.displayName, sourceType: sourceType, host: host, port: port)
     }
 
     // MARK: - State Transitions
@@ -330,6 +354,7 @@ final class ConnectionManager: ObservableObject {
                 try await request.connection.sendMessage(hello)
                 cancelTimeouts()
                 transition(to: .connected)
+                recordConnectedDevice()
                 startReceiving()
             } catch {
                 cancelTimeouts()
@@ -398,6 +423,7 @@ final class ConnectionManager: ObservableObject {
                 connectedPeer = identity
             }
             transition(to: .connected)
+            recordConnectedDevice()
 
         case .connectionReject:
             cancelTimeouts()
