@@ -3,6 +3,9 @@ import Network
 import Combine
 import SwiftUI
 import UIKit
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "ConnectionManager")
 
 /// Incoming connection request for the consent sheet.
 struct IncomingRequest: Identifiable {
@@ -263,18 +266,26 @@ final class ConnectionManager: ObservableObject {
         switch peer.endpoint {
         case .bonjour(let name, let type, let domain):
             endpoint = .service(name: name, type: type, domain: domain, interface: nil)
+            logger.info("Connecting to Bonjour peer: \(name).\(type).\(domain)")
         case .manual(let host, let port):
             endpoint = .hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!)
+            logger.info("Connecting to manual peer: \(host):\(port)")
         }
 
-        // Use TLS for outgoing connections (trust-on-first-use)
-        let clientTLS = TLSConfiguration.clientOptions(
-            identity: certificateManager.identity
-        )
+        // Use TLS for outgoing connections only if we have an identity
+        let clientTLS: NWProtocolTLS.Options?
+        if let identity = certificateManager.identity {
+            clientTLS = TLSConfiguration.clientOptions(identity: identity)
+            logger.info("Using TLS for outgoing connection")
+        } else {
+            clientTLS = nil
+            logger.info("No TLS identity available, connecting without TLS")
+        }
         let params = NWParameters.peerDrop(tls: clientTLS)
         let connection = NWConnection(to: endpoint, using: params)
 
         connection.stateUpdateHandler = { [weak self] state in
+            logger.info("NWConnection state: \(String(describing: state))")
             Task { @MainActor in
                 self?.handleConnectionStateChange(state)
             }
@@ -287,13 +298,18 @@ final class ConnectionManager: ObservableObject {
 
         Task {
             do {
+                logger.info("Waiting for connection to be ready...")
                 try await connection.waitReady()
+                logger.info("Connection ready! Sending HELLO...")
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await connection.sendMessage(hello)
+                logger.info("HELLO sent. Sending CONNECTION_REQUEST...")
                 let request = PeerMessage.connectionRequest(senderID: localIdentity.id)
                 try await connection.sendMessage(request)
+                logger.info("CONNECTION_REQUEST sent. Starting receive loop.")
                 startReceiving()
             } catch {
+                logger.error("Connection failed: \(error.localizedDescription)")
                 cancelTimeouts()
                 transition(to: .failed(reason: error.localizedDescription))
             }
@@ -303,35 +319,55 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Incoming Connection
 
     private func handleIncomingConnection(_ connection: NWConnection) {
+        logger.info("Incoming connection from: \(String(describing: connection.endpoint))")
+
+        // Reject if we're already handling a connection or are connected
+        guard activeConnection == nil else {
+            logger.info("Already have active connection, rejecting incoming from: \(String(describing: connection.endpoint))")
+            connection.cancel()
+            return
+        }
+
         connection.start(queue: .global(qos: .userInitiated))
         activeConnection = connection
 
+        connection.stateUpdateHandler = { state in
+            logger.info("Incoming NWConnection state: \(String(describing: state))")
+        }
+
         Task {
             do {
+                logger.info("Waiting for incoming connection to be ready...")
                 try await connection.waitReady()
+                logger.info("Incoming connection ready! Waiting for HELLO...")
                 let helloMsg = try await connection.receiveMessage()
+                logger.info("Received message type: \(String(describing: helloMsg.type))")
 
                 guard helloMsg.type == .hello, helloMsg.version == .current,
                       let payload = helloMsg.payload else {
-                    print("[ConnectionManager] Incompatible protocol version or invalid hello")
+                    logger.error("Incompatible protocol version or invalid hello")
                     connection.cancel()
                     return
                 }
 
                 let peerIdentity = try JSONDecoder().decode(PeerIdentity.self, from: payload)
+                logger.info("Peer identity received: \(peerIdentity.displayName)")
                 let requestMsg = try await connection.receiveMessage()
 
                 guard requestMsg.type == .connectionRequest else {
+                    logger.error("Expected connectionRequest, got: \(String(describing: requestMsg.type))")
                     connection.cancel()
                     return
                 }
 
+                logger.info("Connection request received! Showing consent sheet.")
                 transition(to: .incomingRequest)
                 pendingIncomingRequest = IncomingRequest(
                     peerIdentity: peerIdentity,
                     connection: connection
                 )
             } catch {
+                logger.error("Incoming connection error: \(error.localizedDescription)")
                 connection.cancel()
             }
         }

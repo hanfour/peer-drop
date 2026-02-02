@@ -1,6 +1,9 @@
 import Foundation
 import Network
 import Combine
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "BonjourDiscovery")
 
 final class BonjourDiscovery: DiscoveryBackend {
     private static let serviceType = "_peerdrop._tcp"
@@ -58,7 +61,7 @@ final class BonjourDiscovery: DiscoveryBackend {
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
-                    break
+                    logger.info("Listener ready on port: \(listener.port?.rawValue ?? 0)")
                 case .failed(let error):
                     print("[BonjourDiscovery] Listener failed: \(error), restarting...")
                     listener.cancel()
@@ -88,6 +91,7 @@ final class BonjourDiscovery: DiscoveryBackend {
     var onIncomingConnection: ((NWConnection) -> Void)?
 
     private func handleIncomingConnection(_ connection: NWConnection) {
+        logger.info("New incoming connection: \(String(describing: connection.endpoint))")
         onIncomingConnection?(connection)
     }
 

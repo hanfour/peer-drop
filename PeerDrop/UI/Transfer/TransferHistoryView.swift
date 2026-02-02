@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TransferHistoryView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
@@ -47,5 +48,12 @@ struct TransferHistoryView: View {
         }
         .navigationTitle("Transfer History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") {
+                    dismiss()
+                }
+            }
+        }
     }
 }
