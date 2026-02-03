@@ -4,6 +4,7 @@ import Foundation
 final class ChatManager: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var unreadCounts: [String: Int] = [:]
+    @Published var activeChatPeerID: String?
 
     var totalUnread: Int { unreadCounts.values.reduce(0, +) }
 
@@ -40,7 +41,9 @@ final class ChatManager: ObservableObject {
     func saveIncoming(text: String, peerID: String, peerName: String) -> ChatMessage {
         let msg = ChatMessage.text(text: text, isOutgoing: false, peerName: peerName)
         appendMessage(msg, peerID: peerID)
-        incrementUnread(peerID: peerID)
+        if activeChatPeerID != peerID {
+            incrementUnread(peerID: peerID)
+        }
         return msg
     }
 
@@ -55,7 +58,9 @@ final class ChatManager: ObservableObject {
         let relativePath = saveMediaFile(data: fileData, fileName: payload.fileName, peerID: peerID)
         let msg = ChatMessage.media(mediaType: payload.mediaType.rawValue, fileName: payload.fileName, fileSize: payload.fileSize, mimeType: payload.mimeType, duration: payload.duration, localFileURL: relativePath, thumbnailData: payload.thumbnailData, isOutgoing: false, peerName: peerName)
         appendMessage(msg, peerID: peerID)
-        incrementUnread(peerID: peerID)
+        if activeChatPeerID != peerID {
+            incrementUnread(peerID: peerID)
+        }
     }
 
     func loadMessages(forPeer peerID: String) {

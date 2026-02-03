@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct NearbyTab: View {
+    @Binding var selectedTab: Int
     @EnvironmentObject var connectionManager: ConnectionManager
     @AppStorage("peerDropViewMode") private var isGridMode = false
     @AppStorage("peerDropSortMode") private var sortModeRaw = "name"
@@ -49,7 +50,11 @@ struct NearbyTab: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                             ForEach(sortedPeers) { peer in
                                 PeerGridItemView(peer: peer) {
-                                    connectionManager.requestConnection(to: peer)
+                                    if isConnectedPeer(peer) {
+                                        selectedTab = 1
+                                    } else {
+                                        connectionManager.requestConnection(to: peer)
+                                    }
                                 }
                                 .disabled(isConnecting)
                             }
@@ -64,7 +69,19 @@ struct NearbyTab: View {
                         Section {
                             ForEach(sortedPeers) { peer in
                                 PeerRowView(peer: peer) {
-                                    connectionManager.requestConnection(to: peer)
+                                    if isConnectedPeer(peer) {
+                                        selectedTab = 1
+                                    } else {
+                                        connectionManager.requestConnection(to: peer)
+                                    }
+                                }
+                                .overlay(alignment: .trailing) {
+                                    if isConnectedPeer(peer) {
+                                        Text("Connected")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.green)
+                                            .padding(.trailing, 8)
+                                    }
                                 }
                                 .disabled(isConnecting)
                             }
@@ -209,5 +226,10 @@ struct NearbyTab: View {
         case .connecting: return "Connecting..."
         default: return ""
         }
+    }
+
+    private func isConnectedPeer(_ peer: DiscoveredPeer) -> Bool {
+        guard case .connected = connectionManager.state else { return false }
+        return connectionManager.lastConnectedPeer?.id == peer.id
     }
 }

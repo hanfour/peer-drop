@@ -38,7 +38,7 @@ final class ConnectionManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let localIdentity: PeerIdentity
     let certificateManager = CertificateManager()
-    private var lastConnectedPeer: DiscoveredPeer?
+    private(set) var lastConnectedPeer: DiscoveredPeer?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var requestingTimeoutTask: Task<Void, Never>?
     private var connectingTimeoutTask: Task<Void, Never>?
@@ -56,6 +56,13 @@ final class ConnectionManager: ObservableObject {
 
         // Deferred init — fileTransfer needs `self`
         self.fileTransfer = FileTransfer(connectionManager: self)
+
+        // Forward chatManager changes so views observing ConnectionManager re-render on unread updates
+        chatManager.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
@@ -262,6 +269,12 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Connection Request (Outgoing)
 
     func requestConnection(to peer: DiscoveredPeer) {
+        // If already connected to this peer, don't create a duplicate connection
+        if let last = lastConnectedPeer, last.id == peer.id,
+           case .connected = state {
+            return
+        }
+
         lastConnectedPeer = peer
         cancelTimeouts()
         // State machine requires discovering → peerFound → requesting

@@ -51,6 +51,10 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
+            chatManager.activeChatPeerID = peerID
+        }
+        .onDisappear {
+            chatManager.activeChatPeerID = nil
         }
         .sheet(isPresented: $showAttachmentMenu) {
             AttachmentMenuSheet(

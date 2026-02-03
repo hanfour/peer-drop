@@ -11,7 +11,7 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                NearbyTab()
+                NearbyTab(selectedTab: $selectedTab)
             }
             .tabItem {
                 Label("Nearby", systemImage: "wifi")
