@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- PeerDrop Logo: Drop + Peer Nodes + Signal Arcs -->
+  <defs>
+    <linearGradient id="dropGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3D8FD6"/>
+      <stop offset="100%" stop-color="#005CAF"/>
+    </linearGradient>
+  </defs>
+  <!-- Drop silhouette -->
+  <path d="M256 38 C256 38 100 215 100 330 C100 416.1 170.9 486 256 486 C341.1 486 412 416.1 412 330 C412 215 256 38 256 38Z" fill="url(#dropGrad)"/>
+  <!-- Signal arcs (above the nodes, subtle) -->
+  <g transform="translate(256, 268)">
+    <path d="M-36 0 A42 42 0 0 1 36 0" fill="none" stroke="white" stroke-width="5.5" stroke-linecap="round" opacity="0.4"/>
+    <path d="M-64 -14 A76 76 0 0 1 64 -14" fill="none" stroke="white" stroke-width="5.5" stroke-linecap="round" opacity="0.25"/>
+  </g>
+  <!-- Left peer node -->
+  <circle cx="200" cy="340" r="30" fill="white" opacity="0.95"/>
+  <circle cx="200" cy="340" r="16" fill="#005CAF"/>
+  <!-- Right peer node -->
+  <circle cx="312" cy="340" r="30" fill="white" opacity="0.95"/>
+  <circle cx="312" cy="340" r="16" fill="#005CAF"/>
+  <!-- Connection line -->
+  <line x1="230" y1="340" x2="282" y2="340" stroke="white" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+  <!-- Exchange arrows -->
+  <polyline points="266,330 276,340 266,350" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+  <polyline points="246,330 236,340 246,350" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+</svg>

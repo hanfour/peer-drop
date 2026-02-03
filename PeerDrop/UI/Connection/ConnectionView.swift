@@ -1,13 +1,12 @@
 import SwiftUI
-import UIKit
 
 struct ConnectionView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var showDisconnectConfirm = false
     @State private var showToast = false
     @State private var toastRecord: TransferRecord?
-    @State private var hasClipboardContent = false
-    @State private var showClipboardShare = false
+    @State private var showFilePicker = false
+    @State private var showChat = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -24,45 +23,83 @@ struct ConnectionView: View {
 
                     StatusBadge(state: connectionManager.state)
 
+                    // Connection History
+                    if let record = connectionManager.deviceStore.records.first(where: { $0.id == peer.id }),
+                       !record.connectionHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Connection History")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 8)
+
+                            VStack(spacing: 0) {
+                                ForEach(Array(record.connectionHistory.suffix(10).reversed().enumerated()), id: \.offset) { index, date in
+                                    if index > 0 {
+                                        Divider().padding(.leading, 16)
+                                    }
+                                    HStack {
+                                        Text(date, style: .relative)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        Text(date, format: .dateTime.month(.abbreviated).day().hour().minute())
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                }
+                            }
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    }
+
                     Spacer()
 
                     if case .connected = connectionManager.state {
-                        HStack(spacing: 16) {
-                            NavigationLink {
-                                FilePickerView()
-                                    .environmentObject(connectionManager)
-                            } label: {
-                                Label("Send File", systemImage: "doc.fill")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                        HStack(spacing: 32) {
+                            circleButton(icon: "doc.fill", label: "Send File", color: .blue) {
+                                showFilePicker = true
                             }
-                            .buttonStyle(.borderedProminent)
 
-                            Button {
-                                showClipboardShare = true
-                            } label: {
-                                Label("Clipboard", systemImage: "doc.on.clipboard")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                            ZStack(alignment: .topTrailing) {
+                                circleButton(icon: "message.fill", label: "Chat", color: .orange) {
+                                    showChat = true
+                                }
+
+                                if let count = connectionManager.chatManager.unreadCounts[peer.id], count > 0 {
+                                    Text("\(count)")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.white)
+                                        .padding(5)
+                                        .background(Circle().fill(.red))
+                                        .offset(x: 4, y: -4)
+                                }
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.orange)
-                            .disabled(!hasClipboardContent)
 
-                            Button {
+                            circleButton(icon: "phone.fill", label: "Voice Call", color: .green) {
                                 Task {
                                     await connectionManager.voiceCallManager?.startCall()
                                 }
-                            } label: {
-                                Label("Voice Call", systemImage: "phone.fill")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.green)
                         }
-                        .padding(.horizontal)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .navigationDestination(isPresented: $showFilePicker) {
+                            FilePickerView()
+                                .environmentObject(connectionManager)
+                        }
+                        .navigationDestination(isPresented: $showChat) {
+                            ChatView(
+                                chatManager: connectionManager.chatManager,
+                                peerID: peer.id,
+                                peerName: peer.displayName
+                            )
+                            .environmentObject(connectionManager)
+                        }
                     }
                 } else {
                     Spacer()
@@ -97,17 +134,9 @@ struct ConnectionView: View {
                     .zIndex(1)
             }
         }
-        .sheet(isPresented: $showClipboardShare) {
-            ClipboardShareView()
-                .environmentObject(connectionManager)
-        }
         .animation(.easeInOut(duration: 0.25), value: connectionManager.state)
-        .onAppear {
-            checkClipboardContent()
-        }
-        .onChange(of: connectionManager.state) { _ in
-            checkClipboardContent()
-        }
+        .animation(.easeInOut(duration: 0.25), value: showChat)
+        .animation(.easeInOut(duration: 0.25), value: showFilePicker)
         .onChange(of: connectionManager.latestToast?.id) { _ in
             guard let record = connectionManager.latestToast else { return }
             toastRecord = record
@@ -123,11 +152,19 @@ struct ConnectionView: View {
         }
     }
 
-    // MARK: - Clipboard Helper
-
-    private func checkClipboardContent() {
-        let pasteboard = UIPasteboard.general
-        hasClipboardContent = pasteboard.hasStrings || pasteboard.hasImages
+    private func circleButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
+        VStack(spacing: 6) {
+            Button(action: action) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .frame(width: 60, height: 60)
+                    .background(color)
+                    .clipShape(Circle())
+            }
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
-
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- PeerDrop Logo: Circles arranged to suggest "P" shape -->
+  <!-- Large left = stem of P, top-right = bowl of P -->
+
+  <!-- 1. Large vivid blue (left, the "stem" of P) -->
+  <circle cx="165" cy="270" r="145" fill="#38B6FF"/>
+
+  <!-- 2. Vivid violet (top-right, the "bowl" of P) -->
+  <circle cx="320" cy="170" r="100" fill="#A855F7"/>
+
+  <!-- 3. Golden yellow (bottom-right, anchors the base) -->
+  <circle cx="310" cy="365" r="95" fill="#FBBF24"/>
+
+  <!-- 4. White circle — lighten blend mask, positioned at the bowl area -->
+  <circle cx="255" cy="245" r="110" fill="white" style="mix-blend-mode: lighten"/>
+</svg>

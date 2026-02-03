@@ -64,6 +64,16 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .batchComplete, payload: data, senderID: senderID)
     }
 
+    static func textMessage(_ payload: TextMessagePayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .textMessage, payload: data, senderID: senderID)
+    }
+
+    static func mediaMessage(_ payload: MediaMessagePayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .mediaMessage, payload: data, senderID: senderID)
+    }
+
     static func disconnect(senderID: String) -> PeerMessage {
         PeerMessage(type: .disconnect, senderID: senderID)
     }

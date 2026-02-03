@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var displayName: String
+    @AppStorage("messageStorageMode") private var storageMode = "local"
 
     init() {
         _displayName = State(
@@ -20,6 +21,24 @@ struct SettingsView: View {
                     Text("Identity")
                 } footer: {
                     Text("This name is visible to nearby devices.")
+                }
+
+                Section("Profile") {
+                    NavigationLink("Edit Profile") {
+                        UserProfileView()
+                    }
+                }
+
+                Section("Message Storage") {
+                    Picker("Storage Mode", selection: $storageMode) {
+                        Text("Local Only").tag("local")
+                        Text("Sync to iCloud").tag("icloud")
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text("Messages are stored on this device only.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {

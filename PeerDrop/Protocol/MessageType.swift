@@ -27,6 +27,10 @@ enum MessageType: String, Codable {
     case callReject
     case callEnd
 
+    // Chat messaging
+    case textMessage
+    case mediaMessage
+
     // Connection lifecycle
     case disconnect
 }

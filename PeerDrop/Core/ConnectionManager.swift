@@ -7,6 +7,7 @@ import os
 
 private let logger = Logger(subsystem: "com.peerdrop.app", category: "ConnectionManager")
 
+
 /// Incoming connection request for the consent sheet.
 struct IncomingRequest: Identifiable {
     let id = UUID()
@@ -47,6 +48,7 @@ final class ConnectionManager: ObservableObject {
     private(set) var fileTransfer: FileTransfer?
     private(set) var voiceCallManager: VoiceCallManager?
     let deviceStore = DeviceRecordStore()
+    let chatManager = ChatManager()
 
     init() {
         let certManager = CertificateManager()
@@ -92,6 +94,8 @@ final class ConnectionManager: ObservableObject {
             print("[ConnectionManager] Invalid transition: \(state) → \(newState)")
             return
         }
+        let oldState = state
+        logger.info("State: \(String(describing: oldState)) → \(String(describing: newState))")
         state = newState
         triggerHaptic(for: newState)
     }
@@ -260,6 +264,10 @@ final class ConnectionManager: ObservableObject {
     func requestConnection(to peer: DiscoveredPeer) {
         lastConnectedPeer = peer
         cancelTimeouts()
+        // State machine requires discovering → peerFound → requesting
+        if case .discovering = state {
+            transition(to: .peerFound)
+        }
         transition(to: .requesting)
 
         let endpoint: NWEndpoint
@@ -431,7 +439,11 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Message Receive Loop
 
     private func startReceiving() {
-        guard let connection = activeConnection else { return }
+        guard let connection = activeConnection else {
+            logger.warning("startReceiving: no activeConnection!")
+            return
+        }
+        logger.info("Entering receive loop")
 
         Task {
             while activeConnection != nil {
@@ -439,6 +451,7 @@ final class ConnectionManager: ObservableObject {
                     let message = try await connection.receiveMessage()
                     handleMessage(message)
                 } catch {
+                    logger.error("Receive loop error: \(error.localizedDescription)")
                     if activeConnection != nil {
                         fileTransfer?.handleConnectionFailure()
                         transition(to: .failed(reason: error.localizedDescription))
@@ -451,12 +464,17 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func handleMessage(_ message: PeerMessage) {
+        logger.info("handleMessage: \(String(describing: message.type)) from \(message.senderID)")
         switch message.type {
         case .connectionAccept:
             cancelTimeouts()
             if let payload = message.payload,
                let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
                 connectedPeer = identity
+            }
+            // State machine requires requesting → connecting → connected
+            if case .requesting = state {
+                transition(to: .connecting)
             }
             transition(to: .connected)
             recordConnectedDevice()
@@ -503,9 +521,32 @@ final class ConnectionManager: ObservableObject {
         case .sdpOffer, .sdpAnswer, .iceCandidate:
             voiceCallManager?.handleSignaling(message)
 
+        case .textMessage:
+            if let payload = try? message.decodePayload(TextMessagePayload.self) {
+                chatManager.saveIncoming(
+                    text: payload.text,
+                    peerID: message.senderID,
+                    peerName: connectedPeer?.displayName ?? "Unknown"
+                )
+            }
+
+        case .mediaMessage:
+            if let payload = try? message.decodePayload(MediaMessagePayload.self) {
+                chatManager.saveIncomingMedia(
+                    payload: payload,
+                    fileData: Data(),
+                    peerID: message.senderID,
+                    peerName: connectedPeer?.displayName ?? "Unknown"
+                )
+            }
         case .hello:
-            // Already handled during handshake
-            break
+            // During handshake, hello is handled inline. In the receive loop,
+            // the acceptor sends a second hello after connectionAccept to share identity.
+            if connectedPeer == nil, let payload = message.payload,
+               let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
+                connectedPeer = identity
+                recordConnectedDevice()
+            }
         case .connectionRequest:
             // Already handled during handshake
             break
@@ -536,6 +577,18 @@ final class ConnectionManager: ObservableObject {
         @unknown default:
             print("[ConnectionManager] Unknown network connection state")
         }
+    }
+
+    // MARK: - Chat
+
+    func sendTextMessage(_ text: String) {
+        guard let peer = connectedPeer else { return }
+        let payload = TextMessagePayload(text: text)
+        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+        Task {
+            try? await sendMessage(msg)
+        }
+        chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
     }
 
     // MARK: - Send helpers

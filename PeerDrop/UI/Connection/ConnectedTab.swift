@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectedTab: View {
     @EnvironmentObject var connectionManager: ConnectionManager
+    @State private var showDetail = false
 
     private var isConnected: Bool {
         switch connectionManager.state {
@@ -10,23 +11,80 @@ struct ConnectedTab: View {
         }
     }
 
-    private var recentRecords: [DeviceRecord] {
-        connectionManager.deviceStore.sorted(by: .lastConnected)
+    private var contactRecords: [DeviceRecord] {
+        connectionManager.deviceStore.sorted(by: .name)
     }
 
     var body: some View {
         Group {
             if isConnected {
-                ConnectionView()
-            } else if recentRecords.isEmpty {
+                List {
+                    Section("Active") {
+                        if let peer = connectionManager.connectedPeer {
+                            Button { showDetail = true } label: {
+                                HStack {
+                                    PeerAvatar(name: peer.displayName)
+
+                                    VStack(alignment: .leading) {
+                                        Text(peer.displayName)
+                                            .font(.body.bold())
+                                        Text("Connected")
+                                            .font(.caption)
+                                            .foregroundStyle(.green)
+                                    }
+
+                                    Spacer()
+
+                                    if let count = connectionManager.chatManager.unreadCounts[peer.id], count > 0 {
+                                        Text("\(count)")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.white)
+                                            .padding(6)
+                                            .background(Circle().fill(.red))
+                                    }
+
+                                    Image(systemName: "chevron.right")
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .accessibilityIdentifier("active-peer-row")
+                            .tint(.primary)
+                        }
+                    }
+
+                    Section("Contacts") {
+                        if contactRecords.isEmpty {
+                            Text("No saved devices")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(contactRecords) { record in
+                                DeviceRecordRow(record: record) {
+                                    reconnect(record: record)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        deleteRecord(record)
+                                    } label: {
+                                        Image(systemName: "trash.circle.fill")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationDestination(isPresented: $showDetail) {
+                    ConnectionView()
+                        .environmentObject(connectionManager)
+                }
+            } else if contactRecords.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "link")
+                    Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 40))
                         .foregroundStyle(.secondary)
-                    Text("No active connection")
+                    Text("No saved devices")
                         .font(.headline)
                         .foregroundStyle(.secondary)
-                    Text("Connect to a device from the Nearby tab")
+                    Text("Devices you connect to will appear here")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -46,10 +104,17 @@ struct ConnectedTab: View {
                         .padding(.vertical, 12)
                     }
 
-                    Section("Recent Connections") {
-                        ForEach(recentRecords) { record in
+                    Section("Contacts") {
+                        ForEach(contactRecords) { record in
                             DeviceRecordRow(record: record) {
                                 reconnect(record: record)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    deleteRecord(record)
+                                } label: {
+                                    Image(systemName: "trash.circle.fill")
+                                }
                             }
                         }
                     }
@@ -57,6 +122,11 @@ struct ConnectedTab: View {
             }
         }
         .navigationTitle("Connected")
+    }
+
+    private func deleteRecord(_ record: DeviceRecord) {
+        connectionManager.deviceStore.remove(id: record.id)
+        connectionManager.chatManager.deleteMessages(forPeer: record.id)
     }
 
     private func reconnect(record: DeviceRecord) {

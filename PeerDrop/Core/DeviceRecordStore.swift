@@ -9,26 +9,60 @@ final class DeviceRecordStore: ObservableObject {
 
     init() {
         load()
+        migrateConnectionHistory()
+        mergeByName()
     }
 
     func addOrUpdate(id: String, displayName: String, sourceType: String, host: String?, port: UInt16?) {
+        let now = Date()
         if let index = records.firstIndex(where: { $0.id == id }) {
             records[index].displayName = displayName
-            records[index].lastConnected = Date()
+            records[index].lastConnected = now
             records[index].connectionCount += 1
+            records[index].connectionHistory.append(now)
             if let h = host { records[index].host = h }
             if let p = port { records[index].port = p }
         } else {
-            let record = DeviceRecord(
-                id: id,
-                displayName: displayName,
-                sourceType: sourceType,
-                host: host,
-                port: port,
-                lastConnected: Date(),
-                connectionCount: 1
-            )
-            records.append(record)
+            // Check for existing record with same displayName (case-insensitive) but different id
+            if let dupeIndex = records.firstIndex(where: { $0.displayName.lowercased() == displayName.lowercased() && $0.id != id }) {
+                var merged = records[dupeIndex]
+                let newRecord = DeviceRecord(
+                    id: id,
+                    displayName: displayName,
+                    sourceType: sourceType,
+                    host: host,
+                    port: port,
+                    lastConnected: now,
+                    connectionCount: 1,
+                    connectionHistory: [now]
+                )
+                merged.merge(with: newRecord)
+                // Keep the new id
+                records.remove(at: dupeIndex)
+                let finalRecord = DeviceRecord(
+                    id: id,
+                    displayName: merged.displayName,
+                    sourceType: sourceType,
+                    host: merged.host,
+                    port: merged.port,
+                    lastConnected: merged.lastConnected,
+                    connectionCount: merged.connectionCount,
+                    connectionHistory: merged.connectionHistory
+                )
+                records.append(finalRecord)
+            } else {
+                let record = DeviceRecord(
+                    id: id,
+                    displayName: displayName,
+                    sourceType: sourceType,
+                    host: host,
+                    port: port,
+                    lastConnected: now,
+                    connectionCount: 1,
+                    connectionHistory: [now]
+                )
+                records.append(record)
+            }
         }
         save()
     }
@@ -52,6 +86,38 @@ final class DeviceRecordStore: ObservableObject {
     func search(query: String) -> [DeviceRecord] {
         guard !query.isEmpty else { return records }
         return records.filter { $0.displayName.localizedCaseInsensitiveContains(query) }
+    }
+
+    private func migrateConnectionHistory() {
+        var changed = false
+        for i in records.indices {
+            if records[i].connectionHistory.isEmpty {
+                records[i].connectionHistory = [records[i].lastConnected]
+                changed = true
+            }
+        }
+        if changed { save() }
+    }
+
+    private func mergeByName() {
+        var grouped: [String: [Int]] = [:]
+        for (index, record) in records.enumerated() {
+            let key = record.displayName.lowercased()
+            grouped[key, default: []].append(index)
+        }
+        var indicesToRemove: Set<Int> = []
+        for (_, indices) in grouped where indices.count > 1 {
+            var primary = records[indices[0]]
+            for i in indices.dropFirst() {
+                primary.merge(with: records[i])
+                indicesToRemove.insert(i)
+            }
+            records[indices[0]] = primary
+        }
+        if !indicesToRemove.isEmpty {
+            records = records.enumerated().filter { !indicesToRemove.contains($0.offset) }.map(\.element)
+            save()
+        }
     }
 
     private func load() {

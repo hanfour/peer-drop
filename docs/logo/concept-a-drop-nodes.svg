@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Concept A: Drop shape with two connected peer nodes inside -->
+  <defs>
+    <linearGradient id="dropGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3D8FD6"/>
+      <stop offset="100%" stop-color="#005CAF"/>
+    </linearGradient>
+  </defs>
+  <!-- Drop silhouette -->
+  <path d="M256 42 C256 42 108 210 108 320 C108 401.6 175.4 468 256 468 C336.6 468 404 401.6 404 320 C404 210 256 42 256 42Z" fill="url(#dropGrad)"/>
+  <!-- Left peer node -->
+  <circle cx="196" cy="300" r="32" fill="white" opacity="0.95"/>
+  <circle cx="196" cy="300" r="18" fill="#005CAF"/>
+  <!-- Right peer node -->
+  <circle cx="316" cy="300" r="32" fill="white" opacity="0.95"/>
+  <circle cx="316" cy="300" r="18" fill="#005CAF"/>
+  <!-- Connection line between nodes -->
+  <line x1="228" y1="300" x2="284" y2="300" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.95"/>
+  <!-- Small exchange arrows on the line -->
+  <polyline points="264,288 276,300 264,312" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+  <polyline points="248,288 236,300 248,312" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+</svg>
