@@ -277,7 +277,13 @@ final class ConnectionManager: ObservableObject {
 
         lastConnectedPeer = peer
         cancelTimeouts()
-        // State machine requires discovering → peerFound → requesting
+        // Normalize state so we can reach .requesting
+        switch state {
+        case .disconnected, .failed, .rejected, .idle:
+            transition(to: .discovering)
+        default:
+            break
+        }
         if case .discovering = state {
             transition(to: .peerFound)
         }
@@ -382,6 +388,13 @@ final class ConnectionManager: ObservableObject {
                 }
 
                 logger.info("Connection request received! Showing consent sheet.")
+                // Normalize state so .incomingRequest transition is valid
+                switch state {
+                case .disconnected, .failed, .rejected, .idle:
+                    transition(to: .discovering)
+                default:
+                    break
+                }
                 transition(to: .incomingRequest)
                 pendingIncomingRequest = IncomingRequest(
                     peerIdentity: peerIdentity,
@@ -400,6 +413,16 @@ final class ConnectionManager: ObservableObject {
         guard let request = pendingIncomingRequest else { return }
         pendingIncomingRequest = nil
         connectedPeer = request.peerIdentity
+        // Normalize state so .connecting transition is valid from any terminal state
+        switch state {
+        case .disconnected, .failed, .rejected, .idle:
+            transition(to: .discovering)
+            transition(to: .incomingRequest)
+        case .incomingRequest:
+            break // already correct
+        default:
+            break
+        }
         transition(to: .connecting)
         startConnectingTimeout()
 

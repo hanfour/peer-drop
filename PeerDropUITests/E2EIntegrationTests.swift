@@ -194,6 +194,79 @@ final class E2EIntegrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Test 10b: Connect, Disconnect, Reconnect
+
+    /// Run on INITIATOR. Connects, disconnects, then reconnects to verify state recovery.
+    /// Run testAcceptTwiceForReconnect on the ACCEPTOR simulator simultaneously.
+    func test10b_DisconnectAndReconnect() throws {
+        // 1. Discover peer
+        let peer = app.buttons.matching(NSPredicate(format: "label CONTAINS 'iPhone'")).firstMatch
+        guard peer.waitForExistence(timeout: 20) else {
+            XCTFail("No peer discovered")
+            return
+        }
+
+        // 2. Connect
+        peer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let connectedTab = app.tabBars.buttons["Connected"]
+        var connected = false
+        for _ in 0..<30 {
+            if connectedTab.isSelected { connected = true; break }
+            sleep(1)
+        }
+        XCTAssertTrue(connected, "Should connect on first attempt")
+        addScreenshot("RC01_FirstConnect")
+
+        // 3. Disconnect
+        navigateToConnectionView()
+        let disconnectBtns = app.buttons.matching(identifier: "Disconnect")
+        guard disconnectBtns.firstMatch.waitForExistence(timeout: 5) else {
+            XCTFail("Disconnect button not found")
+            return
+        }
+        disconnectBtns.firstMatch.tap()
+        sleep(1)
+        // Confirm in the action sheet
+        let sheet = app.sheets["Disconnect from peer?"]
+        if sheet.waitForExistence(timeout: 3) {
+            sheet.buttons["Disconnect"].tap()
+        }
+        sleep(3)
+        addScreenshot("RC02_Disconnected")
+
+        // 4. Navigate back from detail if needed, then to Nearby tab
+        // After disconnect, we may still be in ConnectionView detail
+        let backBtn = app.navigationBars.buttons.firstMatch
+        if backBtn.exists && !app.tabBars.buttons["Nearby"].isHittable == false {
+            backBtn.tap()
+            sleep(1)
+        }
+        app.tabBars.buttons["Nearby"].tap()
+        sleep(2)
+        addScreenshot("RC03_NearbyAfterDisconnect")
+
+        // 6. Reconnect — find peer again and tap
+        let peerAgain = app.buttons.matching(NSPredicate(format: "label CONTAINS 'iPhone'")).firstMatch
+        guard peerAgain.waitForExistence(timeout: 15) else {
+            XCTFail("Peer not found for reconnect")
+            return
+        }
+        peerAgain.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        addScreenshot("RC04_ReconnectTapped")
+
+        // 7. Verify reconnection
+        var reconnected = false
+        for _ in 0..<30 {
+            if connectedTab.isSelected { reconnected = true; break }
+            sleep(1)
+        }
+        addScreenshot("RC05_Reconnected")
+        XCTAssertTrue(reconnected, "Should reconnect successfully after disconnect")
+
+        // Stay alive for acceptor
+        sleep(10)
+    }
+
     // MARK: - Test 11: Initiate, Connect, and Verify 3-Icon UI
 
     /// Run on the INITIATOR simulator. Discovers peer, connects, verifies 3-icon UI,

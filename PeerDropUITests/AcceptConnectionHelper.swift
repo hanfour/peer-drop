@@ -453,6 +453,43 @@ final class AcceptConnectionHelper: XCTestCase {
         takeScreenshot("NF-09-Final")
     }
 
+    /// Accept TWO consecutive connections (for disconnect-reconnect testing on other sim).
+    func testAcceptTwiceForReconnect() {
+        for attempt in 1...2 {
+            let acceptButton = app.buttons["Accept"]
+            guard acceptButton.waitForExistence(timeout: 60) else {
+                if attempt == 1 {
+                    XCTFail("No incoming connection consent sheet appeared (attempt \(attempt))")
+                }
+                return
+            }
+            acceptButton.tap()
+            takeScreenshot("Reconnect-Sim1-Accept\(attempt)")
+
+            let connectedNav = app.navigationBars["Connected"]
+            XCTAssertTrue(connectedNav.waitForExistence(timeout: 10),
+                          "Should auto-switch to Connected tab (attempt \(attempt))")
+
+            print("[Sim1] Connected (attempt \(attempt))")
+
+            if attempt == 1 {
+                // Wait for Sim 2 to disconnect us
+                let noActive = app.staticTexts["No active connection"]
+                for _ in 1...30 {
+                    if noActive.exists { break }
+                    sleep(2)
+                }
+                takeScreenshot("Reconnect-Sim1-Disconnected")
+                print("[Sim1] Disconnected, waiting for second connection")
+            } else {
+                // Second connection succeeded — stay alive
+                sleep(15)
+                takeScreenshot("Reconnect-Sim1-SecondConnected")
+                print("[Sim1] Second connection verified!")
+            }
+        }
+    }
+
     /// Navigate from Connected list (Active section) into ConnectionView detail.
     private func navigateToConnectionView() {
         let activeHeader = app.staticTexts["Active"]
