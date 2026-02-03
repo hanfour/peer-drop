@@ -5,9 +5,18 @@ struct CameraPickerView: UIViewControllerRepresentable {
     @Environment(\.dismiss) private var dismiss
     var onImageCaptured: (UIImage) -> Void
 
+    static var isAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = .camera
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .camera
+        } else {
+            // Fallback to photo library if camera unavailable (e.g. simulator)
+            picker.sourceType = .photoLibrary
+        }
         picker.delegate = context.coordinator
         return picker
     }

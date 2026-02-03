@@ -589,7 +589,7 @@ final class ConnectionManager: ObservableObject {
         Task {
             do {
                 try await sendMessage(msg)
-                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .delivered) }
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .sent) }
             } catch {
                 await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
             }
@@ -625,7 +625,7 @@ final class ConnectionManager: ObservableObject {
         Task {
             do {
                 try await sendMessage(msg)
-                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .delivered) }
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .sent) }
             } catch {
                 await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
             }

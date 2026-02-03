@@ -135,12 +135,9 @@ struct ChatBubbleView: View {
                 .font(.system(size: 9))
                 .foregroundStyle(.white.opacity(0.65))
         case .delivered:
-            HStack(spacing: -3) {
-                Image(systemName: "checkmark")
-                Image(systemName: "checkmark")
-            }
-            .font(.system(size: 9))
-            .foregroundStyle(.white.opacity(0.65))
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.65))
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 11))

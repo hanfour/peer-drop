@@ -23,41 +23,6 @@ struct ConnectionView: View {
 
                     StatusBadge(state: connectionManager.state)
 
-                    // Connection History
-                    if let record = connectionManager.deviceStore.records.first(where: { $0.id == peer.id }),
-                       !record.connectionHistory.isEmpty {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("Connection History")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 8)
-
-                            VStack(spacing: 0) {
-                                ForEach(Array(record.connectionHistory.suffix(10).reversed().enumerated()), id: \.offset) { index, date in
-                                    if index > 0 {
-                                        Divider().padding(.leading, 16)
-                                    }
-                                    HStack {
-                                        Text(date, style: .relative)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        Text(date, format: .dateTime.month(.abbreviated).day().hour().minute())
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                }
-                            }
-                            .background(Color(.secondarySystemGroupedBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                    }
-
                     Spacer()
 
                     if case .connected = connectionManager.state {
