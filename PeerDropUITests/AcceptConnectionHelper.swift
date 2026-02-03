@@ -179,7 +179,7 @@ final class AcceptConnectionHelper: XCTestCase {
         let attachBtn = app.buttons["Attach"]
         XCTAssertTrue(attachBtn.waitForExistence(timeout: 5), "Attach button should be visible")
 
-        let micBtn = app.buttons["Record Voice"]
+        let micBtn = app.buttons["Voice message"]
         XCTAssertTrue(micBtn.waitForExistence(timeout: 3), "Mic button should be visible when text field is empty")
 
         takeScreenshot("Media-Sim1-03-InputBarVerified")
@@ -188,14 +188,14 @@ final class AcceptConnectionHelper: XCTestCase {
         attachBtn.tap()
         sleep(1)
 
-        let photoVideoBtn = app.buttons["Photo & Video"]
+        let photoVideoBtn = app.buttons["Photos"]
         let attachMenuShown = photoVideoBtn.waitForExistence(timeout: 3)
         XCTAssertTrue(attachMenuShown, "Attachment menu should show Photo & Video option")
 
         let cameraBtn = app.buttons["Camera"]
         XCTAssertTrue(cameraBtn.exists, "Attachment menu should show Camera option")
 
-        let fileBtn = app.buttons["File"]
+        let fileBtn = app.buttons["Files"]
         XCTAssertTrue(fileBtn.exists, "Attachment menu should show File option")
 
         takeScreenshot("Media-Sim1-04-AttachMenu")
@@ -206,7 +206,7 @@ final class AcceptConnectionHelper: XCTestCase {
         sleep(1)
 
         // Test: Record and send voice message
-        let micBtnAgain = app.buttons["Record Voice"]
+        let micBtnAgain = app.buttons["Voice message"]
         guard micBtnAgain.waitForExistence(timeout: 5) else {
             XCTFail("Mic button not found after dismissing attach menu")
             return
@@ -410,7 +410,7 @@ final class AcceptConnectionHelper: XCTestCase {
         if textField.waitForExistence(timeout: 3) {
             textField.tap()
             textField.typeText("Reply from acceptor!")
-            let sendBtn = app.buttons["Send message"]
+            let sendBtn = app.buttons["Send"]
             if sendBtn.waitForExistence(timeout: 3) {
                 sendBtn.tap()
                 sleep(1)

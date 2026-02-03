@@ -585,10 +585,51 @@ final class ConnectionManager: ObservableObject {
         guard let peer = connectedPeer else { return }
         let payload = TextMessagePayload(text: text)
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
         Task {
-            try? await sendMessage(msg)
+            do {
+                try await sendMessage(msg)
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .delivered) }
+            } catch {
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
+            }
         }
-        chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
+    }
+
+    func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
+        guard let peer = connectedPeer else { return }
+        let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData)
+        guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else { return }
+
+        // Save locally
+        let localPath: String?
+        if !fileData.isEmpty {
+            localPath = chatManager.saveMediaFile(data: fileData, fileName: fileName, peerID: peer.id)
+        } else {
+            localPath = nil
+        }
+
+        let saved = chatManager.saveOutgoingMedia(
+            mediaType: mediaType,
+            fileName: fileName,
+            fileSize: Int64(fileData.count),
+            mimeType: mimeType,
+            duration: duration,
+            localFileURL: localPath,
+            thumbnailData: thumbnailData,
+            peerID: peer.id,
+            peerName: peer.displayName
+        )
+
+        // Send over network
+        Task {
+            do {
+                try await sendMessage(msg)
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .delivered) }
+            } catch {
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
+            }
+        }
     }
 
     // MARK: - Send helpers

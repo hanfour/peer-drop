@@ -269,7 +269,7 @@ final class E2EIntegrationTests: XCTestCase {
                 addScreenshot("05_ChatTyping")
 
                 // Tap send button
-                let sendButton = app.buttons["Send message"]
+                let sendButton = app.buttons["Send"]
                 if sendButton.exists {
                     sendButton.tap()
                     sleep(1)
@@ -278,14 +278,14 @@ final class E2EIntegrationTests: XCTestCase {
             }
 
             // Verify + attachment button exists
-            let attachButton = app.buttons["Attach media"]
+            let attachButton = app.buttons["Attach"]
             if attachButton.exists {
                 attachButton.tap()
                 sleep(1)
                 addScreenshot("07_AttachmentOptions")
 
                 // Verify attachment options
-                let photos = app.buttons["Photos & Videos"]
+                let photos = app.buttons["Photos"]
                 let camera = app.buttons["Camera"]
                 let files = app.buttons["Files"]
                 print("Photos: \(photos.exists), Camera: \(camera.exists), Files: \(files.exists)")
@@ -476,7 +476,7 @@ final class E2EIntegrationTests: XCTestCase {
         if messageField.waitForExistence(timeout: 3) {
             messageField.tap()
             messageField.typeText("Hello from Pro!")
-            let sendButton = app.buttons["Send message"]
+            let sendButton = app.buttons["Send"]
             if sendButton.exists {
                 sendButton.tap()
                 sleep(1)
