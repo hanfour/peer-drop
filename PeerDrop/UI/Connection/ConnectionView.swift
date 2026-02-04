@@ -11,6 +11,13 @@ struct ConnectionView: View {
     @AppStorage("peerDropVoiceCallEnabled") private var voiceCallEnabled = true
     @AppStorage("peerDropChatEnabled") private var chatEnabled = true
 
+    private var isTerminalState: Bool {
+        switch connectionManager.state {
+        case .disconnected, .failed: return true
+        default: return false
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 20) {
@@ -75,6 +82,18 @@ struct ConnectionView: View {
                             .environmentObject(connectionManager)
                         }
                     }
+
+                    // Reconnect button for disconnected/failed states
+                    if isTerminalState {
+                        Button {
+                            connectionManager.reconnect()
+                        } label: {
+                            Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!connectionManager.canReconnect)
+                        .transition(.opacity)
+                    }
                 } else {
                     Spacer()
                     ProgressView()
@@ -83,19 +102,26 @@ struct ConnectionView: View {
                     Spacer()
                 }
 
-                Button("Disconnect", role: .destructive) {
-                    showDisconnectConfirm = true
-                }
-                .padding(.bottom)
-                .confirmationDialog(
-                    "Disconnect from peer?",
-                    isPresented: $showDisconnectConfirm,
-                    titleVisibility: .visible
-                ) {
+                if case .connected = connectionManager.state {
                     Button("Disconnect", role: .destructive) {
-                        connectionManager.disconnect()
+                        showDisconnectConfirm = true
                     }
-                    Button("Cancel", role: .cancel) {}
+                    .padding(.bottom)
+                    .confirmationDialog(
+                        "Disconnect from peer?",
+                        isPresented: $showDisconnectConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Disconnect", role: .destructive) {
+                            connectionManager.disconnect()
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    }
+                } else if isTerminalState {
+                    Button("Back to Discovery") {
+                        connectionManager.returnToDiscovery()
+                    }
+                    .padding(.bottom)
                 }
             }
             .padding()

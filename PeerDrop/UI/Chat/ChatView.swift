@@ -19,6 +19,11 @@ struct ChatView: View {
     @State private var voiceRecordingDuration: TimeInterval = 0
     @State private var voiceRecordingTimer: Timer?
 
+    private var isConnected: Bool {
+        if case .connected = connectionManager.state { return true }
+        return false
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Messages
@@ -44,8 +49,23 @@ struct ChatView: View {
 
             Divider()
 
+            // Disconnected banner
+            if !isConnected {
+                HStack {
+                    Image(systemName: "wifi.slash")
+                    Text("Peer disconnected")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color(.systemGray5))
+            }
+
             // Input bar
             inputBar
+                .disabled(!isConnected)
+                .opacity(isConnected ? 1.0 : 0.5)
         }
         .navigationTitle(peerName)
         .navigationBarTitleDisplayMode(.inline)

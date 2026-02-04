@@ -133,6 +133,9 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Discovery
 
     func startDiscovery() {
+        // Tear down any lingering listener/browser first (idempotent)
+        stopDiscovery()
+
         // Create TLS-enabled listener if we have an identity
         let tlsOpts: NWProtocolTLS.Options?
         if let identity = certificateManager.identity {
@@ -167,7 +170,20 @@ final class ConnectionManager: ObservableObject {
 
     func restartDiscovery() {
         stopDiscovery()
+        // Respect the user's online/offline preference before restarting
+        let defaults = UserDefaults.standard
+        let isOnline = defaults.object(forKey: "peerDropIsOnline") == nil
+            ? true
+            : defaults.bool(forKey: "peerDropIsOnline")
+        guard isOnline else { return }
         startDiscovery()
+    }
+
+    /// Clear peer info and return to discovery (used by UI "Back to Discovery" button).
+    func returnToDiscovery() {
+        connectedPeer = nil
+        if case .discovering = state { return }
+        transition(to: .discovering)
     }
 
     func addManualPeer(host: String, port: UInt16, name: String?) {
@@ -472,11 +488,22 @@ final class ConnectionManager: ObservableObject {
                 try? await connection.sendMessage(msg)
                 connection.cancel()
             }
-            activeConnection = nil
-            connectedPeer = nil
-            endBackgroundTask()
-            transition(to: .disconnected)
+            cleanupAfterDisconnect(clearPeer: true)
         }
+    }
+
+    /// Consolidated cleanup after any disconnect path.
+    /// - Parameter clearPeer: `true` when the local user initiates disconnect;
+    ///   `false` when the remote peer disconnects (so UI can still show who disconnected).
+    private func cleanupAfterDisconnect(clearPeer: Bool) {
+        activeConnection = nil
+        if clearPeer {
+            connectedPeer = nil
+        }
+        endBackgroundTask()
+        transition(to: .disconnected)
+        // Restart discovery so a fresh listener replaces any stale one
+        restartDiscovery()
     }
 
     // MARK: - Message Receive Loop
@@ -497,8 +524,10 @@ final class ConnectionManager: ObservableObject {
                     logger.error("Receive loop error: \(error.localizedDescription)")
                     if activeConnection != nil {
                         fileTransfer?.handleConnectionFailure()
-                        transition(to: .failed(reason: error.localizedDescription))
                         activeConnection = nil
+                        // Keep connectedPeer so UI shows who we lost connection with
+                        transition(to: .failed(reason: error.localizedDescription))
+                        restartDiscovery()
                     }
                     break
                 }
@@ -530,9 +559,8 @@ final class ConnectionManager: ObservableObject {
 
         case .disconnect:
             activeConnection?.cancel()
-            activeConnection = nil
-            connectedPeer = nil
-            transition(to: .disconnected)
+            // Keep connectedPeer so the UI shows who disconnected
+            cleanupAfterDisconnect(clearPeer: false)
 
         case .fileOffer:
             guard FeatureSettings.isFileTransferEnabled else { return }
@@ -620,6 +648,7 @@ final class ConnectionManager: ObservableObject {
             fileTransfer?.handleConnectionFailure()
             activeConnection = nil
             transition(to: .failed(reason: error.localizedDescription))
+            restartDiscovery()
         case .cancelled:
             cancelTimeouts()
             activeConnection = nil

@@ -131,13 +131,26 @@ final class BonjourDiscovery: DiscoveryBackend {
         self.browser = browser
     }
 
+    /// Returns `true` if `name` matches our local peer name or a Bonjour-renamed
+    /// variant like "Name (2)", "Name (3)", etc.
+    private func isSelf(_ name: String) -> Bool {
+        if name == localPeerName { return true }
+        // Bonjour auto-renames colliding services by appending " (N)"
+        guard name.hasPrefix(localPeerName + " ("),
+              name.hasSuffix(")") else { return false }
+        let start = name.index(name.startIndex, offsetBy: localPeerName.count + 2)
+        let end = name.index(before: name.endIndex)
+        let digits = name[start..<end]
+        return !digits.isEmpty && digits.allSatisfy(\.isNumber)
+    }
+
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
         let peers = results.compactMap { result -> DiscoveredPeer? in
             guard case .service(let name, let type, let domain, _) = result.endpoint else {
                 return nil
             }
-            // Skip self
-            guard name != localPeerName else { return nil }
+            // Skip self (including Bonjour-renamed variants like "Name (2)")
+            guard !isSelf(name) else { return nil }
 
             return DiscoveredPeer(
                 id: "\(name).\(type).\(domain)",
