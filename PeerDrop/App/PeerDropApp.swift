@@ -25,6 +25,13 @@ struct PeerDropApp: App {
                 if let callKit = appDelegate.callKitManager {
                     connectionManager.configureVoiceCalling(callKitManager: callKit)
                 }
+
+                // One-time migration of existing chat data to encrypted format
+                if !UserDefaults.standard.bool(forKey: "peerDropDataMigrated") {
+                    connectionManager.chatManager.migrateExistingDataToEncrypted()
+                    UserDefaults.standard.set(true, forKey: "peerDropDataMigrated")
+                }
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     showLaunch = false
                 }

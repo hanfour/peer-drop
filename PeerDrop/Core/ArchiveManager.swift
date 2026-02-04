@@ -31,14 +31,29 @@ enum ArchiveManager {
         try JSONEncoder().encode(transferHistory).write(to: archiveDir.appendingPathComponent("transfer_history.json"))
         try JSONEncoder().encode(chatManager.unreadCounts).write(to: archiveDir.appendingPathComponent("unread_counts.json"))
 
+        let encryptor = ChatDataEncryptor.shared
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let chatMessagesDir = docs.appendingPathComponent("ChatData/messages", isDirectory: true)
         if fm.fileExists(atPath: chatMessagesDir.path) {
-            try fm.copyItem(at: chatMessagesDir, to: archiveDir.appendingPathComponent("messages", isDirectory: true))
+            let destMessages = archiveDir.appendingPathComponent("messages", isDirectory: true)
+            try fm.createDirectory(at: destMessages, withIntermediateDirectories: true)
+            for file in (try? fm.contentsOfDirectory(at: chatMessagesDir, includingPropertiesForKeys: nil)) ?? [] {
+                let data = try encryptor.readAndDecrypt(from: file)
+                try data.write(to: destMessages.appendingPathComponent(file.lastPathComponent))
+            }
         }
         let chatMediaDir = docs.appendingPathComponent("ChatData/media", isDirectory: true)
         if fm.fileExists(atPath: chatMediaDir.path) {
-            try fm.copyItem(at: chatMediaDir, to: archiveDir.appendingPathComponent("media", isDirectory: true))
+            let destMedia = archiveDir.appendingPathComponent("media", isDirectory: true)
+            try fm.createDirectory(at: destMedia, withIntermediateDirectories: true)
+            for peerDir in (try? fm.contentsOfDirectory(at: chatMediaDir, includingPropertiesForKeys: nil)) ?? [] {
+                let destPeer = destMedia.appendingPathComponent(peerDir.lastPathComponent)
+                try fm.createDirectory(at: destPeer, withIntermediateDirectories: true)
+                for file in (try? fm.contentsOfDirectory(at: peerDir, includingPropertiesForKeys: nil)) ?? [] {
+                    let data = try encryptor.readAndDecrypt(from: file)
+                    try data.write(to: destPeer.appendingPathComponent(file.lastPathComponent))
+                }
+            }
         }
 
         let zipURL = try archiveDir.zipDirectory()
@@ -90,6 +105,7 @@ enum ArchiveManager {
             if let encoded = try? JSONEncoder().encode(counts) { UserDefaults.standard.set(encoded, forKey: "peerDropUnreadCounts") }
         }
 
+        let encryptor = ChatDataEncryptor.shared
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let messagesSource = contentDir.appendingPathComponent("messages", isDirectory: true)
         if fm.fileExists(atPath: messagesSource.path) {
@@ -99,7 +115,8 @@ enum ArchiveManager {
             for file in (try? fm.contentsOfDirectory(at: messagesSource, includingPropertiesForKeys: nil)) ?? [] {
                 let d = dest.appendingPathComponent(file.lastPathComponent)
                 if fm.fileExists(atPath: d.path) && merge { continue }
-                try? fm.copyItem(at: file, to: d)
+                let plaintext = try Data(contentsOf: file)
+                try encryptor.encryptAndWrite(plaintext, to: d)
             }
         }
 
@@ -114,7 +131,8 @@ enum ArchiveManager {
                 for file in (try? fm.contentsOfDirectory(at: peerDir, includingPropertiesForKeys: nil)) ?? [] {
                     let d = destPeer.appendingPathComponent(file.lastPathComponent)
                     if fm.fileExists(atPath: d.path) && merge { continue }
-                    try? fm.copyItem(at: file, to: d)
+                    let plaintext = try Data(contentsOf: file)
+                    try encryptor.encryptAndWrite(plaintext, to: d)
                 }
             }
         }

@@ -171,7 +171,8 @@ struct ChatBubbleView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         } else if let localPath = message.localFileURL,
                   let chatManager,
-                  let uiImage = UIImage(contentsOfFile: chatManager.resolveMediaURL(localPath).path) {
+                  let mediaData = chatManager.loadMediaData(relativePath: localPath),
+                  let uiImage = UIImage(data: mediaData) {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFit()

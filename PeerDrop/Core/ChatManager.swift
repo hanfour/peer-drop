@@ -10,6 +10,7 @@ final class ChatManager: ObservableObject {
 
     private let fileManager = FileManager.default
     private let unreadKey = "peerDropUnreadCounts"
+    private let encryptor = ChatDataEncryptor.shared
 
     init() {
         loadUnreadCounts()
@@ -71,7 +72,8 @@ final class ChatManager: ObservableObject {
             return
         }
         do {
-            let data = try Data(contentsOf: file)
+            let raw = try Data(contentsOf: file)
+            let data = try encryptor.decrypt(raw)
             messages = try JSONDecoder().decode([ChatMessage].self, from: data)
         } catch {
             messages = []
@@ -95,8 +97,13 @@ final class ChatManager: ObservableObject {
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         let uniqueName = "\(UUID().uuidString.prefix(8))_\(fileName)"
         let fileURL = dir.appendingPathComponent(uniqueName)
-        try? data.write(to: fileURL)
+        try? encryptor.encryptAndWrite(data, to: fileURL)
         return "\(peerID)/\(uniqueName)"
+    }
+
+    func loadMediaData(relativePath: String) -> Data? {
+        let url = resolveMediaURL(relativePath)
+        return try? encryptor.readAndDecrypt(from: url)
     }
 
     func resolveMediaURL(_ relativePath: String) -> URL {
@@ -110,12 +117,13 @@ final class ChatManager: ObservableObject {
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: file),
-                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: data) else { continue }
+            guard let raw = try? Data(contentsOf: file),
+                  let decrypted = try? encryptor.decrypt(raw),
+                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
             if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
                 msgs[idx].status = status
                 if let encoded = try? JSONEncoder().encode(msgs) {
-                    try? encoded.write(to: file)
+                    try? encryptor.encryptAndWrite(encoded, to: file)
                 }
                 return
             }
@@ -153,13 +161,35 @@ final class ChatManager: ObservableObject {
         let dir = file.deletingLastPathComponent()
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         var existing: [ChatMessage] = []
-        if let data = try? Data(contentsOf: file) {
-            existing = (try? JSONDecoder().decode([ChatMessage].self, from: data)) ?? []
+        if let raw = try? Data(contentsOf: file),
+           let decrypted = try? encryptor.decrypt(raw) {
+            existing = (try? JSONDecoder().decode([ChatMessage].self, from: decrypted)) ?? []
         }
         existing.append(message)
         if let encoded = try? JSONEncoder().encode(existing) {
-            try? encoded.write(to: file)
+            try? encryptor.encryptAndWrite(encoded, to: file)
         }
         messages.append(message)
+    }
+
+    // MARK: - Migration
+
+    func migrateExistingDataToEncrypted() {
+        let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
+        if let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) {
+            for file in files where file.pathExtension == "json" {
+                try? encryptor.migrateFileIfNeeded(at: file)
+            }
+        }
+
+        let mediaDir = chatDirectory.appendingPathComponent("media", isDirectory: true)
+        if let peerDirs = try? fileManager.contentsOfDirectory(at: mediaDir, includingPropertiesForKeys: nil) {
+            for peerDir in peerDirs {
+                guard let files = try? fileManager.contentsOfDirectory(at: peerDir, includingPropertiesForKeys: nil) else { continue }
+                for file in files {
+                    try? encryptor.migrateFileIfNeeded(at: file)
+                }
+            }
+        }
     }
 }
