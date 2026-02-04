@@ -1,6 +1,6 @@
 import XCTest
 
-/// Quick verification test to screenshot all 4 new features.
+/// Verify the 4 new features: Online/Offline toggle, Connectivity, Notifications, Archive.
 final class FeatureVerificationTests: XCTestCase {
 
     var app: XCUIApplication!
@@ -8,127 +8,118 @@ final class FeatureVerificationTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         app = XCUIApplication()
+        app.launchArguments += ["-peerDropIsOnline", "YES"]
         app.launch()
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
     }
 
-    func testFeature1_ConnectionStatusHeader() {
-        // Feature 1: Connection status header should be visible on Nearby tab
-        sleep(1)
-        let screenshot = app.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = "F1-connection-header-nearby"
-        attachment.lifetime = .keepAlways
-        add(attachment)
+    // MARK: - Feature 1: Online/Offline Toggle
 
-        // Check for "Not Connected" text in the toolbar area
-        let notConnected = app.staticTexts["Not Connected"]
-        XCTAssertTrue(notConnected.exists, "Connection status header should show 'Not Connected'")
-    }
+    func testOnlineOfflineToggle() {
+        let navBar = app.navigationBars["PeerDrop"]
+        XCTAssertTrue(navBar.waitForExistence(timeout: 3), "Navigation bar should exist")
 
-    func testFeature2_LibraryGroups() {
-        // Feature 2: Library tab with groups
-        app.tabBars.buttons["Library"].tap()
-        sleep(1)
+        // Look for the antenna button by accessibility label
+        let onlineButton = navBar.buttons["Go offline"]
+        let offlineButton = navBar.buttons["Go online"]
 
-        let screenshot1 = app.screenshot()
-        let attachment1 = XCTAttachment(screenshot: screenshot1)
-        attachment1.name = "F2-library-tab"
-        attachment1.lifetime = .keepAlways
-        add(attachment1)
+        if onlineButton.exists {
+            // Screenshot online state
+            let ss1 = app.screenshot()
+            let a1 = XCTAttachment(screenshot: ss1)
+            a1.name = "F1-online-state"
+            a1.lifetime = .keepAlways
+            add(a1)
 
-        // Check for group management button
-        let groupButton = app.buttons["folder.badge.gearshape"]
-        if groupButton.waitForExistence(timeout: 2) {
-            groupButton.tap()
+            // Tap to go offline
+            onlineButton.tap()
             sleep(1)
 
-            let screenshot2 = app.screenshot()
-            let attachment2 = XCTAttachment(screenshot: screenshot2)
-            attachment2.name = "F2-library-group-menu"
-            attachment2.lifetime = .keepAlways
-            add(attachment2)
+            // Verify offline UI
+            let offlineText = app.staticTexts["You are offline"]
+            XCTAssertTrue(offlineText.waitForExistence(timeout: 3), "Should show 'You are offline'")
 
-            // Tap "New Group" if visible
-            let newGroup = app.buttons["New Group"]
-            if newGroup.waitForExistence(timeout: 2) {
-                newGroup.tap()
-                sleep(1)
+            let goOnlineBtn = app.buttons["Go Online"]
+            XCTAssertTrue(goOnlineBtn.exists, "Should show 'Go Online' button")
 
-                let screenshot3 = app.screenshot()
-                let attachment3 = XCTAttachment(screenshot: screenshot3)
-                attachment3.name = "F2-group-editor"
-                attachment3.lifetime = .keepAlways
-                add(attachment3)
+            let ss2 = app.screenshot()
+            let a2 = XCTAttachment(screenshot: ss2)
+            a2.name = "F1-offline-state"
+            a2.lifetime = .keepAlways
+            add(a2)
 
-                // Dismiss
-                if app.buttons["Cancel"].exists {
-                    app.buttons["Cancel"].tap()
-                }
-            }
+            // Restore online
+            goOnlineBtn.tap()
+            sleep(1)
+        } else if offlineButton.exists {
+            offlineButton.tap()
+            sleep(1)
+        } else {
+            XCTFail("Neither Go offline nor Go online button found")
         }
     }
 
-    func testFeature3_EnhancedSettings() {
-        // Feature 3: Enhanced settings
-        // Open settings via the ellipsis menu on Nearby tab
-        let menu = app.buttons["ellipsis.circle"]
-        if menu.waitForExistence(timeout: 3) {
-            menu.tap()
-            sleep(1)
+    // MARK: - Features 2, 3, 4: Settings Sections
 
-            let settingsButton = app.buttons["Settings"]
-            if settingsButton.waitForExistence(timeout: 2) {
-                settingsButton.tap()
-                sleep(1)
+    func testSettingsNewSections() {
+        let navBar = app.navigationBars["PeerDrop"]
+        XCTAssertTrue(navBar.waitForExistence(timeout: 3))
 
-                let screenshot1 = app.screenshot()
-                let attachment1 = XCTAttachment(screenshot: screenshot1)
-                attachment1.name = "F3-settings-top"
-                attachment1.lifetime = .keepAlways
-                add(attachment1)
-
-                // Scroll down to see more settings
-                app.swipeUp()
-                sleep(1)
-
-                let screenshot2 = app.screenshot()
-                let attachment2 = XCTAttachment(screenshot: screenshot2)
-                attachment2.name = "F3-settings-bottom"
-                attachment2.lifetime = .keepAlways
-                add(attachment2)
-
-                // Try to navigate to Backup Records
-                let backupLink = app.staticTexts["Backup Records"]
-                if backupLink.exists {
-                    backupLink.tap()
-                    sleep(1)
-
-                    let screenshot3 = app.screenshot()
-                    let attachment3 = XCTAttachment(screenshot: screenshot3)
-                    attachment3.name = "F3-backup-records"
-                    attachment3.lifetime = .keepAlways
-                    add(attachment3)
-
-                    app.navigationBars.buttons.firstMatch.tap()
-                    sleep(1)
-                }
-
-                // Navigate to User Profile
-                let profileLink = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Profile'")).firstMatch
-                if profileLink.exists {
-                    profileLink.tap()
-                    sleep(1)
-
-                    let screenshot4 = app.screenshot()
-                    let attachment4 = XCTAttachment(screenshot: screenshot4)
-                    attachment4.name = "F4-user-profile"
-                    attachment4.lifetime = .keepAlways
-                    add(attachment4)
-                }
+        // Open the "..." menu — try accessibility identifier first
+        let menuButton = navBar.buttons["ellipsis.circle"]
+        if menuButton.exists {
+            menuButton.tap()
+        } else {
+            // Fall back: tap the last button in the nav bar trailing group
+            let allButtons = navBar.buttons.allElementsBoundByIndex
+            guard let last = allButtons.last else {
+                XCTFail("No buttons in nav bar")
+                return
             }
+            last.tap()
         }
+        sleep(1)
+
+        // Tap Settings
+        let settingsItem = app.buttons["Settings"]
+        guard settingsItem.waitForExistence(timeout: 3) else {
+            XCTFail("Settings menu item not found")
+            return
+        }
+        settingsItem.tap()
+        sleep(1)
+
+        // Screenshot top of Settings
+        let ss1 = app.screenshot()
+        let a1 = XCTAttachment(screenshot: ss1)
+        a1.name = "F2-settings-connectivity"
+        a1.lifetime = .keepAlways
+        add(a1)
+
+        // Feature 2: Connectivity toggles
+        XCTAssertTrue(app.switches["File Transfer"].exists, "File Transfer toggle should exist")
+        XCTAssertTrue(app.switches["Voice Calls"].exists, "Voice Calls toggle should exist")
+        XCTAssertTrue(app.switches["Chat"].exists, "Chat toggle should exist")
+
+        // Feature 3: Notifications toggle
+        XCTAssertTrue(app.switches["Enable Notifications"].exists, "Notifications toggle should exist")
+
+        // Scroll down for Archive section
+        app.swipeUp()
+        sleep(1)
+
+        let ss2 = app.screenshot()
+        let a2 = XCTAttachment(screenshot: ss2)
+        a2.name = "F4-settings-archive"
+        a2.lifetime = .keepAlways
+        add(a2)
+
+        // Feature 4: Archive buttons
+        let exportBtn = app.buttons["Export Archive"]
+        let importBtn = app.buttons["Import Archive"]
+        XCTAssertTrue(exportBtn.exists, "Export Archive button should exist")
+        XCTAssertTrue(importBtn.exists, "Import Archive button should exist")
     }
 }

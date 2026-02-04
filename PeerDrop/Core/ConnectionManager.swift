@@ -27,7 +27,9 @@ final class ConnectionManager: ObservableObject {
     @Published var showVoiceCall = false
     @Published private(set) var transferProgress: Double = 0
     @Published private(set) var connectedPeer: PeerIdentity?
-    @Published var transferHistory: [TransferRecord] = []
+    @Published var transferHistory: [TransferRecord] = [] {
+        didSet { saveTransferHistory() }
+    }
     @Published var latestToast: TransferRecord?
 
     // MARK: - Internal
@@ -50,12 +52,16 @@ final class ConnectionManager: ObservableObject {
     let deviceStore = DeviceRecordStore()
     let chatManager = ChatManager()
 
+    private static let transferHistoryKey = "peerDropTransferHistory"
+
     init() {
         let certManager = CertificateManager()
         self.localIdentity = .local(certificateFingerprint: certManager.fingerprint)
 
         // Deferred init — fileTransfer needs `self`
         self.fileTransfer = FileTransfer(connectionManager: self)
+
+        loadTransferHistory()
 
         // Forward chatManager changes so views observing ConnectionManager re-render on unread updates
         chatManager.objectWillChange
@@ -396,6 +402,7 @@ final class ConnectionManager: ObservableObject {
                     break
                 }
                 transition(to: .incomingRequest)
+                NotificationManager.shared.postIncomingConnection(from: peerIdentity.displayName)
                 pendingIncomingRequest = IncomingRequest(
                     peerIdentity: peerIdentity,
                     connection: connection
@@ -528,6 +535,7 @@ final class ConnectionManager: ObservableObject {
             transition(to: .disconnected)
 
         case .fileOffer:
+            guard FeatureSettings.isFileTransferEnabled else { return }
             fileTransfer?.handleFileOffer(message)
 
         case .fileAccept:
@@ -543,6 +551,7 @@ final class ConnectionManager: ObservableObject {
             fileTransfer?.handleFileComplete(message)
 
         case .callRequest:
+            guard FeatureSettings.isVoiceCallEnabled else { return }
             voiceCallManager?.handleCallRequest(from: message.senderID)
 
         case .callAccept:
@@ -558,15 +567,18 @@ final class ConnectionManager: ObservableObject {
             voiceCallManager?.handleSignaling(message)
 
         case .textMessage:
+            guard FeatureSettings.isChatEnabled else { return }
             if let payload = try? message.decodePayload(TextMessagePayload.self) {
                 chatManager.saveIncoming(
                     text: payload.text,
                     peerID: message.senderID,
                     peerName: connectedPeer?.displayName ?? "Unknown"
                 )
+                NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
             }
 
         case .mediaMessage:
+            guard FeatureSettings.isChatEnabled else { return }
             if let payload = try? message.decodePayload(MediaMessagePayload.self) {
                 chatManager.saveIncomingMedia(
                     payload: payload,
@@ -574,6 +586,7 @@ final class ConnectionManager: ObservableObject {
                     peerID: message.senderID,
                     peerName: connectedPeer?.displayName ?? "Unknown"
                 )
+                NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.fileName)
             }
         case .hello:
             // During handshake, hello is handled inline. In the receive loop,
@@ -618,6 +631,7 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Chat
 
     func sendTextMessage(_ text: String) {
+        guard FeatureSettings.isChatEnabled else { return }
         guard let peer = connectedPeer else { return }
         let payload = TextMessagePayload(text: text)
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
@@ -633,6 +647,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
+        guard FeatureSettings.isChatEnabled else { return }
         guard let peer = connectedPeer else { return }
         let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData)
         guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else { return }
@@ -675,6 +690,19 @@ final class ConnectionManager: ObservableObject {
             throw ConnectionError.notConnected
         }
         try await connection.sendMessage(message)
+    }
+
+    // MARK: - Transfer History Persistence
+
+    private func loadTransferHistory() {
+        guard let data = UserDefaults.standard.data(forKey: Self.transferHistoryKey),
+              let decoded = try? JSONDecoder().decode([TransferRecord].self, from: data) else { return }
+        transferHistory = decoded
+    }
+
+    private func saveTransferHistory() {
+        guard let data = try? JSONEncoder().encode(transferHistory) else { return }
+        UserDefaults.standard.set(data, forKey: Self.transferHistoryKey)
     }
 }
 

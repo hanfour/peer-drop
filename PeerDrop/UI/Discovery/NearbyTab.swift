@@ -5,6 +5,7 @@ struct NearbyTab: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @AppStorage("peerDropViewMode") private var isGridMode = false
     @AppStorage("peerDropSortMode") private var sortModeRaw = "name"
+    @AppStorage("peerDropIsOnline") private var isOnline = true
     @State private var showManualConnect = false
     @State private var showSettings = false
     @State private var showTransferHistory = false
@@ -38,7 +39,21 @@ struct NearbyTab: View {
     var body: some View {
         ZStack {
             Group {
-                if connectionManager.discoveredPeers.isEmpty {
+                if !isOnline {
+                    VStack(spacing: 12) {
+                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("You are offline")
+                            .font(.headline)
+                        Text("Tap the antenna icon to go online and discover nearby devices.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if connectionManager.discoveredPeers.isEmpty {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Searching for nearby devices...")
@@ -62,6 +77,7 @@ struct NearbyTab: View {
                         .padding()
                     }
                     .refreshable {
+                        guard isOnline else { return }
                         connectionManager.restartDiscovery()
                     }
                 } else {
@@ -117,6 +133,7 @@ struct NearbyTab: View {
                     }
                     .animation(.easeInOut(duration: 0.25), value: connectionManager.discoveredPeers)
                     .refreshable {
+                        guard isOnline else { return }
                         connectionManager.restartDiscovery()
                     }
                 }
@@ -138,6 +155,20 @@ struct NearbyTab: View {
         .animation(.easeInOut(duration: 0.2), value: isConnecting)
         .navigationTitle("PeerDrop")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isOnline.toggle()
+                    if isOnline {
+                        connectionManager.startDiscovery()
+                    } else {
+                        connectionManager.stopDiscovery()
+                    }
+                } label: {
+                    Image(systemName: isOnline ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                        .foregroundStyle(isOnline ? .green : .secondary)
+                }
+                .accessibilityLabel(isOnline ? "Go offline" : "Go online")
+            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
                     showManualConnect = true
@@ -194,6 +225,7 @@ struct NearbyTab: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .environmentObject(connectionManager)
         }
         .sheet(isPresented: $showTransferHistory) {
             NavigationStack {
@@ -202,8 +234,15 @@ struct NearbyTab: View {
             }
         }
         .onAppear {
-            if case .idle = connectionManager.state {
+            if isOnline, case .idle = connectionManager.state {
                 connectionManager.startDiscovery()
+            }
+        }
+        .onChange(of: isOnline) { online in
+            if online {
+                connectionManager.startDiscovery()
+            } else {
+                connectionManager.stopDiscovery()
             }
         }
         .onChange(of: connectionManager.discoveredPeers.count) { _ in

@@ -82,6 +82,7 @@ struct DiscoveryView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+                    .environmentObject(connectionManager)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

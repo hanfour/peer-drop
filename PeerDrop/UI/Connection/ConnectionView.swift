@@ -7,6 +7,9 @@ struct ConnectionView: View {
     @State private var toastRecord: TransferRecord?
     @State private var showFilePicker = false
     @State private var showChat = false
+    @AppStorage("peerDropFileTransferEnabled") private var fileTransferEnabled = true
+    @AppStorage("peerDropVoiceCallEnabled") private var voiceCallEnabled = true
+    @AppStorage("peerDropChatEnabled") private var chatEnabled = true
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -27,28 +30,34 @@ struct ConnectionView: View {
 
                     if case .connected = connectionManager.state {
                         HStack(spacing: 32) {
-                            circleButton(icon: "doc.fill", label: "Send File", color: .blue) {
-                                showFilePicker = true
-                            }
-
-                            ZStack(alignment: .topTrailing) {
-                                circleButton(icon: "message.fill", label: "Chat", color: .orange) {
-                                    showChat = true
-                                }
-
-                                if let count = connectionManager.chatManager.unreadCounts[peer.id], count > 0 {
-                                    Text("\(count)")
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.white)
-                                        .padding(5)
-                                        .background(Circle().fill(.red))
-                                        .offset(x: 4, y: -4)
+                            if fileTransferEnabled {
+                                circleButton(icon: "doc.fill", label: "Send File", color: .blue) {
+                                    showFilePicker = true
                                 }
                             }
 
-                            circleButton(icon: "phone.fill", label: "Voice Call", color: .green) {
-                                Task {
-                                    await connectionManager.voiceCallManager?.startCall()
+                            if chatEnabled {
+                                ZStack(alignment: .topTrailing) {
+                                    circleButton(icon: "message.fill", label: "Chat", color: .orange) {
+                                        showChat = true
+                                    }
+
+                                    if let count = connectionManager.chatManager.unreadCounts[peer.id], count > 0 {
+                                        Text("\(count)")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.white)
+                                            .padding(5)
+                                            .background(Circle().fill(.red))
+                                            .offset(x: 4, y: -4)
+                                    }
+                                }
+                            }
+
+                            if voiceCallEnabled {
+                                circleButton(icon: "phone.fill", label: "Voice Call", color: .green) {
+                                    Task {
+                                        await connectionManager.voiceCallManager?.startCall()
+                                    }
                                 }
                             }
                         }

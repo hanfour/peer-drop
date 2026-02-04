@@ -120,13 +120,29 @@ final class DeviceRecordStore: ObservableObject {
         }
     }
 
+    func replaceAll(with newRecords: [DeviceRecord]) {
+        records = newRecords
+        save()
+    }
+
+    func mergeImported(_ imported: [DeviceRecord]) {
+        for record in imported {
+            if let index = records.firstIndex(where: { $0.id == record.id }) {
+                records[index].merge(with: record)
+            } else {
+                records.append(record)
+            }
+        }
+        save()
+    }
+
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([DeviceRecord].self, from: data) else { return }
         records = decoded
     }
 
-    private func save() {
+    func save() {
         guard let data = try? JSONEncoder().encode(records) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
