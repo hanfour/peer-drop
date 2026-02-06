@@ -70,8 +70,19 @@ extension NWConnection {
     }
 }
 
-enum NWConnectionError: Error {
+enum NWConnectionError: LocalizedError {
     case noData
     case cancelled
     case unexpectedState
+
+    var errorDescription: String? {
+        switch self {
+        case .noData:
+            return "Connection closed by peer"
+        case .cancelled:
+            return "Connection was cancelled"
+        case .unexpectedState:
+            return "Connection entered an unexpected state"
+        }
+    }
 }

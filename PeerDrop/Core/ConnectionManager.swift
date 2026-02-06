@@ -7,6 +7,50 @@ import os
 
 private let logger = Logger(subsystem: "com.peerdrop.app", category: "ConnectionManager")
 
+/// Convert any error to a user-friendly message for display.
+private func userFriendlyErrorMessage(_ error: Error) -> String {
+    // Handle NWError from Network framework
+    if let nwError = error as? NWError {
+        switch nwError {
+        case .posix(let code):
+            switch code {
+            case .ECONNREFUSED: return "Connection refused by peer"
+            case .ECONNRESET: return "Connection reset by peer"
+            case .ETIMEDOUT: return "Connection timed out"
+            case .ENETUNREACH: return "Network unreachable"
+            case .EHOSTUNREACH: return "Peer unreachable"
+            case .ENOTCONN: return "Not connected"
+            default: return "Network error occurred"
+            }
+        case .tls(let status):
+            return "Secure connection failed (TLS error \(status))"
+        case .dns(let dnsError):
+            return "Could not find peer (\(dnsError))"
+        @unknown default:
+            return "Network connection failed"
+        }
+    }
+
+    // Handle our custom NWConnectionError
+    if let connError = error as? NWConnectionError {
+        return connError.localizedDescription
+    }
+
+    // For other errors, use localizedDescription but clean it up
+    let desc = error.localizedDescription
+    // Remove technical prefixes like "PeerDrop.SomeError"
+    if desc.contains("(") && desc.contains(")") {
+        // Try to extract just the meaningful part
+        if let range = desc.range(of: "(", options: .backwards) {
+            let prefix = String(desc[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            if !prefix.isEmpty && !prefix.contains(".") {
+                return prefix
+            }
+        }
+    }
+    return desc
+}
+
 
 /// Incoming connection request for the consent sheet.
 struct IncomingRequest: Identifiable {
@@ -449,11 +493,11 @@ final class ConnectionManager: ObservableObject {
                 logger.info("CONNECTION_REQUEST sent. Starting receive loop.")
                 startReceiving()
             } catch {
-                logger.error("Connection failed: \(error.localizedDescription)")
+                logger.error("Connection failed: \(userFriendlyErrorMessage(error))")
                 cancelTimeouts()
                 activeConnection?.cancel()
                 activeConnection = nil
-                transition(to: .failed(reason: error.localizedDescription))
+                transition(to: .failed(reason: userFriendlyErrorMessage(error)))
                 if discoveryCoordinator == nil {
                     restartDiscovery()
                 }
@@ -627,7 +671,7 @@ final class ConnectionManager: ObservableObject {
                 cancelTimeouts()
                 activeConnection?.cancel()
                 activeConnection = nil
-                transition(to: .failed(reason: error.localizedDescription))
+                transition(to: .failed(reason: userFriendlyErrorMessage(error)))
                 if discoveryCoordinator == nil {
                     restartDiscovery()
                 }
@@ -707,13 +751,13 @@ final class ConnectionManager: ObservableObject {
                     guard connectionGeneration == generation else { break }
                     handleMessage(message)
                 } catch {
-                    logger.error("Receive loop error: \(error.localizedDescription)")
+                    logger.error("Receive loop error: \(userFriendlyErrorMessage(error))")
                     // Only handle if this loop still owns the connection
                     guard connectionGeneration == generation, activeConnection != nil else { break }
                     fileTransfer?.handleConnectionFailure()
                     activeConnection = nil
                     // Keep connectedPeer so UI shows who we lost connection with
-                    transition(to: .failed(reason: error.localizedDescription))
+                    transition(to: .failed(reason: userFriendlyErrorMessage(error)))
                     if discoveryCoordinator == nil {
                         restartDiscovery()
                     }
@@ -886,7 +930,7 @@ final class ConnectionManager: ObservableObject {
             cancelTimeouts()
             fileTransfer?.handleConnectionFailure()
             activeConnection = nil
-            transition(to: .failed(reason: error.localizedDescription))
+            transition(to: .failed(reason: userFriendlyErrorMessage(error)))
             if discoveryCoordinator == nil {
                 restartDiscovery()
             }
