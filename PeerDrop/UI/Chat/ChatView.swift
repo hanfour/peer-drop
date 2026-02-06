@@ -20,8 +20,28 @@ struct ChatView: View {
     @State private var voiceRecordingTimer: Timer?
 
     private var isConnected: Bool {
-        if case .connected = connectionManager.state { return true }
-        return false
+        switch connectionManager.state {
+        case .connected, .transferring, .voiceCall:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var isDisconnected: Bool {
+        switch connectionManager.state {
+        case .failed, .disconnected:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var disconnectReason: String? {
+        if case .failed(let reason) = connectionManager.state {
+            return reason
+        }
+        return nil
     }
 
     var body: some View {
@@ -49,17 +69,42 @@ struct ChatView: View {
 
             Divider()
 
-            // Disconnected banner
-            if !isConnected {
-                HStack {
-                    Image(systemName: "wifi.slash")
-                    Text("Peer disconnected")
+            // Disconnected banner with reconnect option
+            if isDisconnected {
+                VStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .foregroundStyle(.orange)
+                        Text(disconnectReason ?? "Connection lost")
+                            .font(.subheadline.weight(.medium))
+                    }
+
+                    HStack(spacing: 16) {
+                        if connectionManager.canReconnect {
+                            Button {
+                                connectionManager.reconnect()
+                            } label: {
+                                Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(.subheadline.weight(.medium))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
+                        }
+
+                        Button {
+                            // Navigate back and return to discovery
+                            connectionManager.returnToDiscovery()
+                        } label: {
+                            Text("Back to Nearby")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray5))
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .background(Color(.systemGray6))
             }
 
             // Input bar
@@ -72,9 +117,12 @@ struct ChatView: View {
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
             chatManager.activeChatPeerID = peerID
+            // Suppress the global error alert while in ChatView (we handle disconnection locally)
+            connectionManager.suppressErrorAlert = true
         }
         .onDisappear {
             chatManager.activeChatPeerID = nil
+            connectionManager.suppressErrorAlert = false
         }
         .sheet(isPresented: $showAttachmentMenu) {
             AttachmentMenuSheet(

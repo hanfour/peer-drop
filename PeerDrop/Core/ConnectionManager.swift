@@ -76,6 +76,8 @@ final class ConnectionManager: ObservableObject {
     }
     @Published var latestToast: TransferRecord?
     @Published var statusToast: String?
+    /// When true, the ContentView error alert is suppressed (e.g., user is in ChatView handling the error locally)
+    @Published var suppressErrorAlert: Bool = false
 
     // MARK: - Internal
 

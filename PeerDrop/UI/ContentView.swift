@@ -73,9 +73,13 @@ struct ContentView: View {
             case .connected, .transferring, .voiceCall:
                 selectedTab = 1
             case .failed(let reason):
-                errorMessage = reason
-                showError = true
+                // Only show alert if not suppressed (e.g., ChatView handles it locally)
+                if !connectionManager.suppressErrorAlert {
+                    errorMessage = reason
+                    showError = true
+                }
             case .rejected:
+                // Always show rejected alert (user needs to know)
                 errorMessage = "The peer declined your connection request."
                 showError = true
             default:
