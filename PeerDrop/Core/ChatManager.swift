@@ -130,6 +130,14 @@ final class ChatManager: ObservableObject {
         }
     }
 
+    func markLastOutgoingAsFailed(peerID: String, errorText: String) {
+        // Find the last outgoing message in the in-memory list and mark it failed
+        if let idx = messages.lastIndex(where: { $0.isOutgoing }) {
+            messages[idx].status = .failed
+            updateStatus(messageID: messages[idx].id, status: .failed)
+        }
+    }
+
     // MARK: - Unread Tracking
 
     func markAsRead(peerID: String) {

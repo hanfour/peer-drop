@@ -194,9 +194,13 @@ final class FileTransfer: ObservableObject {
         // Sender can proceed — chunks are already being sent
     }
 
-    func handleFileReject() {
+    func handleFileReject(reason: String? = nil) {
         isTransferring = false
-        lastError = "File transfer was rejected"
+        if reason == "featureDisabled" {
+            lastError = "Peer has file transfer disabled"
+        } else {
+            lastError = "File transfer was rejected"
+        }
     }
 
     func handleFileChunk(_ message: PeerMessage) {

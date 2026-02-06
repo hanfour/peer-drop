@@ -109,7 +109,7 @@ final class VoiceCallManager: ObservableObject {
         }
     }
 
-    func handleCallReject() {
+    func handleCallReject(reason: String? = nil) {
         callKitManager.reportCallEnded(reason: .declinedElsewhere)
         endCallLocally()
     }

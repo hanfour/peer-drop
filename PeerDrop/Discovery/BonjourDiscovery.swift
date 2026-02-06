@@ -145,6 +145,7 @@ final class BonjourDiscovery: DiscoveryBackend {
     }
 
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
+        logger.info("browseResultsChanged: \(results.count) results")
         let peers = results.compactMap { result -> DiscoveredPeer? in
             guard case .service(let name, let type, let domain, _) = result.endpoint else {
                 return nil
@@ -159,6 +160,7 @@ final class BonjourDiscovery: DiscoveryBackend {
                 source: .bonjour
             )
         }
+        logger.info("Publishing \(peers.count) peers: \(peers.map { $0.displayName })")
         peersSubject.send(peers)
     }
 }

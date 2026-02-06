@@ -7,6 +7,8 @@ struct ConnectionView: View {
     @State private var toastRecord: TransferRecord?
     @State private var showFilePicker = false
     @State private var showChat = false
+    @State private var showFeatureDisabledAlert = false
+    @State private var disabledFeatureName = ""
     @AppStorage("peerDropFileTransferEnabled") private var fileTransferEnabled = true
     @AppStorage("peerDropVoiceCallEnabled") private var voiceCallEnabled = true
     @AppStorage("peerDropChatEnabled") private var chatEnabled = true
@@ -37,39 +39,51 @@ struct ConnectionView: View {
 
                     if case .connected = connectionManager.state {
                         HStack(spacing: 32) {
-                            if fileTransferEnabled {
-                                circleButton(icon: "doc.fill", label: "Send File", color: .blue) {
+                            circleButton(icon: "doc.fill", label: "Send File", color: .blue, disabled: !fileTransferEnabled) {
+                                if fileTransferEnabled {
                                     showFilePicker = true
+                                } else {
+                                    disabledFeatureName = "File Transfer"
+                                    showFeatureDisabledAlert = true
                                 }
                             }
+                            .accessibilityIdentifier("send-file-button")
 
-                            if chatEnabled {
-                                ZStack(alignment: .topTrailing) {
-                                    circleButton(icon: "message.fill", label: "Chat", color: .orange) {
+                            ZStack(alignment: .topTrailing) {
+                                circleButton(icon: "message.fill", label: "Chat", color: .orange, disabled: !chatEnabled) {
+                                    if chatEnabled {
                                         showChat = true
+                                    } else {
+                                        disabledFeatureName = "Chat"
+                                        showFeatureDisabledAlert = true
                                     }
+                                }
+                                .accessibilityIdentifier("chat-button")
 
-                                    if let count = connectionManager.chatManager.unreadCounts[peer.id], count > 0 {
-                                        Text("\(count)")
-                                            .font(.caption2.bold())
-                                            .foregroundStyle(.white)
-                                            .padding(5)
-                                            .background(Circle().fill(.red))
-                                            .offset(x: 4, y: -4)
-                                    }
+                                if chatEnabled, let count = connectionManager.chatManager.unreadCounts[peer.id], count > 0 {
+                                    Text("\(count)")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.white)
+                                        .padding(5)
+                                        .background(Circle().fill(.red))
+                                        .offset(x: 4, y: -4)
                                 }
                             }
 
-                            if voiceCallEnabled {
-                                circleButton(icon: "phone.fill", label: "Voice Call", color: .green) {
+                            circleButton(icon: "phone.fill", label: "Voice Call", color: .green, disabled: !voiceCallEnabled) {
+                                if voiceCallEnabled {
                                     Task {
                                         await connectionManager.voiceCallManager?.startCall()
                                     }
+                                } else {
+                                    disabledFeatureName = "Voice Calls"
+                                    showFeatureDisabledAlert = true
                                 }
                             }
+                            .accessibilityIdentifier("voice-call-button")
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .navigationDestination(isPresented: $showFilePicker) {
+                        .sheet(isPresented: $showFilePicker) {
                             FilePickerView()
                                 .environmentObject(connectionManager)
                         }
@@ -107,16 +121,6 @@ struct ConnectionView: View {
                         showDisconnectConfirm = true
                     }
                     .padding(.bottom)
-                    .confirmationDialog(
-                        "Disconnect from peer?",
-                        isPresented: $showDisconnectConfirm,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Disconnect", role: .destructive) {
-                            connectionManager.disconnect()
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    }
                 } else if isTerminalState {
                     Button("Back to Discovery") {
                         connectionManager.returnToDiscovery()
@@ -137,6 +141,18 @@ struct ConnectionView: View {
         .animation(.easeInOut(duration: 0.25), value: connectionManager.state)
         .animation(.easeInOut(duration: 0.25), value: showChat)
         .animation(.easeInOut(duration: 0.25), value: showFilePicker)
+        .sheet(isPresented: $showDisconnectConfirm) {
+            if let peer = connectionManager.connectedPeer {
+                DisconnectSheet(peerName: peer.displayName) {
+                    connectionManager.disconnect()
+                }
+            }
+        }
+        .alert("\(disabledFeatureName) is Off", isPresented: $showFeatureDisabledAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enable \(disabledFeatureName) in Settings to use this feature.")
+        }
         .onChange(of: connectionManager.latestToast?.id) { _ in
             guard let record = connectionManager.latestToast else { return }
             toastRecord = record
@@ -152,19 +168,21 @@ struct ConnectionView: View {
         }
     }
 
-    private func circleButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
-        VStack(spacing: 6) {
-            Button(action: action) {
+    private func circleButton(icon: String, label: String, color: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(.white)
                     .frame(width: 60, height: 60)
-                    .background(color)
+                    .background(disabled ? Color.gray : color)
                     .clipShape(Circle())
+                    .opacity(disabled ? 0.5 : 1.0)
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
+        .buttonStyle(.plain)
     }
 }

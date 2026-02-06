@@ -161,6 +161,13 @@ struct NearbyTab: View {
                     if isOnline {
                         connectionManager.startDiscovery()
                     } else {
+                        // Disconnect any active connection before going offline
+                        switch connectionManager.state {
+                        case .connected, .transferring, .voiceCall, .requesting, .connecting:
+                            connectionManager.disconnect()
+                        default:
+                            break
+                        }
                         connectionManager.stopDiscovery()
                     }
                 } label: {

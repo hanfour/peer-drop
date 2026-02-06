@@ -95,6 +95,15 @@ extension NWParameters {
         } else {
             params = NWParameters(tls: nil)
         }
+
+        // Enable TCP keepalive to prevent idle timeout
+        if let tcpOptions = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+            tcpOptions.enableKeepalive = true
+            tcpOptions.keepaliveIdle = 10 // Start keepalive after 10 seconds idle
+            tcpOptions.keepaliveInterval = 10 // Send keepalive every 10 seconds
+            tcpOptions.keepaliveCount = 3 // Give up after 3 failed keepalives
+        }
+
         let framerOptions = NWProtocolFramer.Options(definition: PeerDropFramer.definition)
         params.defaultProtocolStack.applicationProtocols.insert(framerOptions, at: 0)
         return params

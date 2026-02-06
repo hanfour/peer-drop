@@ -6,6 +6,7 @@ enum MessageType: String, Codable {
     case connectionRequest
     case connectionAccept
     case connectionReject
+    case connectionCancel
 
     // File transfer
     case fileOffer
@@ -30,7 +31,12 @@ enum MessageType: String, Codable {
     // Chat messaging
     case textMessage
     case mediaMessage
+    case chatReject
 
     // Connection lifecycle
     case disconnect
+
+    // Heartbeat keepalive
+    case ping
+    case pong
 }

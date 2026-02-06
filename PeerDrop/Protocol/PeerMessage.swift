@@ -32,6 +32,10 @@ struct PeerMessage: Codable {
         PeerMessage(type: .connectionReject, senderID: senderID)
     }
 
+    static func connectionCancel(senderID: String) -> PeerMessage {
+        PeerMessage(type: .connectionCancel, senderID: senderID)
+    }
+
     static func fileOffer(metadata: TransferMetadata, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(metadata)
         return PeerMessage(type: .fileOffer, payload: data, senderID: senderID)
@@ -41,8 +45,28 @@ struct PeerMessage: Codable {
         PeerMessage(type: .fileAccept, senderID: senderID)
     }
 
-    static func fileReject(senderID: String) -> PeerMessage {
-        PeerMessage(type: .fileReject, senderID: senderID)
+    static func fileReject(senderID: String, reason: String? = nil) -> PeerMessage {
+        if let reason {
+            let data = try? JSONEncoder().encode(RejectionPayload(reason: reason))
+            return PeerMessage(type: .fileReject, payload: data, senderID: senderID)
+        }
+        return PeerMessage(type: .fileReject, senderID: senderID)
+    }
+
+    static func callReject(senderID: String, reason: String? = nil) -> PeerMessage {
+        if let reason {
+            let data = try? JSONEncoder().encode(RejectionPayload(reason: reason))
+            return PeerMessage(type: .callReject, payload: data, senderID: senderID)
+        }
+        return PeerMessage(type: .callReject, senderID: senderID)
+    }
+
+    static func chatReject(senderID: String, reason: String? = nil) -> PeerMessage {
+        if let reason {
+            let data = try? JSONEncoder().encode(RejectionPayload(reason: reason))
+            return PeerMessage(type: .chatReject, payload: data, senderID: senderID)
+        }
+        return PeerMessage(type: .chatReject, senderID: senderID)
     }
 
     static func fileChunk(_ data: Data, senderID: String) -> PeerMessage {
@@ -78,6 +102,14 @@ struct PeerMessage: Codable {
         PeerMessage(type: .disconnect, senderID: senderID)
     }
 
+    static func ping(senderID: String) -> PeerMessage {
+        PeerMessage(type: .ping, senderID: senderID)
+    }
+
+    static func pong(senderID: String) -> PeerMessage {
+        PeerMessage(type: .pong, senderID: senderID)
+    }
+
     // MARK: - Serialization
 
     func encoded() throws -> Data {
@@ -96,6 +128,10 @@ struct PeerMessage: Codable {
         }
         return try JSONDecoder().decode(type, from: payload)
     }
+}
+
+struct RejectionPayload: Codable {
+    let reason: String
 }
 
 enum PeerMessageError: Error {

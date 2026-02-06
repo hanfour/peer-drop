@@ -31,6 +31,7 @@ final class ConnectionManager: ObservableObject {
         didSet { saveTransferHistory() }
     }
     @Published var latestToast: TransferRecord?
+    @Published var statusToast: String?
 
     // MARK: - Internal
 
@@ -44,6 +45,10 @@ final class ConnectionManager: ObservableObject {
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var requestingTimeoutTask: Task<Void, Never>?
     private var connectingTimeoutTask: Task<Void, Never>?
+    private var consentMonitorTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
+    /// Tracks the current connection attempt so stale callbacks are ignored.
+    private var connectionGeneration: UUID = UUID()
 
     // MARK: - Submanagers (set after init)
 
@@ -111,6 +116,16 @@ final class ConnectionManager: ObservableObject {
         logger.info("State: \(String(describing: oldState)) → \(String(describing: newState))")
         state = newState
         triggerHaptic(for: newState)
+
+        // Heartbeat management
+        switch newState {
+        case .connected:
+            startHeartbeat()
+        case .disconnected, .failed, .rejected, .discovering, .idle:
+            stopHeartbeat()
+        default:
+            break
+        }
     }
 
     private func triggerHaptic(for newState: ConnectionState) {
@@ -169,21 +184,30 @@ final class ConnectionManager: ObservableObject {
     }
 
     func restartDiscovery() {
+        logger.info("restartDiscovery() called from state: \(String(describing: self.state))")
         stopDiscovery()
         // Respect the user's online/offline preference before restarting
         let defaults = UserDefaults.standard
         let isOnline = defaults.object(forKey: "peerDropIsOnline") == nil
             ? true
             : defaults.bool(forKey: "peerDropIsOnline")
-        guard isOnline else { return }
+        guard isOnline else {
+            logger.info("restartDiscovery: user is offline, skipping")
+            return
+        }
         startDiscovery()
+        logger.info("restartDiscovery: discovery restarted, state=\(String(describing: self.state))")
     }
 
     /// Clear peer info and return to discovery (used by UI "Back to Discovery" button).
     func returnToDiscovery() {
         connectedPeer = nil
         if case .discovering = state { return }
-        transition(to: .discovering)
+        if discoveryCoordinator == nil {
+            restartDiscovery()
+        } else {
+            transition(to: .discovering)
+        }
     }
 
     func addManualPeer(host: String, port: UInt16, name: String?) {
@@ -252,17 +276,57 @@ final class ConnectionManager: ObservableObject {
         connectingTimeoutTask = nil
     }
 
-    private func startRequestingTimeout() {
+    // MARK: - Heartbeat Keepalive
+
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        let generation = connectionGeneration
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                    guard let self, !Task.isCancelled, self.connectionGeneration == generation else { return }
+                    // Send ping in connected or voiceCall states (not during file transfer)
+                    switch self.state {
+                    case .connected, .voiceCall:
+                        let ping = PeerMessage.ping(senderID: self.localIdentity.id)
+                        try? await self.sendMessage(ping)
+                    default:
+                        continue
+                    }
+                } catch {
+                    // Task cancelled or sleep interrupted
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+    }
+
+    private func startRequestingTimeout(generation: UUID? = nil) {
         requestingTimeoutTask?.cancel()
+        let gen = generation ?? connectionGeneration
         requestingTimeoutTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
-                guard let self, !Task.isCancelled else { return }
+                guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .requesting = self.state {
                     print("[ConnectionManager] Connection request timed out after 15s")
-                    self.activeConnection?.cancel()
+                    // Notify the acceptor so they can dismiss the consent sheet
+                    if let conn = self.activeConnection {
+                        let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
+                        try? await conn.sendMessage(cancel)
+                        conn.cancel()
+                    }
                     self.activeConnection = nil
                     self.transition(to: .failed(reason: "Connection timed out"))
+                    if self.discoveryCoordinator == nil {
+                        self.restartDiscovery()
+                    }
                 }
             } catch {
                 // Task was cancelled, nothing to do
@@ -270,17 +334,26 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func startConnectingTimeout() {
+    private func startConnectingTimeout(generation: UUID? = nil) {
         connectingTimeoutTask?.cancel()
+        let gen = generation ?? connectionGeneration
         connectingTimeoutTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
-                guard let self, !Task.isCancelled else { return }
+                guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .connecting = self.state {
                     print("[ConnectionManager] Connection setup timed out after 10s")
-                    self.activeConnection?.cancel()
+                    // Notify the acceptor so they can dismiss the consent sheet
+                    if let conn = self.activeConnection {
+                        let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
+                        try? await conn.sendMessage(cancel)
+                        conn.cancel()
+                    }
                     self.activeConnection = nil
                     self.transition(to: .failed(reason: "Connection setup timed out"))
+                    if self.discoveryCoordinator == nil {
+                        self.restartDiscovery()
+                    }
                 }
             } catch {
                 // Task was cancelled, nothing to do
@@ -297,8 +370,25 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Guard against duplicate requests (double-tap, rapid Reconnect)
+        switch state {
+        case .requesting, .connecting:
+            logger.info("requestConnection ignored — already in \(String(describing: self.state))")
+            return
+        default:
+            break
+        }
+
         lastConnectedPeer = peer
         cancelTimeouts()
+
+        // Cancel any previous connection and bump generation
+        let oldConnection = activeConnection
+        activeConnection = nil
+        oldConnection?.cancel()
+        let generation = UUID()
+        connectionGeneration = generation
+
         // Normalize state so we can reach .requesting
         switch state {
         case .disconnected, .failed, .rejected, .idle:
@@ -333,17 +423,18 @@ final class ConnectionManager: ObservableObject {
         let params = NWParameters.peerDrop(tls: clientTLS)
         let connection = NWConnection(to: endpoint, using: params)
 
-        connection.stateUpdateHandler = { [weak self] state in
-            logger.info("NWConnection state: \(String(describing: state))")
+        connection.stateUpdateHandler = { [weak self] nwState in
+            logger.info("NWConnection state: \(String(describing: nwState))")
             Task { @MainActor in
-                self?.handleConnectionStateChange(state)
+                guard let self, self.connectionGeneration == generation else { return }
+                self.handleConnectionStateChange(nwState)
             }
         }
 
         connection.start(queue: .global(qos: .userInitiated))
         activeConnection = connection
 
-        startRequestingTimeout()
+        startRequestingTimeout(generation: generation)
 
         Task {
             do {
@@ -360,7 +451,12 @@ final class ConnectionManager: ObservableObject {
             } catch {
                 logger.error("Connection failed: \(error.localizedDescription)")
                 cancelTimeouts()
+                activeConnection?.cancel()
+                activeConnection = nil
                 transition(to: .failed(reason: error.localizedDescription))
+                if discoveryCoordinator == nil {
+                    restartDiscovery()
+                }
             }
         }
     }
@@ -380,8 +476,30 @@ final class ConnectionManager: ObservableObject {
         connection.start(queue: .global(qos: .userInitiated))
         activeConnection = connection
 
-        connection.stateUpdateHandler = { state in
+        connection.stateUpdateHandler = { [weak self] state in
             logger.info("Incoming NWConnection state: \(String(describing: state))")
+            Task { @MainActor in
+                guard let self else { return }
+                switch state {
+                case .failed, .cancelled:
+                    if self.pendingIncomingRequest != nil {
+                        self.pendingIncomingRequest = nil
+                        self.statusToast = "Connection request expired"
+                    }
+                    // Always clean up stale activeConnection
+                    if self.activeConnection === connection {
+                        self.activeConnection = nil
+                        switch self.state {
+                        case .incomingRequest, .connecting:
+                            self.transition(to: .discovering)
+                        default:
+                            break
+                        }
+                    }
+                default:
+                    break
+                }
+            }
         }
 
         Task {
@@ -423,9 +541,45 @@ final class ConnectionManager: ObservableObject {
                     peerIdentity: peerIdentity,
                     connection: connection
                 )
+                // Monitor for connectionCancel or connection death while consent sheet is showing
+                startConsentMonitor(on: connection)
             } catch {
                 logger.error("Incoming connection error: \(error.localizedDescription)")
                 connection.cancel()
+                activeConnection = nil
+                if case .incomingRequest = state {
+                    transition(to: .discovering)
+                }
+            }
+        }
+    }
+
+    /// Listens for messages (e.g. connectionCancel) while the consent sheet is showing.
+    /// Without active reads, NWConnection won't detect remote close promptly.
+    private func startConsentMonitor(on connection: NWConnection) {
+        consentMonitorTask?.cancel()
+        consentMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.pendingIncomingRequest != nil else { break }
+                do {
+                    let message = try await connection.receiveMessage()
+                    // Process the message on the main actor
+                    await MainActor.run {
+                        self.handleMessage(message)
+                    }
+                } catch {
+                    // Read failed — connection died while consent was showing
+                    await MainActor.run {
+                        if self.pendingIncomingRequest != nil {
+                            logger.info("Consent monitor: connection lost, dismissing consent sheet")
+                            self.pendingIncomingRequest = nil
+                            self.activeConnection = nil
+                            self.statusToast = "Connection request expired"
+                            self.transition(to: .discovering)
+                        }
+                    }
+                    break
+                }
             }
         }
     }
@@ -434,6 +588,16 @@ final class ConnectionManager: ObservableObject {
 
     func acceptConnection() {
         guard let request = pendingIncomingRequest else { return }
+        consentMonitorTask?.cancel()
+        consentMonitorTask = nil
+        // Verify the connection is still alive before attempting to accept
+        guard request.connection.state == .ready else {
+            pendingIncomingRequest = nil
+            activeConnection = nil
+            statusToast = "Connection is no longer available"
+            transition(to: .discovering)
+            return
+        }
         pendingIncomingRequest = nil
         connectedPeer = request.peerIdentity
         // Normalize state so .connecting transition is valid from any terminal state
@@ -461,49 +625,68 @@ final class ConnectionManager: ObservableObject {
                 startReceiving()
             } catch {
                 cancelTimeouts()
+                activeConnection?.cancel()
+                activeConnection = nil
                 transition(to: .failed(reason: error.localizedDescription))
+                if discoveryCoordinator == nil {
+                    restartDiscovery()
+                }
             }
         }
     }
 
     func rejectConnection() {
         guard let request = pendingIncomingRequest else { return }
+        consentMonitorTask?.cancel()
+        consentMonitorTask = nil
         pendingIncomingRequest = nil
 
         Task {
             let reject = PeerMessage.connectionReject(senderID: localIdentity.id)
             try? await request.connection.sendMessage(reject)
             request.connection.cancel()
-            transition(to: .rejected)
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            transition(to: .discovering)
+            activeConnection = nil
+            statusToast = "Connection declined"
+            if discoveryCoordinator == nil {
+                restartDiscovery()
+            } else {
+                transition(to: .discovering)
+            }
         }
     }
 
     func disconnect() {
+        logger.info("disconnect() called — state=\(String(describing: self.state)), activeConnection=\(self.activeConnection != nil ? "exists" : "nil")")
         cancelTimeouts()
+        connectionGeneration = UUID()
+        // Capture and nil-out the connection BEFORE cancelling so the receive
+        // loop sees activeConnection == nil and doesn't race to .failed.
+        let connection = activeConnection
+        activeConnection = nil
         Task {
-            if let connection = activeConnection {
+            if let connection {
                 let msg = PeerMessage.disconnect(senderID: localIdentity.id)
                 try? await connection.sendMessage(msg)
                 connection.cancel()
             }
-            cleanupAfterDisconnect(clearPeer: true)
+            cleanupAfterDisconnect()
         }
     }
 
-    /// Consolidated cleanup after any disconnect path.
-    /// - Parameter clearPeer: `true` when the local user initiates disconnect;
-    ///   `false` when the remote peer disconnects (so UI can still show who disconnected).
-    private func cleanupAfterDisconnect(clearPeer: Bool) {
+    /// Cleanup after the local user initiates disconnect.
+    private func cleanupAfterDisconnect() {
         activeConnection = nil
-        if clearPeer {
-            connectedPeer = nil
-        }
+        connectedPeer = nil
         endBackgroundTask()
         transition(to: .disconnected)
-        // Restart discovery so a fresh listener replaces any stale one
-        restartDiscovery()
+        // Auto-resume discovery so the user returns to the Nearby tab seamlessly.
+        // Avoid full restart when the coordinator already exists — stopping the
+        // Bonjour listener causes this device to temporarily vanish from peers.
+        if discoveryCoordinator == nil {
+            restartDiscovery()
+        } else {
+            transition(to: .discovering)
+        }
     }
 
     // MARK: - Message Receive Loop
@@ -513,20 +696,25 @@ final class ConnectionManager: ObservableObject {
             logger.warning("startReceiving: no activeConnection!")
             return
         }
-        logger.info("Entering receive loop")
+        let generation = connectionGeneration
+        logger.info("Entering receive loop (gen=\(generation.uuidString.prefix(8)))")
 
         Task {
-            while activeConnection != nil {
+            while activeConnection != nil && connectionGeneration == generation {
                 do {
                     let message = try await connection.receiveMessage()
+                    // Verify this loop still owns the connection
+                    guard connectionGeneration == generation else { break }
                     handleMessage(message)
                 } catch {
                     logger.error("Receive loop error: \(error.localizedDescription)")
-                    if activeConnection != nil {
-                        fileTransfer?.handleConnectionFailure()
-                        activeConnection = nil
-                        // Keep connectedPeer so UI shows who we lost connection with
-                        transition(to: .failed(reason: error.localizedDescription))
+                    // Only handle if this loop still owns the connection
+                    guard connectionGeneration == generation, activeConnection != nil else { break }
+                    fileTransfer?.handleConnectionFailure()
+                    activeConnection = nil
+                    // Keep connectedPeer so UI shows who we lost connection with
+                    transition(to: .failed(reason: error.localizedDescription))
+                    if discoveryCoordinator == nil {
                         restartDiscovery()
                     }
                     break
@@ -557,20 +745,41 @@ final class ConnectionManager: ObservableObject {
             activeConnection = nil
             transition(to: .rejected)
 
+        case .connectionCancel:
+            // Initiator cancelled the request — dismiss consent sheet
+            pendingIncomingRequest = nil
+            activeConnection?.cancel()
+            activeConnection = nil
+            statusToast = "Connection request was cancelled"
+            transition(to: .discovering)
+
         case .disconnect:
             activeConnection?.cancel()
-            // Keep connectedPeer so the UI shows who disconnected
-            cleanupAfterDisconnect(clearPeer: false)
+            activeConnection = nil
+            endBackgroundTask()
+            fileTransfer?.handleConnectionFailure()
+            voiceCallManager?.handleCallEnd()
+            // Keep connectedPeer so the UI shows who disconnected.
+            // Transition to .failed so the error alert offers Reconnect / Back to Discovery.
+            transition(to: .failed(reason: "Peer disconnected"))
+            if discoveryCoordinator == nil {
+                restartDiscovery()
+            }
 
         case .fileOffer:
-            guard FeatureSettings.isFileTransferEnabled else { return }
+            guard FeatureSettings.isFileTransferEnabled else {
+                let reject = PeerMessage.fileReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await sendMessage(reject) }
+                return
+            }
             fileTransfer?.handleFileOffer(message)
 
         case .fileAccept:
             fileTransfer?.handleFileAccept()
 
         case .fileReject:
-            fileTransfer?.handleFileReject()
+            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+            fileTransfer?.handleFileReject(reason: reason)
 
         case .fileChunk:
             fileTransfer?.handleFileChunk(message)
@@ -579,14 +788,19 @@ final class ConnectionManager: ObservableObject {
             fileTransfer?.handleFileComplete(message)
 
         case .callRequest:
-            guard FeatureSettings.isVoiceCallEnabled else { return }
+            guard FeatureSettings.isVoiceCallEnabled else {
+                let reject = PeerMessage.callReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await sendMessage(reject) }
+                return
+            }
             voiceCallManager?.handleCallRequest(from: message.senderID)
 
         case .callAccept:
             voiceCallManager?.handleCallAccept()
 
         case .callReject:
-            voiceCallManager?.handleCallReject()
+            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+            voiceCallManager?.handleCallReject(reason: reason)
 
         case .callEnd:
             voiceCallManager?.handleCallEnd()
@@ -595,7 +809,11 @@ final class ConnectionManager: ObservableObject {
             voiceCallManager?.handleSignaling(message)
 
         case .textMessage:
-            guard FeatureSettings.isChatEnabled else { return }
+            guard FeatureSettings.isChatEnabled else {
+                let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await sendMessage(reject) }
+                return
+            }
             if let payload = try? message.decodePayload(TextMessagePayload.self) {
                 chatManager.saveIncoming(
                     text: payload.text,
@@ -606,7 +824,11 @@ final class ConnectionManager: ObservableObject {
             }
 
         case .mediaMessage:
-            guard FeatureSettings.isChatEnabled else { return }
+            guard FeatureSettings.isChatEnabled else {
+                let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await sendMessage(reject) }
+                return
+            }
             if let payload = try? message.decodePayload(MediaMessagePayload.self) {
                 chatManager.saveIncomingMedia(
                     payload: payload,
@@ -616,6 +838,14 @@ final class ConnectionManager: ObservableObject {
                 )
                 NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.fileName)
             }
+        case .chatReject:
+            // Remote peer has chat disabled — mark last outgoing message as failed
+            if let peerID = connectedPeer?.id {
+                let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+                let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
+                chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
+            }
+
         case .hello:
             // During handshake, hello is handled inline. In the receive loop,
             // the acceptor sends a second hello after connectionAccept to share identity.
@@ -630,6 +860,15 @@ final class ConnectionManager: ObservableObject {
         case .batchStart, .batchComplete:
             // Multi-file batch markers — handled by FileTransfer internally
             break
+
+        case .ping:
+            // Respond to keepalive ping with pong
+            let pong = PeerMessage.pong(senderID: localIdentity.id)
+            Task { try? await sendMessage(pong) }
+
+        case .pong:
+            // Keepalive response received — connection is alive
+            logger.debug("Heartbeat pong received from \(message.senderID)")
         }
     }
 
@@ -648,10 +887,24 @@ final class ConnectionManager: ObservableObject {
             fileTransfer?.handleConnectionFailure()
             activeConnection = nil
             transition(to: .failed(reason: error.localizedDescription))
-            restartDiscovery()
+            if discoveryCoordinator == nil {
+                restartDiscovery()
+            }
         case .cancelled:
             cancelTimeouts()
             activeConnection = nil
+            // Transition out of active states so the app doesn't get stuck
+            switch state {
+            case .requesting, .connecting:
+                transition(to: .failed(reason: "Connection was cancelled"))
+                if discoveryCoordinator == nil { restartDiscovery() }
+            case .connected, .transferring, .voiceCall:
+                fileTransfer?.handleConnectionFailure()
+                transition(to: .failed(reason: "Connection lost"))
+                if discoveryCoordinator == nil { restartDiscovery() }
+            default:
+                break
+            }
         @unknown default:
             print("[ConnectionManager] Unknown network connection state")
         }

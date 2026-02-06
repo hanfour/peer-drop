@@ -7,8 +7,11 @@ struct ContentView: View {
     @State private var showError = false
     @State private var showShareSheet = false
     @State private var receivedFileURL: URL?
+    @State private var showStatusToast = false
+    @State private var statusToastMessage: String?
 
     var body: some View {
+        ZStack(alignment: .top) {
         TabView(selection: $selectedTab) {
             NavigationStack {
                 NearbyTab(selectedTab: $selectedTab)
@@ -84,6 +87,29 @@ struct ContentView: View {
                 receivedFileURL = url
                 showShareSheet = true
                 connectionManager.fileTransfer?.receivedFileURL = nil
+            }
+        }
+        .onChange(of: connectionManager.statusToast) { _ in
+            guard let message = connectionManager.statusToast else { return }
+            statusToastMessage = message
+            connectionManager.statusToast = nil
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                showStatusToast = true
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showStatusToast = false
+                }
+            }
+        }
+
+            // Status toast overlay
+            if showStatusToast, let message = statusToastMessage {
+                StatusToastView(message, icon: "xmark.circle.fill", iconColor: .orange)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 8)
+                    .zIndex(2)
             }
         }
     }

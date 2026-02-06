@@ -48,7 +48,7 @@ enum ConnectionState: Equatable {
         case .requesting:
             return [.connecting, .rejected, .failed, .disconnected]
         case .incomingRequest:
-            return [.connecting, .rejected, .disconnected]
+            return [.connecting, .discovering, .disconnected]
         case .connecting:
             return [.connected, .failed, .disconnected]
         case .connected:
