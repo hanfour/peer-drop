@@ -279,18 +279,32 @@ final class ConnectionManager: ObservableObject {
         switch phase {
         case .active:
             endBackgroundTask()
-            if case .idle = state {
-                // Resume discovery if we were idle
-            } else if case .discovering = state {
+            // Restart discovery when returning to foreground
+            switch state {
+            case .idle:
                 restartDiscovery()
+            case .discovering:
+                restartDiscovery()
+            case .connected, .transferring, .voiceCall:
+                // Connection should still be alive, but restart discovery for peer browsing
+                // Don't call stopDiscovery first - just restart the browser
+                if bonjourDiscovery == nil {
+                    restartDiscovery()
+                }
+            case .failed, .disconnected:
+                // Connection was lost while in background, restart discovery
+                restartDiscovery()
+            default:
+                break
             }
         case .background:
-            // Keep alive if transferring or on a call
-            if case .transferring = state {
+            // Keep connection alive in background for connected states
+            switch state {
+            case .connected, .transferring, .voiceCall:
                 beginBackgroundTask()
-            } else if case .voiceCall = state {
-                beginBackgroundTask()
-            } else {
+                // Keep heartbeat running but stop discovery to save power
+                stopDiscoveryOnly()
+            default:
                 stopDiscovery()
             }
         case .inactive:
@@ -298,6 +312,15 @@ final class ConnectionManager: ObservableObject {
         @unknown default:
             break
         }
+    }
+
+    /// Stop only the discovery (browser/listener) but keep the active connection.
+    private func stopDiscoveryOnly() {
+        bonjourDiscovery?.stopDiscovery()
+        bonjourDiscovery = nil
+        discoveryCoordinator?.stop()
+        discoveryCoordinator = nil
+        // Don't clear discoveredPeers - we might need them when returning
     }
 
     private func beginBackgroundTask() {

@@ -9,6 +9,9 @@ struct NearbyTab: View {
     @State private var showManualConnect = false
     @State private var showSettings = false
     @State private var showTransferHistory = false
+    @State private var isSearchActive = false
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
 
     private var sortMode: SortMode {
         SortMode(rawValue: sortModeRaw) ?? .name
@@ -36,8 +39,16 @@ struct NearbyTab: View {
         }
     }
 
+    private var filteredPeers: [DiscoveredPeer] {
+        guard !searchText.isEmpty else { return sortedPeers }
+        return sortedPeers.filter {
+            $0.displayName.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
     var body: some View {
         ZStack {
+            VStack(spacing: 0) {
             Group {
                 if !isOnline {
                     VStack(spacing: 12) {
@@ -63,7 +74,7 @@ struct NearbyTab: View {
                 } else if isGridMode {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
-                            ForEach(sortedPeers) { peer in
+                            ForEach(filteredPeers) { peer in
                                 PeerGridItemView(peer: peer) {
                                     if isConnectedPeer(peer) {
                                         selectedTab = 1
@@ -83,7 +94,7 @@ struct NearbyTab: View {
                 } else {
                     List {
                         Section {
-                            ForEach(sortedPeers) { peer in
+                            ForEach(filteredPeers) { peer in
                                 PeerRowView(peer: peer) {
                                     if isConnectedPeer(peer) {
                                         selectedTab = 1
@@ -138,6 +149,12 @@ struct NearbyTab: View {
                     }
                 }
             }
+
+                // Search bar footer
+                if isOnline && !connectionManager.discoveredPeers.isEmpty {
+                    searchBarFooter
+                }
+            } // End VStack
 
             if isConnecting {
                 VStack(spacing: 16) {
@@ -277,5 +294,63 @@ struct NearbyTab: View {
     private func isConnectedPeer(_ peer: DiscoveredPeer) -> Bool {
         guard case .connected = connectionManager.state else { return false }
         return connectionManager.lastConnectedPeer?.id == peer.id
+    }
+
+    // MARK: - Search Bar Footer
+
+    private var searchBarFooter: some View {
+        HStack(spacing: 12) {
+            if isSearchActive {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+
+                    TextField("Search devices...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .focused($isSearchFocused)
+                        .submitLabel(.search)
+
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray5))
+                .clipShape(Capsule())
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)
+                ))
+            }
+
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    isSearchActive.toggle()
+                    if isSearchActive {
+                        isSearchFocused = true
+                    } else {
+                        searchText = ""
+                        isSearchFocused = false
+                    }
+                }
+            } label: {
+                Image(systemName: isSearchActive ? "xmark" : "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(isSearchActive ? Color.gray : Color.blue)
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
     }
 }
