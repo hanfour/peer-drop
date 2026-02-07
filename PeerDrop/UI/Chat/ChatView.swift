@@ -9,6 +9,7 @@ struct ChatView: View {
     let peerName: String
     var onBack: (() -> Void)?
     @EnvironmentObject var connectionManager: ConnectionManager
+
     @State private var messageText = ""
     @State private var showAttachmentMenu = false
     @State private var showCamera = false
@@ -19,16 +20,31 @@ struct ChatView: View {
     @State private var voiceRecordingDuration: TimeInterval = 0
     @State private var voiceRecordingTimer: Timer?
 
-    private var isConnected: Bool {
+    /// Check if this specific peer is connected (multi-connection aware).
+    private var isPeerConnected: Bool {
+        if let peerConn = connectionManager.connection(for: peerID) {
+            return peerConn.state.isConnected
+        }
+        // Fallback to global state for backward compatibility
         switch connectionManager.state {
         case .connected, .transferring, .voiceCall:
-            return true
+            return connectionManager.connectedPeer?.id == peerID
         default:
             return false
         }
     }
 
-    private var isDisconnected: Bool {
+    /// Check if this peer is disconnected.
+    private var isPeerDisconnected: Bool {
+        if let peerConn = connectionManager.connection(for: peerID) {
+            switch peerConn.state {
+            case .disconnected, .failed:
+                return true
+            default:
+                return false
+            }
+        }
+        // Fallback to global state
         switch connectionManager.state {
         case .failed, .disconnected:
             return true
@@ -37,7 +53,13 @@ struct ChatView: View {
         }
     }
 
+    /// Get disconnect reason for this peer.
     private var disconnectReason: String? {
+        if let peerConn = connectionManager.connection(for: peerID) {
+            if case .failed(let reason) = peerConn.state {
+                return reason
+            }
+        }
         if case .failed(let reason) = connectionManager.state {
             return reason
         }
@@ -70,7 +92,7 @@ struct ChatView: View {
             Divider()
 
             // Disconnected banner with reconnect option
-            if isDisconnected {
+            if isPeerDisconnected {
                 VStack(spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.exclamationmark")
@@ -80,16 +102,14 @@ struct ChatView: View {
                     }
 
                     HStack(spacing: 16) {
-                        if connectionManager.canReconnect {
-                            Button {
-                                connectionManager.reconnect()
-                            } label: {
-                                Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
-                                    .font(.subheadline.weight(.medium))
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.blue)
+                        Button {
+                            connectionManager.reconnect(to: peerID)
+                        } label: {
+                            Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.subheadline.weight(.medium))
                         }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
 
                         Button {
                             // Navigate back and return to discovery
@@ -109,14 +129,16 @@ struct ChatView: View {
 
             // Input bar
             inputBar
-                .disabled(!isConnected)
-                .opacity(isConnected ? 1.0 : 0.5)
+                .disabled(!isPeerConnected)
+                .opacity(isPeerConnected ? 1.0 : 0.5)
         }
         .navigationTitle(peerName)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
             chatManager.activeChatPeerID = peerID
+            // Focus on this peer for multi-connection
+            connectionManager.focus(on: peerID)
             // Suppress the global error alert while in ChatView (we handle disconnection locally)
             connectionManager.suppressErrorAlert = true
         }
@@ -223,7 +245,8 @@ struct ChatView: View {
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        connectionManager.sendTextMessage(text)
+        // Use per-peer send for multi-connection
+        connectionManager.sendTextMessage(text, to: peerID)
         messageText = ""
     }
 

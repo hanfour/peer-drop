@@ -150,8 +150,8 @@ struct NearbyTab: View {
                 }
             }
 
-                // Search bar footer
-                if isOnline && !connectionManager.discoveredPeers.isEmpty {
+                // Search bar footer (shown when search is active)
+                if isSearchActive {
                     searchBarFooter
                 }
             } // End VStack
@@ -207,6 +207,24 @@ struct NearbyTab: View {
                     Image(systemName: isGridMode ? "list.bullet" : "square.grid.2x2")
                 }
                 .accessibilityLabel(isGridMode ? "Switch to list" : "Switch to grid")
+
+                // Search button
+                if isOnline && !connectionManager.discoveredPeers.isEmpty {
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isSearchActive.toggle()
+                            if isSearchActive {
+                                isSearchFocused = true
+                            } else {
+                                searchText = ""
+                                isSearchFocused = false
+                            }
+                        }
+                    } label: {
+                        Image(systemName: isSearchActive ? "xmark" : "magnifyingglass")
+                    }
+                    .accessibilityLabel(isSearchActive ? "Close search" : "Search devices")
+                }
 
                 Menu {
                     Section("Sort By") {
@@ -274,6 +292,18 @@ struct NearbyTab: View {
                 HapticManager.peerDiscovered()
             }
         }
+        .onChange(of: connectionManager.state) { _ in
+            // Reset search when connection state changes
+            if isSearchActive {
+                switch connectionManager.state {
+                case .requesting, .connecting, .connected:
+                    isSearchActive = false
+                    searchText = ""
+                default:
+                    break
+                }
+            }
+        }
     }
 
     private var isConnecting: Bool {
@@ -292,6 +322,11 @@ struct NearbyTab: View {
     }
 
     private func isConnectedPeer(_ peer: DiscoveredPeer) -> Bool {
+        // Check multi-connection first
+        if connectionManager.isConnected(to: peer.id) {
+            return true
+        }
+        // Fallback to legacy single-connection check
         guard case .connected = connectionManager.state else { return false }
         return connectionManager.lastConnectedPeer?.id == peer.id
     }
@@ -299,58 +334,27 @@ struct NearbyTab: View {
     // MARK: - Search Bar Footer
 
     private var searchBarFooter: some View {
-        HStack(spacing: 12) {
-            if isSearchActive {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField("Search devices...", text: $searchText)
+                .textFieldStyle(.plain)
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
-
-                    TextField("Search devices...", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .focused($isSearchFocused)
-                        .submitLabel(.search)
-
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.systemGray5))
-                .clipShape(Capsule())
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
-            }
-
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    isSearchActive.toggle()
-                    if isSearchActive {
-                        isSearchFocused = true
-                    } else {
-                        searchText = ""
-                        isSearchFocused = false
-                    }
-                }
-            } label: {
-                Image(systemName: isSearchActive ? "xmark" : "magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(isSearchActive ? Color.gray : Color.blue)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(.ultraThinMaterial)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

@@ -1,9 +1,13 @@
 import Foundation
+import os
 
-/// Manages chunked file transfer with back-pressure and hash verification.
-/// Supports both legacy single-connection mode and multi-connection session pool.
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "FileTransferSession")
+
+/// Per-peer file transfer session that manages receiving state for a single connection.
 @MainActor
-final class FileTransfer: ObservableObject {
+final class FileTransferSession: ObservableObject {
+    let peerID: String
+
     @Published private(set) var progress: Double = 0
     @Published private(set) var isTransferring = false
     @Published private(set) var lastError: String?
@@ -15,35 +19,11 @@ final class FileTransfer: ObservableObject {
     @Published private(set) var overallProgress: Double = 0
     @Published private(set) var isCurrentTransferDirectory: Bool = false
 
-    private weak var connectionManager: ConnectionManager?
+    /// Callback to send messages through the connection.
+    var sendMessage: ((PeerMessage) async throws -> Void)?
+
     private let chunkSize = Data.defaultChunkSize
     private var isCancelled = false
-
-    // MARK: - Session Pool (Multi-Connection Support)
-
-    /// Active file transfer sessions, keyed by peerID.
-    private var sessions: [String: FileTransferSession] = [:]
-
-    /// Get or create a file transfer session for a peer.
-    func session(for peerID: String) -> FileTransferSession {
-        if let existing = sessions[peerID] {
-            return existing
-        }
-        let session = FileTransferSession(peerID: peerID)
-        session.sendMessage = { [weak self] message in
-            try await self?.connectionManager?.sendMessage(message, to: peerID)
-        }
-        sessions[peerID] = session
-        return session
-    }
-
-    /// Remove a session when peer disconnects.
-    func removeSession(for peerID: String) {
-        sessions[peerID]?.handleConnectionFailure()
-        sessions.removeValue(forKey: peerID)
-    }
-
-    // MARK: - Legacy Single-Connection State
 
     // Receive state — stream to disk instead of buffering in RAM
     private var receiveFileHandle: FileHandle?
@@ -51,31 +31,19 @@ final class FileTransfer: ObservableObject {
     private var receiveMetadata: TransferMetadata?
     private var receiveHasher = HashVerifier()
     private var receivedBytes: Int64 = 0
-    private var receiveContinuation: CheckedContinuation<URL, Error>?
 
     // Batch receive state
     private var batchMetadata: BatchMetadata?
     private var batchReceivedURLs: [URL] = []
     private var batchFilesCompleted: Int = 0
 
-    init(connectionManager: ConnectionManager) {
-        self.connectionManager = connectionManager
+    init(peerID: String) {
+        self.peerID = peerID
     }
 
     // MARK: - Sending
 
-    /// Send files to the focused peer (legacy API).
     func sendFiles(at urls: [URL], directoryFlags: [URL: Bool] = [:]) async throws {
-        guard let peerID = connectionManager?.focusedPeerID else {
-            throw FileTransferError.notConnected
-        }
-        try await sendFiles(at: urls, to: peerID, directoryFlags: directoryFlags)
-    }
-
-    /// Send files to a specific peer.
-    func sendFiles(at urls: [URL], to peerID: String, directoryFlags: [URL: Bool] = [:]) async throws {
-        let session = session(for: peerID)
-
         defer {
             currentFileIndex = 0
             totalFileCount = 0
@@ -92,94 +60,15 @@ final class FileTransfer: ObservableObject {
             defer { url.stopAccessingSecurityScopedResource() }
 
             let isDirectory = directoryFlags[url] ?? false
-            try await sendFile(at: url, to: peerID, isDirectory: isDirectory, session: session)
+            try await sendFile(at: url, isDirectory: isDirectory)
         }
     }
 
-    /// Send a single file to a specific peer.
-    func sendFile(at url: URL, to peerID: String, isDirectory: Bool = false, session: FileTransferSession? = nil) async throws {
-        guard let manager = connectionManager else {
-            throw FileTransferError.notConnected
-        }
-
-        let transferSession = session ?? self.session(for: peerID)
-
-        isTransferring = true
-        isCancelled = false
-        progress = 0
-        lastError = nil
-        isCurrentTransferDirectory = isDirectory
-        currentFileName = isDirectory ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
-
-        defer {
-            isTransferring = false
-            currentFileName = nil
-            isCurrentTransferDirectory = false
-        }
-
-        let fileName = url.lastPathComponent
-        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-        let fileSize = (attrs[.size] as? Int64) ?? 0
-
-        // Stream hash computation from disk
-        let hash = try HashVerifier.sha256(fileAt: url, chunkSize: chunkSize)
-
-        let metadata = TransferMetadata(
-            fileName: fileName,
-            fileSize: fileSize,
-            mimeType: nil,
-            sha256Hash: hash,
-            isDirectory: isDirectory
-        )
-
-        // Send file offer
-        let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: manager.localIdentity.id)
-        try await manager.sendMessage(offer, to: peerID)
-
-        // Stream chunks from disk via FileHandle (constant memory usage)
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { handle.closeFile() }
-
-        let totalChunks = max(1, Int((fileSize + Int64(chunkSize) - 1) / Int64(chunkSize)))
-        var chunkIndex = 0
-
-        for chunk in FileChunkIterator(handle: handle, chunkSize: chunkSize, totalSize: fileSize) {
-            guard !isCancelled else { throw FileTransferError.cancelled }
-            let chunkMsg = PeerMessage.fileChunk(chunk, senderID: manager.localIdentity.id)
-            try await manager.sendMessage(chunkMsg, to: peerID)
-            chunkIndex += 1
-            progress = Double(chunkIndex) / Double(totalChunks)
-        }
-
-        // Send completion
-        let complete = try PeerMessage.fileComplete(hash: hash, senderID: manager.localIdentity.id)
-        try await manager.sendMessage(complete, to: peerID)
-        progress = 1.0
-
-        let record = TransferRecord(
-            fileName: fileName,
-            fileSize: fileSize,
-            direction: .sent,
-            timestamp: Date(),
-            success: true
-        )
-        manager.transferHistory.insert(record, at: 0)
-        manager.latestToast = record
-    }
-
-    /// Send a single file (legacy API, uses focused peer).
     func sendFile(at url: URL, isDirectory: Bool = false) async throws {
-        guard let manager = connectionManager else {
+        guard let sendMessage else {
             throw FileTransferError.notConnected
         }
 
-        // Try multi-connection mode first
-        if let peerID = manager.focusedPeerID {
-            try await sendFile(at: url, to: peerID, isDirectory: isDirectory)
-            return
-        }
-
-        // Fall back to legacy single-connection mode
         isTransferring = true
         isCancelled = false
         progress = 0
@@ -209,8 +98,8 @@ final class FileTransfer: ObservableObject {
         )
 
         // Send file offer
-        let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: "local")
-        try await manager.sendMessage(offer)
+        let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: peerID)
+        try await sendMessage(offer)
 
         // Stream chunks from disk via FileHandle (constant memory usage)
         let handle = try FileHandle(forReadingFrom: url)
@@ -221,29 +110,19 @@ final class FileTransfer: ObservableObject {
 
         for chunk in FileChunkIterator(handle: handle, chunkSize: chunkSize, totalSize: fileSize) {
             guard !isCancelled else { throw FileTransferError.cancelled }
-            let chunkMsg = PeerMessage.fileChunk(chunk, senderID: "local")
-            try await manager.sendMessage(chunkMsg)
+            let chunkMsg = PeerMessage.fileChunk(chunk, senderID: peerID)
+            try await sendMessage(chunkMsg)
             chunkIndex += 1
             progress = Double(chunkIndex) / Double(totalChunks)
         }
 
         // Send completion
-        let complete = try PeerMessage.fileComplete(hash: hash, senderID: "local")
-        try await manager.sendMessage(complete)
+        let complete = try PeerMessage.fileComplete(hash: hash, senderID: peerID)
+        try await sendMessage(complete)
         progress = 1.0
-
-        let record = TransferRecord(
-            fileName: fileName,
-            fileSize: fileSize,
-            direction: .sent,
-            timestamp: Date(),
-            success: true
-        )
-        manager.transferHistory.insert(record, at: 0)
-        manager.latestToast = record
     }
 
-    // MARK: - Receiving (called from ConnectionManager message loop)
+    // MARK: - Receiving
 
     func handleFileOffer(_ message: PeerMessage) {
         guard let payload = message.payload,
@@ -266,30 +145,19 @@ final class FileTransfer: ObservableObject {
 
         // Auto-accept for now (consent already given at connection level)
         Task {
-            let accept = PeerMessage.fileAccept(senderID: "local")
-            try? await connectionManager?.sendMessage(accept)
+            let accept = PeerMessage.fileAccept(senderID: peerID)
+            try? await sendMessage?(accept)
             isTransferring = true
             progress = 0
-            connectionManager?.showTransferProgress = true
         }
     }
 
-    /// Cancel an in-progress transfer without disconnecting.
     func cancelTransfer() {
         cleanupReceiveState(error: "Transfer cancelled")
-        connectionManager?.showTransferProgress = false
-        connectionManager?.transition(to: .connected)
     }
 
-    /// Called by ConnectionManager when the connection drops unexpectedly.
     func handleConnectionFailure() {
         cleanupReceiveState(error: "Connection lost during transfer")
-
-        // Also clean up all sessions
-        for (_, session) in sessions {
-            session.handleConnectionFailure()
-        }
-        sessions.removeAll()
     }
 
     private func cleanupReceiveState(error: String) {
@@ -335,14 +203,16 @@ final class FileTransfer: ObservableObject {
         progress = Double(receivedBytes) / Double(metadata.fileSize)
     }
 
-    func handleFileComplete(_ message: PeerMessage) {
-        guard let metadata = receiveMetadata else { return }
+    func handleFileComplete(_ message: PeerMessage) -> TransferRecord? {
+        guard let metadata = receiveMetadata else { return nil }
 
         receiveFileHandle?.closeFile()
         receiveFileHandle = nil
 
         let computedHash = receiveHasher.finalize()
         let success = computedHash == metadata.sha256Hash
+
+        var resultRecord: TransferRecord?
 
         if success, let tempURL = receiveTempURL {
             let destURL = FileManager.default.temporaryDirectory
@@ -375,15 +245,13 @@ final class FileTransfer: ObservableObject {
             HapticManager.transferFailed()
         }
 
-        let record = TransferRecord(
+        resultRecord = TransferRecord(
             fileName: metadata.displayName,
             fileSize: metadata.fileSize,
             direction: .received,
             timestamp: Date(),
             success: success
         )
-        connectionManager?.transferHistory.insert(record, at: 0)
-        connectionManager?.latestToast = record
 
         receiveTempURL = nil
         receiveMetadata = nil
@@ -392,31 +260,13 @@ final class FileTransfer: ObservableObject {
             isTransferring = false
             currentFileName = nil
             isCurrentTransferDirectory = false
-
-            Task {
-                connectionManager?.showTransferProgress = false
-                connectionManager?.transition(to: .connected)
-            }
         } else {
             currentFileName = nil
             isCurrentTransferDirectory = false
             progress = 0
         }
+
+        return resultRecord
     }
 }
 
-enum FileTransferError: Error, LocalizedError {
-    case notConnected
-    case hashMismatch
-    case transferRejected
-    case cancelled
-
-    var errorDescription: String? {
-        switch self {
-        case .notConnected: return "Not connected to a peer"
-        case .hashMismatch: return "File integrity check failed"
-        case .transferRejected: return "File transfer was rejected"
-        case .cancelled: return "Transfer cancelled"
-        }
-    }
-}
