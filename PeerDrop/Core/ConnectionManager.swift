@@ -70,7 +70,6 @@ final class ConnectionManager: ObservableObject {
     @Published var showTransferProgress = false
     @Published var showVoiceCall = false
     @Published private(set) var transferProgress: Double = 0
-    @Published private(set) var connectedPeer: PeerIdentity?
     @Published var transferHistory: [TransferRecord] = [] {
         didSet { saveTransferHistory() }
     }
@@ -79,13 +78,50 @@ final class ConnectionManager: ObservableObject {
     /// When true, the ContentView error alert is suppressed (e.g., user is in ChatView handling the error locally)
     @Published var suppressErrorAlert: Bool = false
 
+    // MARK: - Multi-Connection Support
+
+    /// All active peer connections, keyed by peerID.
+    @Published private(set) var connections: [String: PeerConnection] = [:]
+
+    /// The currently focused peer ID for UI interactions.
+    @Published var focusedPeerID: String?
+
+    /// Maximum number of simultaneous connections allowed.
+    let maxConnections = 5
+
+    /// The currently focused connection, if any.
+    var focusedConnection: PeerConnection? {
+        guard let id = focusedPeerID else { return nil }
+        return connections[id]
+    }
+
+    /// Backward-compatible: returns the focused peer's identity.
+    var connectedPeer: PeerIdentity? {
+        focusedConnection?.peerIdentity
+    }
+
+    /// All connected peer identities.
+    var connectedPeers: [PeerIdentity] {
+        connections.values.filter { $0.state.isConnected }.map { $0.peerIdentity }
+    }
+
+    /// Whether any connection is active.
+    var hasActiveConnections: Bool {
+        !connections.isEmpty && connections.values.contains { $0.state.isActive }
+    }
+
+    /// Number of active connections.
+    var activeConnectionCount: Int {
+        connections.values.filter { $0.state.isActive }.count
+    }
+
     // MARK: - Internal
 
     private var discoveryCoordinator: DiscoveryCoordinator?
     private var bonjourDiscovery: BonjourDiscovery?
     private var activeConnection: NWConnection?
     private var cancellables = Set<AnyCancellable>()
-    private let localIdentity: PeerIdentity
+    private(set) var localIdentity: PeerIdentity
     let certificateManager = CertificateManager()
     private(set) var lastConnectedPeer: DiscoveredPeer?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
@@ -102,6 +138,7 @@ final class ConnectionManager: ObservableObject {
     private(set) var voiceCallManager: VoiceCallManager?
     let deviceStore = DeviceRecordStore()
     let chatManager = ChatManager()
+    let groupStore = DeviceGroupStore()
 
     private static let transferHistoryKey = "peerDropTransferHistory"
 
@@ -125,6 +162,126 @@ final class ConnectionManager: ObservableObject {
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
     func configureVoiceCalling(callKitManager: CallKitManager) {
         self.voiceCallManager = VoiceCallManager(connectionManager: self, callKitManager: callKitManager)
+    }
+
+    // MARK: - Multi-Connection Management
+
+    /// Get a connection by peer ID.
+    func connection(for peerID: String) -> PeerConnection? {
+        connections[peerID]
+    }
+
+    /// Check if a peer is connected.
+    func isConnected(to peerID: String) -> Bool {
+        connections[peerID]?.state.isConnected ?? false
+    }
+
+    /// Focus on a specific peer connection.
+    func focus(on peerID: String) {
+        guard connections[peerID] != nil else { return }
+        focusedPeerID = peerID
+    }
+
+    /// Add a new peer connection.
+    private func addConnection(_ peerConnection: PeerConnection) {
+        let peerID = peerConnection.id
+        connections[peerID] = peerConnection
+
+        // Set up callbacks
+        peerConnection.onStateChange = { [weak self] newState in
+            self?.handlePeerStateChange(peerID: peerID, newState: newState)
+        }
+
+        peerConnection.onMessageReceived = { [weak self] message in
+            self?.handleMessage(message, from: peerID)
+        }
+
+        peerConnection.onDisconnected = { [weak self] in
+            self?.handlePeerDisconnected(peerID: peerID)
+        }
+
+        // If no focused connection, focus on this one
+        if focusedPeerID == nil {
+            focusedPeerID = peerID
+        }
+
+        // Start receive loop
+        peerConnection.startReceiving()
+
+        objectWillChange.send()
+    }
+
+    /// Remove a peer connection.
+    private func removeConnection(peerID: String) {
+        connections.removeValue(forKey: peerID)
+
+        // Update focused peer if needed
+        if focusedPeerID == peerID {
+            focusedPeerID = connections.keys.first
+        }
+
+        objectWillChange.send()
+    }
+
+    private func handlePeerStateChange(peerID: String, newState: PeerConnectionState) {
+        objectWillChange.send()
+
+        // Update global state based on all connections
+        updateGlobalState()
+    }
+
+    private func handlePeerDisconnected(peerID: String) {
+        logger.info("Peer \(peerID.prefix(8)) disconnected")
+
+        // Clean up file transfer session if any
+        if let peerConn = connections[peerID] {
+            peerConn.fileTransferSession?.handleConnectionFailure()
+            Task {
+                await peerConn.voiceCallSession?.endCallLocally()
+            }
+        }
+
+        removeConnection(peerID: peerID)
+        updateGlobalState()
+    }
+
+    /// Update the global ConnectionState based on all peer connections.
+    private func updateGlobalState() {
+        if connections.isEmpty {
+            if case .discovering = state { return }
+            if discoveryCoordinator != nil {
+                transition(to: .discovering)
+            }
+            return
+        }
+
+        // If any connection is transferring, show transferring state
+        if connections.values.contains(where: { $0.isTransferring }) {
+            if case .transferring = state { return }
+            transition(to: .transferring(progress: 0))
+            return
+        }
+
+        // If any connection is in voice call, show voice call state
+        if connections.values.contains(where: { $0.isInVoiceCall }) {
+            if case .voiceCall = state { return }
+            transition(to: .voiceCall)
+            return
+        }
+
+        // If any connection is connected, show connected state
+        if connections.values.contains(where: { $0.state.isConnected }) {
+            if case .connected = state { return }
+            transition(to: .connected)
+            return
+        }
+
+        // If all connections are connecting, show connecting state
+        if connections.values.allSatisfy({ $0.state == .connecting }) {
+            if case .connecting = state { return }
+            transition(to: .connecting)
+            return
+        }
     }
 
     private func recordConnectedDevice() {
@@ -163,10 +320,12 @@ final class ConnectionManager: ObservableObject {
         state = newState
         triggerHaptic(for: newState)
 
-        // Heartbeat management
+        // Heartbeat management (legacy single-connection mode)
         switch newState {
         case .connected:
-            startHeartbeat()
+            if activeConnection != nil {
+                startHeartbeat()
+            }
         case .disconnected, .failed, .rejected, .discovering, .idle:
             stopHeartbeat()
         default:
@@ -247,7 +406,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Clear peer info and return to discovery (used by UI "Back to Discovery" button).
     func returnToDiscovery() {
-        connectedPeer = nil
+        focusedPeerID = nil
         if case .discovering = state { return }
         if discoveryCoordinator == nil {
             restartDiscovery()
@@ -266,6 +425,21 @@ final class ConnectionManager: ObservableObject {
     func reconnect() {
         guard let peer = lastConnectedPeer else { return }
         requestConnection(to: peer)
+    }
+
+    /// Attempt to reconnect to a specific peer.
+    func reconnect(to peerID: String) {
+        if let peer = discoveredPeers.first(where: { $0.id == peerID }) {
+            requestConnection(to: peer)
+        } else if let record = deviceStore.records.first(where: { $0.id == peerID }),
+                  let host = record.host, let port = record.port {
+            addManualPeer(host: host, port: port, name: record.displayName)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                if let peer = self?.discoveredPeers.first(where: { $0.id == peerID }) {
+                    self?.requestConnection(to: peer)
+                }
+            }
+        }
     }
 
     /// Whether a reconnect is possible (we have a last-connected peer).
@@ -298,11 +472,15 @@ final class ConnectionManager: ObservableObject {
                 break
             }
         case .background:
-            // Keep connection alive in background for connected states
+            // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
                 beginBackgroundTask()
                 // Keep heartbeat running but stop discovery to save power
+                stopDiscoveryOnly()
+            case .requesting, .connecting, .incomingRequest:
+                // Need background time to complete handshake
+                beginBackgroundTask()
                 stopDiscoveryOnly()
             default:
                 stopDiscovery()
@@ -433,9 +611,16 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Connection Request (Outgoing)
 
     func requestConnection(to peer: DiscoveredPeer) {
-        // If already connected to this peer, don't create a duplicate connection
-        if let last = lastConnectedPeer, last.id == peer.id,
-           case .connected = state {
+        // Check if already connected to this peer
+        if let existingConn = connections[peer.id], existingConn.state.isConnected {
+            // Just focus on this connection
+            focusedPeerID = peer.id
+            return
+        }
+
+        // Check if we've reached max connections
+        if activeConnectionCount >= maxConnections {
+            statusToast = "Maximum connections reached (\(maxConnections))"
             return
         }
 
@@ -535,27 +720,37 @@ final class ConnectionManager: ObservableObject {
     private func handleIncomingConnection(_ connection: NWConnection) {
         logger.info("Incoming connection from: \(String(describing: connection.endpoint))")
 
-        // Reject if we're already handling a connection or are connected
-        guard activeConnection == nil else {
-            logger.info("Already have active connection, rejecting incoming from: \(String(describing: connection.endpoint))")
+        // If already showing consent sheet for another request, reject this one
+        if pendingIncomingRequest != nil {
+            logger.info("Already showing consent sheet, rejecting incoming from: \(String(describing: connection.endpoint))")
             connection.cancel()
             return
         }
 
-        connection.start(queue: .global(qos: .userInitiated))
-        activeConnection = connection
+        // Check if we've reached max connections (for multi-connection mode)
+        if activeConnectionCount >= maxConnections {
+            logger.info("Max connections reached, rejecting incoming from: \(String(describing: connection.endpoint))")
+            connection.cancel()
+            return
+        }
 
-        connection.stateUpdateHandler = { [weak self] state in
-            logger.info("Incoming NWConnection state: \(String(describing: state))")
+        // Track if we have an outgoing connection attempt (for simultaneous connect handling)
+        let hadOutgoingConnection = activeConnection != nil && state == .requesting
+
+        // Start the incoming connection to receive HELLO and determine peer identity
+        connection.start(queue: .global(qos: .userInitiated))
+
+        connection.stateUpdateHandler = { [weak self] nwState in
+            logger.info("Incoming NWConnection state: \(String(describing: nwState))")
             Task { @MainActor in
                 guard let self else { return }
-                switch state {
+                switch nwState {
                 case .failed, .cancelled:
-                    if self.pendingIncomingRequest != nil {
+                    if self.pendingIncomingRequest?.connection === connection {
                         self.pendingIncomingRequest = nil
                         self.statusToast = "Connection request expired"
                     }
-                    // Always clean up stale activeConnection
+                    // Clean up if this was the active connection
                     if self.activeConnection === connection {
                         self.activeConnection = nil
                         switch self.state {
@@ -588,11 +783,46 @@ final class ConnectionManager: ObservableObject {
 
                 let peerIdentity = try JSONDecoder().decode(PeerIdentity.self, from: payload)
                 logger.info("Peer identity received: \(peerIdentity.displayName)")
+
+                // Check if already connected to this peer
+                if connections[peerIdentity.id]?.state.isConnected == true {
+                    logger.info("Already connected to this peer, rejecting duplicate")
+                    connection.cancel()
+                    return
+                }
+
+                // Handle simultaneous connection attempts using peer ID comparison
+                // The peer with the larger ID becomes the initiator (keeps outgoing)
+                // The peer with the smaller ID becomes the acceptor (accepts incoming)
+                if hadOutgoingConnection || (activeConnection != nil && state == .requesting) {
+                    let localID = localIdentity.id
+                    let peerID = peerIdentity.id
+
+                    if localID > peerID {
+                        // We have larger ID -> we are the initiator, reject this incoming
+                        logger.info("Simultaneous connect: local ID > peer ID, rejecting incoming (we are initiator)")
+                        connection.cancel()
+                        return
+                    } else {
+                        // We have smaller ID -> we are the acceptor, cancel our outgoing and accept this
+                        logger.info("Simultaneous connect: local ID < peer ID, cancelling outgoing (we are acceptor)")
+                        cancelTimeouts()
+                        let oldConnection = activeConnection
+                        activeConnection = nil
+                        oldConnection?.cancel()
+                        connectionGeneration = UUID()
+                    }
+                }
+
+                // Now accept this as the active connection
+                activeConnection = connection
+
                 let requestMsg = try await connection.receiveMessage()
 
                 guard requestMsg.type == .connectionRequest else {
                     logger.error("Expected connectionRequest, got: \(String(describing: requestMsg.type))")
                     connection.cancel()
+                    activeConnection = nil
                     return
                 }
 
@@ -615,7 +845,9 @@ final class ConnectionManager: ObservableObject {
             } catch {
                 logger.error("Incoming connection error: \(error.localizedDescription)")
                 connection.cancel()
-                activeConnection = nil
+                if activeConnection === connection {
+                    activeConnection = nil
+                }
                 if case .incomingRequest = state {
                     transition(to: .discovering)
                 }
@@ -634,7 +866,7 @@ final class ConnectionManager: ObservableObject {
                     let message = try await connection.receiveMessage()
                     // Process the message on the main actor
                     await MainActor.run {
-                        self.handleMessage(message)
+                        self.handleMessage(message, from: message.senderID)
                     }
                 } catch {
                     // Read failed — connection died while consent was showing
@@ -668,7 +900,24 @@ final class ConnectionManager: ObservableObject {
             return
         }
         pendingIncomingRequest = nil
-        connectedPeer = request.peerIdentity
+
+        let peerIdentity = request.peerIdentity
+        let peerID = peerIdentity.id
+
+        // Create PeerConnection for multi-connection support
+        let peerConnection = PeerConnection(
+            peerID: peerID,
+            connection: request.connection,
+            peerIdentity: peerIdentity,
+            localIdentity: localIdentity,
+            state: .connecting
+        )
+
+        // Set lastConnectedPeer by finding the matching discovered peer
+        if let matchingPeer = discoveredPeers.first(where: { $0.id == peerID }) {
+            lastConnectedPeer = matchingPeer
+        }
+
         // Normalize state so .connecting transition is valid from any terminal state
         switch state {
         case .disconnected, .failed, .rejected, .idle:
@@ -689,9 +938,16 @@ final class ConnectionManager: ObservableObject {
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await request.connection.sendMessage(hello)
                 cancelTimeouts()
+
+                // Update PeerConnection state and add to connections
+                peerConnection.updateState(.connected)
+                addConnection(peerConnection)
+
+                // Also maintain legacy single-connection for backward compatibility
+                focusedPeerID = peerID
+
                 transition(to: .connected)
                 recordConnectedDevice()
-                startReceiving()
             } catch {
                 cancelTimeouts()
                 activeConnection?.cancel()
@@ -742,10 +998,27 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Disconnect from a specific peer.
+    func disconnect(from peerID: String) async {
+        guard let peerConn = connections[peerID] else { return }
+        await peerConn.disconnect()
+        removeConnection(peerID: peerID)
+        updateGlobalState()
+    }
+
+    /// Disconnect from all peers.
+    func disconnectAll() async {
+        for (peerID, peerConn) in connections {
+            await peerConn.disconnect()
+            removeConnection(peerID: peerID)
+        }
+        cleanupAfterDisconnect()
+    }
+
     /// Cleanup after the local user initiates disconnect.
     private func cleanupAfterDisconnect() {
         activeConnection = nil
-        connectedPeer = nil
+        focusedPeerID = nil
         endBackgroundTask()
         transition(to: .disconnected)
         // Auto-resume discovery so the user returns to the Nearby tab seamlessly.
@@ -774,7 +1047,7 @@ final class ConnectionManager: ObservableObject {
                     let message = try await connection.receiveMessage()
                     // Verify this loop still owns the connection
                     guard connectionGeneration == generation else { break }
-                    handleMessage(message)
+                    handleMessage(message, from: message.senderID)
                 } catch {
                     logger.error("Receive loop error: \(userFriendlyErrorMessage(error))")
                     // Only handle if this loop still owns the connection
@@ -792,19 +1065,176 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func handleMessage(_ message: PeerMessage) {
-        logger.info("handleMessage: \(String(describing: message.type)) from \(message.senderID)")
+    private func handleMessage(_ message: PeerMessage, from senderID: String) {
+        logger.info("handleMessage: \(String(describing: message.type)) from \(senderID)")
+
+        // Route to specific peer connection if it exists
+        if let peerConn = connections[senderID] {
+            handleMessageForPeer(message, peerConnection: peerConn)
+            return
+        }
+
+        // Fall back to legacy single-connection handling
+        handleMessageLegacy(message)
+    }
+
+    /// Handle message for a specific peer connection.
+    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection) {
+        let peerID = peerConnection.id
+
+        switch message.type {
+        case .disconnect:
+            peerConnection.updateState(.disconnected)
+            peerConnection.fileTransferSession?.handleConnectionFailure()
+            Task {
+                await peerConnection.voiceCallSession?.endCallLocally()
+            }
+            removeConnection(peerID: peerID)
+            updateGlobalState()
+
+        case .fileOffer:
+            guard FeatureSettings.isFileTransferEnabled else {
+                let reject = PeerMessage.fileReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await peerConnection.sendMessage(reject) }
+                return
+            }
+            // Create or get file transfer session
+            if peerConnection.fileTransferSession == nil {
+                let session = FileTransferSession(peerID: peerID)
+                session.sendMessage = { [weak peerConnection] msg in
+                    try await peerConnection?.sendMessage(msg)
+                }
+                peerConnection.fileTransferSession = session
+            }
+            peerConnection.fileTransferSession?.handleFileOffer(message)
+            peerConnection.setTransferring(true)
+            showTransferProgress = true
+            updateGlobalState()
+
+        case .fileAccept:
+            peerConnection.fileTransferSession?.handleFileAccept()
+
+        case .fileReject:
+            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+            peerConnection.fileTransferSession?.handleFileReject(reason: reason)
+            peerConnection.setTransferring(false)
+            updateGlobalState()
+
+        case .fileChunk:
+            peerConnection.fileTransferSession?.handleFileChunk(message)
+
+        case .fileComplete:
+            if let record = peerConnection.fileTransferSession?.handleFileComplete(message) {
+                transferHistory.insert(record, at: 0)
+                latestToast = record
+            }
+            peerConnection.setTransferring(false)
+            showTransferProgress = false
+            updateGlobalState()
+
+        case .callRequest:
+            guard FeatureSettings.isVoiceCallEnabled else {
+                let reject = PeerMessage.callReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await peerConnection.sendMessage(reject) }
+                return
+            }
+            voiceCallManager?.handleCallRequest(from: message.senderID)
+
+        case .callAccept:
+            voiceCallManager?.handleCallAccept()
+
+        case .callReject:
+            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+            voiceCallManager?.handleCallReject(reason: reason)
+
+        case .callEnd:
+            voiceCallManager?.handleCallEnd()
+
+        case .sdpOffer, .sdpAnswer, .iceCandidate:
+            voiceCallManager?.handleSignaling(message)
+
+        case .textMessage:
+            guard FeatureSettings.isChatEnabled else {
+                let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await peerConnection.sendMessage(reject) }
+                return
+            }
+            if let payload = try? message.decodePayload(TextMessagePayload.self) {
+                chatManager.saveIncoming(
+                    text: payload.text,
+                    peerID: peerID,
+                    peerName: peerConnection.peerIdentity.displayName
+                )
+                NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
+            }
+
+        case .mediaMessage:
+            guard FeatureSettings.isChatEnabled else {
+                let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
+                Task { try? await peerConnection.sendMessage(reject) }
+                return
+            }
+            if let payload = try? message.decodePayload(MediaMessagePayload.self) {
+                chatManager.saveIncomingMedia(
+                    payload: payload,
+                    fileData: Data(),
+                    peerID: peerID,
+                    peerName: peerConnection.peerIdentity.displayName
+                )
+                NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
+            }
+
+        case .chatReject:
+            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+            let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
+            chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
+
+        case .ping:
+            let pong = PeerMessage.pong(senderID: localIdentity.id)
+            Task { try? await peerConnection.sendMessage(pong) }
+
+        case .pong:
+            logger.debug("Heartbeat pong received from \(peerID)")
+
+        default:
+            break
+        }
+    }
+
+    /// Legacy message handling for backward compatibility.
+    private func handleMessageLegacy(_ message: PeerMessage) {
         switch message.type {
         case .connectionAccept:
+            // Only process if we're still waiting for acceptance
+            guard case .requesting = state else {
+                logger.info("Received connectionAccept but not in requesting state, sending cancel")
+                let cancel = PeerMessage.connectionCancel(senderID: localIdentity.id)
+                Task { try? await sendMessage(cancel) }
+                return
+            }
             cancelTimeouts()
+
+            var peerIdentity: PeerIdentity?
             if let payload = message.payload,
                let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
-                connectedPeer = identity
+                peerIdentity = identity
             }
+
+            // Create PeerConnection for the accepted connection
+            if let identity = peerIdentity, let conn = activeConnection {
+                let peerConnection = PeerConnection(
+                    peerID: identity.id,
+                    connection: conn,
+                    peerIdentity: identity,
+                    localIdentity: localIdentity,
+                    state: .connected
+                )
+                addConnection(peerConnection)
+                focusedPeerID = identity.id
+            }
+
             // State machine requires requesting → connecting → connected
-            if case .requesting = state {
-                transition(to: .connecting)
-            }
+            transition(to: .connecting)
             transition(to: .connected)
             recordConnectedDevice()
 
@@ -815,12 +1245,25 @@ final class ConnectionManager: ObservableObject {
             transition(to: .rejected)
 
         case .connectionCancel:
-            // Initiator cancelled the request — dismiss consent sheet
+            // Initiator cancelled the request — dismiss consent sheet and clean up
             pendingIncomingRequest = nil
+            cancelTimeouts()
             activeConnection?.cancel()
             activeConnection = nil
             statusToast = "Connection request was cancelled"
-            transition(to: .discovering)
+            // Recover from any intermediate state
+            switch state {
+            case .incomingRequest, .connecting:
+                transition(to: .discovering)
+            case .requesting:
+                // We were requesting, but somehow got a cancel (simultaneous connect edge case)
+                transition(to: .failed(reason: "Connection cancelled"))
+                if discoveryCoordinator == nil {
+                    restartDiscovery()
+                }
+            default:
+                break
+            }
 
         case .disconnect:
             activeConnection?.cancel()
@@ -918,9 +1361,22 @@ final class ConnectionManager: ObservableObject {
         case .hello:
             // During handshake, hello is handled inline. In the receive loop,
             // the acceptor sends a second hello after connectionAccept to share identity.
-            if connectedPeer == nil, let payload = message.payload,
+            if let payload = message.payload,
                let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
-                connectedPeer = identity
+                // Update or create PeerConnection
+                if let peerConn = connections[identity.id] {
+                    peerConn.updatePeerIdentity(identity)
+                } else if focusedPeerID == nil, let conn = activeConnection {
+                    let peerConnection = PeerConnection(
+                        peerID: identity.id,
+                        connection: conn,
+                        peerIdentity: identity,
+                        localIdentity: localIdentity,
+                        state: .connected
+                    )
+                    addConnection(peerConnection)
+                    focusedPeerID = identity.id
+                }
                 recordConnectedDevice()
             }
         case .connectionRequest:
@@ -983,13 +1439,35 @@ final class ConnectionManager: ObservableObject {
 
     func sendTextMessage(_ text: String) {
         guard FeatureSettings.isChatEnabled else { return }
-        guard let peer = connectedPeer else { return }
+        guard let peerID = focusedPeerID else { return }
+        guard let peerConn = connections[peerID] else { return }
+        let peer = peerConn.peerIdentity
+
         let payload = TextMessagePayload(text: text)
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
         let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
         Task {
             do {
-                try await sendMessage(msg)
+                try await peerConn.sendMessage(msg)
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .sent) }
+            } catch {
+                await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
+            }
+        }
+    }
+
+    /// Send text message to a specific peer.
+    func sendTextMessage(_ text: String, to peerID: String) {
+        guard FeatureSettings.isChatEnabled else { return }
+        guard let peerConn = connections[peerID] else { return }
+        let peer = peerConn.peerIdentity
+
+        let payload = TextMessagePayload(text: text)
+        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
+        Task {
+            do {
+                try await peerConn.sendMessage(msg)
                 await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .sent) }
             } catch {
                 await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
@@ -999,7 +1477,10 @@ final class ConnectionManager: ObservableObject {
 
     func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
         guard FeatureSettings.isChatEnabled else { return }
-        guard let peer = connectedPeer else { return }
+        guard let peerID = focusedPeerID else { return }
+        guard let peerConn = connections[peerID] else { return }
+        let peer = peerConn.peerIdentity
+
         let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData)
         guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else { return }
 
@@ -1026,7 +1507,7 @@ final class ConnectionManager: ObservableObject {
         // Send over network
         Task {
             do {
-                try await sendMessage(msg)
+                try await peerConn.sendMessage(msg)
                 await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .sent) }
             } catch {
                 await MainActor.run { chatManager.updateStatus(messageID: saved.id, status: .failed) }
@@ -1034,13 +1515,126 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    // MARK: - Group Connection
+
+    /// Connect to all online devices in a group.
+    func connectToGroup(_ group: DeviceGroup) {
+        var connectedCount = 0
+        var attemptedCount = 0
+
+        for deviceID in group.deviceIDs {
+            // Skip if already connected
+            if isConnected(to: deviceID) {
+                connectedCount += 1
+                continue
+            }
+
+            // Check if we've reached max connections
+            if activeConnectionCount >= maxConnections {
+                break
+            }
+
+            // Try to find the peer in discovered peers
+            if let peer = discoveredPeers.first(where: { $0.id == deviceID }) {
+                requestConnection(to: peer)
+                attemptedCount += 1
+            } else if let record = deviceStore.records.first(where: { $0.id == deviceID }),
+                      let host = record.host, let port = record.port {
+                // Try to add as manual peer and connect
+                addManualPeer(host: host, port: port, name: record.displayName)
+                attemptedCount += 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    if let peer = self?.discoveredPeers.first(where: { $0.id == deviceID }) {
+                        self?.requestConnection(to: peer)
+                    }
+                }
+            }
+        }
+
+        if attemptedCount == 0 && connectedCount < group.deviceIDs.count {
+            statusToast = "No group members found nearby"
+        }
+    }
+
+    /// Broadcast a text message to all connected members of a group.
+    func broadcastTextMessage(_ text: String, toGroup groupID: String) {
+        guard let group = groupStore.groups.first(where: { $0.id == groupID }) else { return }
+
+        // Save the outgoing group message
+        let saved = chatManager.saveGroupOutgoing(
+            text: text,
+            groupID: groupID,
+            localName: localIdentity.displayName
+        )
+
+        let payload = TextMessagePayload(text: text)
+        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+
+        var sentCount = 0
+        var failCount = 0
+
+        for deviceID in group.deviceIDs {
+            guard let peerConn = connections[deviceID], peerConn.state.isConnected else { continue }
+
+            Task {
+                do {
+                    try await peerConn.sendMessage(msg)
+                    sentCount += 1
+                    // Update status when all sends complete
+                    if sentCount + failCount == group.deviceIDs.count {
+                        await MainActor.run {
+                            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .sent)
+                        }
+                    }
+                } catch {
+                    failCount += 1
+                    if sentCount == 0 && failCount == group.deviceIDs.count {
+                        await MainActor.run {
+                            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
+                        }
+                    }
+                }
+            }
+        }
+
+        // If no peers are connected, mark as failed immediately
+        let connectedInGroup = group.deviceIDs.filter { isConnected(to: $0) }.count
+        if connectedInGroup == 0 {
+            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
+        }
+    }
+
+    /// Get connection status for group members.
+    func groupConnectionStatus(_ group: DeviceGroup) -> (connected: Int, total: Int, online: Int) {
+        let connectedCount = group.deviceIDs.filter { isConnected(to: $0) }.count
+        let onlineCount = group.deviceIDs.filter { deviceID in
+            discoveredPeers.contains { $0.id == deviceID }
+        }.count
+        return (connectedCount, group.deviceIDs.count, onlineCount)
+    }
+
     // MARK: - Send helpers
 
     func sendMessage(_ message: PeerMessage) async throws {
+        // Try focused peer connection first
+        if let peerID = focusedPeerID, let peerConn = connections[peerID] {
+            try await peerConn.sendMessage(message)
+            return
+        }
+
+        // Fall back to legacy active connection
         guard let connection = activeConnection else {
             throw ConnectionError.notConnected
         }
         try await connection.sendMessage(message)
+    }
+
+    /// Send message to a specific peer.
+    func sendMessage(_ message: PeerMessage, to peerID: String) async throws {
+        guard let peerConn = connections[peerID] else {
+            throw ConnectionError.notConnected
+        }
+        try await peerConn.sendMessage(message)
     }
 
     // MARK: - Transfer History Persistence
@@ -1060,11 +1654,13 @@ final class ConnectionManager: ObservableObject {
 enum ConnectionError: Error, LocalizedError {
     case notConnected
     case invalidState
+    case maxConnectionsReached
 
     var errorDescription: String? {
         switch self {
         case .notConnected: return "Not connected to a peer"
         case .invalidState: return "Invalid connection state"
+        case .maxConnectionsReached: return "Maximum connections reached"
         }
     }
 }

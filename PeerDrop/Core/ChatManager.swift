@@ -3,17 +3,22 @@ import Foundation
 @MainActor
 final class ChatManager: ObservableObject {
     @Published var messages: [ChatMessage] = []
+    @Published var groupMessages: [ChatMessage] = []
     @Published var unreadCounts: [String: Int] = [:]
+    @Published var groupUnreadCounts: [String: Int] = [:]
     @Published var activeChatPeerID: String?
+    @Published var activeGroupID: String?
 
-    var totalUnread: Int { unreadCounts.values.reduce(0, +) }
+    var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
     private let fileManager = FileManager.default
     private let unreadKey = "peerDropUnreadCounts"
+    private let groupUnreadKey = "peerDropGroupUnreadCounts"
     private let encryptor = ChatDataEncryptor.shared
 
     init() {
         loadUnreadCounts()
+        loadGroupUnreadCounts()
     }
 
     private var chatDirectory: URL {
@@ -29,6 +34,11 @@ final class ChatManager: ObservableObject {
     private func messagesFile(for peerID: String) -> URL {
         chatDirectory.appendingPathComponent("messages", isDirectory: true)
             .appendingPathComponent("\(peerID).json")
+    }
+
+    private func groupMessagesFile(for groupID: String) -> URL {
+        chatDirectory.appendingPathComponent("group_messages", isDirectory: true)
+            .appendingPathComponent("\(groupID).json")
     }
 
     @discardableResult
@@ -178,6 +188,126 @@ final class ChatManager: ObservableObject {
             try? encryptor.encryptAndWrite(encoded, to: file)
         }
         messages.append(message)
+    }
+
+    // MARK: - Group Messages
+
+    @discardableResult
+    func saveGroupOutgoing(text: String, groupID: String, localName: String) -> ChatMessage {
+        let msg = ChatMessage.text(
+            text: text,
+            isOutgoing: true,
+            peerName: "Group",
+            groupID: groupID,
+            senderID: nil,
+            senderName: localName
+        )
+        appendGroupMessage(msg, groupID: groupID)
+        return msg
+    }
+
+    @discardableResult
+    func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String) -> ChatMessage {
+        let msg = ChatMessage.text(
+            text: text,
+            isOutgoing: false,
+            peerName: "Group",
+            groupID: groupID,
+            senderID: senderID,
+            senderName: senderName
+        )
+        appendGroupMessage(msg, groupID: groupID)
+        if activeGroupID != groupID {
+            incrementGroupUnread(groupID: groupID)
+        }
+        return msg
+    }
+
+    func loadGroupMessages(forGroup groupID: String) {
+        let file = groupMessagesFile(for: groupID)
+        guard fileManager.fileExists(atPath: file.path) else {
+            groupMessages = []
+            markGroupAsRead(groupID: groupID)
+            return
+        }
+        do {
+            let raw = try Data(contentsOf: file)
+            let data = try encryptor.decrypt(raw)
+            groupMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+        } catch {
+            groupMessages = []
+        }
+        markGroupAsRead(groupID: groupID)
+    }
+
+    func deleteGroupMessages(forGroup groupID: String) {
+        let file = groupMessagesFile(for: groupID)
+        try? fileManager.removeItem(at: file)
+        groupMessages = []
+    }
+
+    private func appendGroupMessage(_ message: ChatMessage, groupID: String) {
+        let file = groupMessagesFile(for: groupID)
+        let dir = file.deletingLastPathComponent()
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        var existing: [ChatMessage] = []
+        if let raw = try? Data(contentsOf: file),
+           let decrypted = try? encryptor.decrypt(raw) {
+            existing = (try? JSONDecoder().decode([ChatMessage].self, from: decrypted)) ?? []
+        }
+        existing.append(message)
+        if let encoded = try? JSONEncoder().encode(existing) {
+            try? encryptor.encryptAndWrite(encoded, to: file)
+        }
+        groupMessages.append(message)
+    }
+
+    func updateGroupMessageStatus(messageID: String, status: MessageStatus) {
+        if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
+            groupMessages[idx].status = status
+        }
+        let groupMessagesDir = chatDirectory.appendingPathComponent("group_messages", isDirectory: true)
+        guard let files = try? fileManager.contentsOfDirectory(at: groupMessagesDir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "json" {
+            guard let raw = try? Data(contentsOf: file),
+                  let decrypted = try? encryptor.decrypt(raw),
+                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
+            if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
+                msgs[idx].status = status
+                if let encoded = try? JSONEncoder().encode(msgs) {
+                    try? encryptor.encryptAndWrite(encoded, to: file)
+                }
+                return
+            }
+        }
+    }
+
+    // MARK: - Group Unread Tracking
+
+    func markGroupAsRead(groupID: String) {
+        guard groupUnreadCounts[groupID] != nil, groupUnreadCounts[groupID] != 0 else { return }
+        groupUnreadCounts[groupID] = 0
+        saveGroupUnreadCounts()
+    }
+
+    func incrementGroupUnread(groupID: String) {
+        groupUnreadCounts[groupID, default: 0] += 1
+        saveGroupUnreadCounts()
+    }
+
+    func groupUnreadCount(for groupID: String) -> Int {
+        groupUnreadCounts[groupID] ?? 0
+    }
+
+    private func loadGroupUnreadCounts() {
+        guard let data = UserDefaults.standard.data(forKey: groupUnreadKey),
+              let decoded = try? JSONDecoder().decode([String: Int].self, from: data) else { return }
+        groupUnreadCounts = decoded
+    }
+
+    private func saveGroupUnreadCounts() {
+        guard let data = try? JSONEncoder().encode(groupUnreadCounts) else { return }
+        UserDefaults.standard.set(data, forKey: groupUnreadKey)
     }
 
     // MARK: - Migration
