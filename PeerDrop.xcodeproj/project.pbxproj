@@ -122,6 +122,10 @@
 		FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */; };
 		FF7F70AA9923E24F6F0B56FC /* PeerActionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1ADD977AFAD636B6D0A3BC /* PeerActionSheet.swift */; };
 		FFAED0C0D33E4E57C00B905B /* TransferMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */; };
+		A1A1A1A1A1A1A1A1A1A1A102 /* RetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1A1A1A1A1A1A1A101 /* RetryPolicyTests.swift */; };
+		B1B1B1B1B1B1B1B1B1B1B102 /* CircuitBreakerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B1B1B1B1B1B1B1B1B1B101 /* CircuitBreakerTests.swift */; };
+		C1C1C1C1C1C1C1C1C1C1C102 /* ConnectionTimeoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C1C1C1C1C1C1C1C1C1C101 /* ConnectionTimeoutTests.swift */; };
+		D1D1D1D1D1D1D1D1D1D1D102 /* DiscoveryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D1D1D1D1D1D1D1D1D1D101 /* DiscoveryServiceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,6 +146,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A1A1A1A1A1A1A1A1A1A1A101 /* RetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryPolicyTests.swift; sourceTree = "<group>"; };
+		B1B1B1B1B1B1B1B1B1B1B101 /* CircuitBreakerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircuitBreakerTests.swift; sourceTree = "<group>"; };
+		C1C1C1C1C1C1C1C1C1C1C101 /* ConnectionTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionTimeoutTests.swift; sourceTree = "<group>"; };
+		D1D1D1D1D1D1D1D1D1D1D101 /* DiscoveryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryServiceTests.swift; sourceTree = "<group>"; };
 		01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTab.swift; sourceTree = "<group>"; };
 		0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManagerTests.swift; sourceTree = "<group>"; };
 		0694CAF31BEAB2BA98E99ECB /* EdgeCaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeCaseTests.swift; sourceTree = "<group>"; };
@@ -343,6 +351,10 @@
 				A66FD4290A348E85E7D37D0F /* Mocks */,
 				6E794A5B12CE944C147F6572 /* ChatManagerGroupTests.swift */,
 				92DD8AFBCC95FE0A2D0FBBC6 /* ChatIntegrationTests.swift */,
+				A1A1A1A1A1A1A1A1A1A1A101 /* RetryPolicyTests.swift */,
+				B1B1B1B1B1B1B1B1B1B1B101 /* CircuitBreakerTests.swift */,
+				C1C1C1C1C1C1C1C1C1C1C101 /* ConnectionTimeoutTests.swift */,
+				D1D1D1D1D1D1D1D1D1D1D101 /* DiscoveryServiceTests.swift */,
 			);
 			path = PeerDropTests;
 			sourceTree = "<group>";
@@ -723,6 +735,10 @@
 				70EE13BE136658C0B8EB3AE2 /* TransferMetadataTests.swift in Sources */,
 				F32D1DE3FA8A516CBAC2407E /* ChatManagerGroupTests.swift in Sources */,
 				2166C112B4222D0D2E996357 /* ChatIntegrationTests.swift in Sources */,
+				A1A1A1A1A1A1A1A1A1A1A102 /* RetryPolicyTests.swift in Sources */,
+				B1B1B1B1B1B1B1B1B1B1B102 /* CircuitBreakerTests.swift in Sources */,
+				C1C1C1C1C1C1C1C1C1C1C102 /* ConnectionTimeoutTests.swift in Sources */,
+				D1D1D1D1D1D1D1D1D1D1D102 /* DiscoveryServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
