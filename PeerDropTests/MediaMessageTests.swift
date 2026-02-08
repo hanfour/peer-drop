@@ -314,7 +314,9 @@ final class MediaMessageTests: XCTestCase {
         let resolvedURL = chatManager.resolveMediaURL(relativePath)
         XCTAssertTrue(FileManager.default.fileExists(atPath: resolvedURL.path))
 
-        let readBack = try Data(contentsOf: resolvedURL)
+        // Use loadMediaData to properly decrypt the file
+        let readBack = chatManager.loadMediaData(relativePath: relativePath)
+        XCTAssertNotNil(readBack)
         XCTAssertEqual(readBack, testData)
 
         // Clean up
@@ -440,10 +442,11 @@ final class MediaMessageTests: XCTestCase {
         // 8. VERIFY: File data integrity — read saved file and compare byte-by-byte
         let resolvedURL = chatManager.resolveMediaURL(savedMsg.localFileURL!)
         XCTAssertTrue(FileManager.default.fileExists(atPath: resolvedURL.path), "Media file should exist on disk")
-        let savedFileData = try Data(contentsOf: resolvedURL)
-        XCTAssertEqual(savedFileData.count, imageData.count, "File size mismatch")
-        XCTAssertEqual(savedFileData, pendingData, "Reassembled data should match saved file")
-        XCTAssertEqual(savedFileData, imageData, "Saved file should match original image data byte-for-byte")
+        let savedFileData = chatManager.loadMediaData(relativePath: savedMsg.localFileURL!)
+        XCTAssertNotNil(savedFileData, "Should be able to load and decrypt media data")
+        XCTAssertEqual(savedFileData!.count, imageData.count, "File size mismatch")
+        XCTAssertEqual(savedFileData!, pendingData, "Reassembled data should match saved file")
+        XCTAssertEqual(savedFileData!, imageData, "Saved file should match original image data byte-for-byte")
 
         // Clean up
         chatManager.deleteMessages(forPeer: senderID)
@@ -496,8 +499,9 @@ final class MediaMessageTests: XCTestCase {
         XCTAssertEqual(msg.duration, 4.2)
         XCTAssertEqual(msg.fileSize, Int64(voiceData.count))
 
-        let savedData = try Data(contentsOf: receiverChatManager.resolveMediaURL(msg.localFileURL!))
-        XCTAssertEqual(savedData, voiceData, "Voice data should match original byte-for-byte")
+        let savedData = receiverChatManager.loadMediaData(relativePath: msg.localFileURL!)
+        XCTAssertNotNil(savedData, "Should be able to load and decrypt voice data")
+        XCTAssertEqual(savedData!, voiceData, "Voice data should match original byte-for-byte")
 
         receiverChatManager.deleteMessages(forPeer: senderID)
     }
@@ -554,8 +558,9 @@ final class MediaMessageTests: XCTestCase {
         XCTAssertEqual(msg.fileName, "report.pdf")
         XCTAssertEqual(msg.fileSize, 500_000)
 
-        let savedData = try Data(contentsOf: receiverChatManager.resolveMediaURL(msg.localFileURL!))
-        XCTAssertEqual(savedData, fileData, "500KB file should match original byte-for-byte")
+        let savedData = receiverChatManager.loadMediaData(relativePath: msg.localFileURL!)
+        XCTAssertNotNil(savedData, "Should be able to load and decrypt file data")
+        XCTAssertEqual(savedData!, fileData, "500KB file should match original byte-for-byte")
 
         receiverChatManager.deleteMessages(forPeer: senderID)
     }
@@ -608,8 +613,9 @@ final class MediaMessageTests: XCTestCase {
         XCTAssertEqual(msg.duration, 12.7)
         XCTAssertEqual(msg.thumbnailData, thumbnail)
 
-        let savedData = try Data(contentsOf: receiverChatManager.resolveMediaURL(msg.localFileURL!))
-        XCTAssertEqual(savedData, videoData, "Video data should match original byte-for-byte")
+        let savedData = receiverChatManager.loadMediaData(relativePath: msg.localFileURL!)
+        XCTAssertNotNil(savedData, "Should be able to load and decrypt video data")
+        XCTAssertEqual(savedData!, videoData, "Video data should match original byte-for-byte")
 
         receiverChatManager.deleteMessages(forPeer: senderID)
     }
@@ -657,8 +663,9 @@ final class MediaMessageTests: XCTestCase {
         let bobMsg = chatManager.messages[0]
         XCTAssertEqual(bobMsg.mediaType, "image")
         XCTAssertEqual(bobMsg.peerName, "Alice")
-        let bobSavedData = try Data(contentsOf: chatManager.resolveMediaURL(bobMsg.localFileURL!))
-        XCTAssertEqual(bobSavedData, imageData)
+        let bobSavedData = chatManager.loadMediaData(relativePath: bobMsg.localFileURL!)
+        XCTAssertNotNil(bobSavedData, "Should be able to load and decrypt Bob's image data")
+        XCTAssertEqual(bobSavedData!, imageData)
 
         // --- Verify Alice's received messages (from Bob) ---
         chatManager.loadMessages(forPeer: bobID)
@@ -667,8 +674,9 @@ final class MediaMessageTests: XCTestCase {
         XCTAssertEqual(aliceMsg.mediaType, "voice")
         XCTAssertEqual(aliceMsg.duration, 2.1)
         XCTAssertEqual(aliceMsg.peerName, "Bob")
-        let aliceSavedData = try Data(contentsOf: chatManager.resolveMediaURL(aliceMsg.localFileURL!))
-        XCTAssertEqual(aliceSavedData, voiceData)
+        let aliceSavedData = chatManager.loadMediaData(relativePath: aliceMsg.localFileURL!)
+        XCTAssertNotNil(aliceSavedData, "Should be able to load and decrypt Alice's voice data")
+        XCTAssertEqual(aliceSavedData!, voiceData)
 
         // Clean up
         chatManager.deleteMessages(forPeer: aliceID)

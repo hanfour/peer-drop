@@ -132,6 +132,26 @@ final class ConnectionManager: ObservableObject {
     /// Tracks the current connection attempt so stale callbacks are ignored.
     private var connectionGeneration: UUID = UUID()
 
+    // MARK: - Network Path Monitoring
+    private var pathMonitor: NWPathMonitor?
+    private var lastNetworkPath: NWPath?
+
+    // MARK: - Consent Timeout
+    private var consentTimeoutTask: Task<Void, Never>?
+    private let consentTimeoutSeconds: UInt64 = 30
+
+    // MARK: - Exponential Backoff Retry
+    private let reconnectController = RetryController()
+
+    // MARK: - Background Time Monitoring
+    private var backgroundTimeMonitorTask: Task<Void, Never>?
+    private let backgroundWarningThreshold: TimeInterval = 10.0
+
+    // MARK: - Circuit Breaker
+    private var failedPeers: [String: (count: Int, lastFailed: Date)] = [:]
+    private let circuitBreakerThreshold = 3
+    private let circuitBreakerCooldown: TimeInterval = 300 // 5 minutes
+
     // MARK: - Submanagers (set after init)
 
     private(set) var fileTransfer: FileTransfer?
@@ -380,12 +400,68 @@ final class ConnectionManager: ObservableObject {
         self.bonjourDiscovery = bonjour
         self.discoveryCoordinator = coordinator
         transition(to: .discovering)
+
+        // Start network path monitoring
+        startNetworkPathMonitor()
     }
 
     func stopDiscovery() {
         discoveryCoordinator?.stop()
         discoveryCoordinator = nil
         bonjourDiscovery = nil
+        stopNetworkPathMonitor()
+    }
+
+    // MARK: - Network Path Monitoring
+
+    private func startNetworkPathMonitor() {
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            self?.handleNetworkPathChange(path)
+        }
+        monitor.start(queue: .global(qos: .utility))
+        pathMonitor = monitor
+    }
+
+    private func stopNetworkPathMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        lastNetworkPath = nil
+    }
+
+    private nonisolated func handleNetworkPathChange(_ newPath: NWPath) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            guard let lastPath = self.lastNetworkPath else {
+                self.lastNetworkPath = newPath
+                return
+            }
+
+            // Detect network interface changes
+            let oldInterfaces = Set(lastPath.availableInterfaces.map { $0.name })
+            let newInterfaces = Set(newPath.availableInterfaces.map { $0.name })
+
+            if oldInterfaces != newInterfaces {
+                self.handleNetworkInterfaceChange(from: oldInterfaces, to: newInterfaces)
+            }
+
+            self.lastNetworkPath = newPath
+        }
+    }
+
+    private func handleNetworkInterfaceChange(from old: Set<String>, to new: Set<String>) {
+        logger.info("Network interface changed: \(old) → \(new)")
+
+        // WiFi switching: restart discovery for connected/transferring states
+        switch state {
+        case .connected, .transferring:
+            statusToast = "Network changed, reconnecting..."
+            restartDiscovery()
+        default:
+            break
+        }
     }
 
     func restartDiscovery() {
@@ -421,10 +497,68 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Reconnect
 
-    /// Attempt to reconnect to the last connected peer.
+    /// Attempt to reconnect to the last connected peer with exponential backoff.
     func reconnect() {
         guard let peer = lastConnectedPeer else { return }
-        requestConnection(to: peer)
+
+        Task {
+            guard let delay = await reconnectController.nextDelay() else {
+                await MainActor.run {
+                    self.statusToast = "Max reconnection attempts reached"
+                }
+                return
+            }
+
+            let attempt = await reconnectController.currentAttempt
+            logger.info("Reconnecting (attempt \(attempt)) after \(String(format: "%.1f", delay))s delay")
+
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+
+            await MainActor.run {
+                self.requestConnection(to: peer)
+            }
+        }
+    }
+
+    /// Reset reconnect attempts (call on successful connection).
+    private func resetReconnectAttempts() {
+        Task { await reconnectController.reset() }
+    }
+
+    // MARK: - Circuit Breaker
+
+    /// Check if a connection attempt should be made to the given peer.
+    /// Returns `false` if the circuit breaker is open (too many recent failures).
+    func shouldAttemptConnection(to peerID: String) -> Bool {
+        guard let failure = failedPeers[peerID] else { return true }
+
+        if failure.count >= circuitBreakerThreshold {
+            let elapsed = Date().timeIntervalSince(failure.lastFailed)
+            let cooldown = self.circuitBreakerCooldown
+            if elapsed < cooldown {
+                logger.info("Circuit breaker open for peer \(peerID.prefix(8)): \(failure.count) failures, \(Int(cooldown - elapsed))s remaining")
+                return false // Circuit breaker is open
+            }
+            // Cooldown period has passed, reset
+            failedPeers.removeValue(forKey: peerID)
+        }
+        return true
+    }
+
+    /// Record a connection failure for the given peer.
+    func recordConnectionFailure(for peerID: String) {
+        var failure = failedPeers[peerID] ?? (count: 0, lastFailed: Date())
+        failure.count += 1
+        failure.lastFailed = Date()
+        failedPeers[peerID] = failure
+        logger.info("Connection failure recorded for peer \(peerID.prefix(8)): \(failure.count) failures")
+    }
+
+    /// Record a successful connection, resetting the failure count.
+    func recordConnectionSuccess(for peerID: String) {
+        if failedPeers.removeValue(forKey: peerID) != nil {
+            logger.info("Circuit breaker reset for peer \(peerID.prefix(8))")
+        }
     }
 
     /// Attempt to reconnect to a specific peer.
@@ -504,14 +638,65 @@ final class ConnectionManager: ObservableObject {
     private func beginBackgroundTask() {
         guard backgroundTaskID == .invalid else { return }
         backgroundTaskID = UIApplication.shared.beginBackgroundTask { [weak self] in
-            self?.endBackgroundTask()
+            self?.handleBackgroundExpiration()
         }
+
+        // Start monitoring remaining background time
+        startBackgroundTimeMonitor()
     }
 
     private func endBackgroundTask() {
         guard backgroundTaskID != .invalid else { return }
+        stopBackgroundTimeMonitor()
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
         backgroundTaskID = .invalid
+    }
+
+    private func startBackgroundTimeMonitor() {
+        backgroundTimeMonitorTask?.cancel()
+        backgroundTimeMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // Check every 2 seconds
+
+                guard let self, !Task.isCancelled else { break }
+                let remaining = UIApplication.shared.backgroundTimeRemaining
+
+                if remaining < self.backgroundWarningThreshold && remaining > 0 {
+                    await MainActor.run {
+                        self.handleBackgroundTimeWarning(remaining: remaining)
+                    }
+                }
+            }
+        }
+    }
+
+    private func stopBackgroundTimeMonitor() {
+        backgroundTimeMonitorTask?.cancel()
+        backgroundTimeMonitorTask = nil
+    }
+
+    private func handleBackgroundTimeWarning(remaining: TimeInterval) {
+        if case .transferring = state {
+            statusToast = "App will suspend soon, transfer may be interrupted"
+            logger.warning("Background time remaining: \(String(format: "%.1f", remaining))s")
+        }
+    }
+
+    private func handleBackgroundExpiration() {
+        logger.warning("Background task expiring, disconnecting gracefully")
+
+        // Gracefully close all connections
+        Task {
+            for (_, connection) in connections {
+                await connection.disconnect()
+            }
+        }
+
+        // Also close legacy active connection
+        activeConnection?.cancel()
+        activeConnection = nil
+
+        endBackgroundTask()
     }
 
     // MARK: - Timeout Helpers
@@ -618,6 +803,12 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Check circuit breaker
+        guard shouldAttemptConnection(to: peer.id) else {
+            statusToast = "Connection temporarily blocked (too many failures)"
+            return
+        }
+
         // Check if we've reached max connections
         if activeConnectionCount >= maxConnections {
             statusToast = "Maximum connections reached (\(maxConnections))"
@@ -707,6 +898,7 @@ final class ConnectionManager: ObservableObject {
                 cancelTimeouts()
                 activeConnection?.cancel()
                 activeConnection = nil
+                recordConnectionFailure(for: peer.id)
                 transition(to: .failed(reason: userFriendlyErrorMessage(error)))
                 if discoveryCoordinator == nil {
                     restartDiscovery()
@@ -858,7 +1050,13 @@ final class ConnectionManager: ObservableObject {
     /// Listens for messages (e.g. connectionCancel) while the consent sheet is showing.
     /// Without active reads, NWConnection won't detect remote close promptly.
     private func startConsentMonitor(on connection: NWConnection) {
+        let generation = connectionGeneration
+
+        // Cancel any existing monitors
         consentMonitorTask?.cancel()
+        consentTimeoutTask?.cancel()
+
+        // Start connection monitor
         consentMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.pendingIncomingRequest != nil else { break }
@@ -883,14 +1081,38 @@ final class ConnectionManager: ObservableObject {
                 }
             }
         }
+
+        // Start consent timeout
+        consentTimeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: (self?.consentTimeoutSeconds ?? 30) * 1_000_000_000)
+                guard let self, !Task.isCancelled,
+                      self.connectionGeneration == generation,
+                      self.pendingIncomingRequest != nil else { return }
+
+                await MainActor.run {
+                    logger.info("Consent timeout: auto-rejecting after \(self.consentTimeoutSeconds)s")
+                    self.statusToast = "Connection request timed out"
+                    self.pendingIncomingRequest = nil
+                    connection.cancel()
+                    self.activeConnection = nil
+                    self.transition(to: .discovering)
+                }
+            } catch {
+                // Task cancelled - expected on accept/reject
+            }
+        }
     }
 
     // MARK: - Consent Response
 
     func acceptConnection() {
         guard let request = pendingIncomingRequest else { return }
+        // Cancel consent monitoring and timeout
         consentMonitorTask?.cancel()
         consentMonitorTask = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
         // Verify the connection is still alive before attempting to accept
         guard request.connection.state == .ready else {
             pendingIncomingRequest = nil
@@ -948,10 +1170,13 @@ final class ConnectionManager: ObservableObject {
 
                 transition(to: .connected)
                 recordConnectedDevice()
+                resetReconnectAttempts()
+                recordConnectionSuccess(for: peerID)
             } catch {
                 cancelTimeouts()
                 activeConnection?.cancel()
                 activeConnection = nil
+                recordConnectionFailure(for: peerID)
                 transition(to: .failed(reason: userFriendlyErrorMessage(error)))
                 if discoveryCoordinator == nil {
                     restartDiscovery()
@@ -962,8 +1187,11 @@ final class ConnectionManager: ObservableObject {
 
     func rejectConnection() {
         guard let request = pendingIncomingRequest else { return }
+        // Cancel consent monitoring and timeout
         consentMonitorTask?.cancel()
         consentMonitorTask = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
         pendingIncomingRequest = nil
 
         Task {
@@ -1237,6 +1465,10 @@ final class ConnectionManager: ObservableObject {
             transition(to: .connecting)
             transition(to: .connected)
             recordConnectedDevice()
+            resetReconnectAttempts()
+            if let identity = peerIdentity {
+                recordConnectionSuccess(for: identity.id)
+            }
 
         case .connectionReject:
             cancelTimeouts()
@@ -1378,6 +1610,8 @@ final class ConnectionManager: ObservableObject {
                     focusedPeerID = identity.id
                 }
                 recordConnectedDevice()
+                resetReconnectAttempts()
+                recordConnectionSuccess(for: identity.id)
             }
         case .connectionRequest:
             // Already handled during handshake
@@ -1662,5 +1896,63 @@ enum ConnectionError: Error, LocalizedError {
         case .invalidState: return "Invalid connection state"
         case .maxConnectionsReached: return "Maximum connections reached"
         }
+    }
+}
+
+// MARK: - Retry Policy
+
+/// Exponential backoff configuration for retry logic.
+struct ExponentialBackoff {
+    let initialDelay: TimeInterval
+    let maxDelay: TimeInterval
+    let multiplier: Double
+    let maxAttempts: Int
+
+    static let `default` = ExponentialBackoff(
+        initialDelay: 1.0,
+        maxDelay: 30.0,
+        multiplier: 2.0,
+        maxAttempts: 5
+    )
+
+    /// Calculate the delay for a given attempt number.
+    func delay(for attempt: Int) -> TimeInterval {
+        guard attempt < maxAttempts else { return maxDelay }
+        let delay = initialDelay * pow(multiplier, Double(attempt))
+        let jitter = Double.random(in: 0.9...1.1)
+        return min(delay * jitter, maxDelay)
+    }
+
+    /// Check if another retry attempt is allowed.
+    func canRetry(_ attempt: Int) -> Bool {
+        attempt < maxAttempts
+    }
+}
+
+/// Actor that controls retry timing with exponential backoff.
+actor RetryController {
+    private let policy: ExponentialBackoff
+    private(set) var attemptCount = 0
+
+    init(policy: ExponentialBackoff = .default) {
+        self.policy = policy
+    }
+
+    /// Get the delay for the next retry attempt.
+    func nextDelay() -> TimeInterval? {
+        guard policy.canRetry(attemptCount) else { return nil }
+        let delay = policy.delay(for: attemptCount)
+        attemptCount += 1
+        return delay
+    }
+
+    /// Reset the attempt counter (call on successful connection).
+    func reset() {
+        attemptCount = 0
+    }
+
+    /// Get the current attempt count without incrementing.
+    var currentAttempt: Int {
+        attemptCount
     }
 }

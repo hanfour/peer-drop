@@ -26,8 +26,8 @@ extension NWConnection {
         }
     }
 
-    /// Receive a single PeerMessage from a framed connection.
-    func receiveMessage() async throws -> PeerMessage {
+    /// Receive a single PeerMessage from a framed connection (internal implementation).
+    private func receiveMessageInternal() async throws -> PeerMessage {
         try await withCheckedThrowingContinuation { continuation in
             receiveMessage { content, context, isComplete, error in
                 if let error {
@@ -48,8 +48,28 @@ extension NWConnection {
         }
     }
 
-    /// Wait for the connection to become ready.
-    func waitReady() async throws {
+    /// Receive a single PeerMessage with a configurable timeout.
+    /// - Parameter timeout: Maximum time to wait in seconds (default: 60 seconds).
+    /// - Throws: `NWConnectionError.timeout` if no message is received in time.
+    func receiveMessage(timeout: TimeInterval = 60) async throws -> PeerMessage {
+        try await withThrowingTaskGroup(of: PeerMessage.self) { group in
+            group.addTask {
+                try await self.receiveMessageInternal()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw NWConnectionError.timeout
+            }
+            // Wait for the first task to complete (either message received or timeout)
+            let result = try await group.next()!
+            // Cancel the remaining task
+            group.cancelAll()
+            return result
+        }
+    }
+
+    /// Wait for the connection to become ready (internal implementation).
+    private func waitReadyInternal() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             stateUpdateHandler = { state in
                 switch state {
@@ -68,15 +88,37 @@ extension NWConnection {
             }
         }
     }
+
+    /// Wait for the connection to become ready with a configurable timeout.
+    /// - Parameter timeout: Maximum time to wait in seconds (default: 15 seconds).
+    /// - Throws: `NWConnectionError.timeout` if the connection doesn't become ready in time.
+    func waitReady(timeout: TimeInterval = 15) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await self.waitReadyInternal()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw NWConnectionError.timeout
+            }
+            // Wait for the first task to complete (either ready or timeout)
+            try await group.next()
+            // Cancel the remaining task
+            group.cancelAll()
+        }
+    }
 }
 
 enum NWConnectionError: LocalizedError {
+    case timeout
     case noData
     case cancelled
     case unexpectedState
 
     var errorDescription: String? {
         switch self {
+        case .timeout:
+            return "Connection timed out"
         case .noData:
             return "Connection closed by peer"
         case .cancelled:

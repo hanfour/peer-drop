@@ -7,6 +7,7 @@ struct DiscoveredPeer: Identifiable, Hashable {
     let displayName: String
     let endpoint: PeerEndpoint
     let source: DiscoverySource
+    var lastSeen: Date = Date()
 }
 
 enum PeerEndpoint: Hashable {
@@ -51,10 +52,25 @@ final class DiscoveryCoordinator: ObservableObject {
             id: "\(host):\(port)",
             displayName: name ?? host,
             endpoint: .manual(host: host, port: port),
-            source: .manual
+            source: .manual,
+            lastSeen: Date()
         )
         if !peers.contains(where: { $0.id == peer.id }) {
             peers.append(peer)
+        }
+    }
+
+    /// Remove a specific manual peer by ID.
+    func removeManualPeer(id: String) {
+        peers.removeAll { $0.id == id && $0.source == .manual }
+    }
+
+    /// Remove manual peers that haven't been seen within the specified interval.
+    /// - Parameter interval: Time interval in seconds (default: 24 hours).
+    func cleanupStalePeers(olderThan interval: TimeInterval = 86400) {
+        let cutoff = Date().addingTimeInterval(-interval)
+        peers.removeAll { peer in
+            peer.source == .manual && peer.lastSeen < cutoff
         }
     }
 

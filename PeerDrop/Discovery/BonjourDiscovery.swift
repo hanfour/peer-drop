@@ -133,7 +133,7 @@ final class BonjourDiscovery: DiscoveryBackend {
 
     /// Returns `true` if `name` matches our local peer name or a Bonjour-renamed
     /// variant like "Name (2)", "Name (3)", etc.
-    private func isSelf(_ name: String) -> Bool {
+    private func isSelfByName(_ name: String) -> Bool {
         if name == localPeerName { return true }
         // Bonjour auto-renames colliding services by appending " (N)"
         guard name.hasPrefix(localPeerName + " ("),
@@ -144,14 +144,36 @@ final class BonjourDiscovery: DiscoveryBackend {
         return !digits.isEmpty && digits.allSatisfy(\.isNumber)
     }
 
+    /// Returns `true` if the interface is a loopback interface.
+    private func isLocalInterface(_ interface: NWInterface) -> Bool {
+        interface.type == .loopback
+    }
+
+    /// Returns `true` if the browse result represents this device.
+    private func isSelf(_ result: NWBrowser.Result) -> Bool {
+        guard case .service(let name, _, _, let interface) = result.endpoint else {
+            return false
+        }
+
+        // 1. Name-based detection (including Bonjour-renamed variants)
+        if isSelfByName(name) { return true }
+
+        // 2. Interface-based detection - check if it's a loopback interface
+        if let interface = interface, isLocalInterface(interface) {
+            return true
+        }
+
+        return false
+    }
+
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
         logger.info("browseResultsChanged: \(results.count) results")
         let peers = results.compactMap { result -> DiscoveredPeer? in
             guard case .service(let name, let type, let domain, _) = result.endpoint else {
                 return nil
             }
-            // Skip self (including Bonjour-renamed variants like "Name (2)")
-            guard !isSelf(name) else { return nil }
+            // Skip self (including Bonjour-renamed variants and loopback interfaces)
+            guard !isSelf(result) else { return nil }
 
             return DiscoveredPeer(
                 id: "\(name).\(type).\(domain)",
