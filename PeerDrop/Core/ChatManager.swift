@@ -8,6 +8,9 @@ final class ChatManager: ObservableObject {
     @Published var groupUnreadCounts: [String: Int] = [:]
     @Published var activeChatPeerID: String?
     @Published var activeGroupID: String?
+    @Published var typingPeers: Set<String> = []
+
+    private var typingExpirationTasks: [String: Task<Void, Never>] = [:]
 
     var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
@@ -154,6 +157,32 @@ final class ChatManager: ObservableObject {
         guard unreadCounts[peerID] != nil, unreadCounts[peerID] != 0 else { return }
         unreadCounts[peerID] = 0
         saveUnreadCounts()
+    }
+
+    // MARK: - Typing Indicator
+
+    func setTyping(_ isTyping: Bool, for peerID: String) {
+        typingExpirationTasks[peerID]?.cancel()
+
+        if isTyping {
+            typingPeers.insert(peerID)
+            typingExpirationTasks[peerID] = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                typingPeers.remove(peerID)
+            }
+        } else {
+            typingPeers.remove(peerID)
+        }
+    }
+
+    func isTyping(peerID: String) -> Bool {
+        typingPeers.contains(peerID)
+    }
+
+    func getUnreadMessageIDs(for peerID: String) -> [String] {
+        messages
+            .filter { !$0.isOutgoing && $0.status != .read }
+            .map { $0.id }
     }
 
     func incrementUnread(peerID: String) {

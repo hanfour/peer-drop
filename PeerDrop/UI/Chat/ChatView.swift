@@ -89,6 +89,13 @@ struct ChatView: View {
                 }
             }
 
+            // Typing indicator
+            if chatManager.isTyping(peerID: peerID) {
+                TypingIndicatorView(peerName: peerName)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
+            }
+
             Divider()
 
             // Disconnected banner with reconnect option
@@ -141,6 +148,8 @@ struct ChatView: View {
             connectionManager.focus(on: peerID)
             // Suppress the global error alert while in ChatView (we handle disconnection locally)
             connectionManager.suppressErrorAlert = true
+            // Send read receipts for unread messages
+            connectionManager.sendReadReceipts(for: peerID)
         }
         .onDisappear {
             chatManager.activeChatPeerID = nil
@@ -209,6 +218,12 @@ struct ChatView: View {
                     .padding(.vertical, 8)
                     .background(Color(.systemGray6))
                     .clipShape(Capsule())
+                    .onChange(of: messageText) { newValue in
+                        connectionManager.handleTypingChange(
+                            in: peerID,
+                            hasText: !newValue.isEmpty
+                        )
+                    }
 
                 // Send or Mic button
                 if messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

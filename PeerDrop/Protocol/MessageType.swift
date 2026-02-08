@@ -32,6 +32,8 @@ enum MessageType: String, Codable {
     case textMessage
     case mediaMessage
     case chatReject
+    case messageReceipt
+    case typingIndicator
 
     // Connection lifecycle
     case disconnect

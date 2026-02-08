@@ -194,9 +194,19 @@ struct GroupChatBubbleView: View {
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.7))
         case .delivered:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.7))
+            HStack(spacing: -3) {
+                Image(systemName: "checkmark")
+                Image(systemName: "checkmark")
+            }
+            .font(.caption2)
+            .foregroundStyle(.white.opacity(0.7))
+        case .read:
+            HStack(spacing: -3) {
+                Image(systemName: "checkmark")
+                Image(systemName: "checkmark")
+            }
+            .font(.caption2)
+            .foregroundStyle(.cyan)
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.caption2)

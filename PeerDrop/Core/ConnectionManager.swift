@@ -160,6 +160,11 @@ final class ConnectionManager: ObservableObject {
     let chatManager = ChatManager()
     let groupStore = DeviceGroupStore()
 
+    // MARK: - Typing Indicator State
+
+    private var typingDebounceTask: Task<Void, Never>?
+    private var lastTypingSent: Date?
+
     private static let transferHistoryKey = "peerDropTransferHistory"
 
     init() {
@@ -1388,12 +1393,13 @@ final class ConnectionManager: ObservableObject {
                 return
             }
             if let payload = try? message.decodePayload(TextMessagePayload.self) {
-                chatManager.saveIncoming(
+                let savedMsg = chatManager.saveIncoming(
                     text: payload.text,
                     peerID: peerID,
                     peerName: peerConnection.peerIdentity.displayName
                 )
                 NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
+                sendDeliveryReceipt(for: savedMsg.id, to: peerConnection)
             }
 
         case .mediaMessage:
@@ -1410,6 +1416,19 @@ final class ConnectionManager: ObservableObject {
                     peerName: peerConnection.peerIdentity.displayName
                 )
                 NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
+            }
+
+        case .messageReceipt:
+            if let payload = try? message.decodePayload(MessageReceiptPayload.self) {
+                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
+                for msgID in payload.messageIDs {
+                    chatManager.updateStatus(messageID: msgID, status: newStatus)
+                }
+            }
+
+        case .typingIndicator:
+            if let payload = try? message.decodePayload(TypingIndicatorPayload.self) {
+                chatManager.setTyping(payload.isTyping, for: peerID)
             }
 
         case .chatReject:
@@ -1628,6 +1647,19 @@ final class ConnectionManager: ObservableObject {
         case .pong:
             // Keepalive response received — connection is alive
             logger.debug("Heartbeat pong received from \(message.senderID)")
+
+        case .messageReceipt:
+            if let payload = try? message.decodePayload(MessageReceiptPayload.self) {
+                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
+                for msgID in payload.messageIDs {
+                    chatManager.updateStatus(messageID: msgID, status: newStatus)
+                }
+            }
+
+        case .typingIndicator:
+            if let payload = try? message.decodePayload(TypingIndicatorPayload.self) {
+                chatManager.setTyping(payload.isTyping, for: message.senderID)
+            }
         }
     }
 
@@ -1666,6 +1698,66 @@ final class ConnectionManager: ObservableObject {
             }
         @unknown default:
             print("[ConnectionManager] Unknown network connection state")
+        }
+    }
+
+    // MARK: - Message Receipts
+
+    private func sendDeliveryReceipt(for messageID: String, to peerConnection: PeerConnection) {
+        let payload = MessageReceiptPayload(
+            messageIDs: [messageID],
+            receiptType: .delivered,
+            timestamp: Date()
+        )
+        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
+        Task { try? await peerConnection.sendMessage(msg) }
+    }
+
+    func sendReadReceipts(for peerID: String) {
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let unreadIDs = chatManager.getUnreadMessageIDs(for: peerID)
+        guard !unreadIDs.isEmpty else { return }
+
+        let payload = MessageReceiptPayload(
+            messageIDs: unreadIDs,
+            receiptType: .read,
+            timestamp: Date()
+        )
+        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
+        Task { try? await peerConn.sendMessage(msg) }
+
+        for msgID in unreadIDs {
+            chatManager.updateStatus(messageID: msgID, status: .read)
+        }
+    }
+
+    // MARK: - Typing Indicator
+
+    func sendTypingIndicator(to peerID: String, isTyping: Bool) {
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let payload = TypingIndicatorPayload(isTyping: isTyping, timestamp: Date())
+        guard let msg = try? PeerMessage.typingIndicator(payload, senderID: localIdentity.id) else { return }
+        Task { try? await peerConn.sendMessage(msg) }
+    }
+
+    func handleTypingChange(in peerID: String, hasText: Bool) {
+        typingDebounceTask?.cancel()
+
+        if hasText {
+            if let last = lastTypingSent, Date().timeIntervalSince(last) < 2 { return }
+            sendTypingIndicator(to: peerID, isTyping: true)
+            lastTypingSent = Date()
+
+            typingDebounceTask = Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await MainActor.run {
+                    sendTypingIndicator(to: peerID, isTyping: false)
+                }
+            }
+        } else {
+            sendTypingIndicator(to: peerID, isTyping: false)
         }
     }
 

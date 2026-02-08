@@ -110,6 +110,16 @@ struct PeerMessage: Codable {
         PeerMessage(type: .pong, senderID: senderID)
     }
 
+    static func messageReceipt(_ payload: MessageReceiptPayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .messageReceipt, payload: data, senderID: senderID)
+    }
+
+    static func typingIndicator(_ payload: TypingIndicatorPayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .typingIndicator, payload: data, senderID: senderID)
+    }
+
     // MARK: - Serialization
 
     func encoded() throws -> Data {
