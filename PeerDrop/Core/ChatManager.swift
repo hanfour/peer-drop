@@ -45,15 +45,33 @@ final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    func saveOutgoing(text: String, peerID: String, peerName: String) -> ChatMessage {
-        let msg = ChatMessage.text(text: text, isOutgoing: true, peerName: peerName)
+    func saveOutgoing(text: String, peerID: String, peerName: String, replyTo: ChatMessage? = nil) -> ChatMessage {
+        let msg = ChatMessage.text(text: text, isOutgoing: true, peerName: peerName, replyTo: replyTo)
         appendMessage(msg, peerID: peerID)
         return msg
     }
 
     @discardableResult
-    func saveIncoming(text: String, peerID: String, peerName: String) -> ChatMessage {
-        let msg = ChatMessage.text(text: text, isOutgoing: false, peerName: peerName)
+    func saveIncoming(text: String, peerID: String, peerName: String, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
+        let msg = ChatMessage(
+            id: UUID().uuidString,
+            text: text,
+            isMedia: false,
+            mediaType: nil,
+            fileName: nil,
+            fileSize: nil,
+            mimeType: nil,
+            duration: nil,
+            thumbnailData: nil,
+            localFileURL: nil,
+            isOutgoing: false,
+            peerName: peerName,
+            status: .delivered,
+            timestamp: Date(),
+            replyToMessageID: replyToMessageID,
+            replyToText: replyToText,
+            replyToSenderName: replyToSenderName
+        )
         appendMessage(msg, peerID: peerID)
         if activeChatPeerID != peerID {
             incrementUnread(peerID: peerID)
@@ -183,6 +201,10 @@ final class ChatManager: ObservableObject {
         messages
             .filter { !$0.isOutgoing && $0.status != .read }
             .map { $0.id }
+    }
+
+    func message(byID messageID: String) -> ChatMessage? {
+        messages.first { $0.id == messageID }
     }
 
     func incrementUnread(peerID: String) {

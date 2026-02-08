@@ -19,6 +19,7 @@ struct ChatView: View {
     @State private var isRecordingVoice = false
     @State private var voiceRecordingDuration: TimeInterval = 0
     @State private var voiceRecordingTimer: Timer?
+    @State private var replyingToMessage: ChatMessage?
 
     /// Check if this specific peer is connected (multi-connection aware).
     private var isPeerConnected: Bool {
@@ -75,6 +76,14 @@ struct ChatView: View {
                         ForEach(chatManager.messages) { message in
                             ChatBubbleView(message: message, chatManager: chatManager)
                                 .id(message.id)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    Button {
+                                        replyingToMessage = message
+                                    } label: {
+                                        Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                                    }
+                                    .tint(.blue)
+                                }
                         }
                     }
                     .padding(.horizontal, 8)
@@ -134,6 +143,11 @@ struct ChatView: View {
                 .background(Color(.systemGray6))
             }
 
+            // Reply preview bar
+            if let replyMessage = replyingToMessage {
+                replyPreviewBar(for: replyMessage)
+            }
+
             // Input bar
             inputBar
                 .disabled(!isPeerConnected)
@@ -180,6 +194,40 @@ struct ChatView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Reply Preview Bar
+
+    private func replyPreviewBar(for message: ChatMessage) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.blue)
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
+                    .font(.caption.bold())
+                    .foregroundStyle(.blue)
+
+                Text(message.text ?? message.fileName ?? "Media")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                replyingToMessage = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.gray)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
     }
 
     // MARK: - Input Bar
@@ -261,8 +309,9 @@ struct ChatView: View {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         // Use per-peer send for multi-connection
-        connectionManager.sendTextMessage(text, to: peerID)
+        connectionManager.sendTextMessage(text, to: peerID, replyTo: replyingToMessage)
         messageText = ""
+        replyingToMessage = nil
     }
 
     // MARK: - Send image

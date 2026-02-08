@@ -29,6 +29,11 @@ struct ChatMessage: Identifiable, Codable {
     let senderID: String?      // Identifies sender in group context
     let senderName: String?    // Display name for group messages
 
+    // Reply support
+    let replyToMessageID: String?    // ID of the message being replied to
+    let replyToText: String?         // Preview text of replied message
+    let replyToSenderName: String?   // Sender name of replied message
+
     init(
         id: String,
         text: String?,
@@ -46,7 +51,10 @@ struct ChatMessage: Identifiable, Codable {
         timestamp: Date,
         groupID: String? = nil,
         senderID: String? = nil,
-        senderName: String? = nil
+        senderName: String? = nil,
+        replyToMessageID: String? = nil,
+        replyToText: String? = nil,
+        replyToSenderName: String? = nil
     ) {
         self.id = id
         self.text = text
@@ -65,6 +73,9 @@ struct ChatMessage: Identifiable, Codable {
         self.groupID = groupID
         self.senderID = senderID
         self.senderName = senderName
+        self.replyToMessageID = replyToMessageID
+        self.replyToText = replyToText
+        self.replyToSenderName = replyToSenderName
     }
 
     // Custom decoding to handle backward compatibility with old messages
@@ -88,9 +99,13 @@ struct ChatMessage: Identifiable, Codable {
         groupID = try container.decodeIfPresent(String.self, forKey: .groupID)
         senderID = try container.decodeIfPresent(String.self, forKey: .senderID)
         senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
+        // Reply fields with backward compatibility
+        replyToMessageID = try container.decodeIfPresent(String.self, forKey: .replyToMessageID)
+        replyToText = try container.decodeIfPresent(String.self, forKey: .replyToText)
+        replyToSenderName = try container.decodeIfPresent(String.self, forKey: .replyToSenderName)
     }
 
-    static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil) -> ChatMessage {
+    static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
         ChatMessage(
             id: UUID().uuidString,
             text: text,
@@ -108,11 +123,14 @@ struct ChatMessage: Identifiable, Codable {
             timestamp: Date(),
             groupID: groupID,
             senderID: senderID,
-            senderName: senderName
+            senderName: senderName,
+            replyToMessageID: replyTo?.id,
+            replyToText: replyTo?.text ?? replyTo?.fileName,
+            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
         )
     }
 
-    static func media(mediaType: String, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil) -> ChatMessage {
+    static func media(mediaType: String, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
         ChatMessage(
             id: UUID().uuidString,
             text: nil,
@@ -130,12 +148,20 @@ struct ChatMessage: Identifiable, Codable {
             timestamp: Date(),
             groupID: groupID,
             senderID: senderID,
-            senderName: senderName
+            senderName: senderName,
+            replyToMessageID: replyTo?.id,
+            replyToText: replyTo?.text ?? replyTo?.fileName,
+            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
         )
     }
 
     /// Whether this message is a group message.
     var isGroupMessage: Bool {
         groupID != nil
+    }
+
+    /// Whether this message is a reply to another message.
+    var isReply: Bool {
+        replyToMessageID != nil
     }
 }

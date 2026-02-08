@@ -84,6 +84,11 @@ struct ChatBubbleView: View {
             if message.isOutgoing { Spacer(minLength: 50) }
 
             VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 1) {
+                // Reply preview if this is a reply
+                if message.isReply {
+                    replyPreview
+                }
+
                 // Content
                 if message.isMedia {
                     mediaContent
@@ -113,6 +118,40 @@ struct ChatBubbleView: View {
         }
         .padding(.horizontal, 16)
         .padding(message.isOutgoing ? .trailing : .leading, -6)
+    }
+
+    // MARK: - Reply Preview
+
+    @ViewBuilder
+    private var replyPreview: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(message.isOutgoing ? Color.white.opacity(0.5) : Color.blue)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(replyToSenderDisplayName)
+                    .font(.caption.bold())
+                    .foregroundStyle(message.isOutgoing ? .white : .blue)
+
+                Text(message.replyToText ?? "")
+                    .font(.caption)
+                    .foregroundStyle(message.isOutgoing ? .white.opacity(0.8) : .secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(message.isOutgoing ? Color.white.opacity(0.15) : Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.bottom, 4)
+    }
+
+    private var replyToSenderDisplayName: String {
+        if let name = message.replyToSenderName {
+            return name
+        }
+        return "You"
     }
 
     // MARK: - Bubble color

@@ -1396,7 +1396,10 @@ final class ConnectionManager: ObservableObject {
                 let savedMsg = chatManager.saveIncoming(
                     text: payload.text,
                     peerID: peerID,
-                    peerName: peerConnection.peerIdentity.displayName
+                    peerName: peerConnection.peerIdentity.displayName,
+                    replyToMessageID: payload.replyToMessageID,
+                    replyToText: payload.replyToText,
+                    replyToSenderName: payload.replyToSenderName
                 )
                 NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
                 sendDeliveryReceipt(for: savedMsg.id, to: peerConnection)
@@ -1581,7 +1584,10 @@ final class ConnectionManager: ObservableObject {
                 chatManager.saveIncoming(
                     text: payload.text,
                     peerID: message.senderID,
-                    peerName: connectedPeer?.displayName ?? "Unknown"
+                    peerName: connectedPeer?.displayName ?? "Unknown",
+                    replyToMessageID: payload.replyToMessageID,
+                    replyToText: payload.replyToText,
+                    replyToSenderName: payload.replyToSenderName
                 )
                 NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
             }
@@ -1763,15 +1769,20 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Chat
 
-    func sendTextMessage(_ text: String) {
+    func sendTextMessage(_ text: String, replyTo: ChatMessage? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
         guard let peerConn = connections[peerID] else { return }
         let peer = peerConn.peerIdentity
 
-        let payload = TextMessagePayload(text: text)
+        let payload = TextMessagePayload(
+            text: text,
+            replyToMessageID: replyTo?.id,
+            replyToText: replyTo?.text ?? replyTo?.fileName,
+            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
+        )
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
-        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
+        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         Task {
             do {
                 try await peerConn.sendMessage(msg)
@@ -1783,14 +1794,19 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Send text message to a specific peer.
-    func sendTextMessage(_ text: String, to peerID: String) {
+    func sendTextMessage(_ text: String, to peerID: String, replyTo: ChatMessage? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerConn = connections[peerID] else { return }
         let peer = peerConn.peerIdentity
 
-        let payload = TextMessagePayload(text: text)
+        let payload = TextMessagePayload(
+            text: text,
+            replyToMessageID: replyTo?.id,
+            replyToText: replyTo?.text ?? replyTo?.fileName,
+            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
+        )
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
-        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName)
+        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         Task {
             do {
                 try await peerConn.sendMessage(msg)

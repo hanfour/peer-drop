@@ -117,6 +117,7 @@
 		F32D1DE3FA8A516CBAC2407E /* ChatManagerGroupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E794A5B12CE944C147F6572 /* ChatManagerGroupTests.swift */; };
 		F32D1DE3FA8A516CBAC2407F /* MessageReceiptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E794A5B12CE944C147F6573 /* MessageReceiptTests.swift */; };
 		F32D1DE3FA8A516CBAC24080 /* TypingIndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E794A5B12CE944C147F6574 /* TypingIndicatorTests.swift */; };
+		F32D1DE3FA8A516CBAC24081 /* MessageReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E794A5B12CE944C147F6575 /* MessageReplyTests.swift */; };
 		F422276653E0728E859B9BC9 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C17EA9E6BE4797FC20EBBBC /* WebRTC */; };
 		F5D3B318A8790CF5D48FB2C7 /* TimeoutReconnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49E78CCB361B034EF8A1BE3D /* TimeoutReconnectTests.swift */; };
 		F8E7D6C5B4A3928176540DEF /* ChatDataEncryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B890123456 /* ChatDataEncryptor.swift */; };
@@ -206,6 +207,7 @@
 		6E794A5B12CE944C147F6572 /* ChatManagerGroupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatManagerGroupTests.swift; sourceTree = "<group>"; };
 		6E794A5B12CE944C147F6573 /* MessageReceiptTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageReceiptTests.swift; sourceTree = "<group>"; };
 		6E794A5B12CE944C147F6574 /* TypingIndicatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TypingIndicatorTests.swift; sourceTree = "<group>"; };
+		6E794A5B12CE944C147F6575 /* MessageReplyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageReplyTests.swift; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
 		715E93D38328F7F41A2BB8DC /* GroupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDetailView.swift; sourceTree = "<group>"; };
@@ -358,6 +360,7 @@
 				6E794A5B12CE944C147F6573 /* MessageReceiptTests.swift */,
 				46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */,
 				6E794A5B12CE944C147F6574 /* TypingIndicatorTests.swift */,
+				6E794A5B12CE944C147F6575 /* MessageReplyTests.swift */,
 				9213B13A8B9B9DF21664EA58 /* PerformanceTests.swift */,
 				5BE45F7EE204F6F3E38ACB4A /* ReconnectTests.swift */,
 				62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */,
@@ -750,6 +753,7 @@
 				DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */,
 				70EE13BE136658C0B8EB3AE2 /* TransferMetadataTests.swift in Sources */,
 				F32D1DE3FA8A516CBAC24080 /* TypingIndicatorTests.swift in Sources */,
+				F32D1DE3FA8A516CBAC24081 /* MessageReplyTests.swift in Sources */,
 				F32D1DE3FA8A516CBAC2407E /* ChatManagerGroupTests.swift in Sources */,
 				2166C112B4222D0D2E996357 /* ChatIntegrationTests.swift in Sources */,
 				A1A1A1A1A1A1A1A1A1A1A102 /* RetryPolicyTests.swift in Sources */,
