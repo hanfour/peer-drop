@@ -64,9 +64,9 @@ final class ConnectionManagerTests: XCTestCase {
 
     func testHandleScenePhaseActive() {
         let manager = ConnectionManager()
-        // Should not crash even from idle state
+        // When returning to foreground from idle, discovery should start
         manager.handleScenePhaseChange(.active)
-        XCTAssertEqual(manager.state, .idle)
+        XCTAssertEqual(manager.state, .discovering)
     }
 
     func testFailedRecovery() {
