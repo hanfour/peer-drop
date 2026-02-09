@@ -51,3 +51,7 @@ playground.xcworkspace
 
 # Crash logs
 *.ips
+
+# E2E Test artifacts
+TestResults/
+DerivedData-MultiSim/

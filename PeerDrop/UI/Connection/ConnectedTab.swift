@@ -50,6 +50,7 @@ struct ConnectedTab: View {
                         activePeerRow(for: peerConn)
                     }
                     .tint(.primary)
+                    .accessibilityIdentifier("active-peer-row")
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             Task {

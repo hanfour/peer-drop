@@ -779,3 +779,82 @@ Examples:
 - `CONN-01-02-requesting`
 - `CONN-01-03-connected`
 - `CONN-01-B-01-waiting` (acceptor)
+
+---
+
+## E2E Multi-Simulator Tests
+
+Real device-to-device integration tests using two simulators running in parallel.
+
+### Quick Start
+
+```bash
+# Setup (boot simulators, build app)
+./Scripts/run-multi-sim-tests.sh setup
+
+# Run smoke tests (4 core scenarios)
+./Scripts/run-multi-sim-tests.sh run smoke
+
+# Run full suite (10 scenarios)
+./Scripts/run-multi-sim-tests.sh run full
+
+# Run single test
+./Scripts/run-multi-sim-tests.sh single CONN_01
+
+# Check status
+./Scripts/run-multi-sim-tests.sh status
+
+# Clean test results
+./Scripts/run-multi-sim-tests.sh clean
+```
+
+### Test Suites
+
+| Suite | Tests | Description |
+|-------|-------|-------------|
+| smoke | 4 | Core path: DISC-01, CONN-01, CHAT-01, FILE-01 |
+| full | 12 | All E2E scenarios |
+
+### E2E Test Scenarios
+
+| ID | Name | Description |
+|----|------|-------------|
+| DISC-01 | Mutual Discovery | Both devices discover each other via Bonjour |
+| DISC-02 | Online/Offline | Peer disappears offline, reappears online |
+| CONN-01 | Full Connection | Request → Accept → Connected state |
+| CONN-02 | Reject/Retry | First reject, second accept succeeds |
+| CONN-03 | Reconnection | Disconnect then reconnect with history preserved |
+| CHAT-01 | Bidirectional Messages | 3 round-trip message exchanges |
+| CHAT-02 | Rapid Messages | 10 messages in sequence |
+| CHAT-03 | Read Receipts | Message read status updates |
+| FILE-01 | File Picker UI | Open and cancel file picker |
+| FILE-02 | Transfer Progress | Verify progress UI elements |
+| LIB-01 | Device Saved | Device saved to contacts after connection |
+| UI-01 | Tab Navigation | Switch between Nearby and Connected tabs |
+
+### Synchronization Mechanism
+
+Tests use file-based checkpoints in `/tmp/peerdrop-test-sync/`:
+
+```
+Initiator                              Acceptor
+    |                                      |
+    | signal("ready") ─────────────────────▶|
+    |◀───────────────────── wait("ready")   |
+    |                                      |
+    | tap peer                              |
+    | signal("connection-requested") ──────▶|
+    |◀────────── signal("connection-accepted")|
+```
+
+### Test Files
+
+| File | Description |
+|------|-------------|
+| `E2E/MultiSimTestBase.swift` | Base class with sync primitives |
+| `E2E/E2ETestSuites.swift` | All test implementations |
+| `Scripts/run-multi-sim-tests.sh` | Test runner script |
+
+### HTML Reports
+
+Reports are generated at `TestResults/E2E/<timestamp>/report.html` after each run.
