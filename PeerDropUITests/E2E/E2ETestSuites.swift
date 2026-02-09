@@ -166,34 +166,59 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         signalCheckpoint("first-request")
         XCTAssertTrue(waitForCheckpoint("rejected", timeout: 60))
 
+        // Handle rejection alert
         sleep(3)
         let alert = app.alerts.firstMatch
         if alert.waitForExistence(timeout: 10) {
+            screenshot("02-rejection-alert")
             alert.buttons.firstMatch.tap()
+            sleep(1)
         }
         signalCheckpoint("rejection-handled")
-        screenshot("02-rejection-handled")
+        screenshot("03-rejection-handled")
 
         XCTAssertTrue(waitForCheckpoint("ready-for-retry", timeout: 30))
 
-        sleep(2)
+        // Wait a bit longer for Bonjour to stabilize
+        sleep(3)
         switchToTab("Nearby")
-        sleep(2)
+        ensureOnline()
+        sleep(3)
 
-        if let peer2 = findPeer(timeout: 20) {
-            tapPeer(peer2)
+        // Try to find peer again for retry
+        guard let peer2 = findPeer(timeout: 30) else {
+            signalCheckpoint("retry-request")
+            XCTFail("Could not find peer for retry")
+            return
         }
+        tapPeer(peer2)
         signalCheckpoint("retry-request")
-        screenshot("03-retry-request")
+        screenshot("04-retry-request")
 
         XCTAssertTrue(waitForCheckpoint("accepted", timeout: 60))
-        XCTAssertTrue(waitForConnected(timeout: 30), "Should connect on retry")
-        signalCheckpoint("retry-connected")
-        screenshot("04-connected")
 
-        switchToTab("Connected")
-        navigateToConnectionView()
-        disconnectFromPeer()
+        // Wait for connection with more patience
+        var connected = false
+        for _ in 0..<30 {
+            if waitForConnected(timeout: 1) {
+                connected = true
+                break
+            }
+        }
+
+        if connected {
+            signalCheckpoint("retry-connected")
+            screenshot("05-connected")
+
+            switchToTab("Connected")
+            navigateToConnectionView()
+            disconnectFromPeer()
+        } else {
+            signalCheckpoint("retry-connected") // Signal anyway
+            screenshot("05-not-connected")
+            XCTFail("Should connect on retry")
+        }
+
         signalCheckpoint("test-complete")
     }
 
@@ -660,19 +685,47 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
 
         XCTAssertTrue(waitForCheckpoint("first-request", timeout: 60))
         XCTAssertTrue(waitForConsent())
-        app.buttons["Decline"].tap()
+        screenshot("01-first-consent")
+
+        let declineBtn = app.buttons["Decline"]
+        if declineBtn.waitForExistence(timeout: 5) {
+            declineBtn.tap()
+        }
         signalCheckpoint("rejected")
-        sleep(2)
+        sleep(3)
 
         XCTAssertTrue(waitForCheckpoint("rejection-handled", timeout: 30))
+
+        // Ensure we're back to a clean state for retry
         switchToTab("Nearby")
+        ensureOnline()
+        sleep(2)
         signalCheckpoint("ready-for-retry")
 
         XCTAssertTrue(waitForCheckpoint("retry-request", timeout: 60))
-        XCTAssertTrue(waitForConsent(timeout: 30))
-        app.buttons["Accept"].tap()
-        signalCheckpoint("accepted")
-        sleep(3)
+
+        // Wait for consent sheet with retry logic
+        var accepted = false
+        for _ in 0..<30 {
+            let acceptBtn = app.buttons["Accept"]
+            if acceptBtn.waitForExistence(timeout: 2) {
+                screenshot("02-retry-consent")
+                acceptBtn.tap()
+                print("[ACCEPTOR] Tapped Accept for retry")
+                accepted = true
+                break
+            }
+            sleep(1)
+        }
+
+        if accepted {
+            signalCheckpoint("accepted")
+            sleep(3)
+        } else {
+            screenshot("02-no-consent-for-retry")
+            signalCheckpoint("accepted") // Signal anyway to not block
+            XCTFail("Consent sheet did not appear for retry")
+        }
 
         XCTAssertTrue(waitForCheckpoint("retry-connected", timeout: 30))
         XCTAssertTrue(waitForCheckpoint("test-complete", timeout: 60))

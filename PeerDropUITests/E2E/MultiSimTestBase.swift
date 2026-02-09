@@ -55,11 +55,29 @@ class MultiSimTestBase: XCTestCase {
             "App should launch with tab bar visible"
         )
 
-        // Ensure sync directory exists
+        // Ensure sync directory exists and clean this test's directory
         ensureSyncDirectoryExists()
+        cleanTestSyncDirectory()
 
         // Log role
         print("[\(role.rawValue.uppercased())] Test starting: \(name)")
+    }
+
+    /// Clean this test's sync directory to ensure fresh state
+    private func cleanTestSyncDirectory() {
+        let fileManager = FileManager.default
+        let testDir = testSyncDirectory
+
+        // Only clean if we're the initiator (to avoid race condition)
+        if role == .initiator {
+            try? fileManager.removeItem(atPath: testDir)
+            try? fileManager.createDirectory(
+                atPath: testDir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o777]
+            )
+            print("[\(role.rawValue.uppercased())] Cleaned sync directory: \(testDir)")
+        }
     }
 
     override func tearDownWithError() throws {
