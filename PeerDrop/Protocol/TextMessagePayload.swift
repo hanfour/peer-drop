@@ -9,12 +9,25 @@ struct TextMessagePayload: Codable {
     let replyToText: String?
     let replyToSenderName: String?
 
-    init(text: String, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) {
+    // Group messaging support
+    let groupID: String?
+    let senderName: String?
+
+    init(
+        text: String,
+        replyToMessageID: String? = nil,
+        replyToText: String? = nil,
+        replyToSenderName: String? = nil,
+        groupID: String? = nil,
+        senderName: String? = nil
+    ) {
         self.text = text
         self.timestamp = Date()
         self.replyToMessageID = replyToMessageID
         self.replyToText = replyToText
         self.replyToSenderName = replyToSenderName
+        self.groupID = groupID
+        self.senderName = senderName
     }
 
     // Custom decoding for backward compatibility
@@ -25,5 +38,7 @@ struct TextMessagePayload: Codable {
         replyToMessageID = try container.decodeIfPresent(String.self, forKey: .replyToMessageID)
         replyToText = try container.decodeIfPresent(String.self, forKey: .replyToText)
         replyToSenderName = try container.decodeIfPresent(String.self, forKey: .replyToSenderName)
+        groupID = try container.decodeIfPresent(String.self, forKey: .groupID)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
     }
 }

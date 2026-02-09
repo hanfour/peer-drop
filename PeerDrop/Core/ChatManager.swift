@@ -52,7 +52,7 @@ final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    func saveIncoming(text: String, peerID: String, peerName: String, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
+    func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
         let msg = ChatMessage(
             id: UUID().uuidString,
             text: text,
@@ -68,6 +68,9 @@ final class ChatManager: ObservableObject {
             peerName: peerName,
             status: .delivered,
             timestamp: Date(),
+            groupID: groupID,
+            senderID: senderID,
+            senderName: senderName ?? peerName,
             replyToMessageID: replyToMessageID,
             replyToText: replyToText,
             replyToSenderName: replyToSenderName
@@ -141,6 +144,22 @@ final class ChatManager: ObservableObject {
         chatDirectory.appendingPathComponent("media", isDirectory: true).appendingPathComponent(relativePath)
     }
 
+    /// Write media to a temporary file for video playback.
+    func writeMediaToTempFile(relativePath: String) -> URL? {
+        guard let data = loadMediaData(relativePath: relativePath) else { return nil }
+
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileName = (relativePath as NSString).lastPathComponent
+        let tempURL = tempDir.appendingPathComponent("media_\(UUID().uuidString)_\(fileName)")
+
+        do {
+            try data.write(to: tempURL)
+            return tempURL
+        } catch {
+            return nil
+        }
+    }
+
     func updateStatus(messageID: String, status: MessageStatus) {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx].status = status
@@ -166,6 +185,61 @@ final class ChatManager: ObservableObject {
         if let idx = messages.lastIndex(where: { $0.isOutgoing }) {
             messages[idx].status = .failed
             updateStatus(messageID: messages[idx].id, status: .failed)
+        }
+    }
+
+    // MARK: - Group Read Status
+
+    /// Update group message status for a specific message.
+    func updateGroupMessageStatus(messageID: String, status: MessageStatus) {
+        if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
+            groupMessages[idx].status = status
+        }
+        // Also persist to disk
+        updateStatus(messageID: messageID, status: status)
+    }
+
+    /// Mark a group message as delivered to a specific peer.
+    func markGroupMessageDelivered(messageID: String, groupID: String, to peerID: String) {
+        // Update in-memory
+        if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
+            var status = groupMessages[idx].groupReadStatus ?? GroupReadStatus()
+            status.deliveredTo.insert(peerID)
+            groupMessages[idx].groupReadStatus = status
+            persistGroupReadStatus(messageID: messageID, groupID: groupID, status: status)
+        }
+    }
+
+    /// Mark a group message as read by a specific peer.
+    func markGroupMessageRead(messageID: String, groupID: String, by peerID: String) {
+        // Update in-memory
+        if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
+            var status = groupMessages[idx].groupReadStatus ?? GroupReadStatus()
+            status.deliveredTo.insert(peerID) // Read implies delivered
+            status.readBy.insert(peerID)
+            groupMessages[idx].groupReadStatus = status
+            persistGroupReadStatus(messageID: messageID, groupID: groupID, status: status)
+        }
+    }
+
+    private func persistGroupReadStatus(messageID: String, groupID: String, status: GroupReadStatus) {
+        // Persist to group messages file
+        let groupMessagesFile = chatDirectory
+            .appendingPathComponent("group_messages", isDirectory: true)
+            .appendingPathComponent("\(groupID).json")
+
+        guard fileManager.fileExists(atPath: groupMessagesFile.path),
+              let raw = try? Data(contentsOf: groupMessagesFile),
+              let decrypted = try? encryptor.decrypt(raw),
+              var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else {
+            return
+        }
+
+        if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
+            msgs[idx].groupReadStatus = status
+            if let encoded = try? JSONEncoder().encode(msgs) {
+                try? encryptor.encryptAndWrite(encoded, to: groupMessagesFile)
+            }
         }
     }
 
@@ -205,6 +279,82 @@ final class ChatManager: ObservableObject {
 
     func message(byID messageID: String) -> ChatMessage? {
         messages.first { $0.id == messageID }
+    }
+
+    // MARK: - Reactions
+
+    /// Add a reaction to a message.
+    func addReaction(emoji: String, to messageID: String, from senderID: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == messageID }) else { return }
+
+        var reactions = messages[idx].reactions ?? [:]
+        var senders = reactions[emoji] ?? []
+        senders.insert(senderID)
+        reactions[emoji] = senders
+        messages[idx].reactions = reactions
+
+        // Persist to disk
+        persistReaction(messageID: messageID, reactions: reactions)
+    }
+
+    /// Remove a reaction from a message.
+    func removeReaction(emoji: String, from messageID: String, by senderID: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == messageID }) else { return }
+
+        var reactions = messages[idx].reactions ?? [:]
+        var senders = reactions[emoji] ?? []
+        senders.remove(senderID)
+        if senders.isEmpty {
+            reactions.removeValue(forKey: emoji)
+        } else {
+            reactions[emoji] = senders
+        }
+        messages[idx].reactions = reactions.isEmpty ? nil : reactions
+
+        // Persist to disk
+        persistReaction(messageID: messageID, reactions: messages[idx].reactions)
+    }
+
+    private func persistReaction(messageID: String, reactions: [String: Set<String>]?) {
+        let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
+        guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "json" {
+            guard let raw = try? Data(contentsOf: file),
+                  let decrypted = try? encryptor.decrypt(raw),
+                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
+            if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
+                msgs[idx].reactions = reactions
+                if let encoded = try? JSONEncoder().encode(msgs) {
+                    try? encryptor.encryptAndWrite(encoded, to: file)
+                }
+                return
+            }
+        }
+    }
+
+    // MARK: - Search
+
+    /// Search messages matching a query for a specific peer.
+    func searchMessages(query: String, peerID: String) -> [ChatMessage] {
+        let lowercasedQuery = query.lowercased()
+
+        // Load all messages for this peer if not already loaded
+        if messages.isEmpty {
+            loadMessages(forPeer: peerID)
+        }
+
+        return messages.filter { message in
+            // Search in text content
+            if let text = message.text?.lowercased(), text.contains(lowercasedQuery) {
+                return true
+            }
+            // Search in file names
+            if let fileName = message.fileName?.lowercased(), fileName.contains(lowercasedQuery) {
+                return true
+            }
+            return false
+        }
+        .sorted { $0.timestamp > $1.timestamp } // Most recent first
     }
 
     func incrementUnread(peerID: String) {
@@ -311,26 +461,6 @@ final class ChatManager: ObservableObject {
             try? encryptor.encryptAndWrite(encoded, to: file)
         }
         groupMessages.append(message)
-    }
-
-    func updateGroupMessageStatus(messageID: String, status: MessageStatus) {
-        if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
-            groupMessages[idx].status = status
-        }
-        let groupMessagesDir = chatDirectory.appendingPathComponent("group_messages", isDirectory: true)
-        guard let files = try? fileManager.contentsOfDirectory(at: groupMessagesDir, includingPropertiesForKeys: nil) else { return }
-        for file in files where file.pathExtension == "json" {
-            guard let raw = try? Data(contentsOf: file),
-                  let decrypted = try? encryptor.decrypt(raw),
-                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
-            if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
-                msgs[idx].status = status
-                if let encoded = try? JSONEncoder().encode(msgs) {
-                    try? encryptor.encryptAndWrite(encoded, to: file)
-                }
-                return
-            }
-        }
     }
 
     // MARK: - Group Unread Tracking

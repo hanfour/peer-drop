@@ -26,6 +26,8 @@ private func userFriendlyErrorMessage(_ error: Error) -> String {
             return "Secure connection failed (TLS error \(status))"
         case .dns(let dnsError):
             return "Could not find peer (\(dnsError))"
+        case .wifiAware:
+            return "WiFi Aware connection failed"
         @unknown default:
             return "Network connection failed"
         }
@@ -261,9 +263,7 @@ final class ConnectionManager: ObservableObject {
         // Clean up file transfer session if any
         if let peerConn = connections[peerID] {
             peerConn.fileTransferSession?.handleConnectionFailure()
-            Task {
-                await peerConn.voiceCallSession?.endCallLocally()
-            }
+            peerConn.voiceCallSession?.endCallLocally()
         }
 
         removeConnection(peerID: peerID)
@@ -1319,9 +1319,7 @@ final class ConnectionManager: ObservableObject {
         case .disconnect:
             peerConnection.updateState(.disconnected)
             peerConnection.fileTransferSession?.handleConnectionFailure()
-            Task {
-                await peerConnection.voiceCallSession?.endCallLocally()
-            }
+            peerConnection.voiceCallSession?.endCallLocally()
             removeConnection(peerID: peerID)
             updateGlobalState()
 
@@ -1393,16 +1391,21 @@ final class ConnectionManager: ObservableObject {
                 return
             }
             if let payload = try? message.decodePayload(TextMessagePayload.self) {
+                // Determine the storage key: groupID for group messages, peerID for 1-to-1
+                let storageKey = payload.groupID ?? peerID
                 let savedMsg = chatManager.saveIncoming(
                     text: payload.text,
-                    peerID: peerID,
+                    peerID: storageKey,
                     peerName: peerConnection.peerIdentity.displayName,
+                    groupID: payload.groupID,
+                    senderID: payload.groupID != nil ? message.senderID : nil,
+                    senderName: payload.senderName,
                     replyToMessageID: payload.replyToMessageID,
                     replyToText: payload.replyToText,
                     replyToSenderName: payload.replyToSenderName
                 )
                 NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
-                sendDeliveryReceipt(for: savedMsg.id, to: peerConnection)
+                sendDeliveryReceipt(for: savedMsg.id, to: peerConnection, groupID: payload.groupID)
             }
 
         case .mediaMessage:
@@ -1423,15 +1426,38 @@ final class ConnectionManager: ObservableObject {
 
         case .messageReceipt:
             if let payload = try? message.decodePayload(MessageReceiptPayload.self) {
-                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                for msgID in payload.messageIDs {
-                    chatManager.updateStatus(messageID: msgID, status: newStatus)
+                // Check if this is a group receipt
+                if let groupID = payload.groupID, let senderID = payload.senderID {
+                    // Group message receipt - update per-member status
+                    for msgID in payload.messageIDs {
+                        if payload.receiptType == .read {
+                            chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
+                        } else {
+                            chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
+                        }
+                    }
+                } else {
+                    // 1-to-1 message receipt
+                    let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
+                    for msgID in payload.messageIDs {
+                        chatManager.updateStatus(messageID: msgID, status: newStatus)
+                    }
                 }
             }
 
         case .typingIndicator:
             if let payload = try? message.decodePayload(TypingIndicatorPayload.self) {
                 chatManager.setTyping(payload.isTyping, for: peerID)
+            }
+
+        case .reaction:
+            if let payload = try? message.decodePayload(ReactionPayload.self) {
+                switch payload.action {
+                case .add:
+                    chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
+                case .remove:
+                    chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
+                }
             }
 
         case .chatReject:
@@ -1656,15 +1682,38 @@ final class ConnectionManager: ObservableObject {
 
         case .messageReceipt:
             if let payload = try? message.decodePayload(MessageReceiptPayload.self) {
-                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                for msgID in payload.messageIDs {
-                    chatManager.updateStatus(messageID: msgID, status: newStatus)
+                // Check if this is a group receipt
+                if let groupID = payload.groupID, let senderID = payload.senderID {
+                    // Group message receipt - update per-member status
+                    for msgID in payload.messageIDs {
+                        if payload.receiptType == .read {
+                            chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
+                        } else {
+                            chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
+                        }
+                    }
+                } else {
+                    // 1-to-1 message receipt
+                    let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
+                    for msgID in payload.messageIDs {
+                        chatManager.updateStatus(messageID: msgID, status: newStatus)
+                    }
                 }
             }
 
         case .typingIndicator:
             if let payload = try? message.decodePayload(TypingIndicatorPayload.self) {
                 chatManager.setTyping(payload.isTyping, for: message.senderID)
+            }
+
+        case .reaction:
+            if let payload = try? message.decodePayload(ReactionPayload.self) {
+                switch payload.action {
+                case .add:
+                    chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
+                case .remove:
+                    chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
+                }
             }
         }
     }
@@ -1709,11 +1758,13 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Message Receipts
 
-    private func sendDeliveryReceipt(for messageID: String, to peerConnection: PeerConnection) {
+    private func sendDeliveryReceipt(for messageID: String, to peerConnection: PeerConnection, groupID: String? = nil) {
         let payload = MessageReceiptPayload(
             messageIDs: [messageID],
             receiptType: .delivered,
-            timestamp: Date()
+            timestamp: Date(),
+            groupID: groupID,
+            senderID: groupID != nil ? localIdentity.id : nil
         )
         guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
         Task { try? await peerConnection.sendMessage(msg) }
@@ -1733,6 +1784,33 @@ final class ConnectionManager: ObservableObject {
         guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
         Task { try? await peerConn.sendMessage(msg) }
 
+        for msgID in unreadIDs {
+            chatManager.updateStatus(messageID: msgID, status: .read)
+        }
+    }
+
+    /// Send read receipts for group messages to all group members
+    func sendGroupReadReceipts(for groupID: String, to members: [PeerIdentity]) {
+        let unreadIDs = chatManager.getUnreadMessageIDs(for: groupID)
+        guard !unreadIDs.isEmpty else { return }
+
+        let payload = MessageReceiptPayload(
+            messageIDs: unreadIDs,
+            receiptType: .read,
+            timestamp: Date(),
+            groupID: groupID,
+            senderID: localIdentity.id
+        )
+        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
+
+        // Send to all connected group members
+        for member in members where member.id != localIdentity.id {
+            if let peerConn = connection(for: member.id) {
+                Task { try? await peerConn.sendMessage(msg) }
+            }
+        }
+
+        // Mark as read locally
         for msgID in unreadIDs {
             chatManager.updateStatus(messageID: msgID, status: .read)
         }
@@ -1764,6 +1842,32 @@ final class ConnectionManager: ObservableObject {
             }
         } else {
             sendTypingIndicator(to: peerID, isTyping: false)
+        }
+    }
+
+    // MARK: - Reactions
+
+    func sendReaction(emoji: String, to messageID: String, action: ReactionPayload.Action, peerID: String) {
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let payload = ReactionPayload(
+            messageID: messageID,
+            emoji: emoji,
+            action: action,
+            timestamp: Date()
+        )
+        guard let msg = try? PeerMessage.reaction(payload, senderID: localIdentity.id) else { return }
+
+        Task {
+            try? await peerConn.sendMessage(msg)
+        }
+
+        // Update local state
+        switch action {
+        case .add:
+            chatManager.addReaction(emoji: emoji, to: messageID, from: localIdentity.id)
+        case .remove:
+            chatManager.removeReaction(emoji: emoji, from: messageID, by: localIdentity.id)
         }
     }
 
@@ -1909,7 +2013,12 @@ final class ConnectionManager: ObservableObject {
             localName: localIdentity.displayName
         )
 
-        let payload = TextMessagePayload(text: text)
+        // Include groupID and senderName in the payload
+        let payload = TextMessagePayload(
+            text: text,
+            groupID: groupID,
+            senderName: localIdentity.displayName
+        )
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
 
         var sentCount = 0

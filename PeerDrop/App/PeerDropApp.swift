@@ -4,6 +4,7 @@ import SwiftUI
 struct PeerDropApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var connectionManager = ConnectionManager()
+    @StateObject private var voicePlayer = VoicePlayer()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
 
@@ -12,6 +13,7 @@ struct PeerDropApp: App {
             ZStack {
                 ContentView()
                     .environmentObject(connectionManager)
+                    .environmentObject(voicePlayer)
                     .opacity(showLaunch ? 0 : 1)
 
                 if showLaunch {

@@ -8,6 +8,12 @@ enum MessageStatus: String, Codable {
     case failed
 }
 
+/// Tracks delivery and read status for each group member.
+struct GroupReadStatus: Codable, Equatable {
+    var deliveredTo: Set<String> = []  // Peer IDs that received the message
+    var readBy: Set<String> = []       // Peer IDs that read the message
+}
+
 struct ChatMessage: Identifiable, Codable {
     let id: String
     let text: String?
@@ -34,6 +40,12 @@ struct ChatMessage: Identifiable, Codable {
     let replyToText: String?         // Preview text of replied message
     let replyToSenderName: String?   // Sender name of replied message
 
+    // Reactions (emoji -> set of senderIDs)
+    var reactions: [String: Set<String>]?
+
+    // Group read status (for outgoing group messages)
+    var groupReadStatus: GroupReadStatus?
+
     init(
         id: String,
         text: String?,
@@ -54,7 +66,9 @@ struct ChatMessage: Identifiable, Codable {
         senderName: String? = nil,
         replyToMessageID: String? = nil,
         replyToText: String? = nil,
-        replyToSenderName: String? = nil
+        replyToSenderName: String? = nil,
+        reactions: [String: Set<String>]? = nil,
+        groupReadStatus: GroupReadStatus? = nil
     ) {
         self.id = id
         self.text = text
@@ -76,6 +90,8 @@ struct ChatMessage: Identifiable, Codable {
         self.replyToMessageID = replyToMessageID
         self.replyToText = replyToText
         self.replyToSenderName = replyToSenderName
+        self.reactions = reactions
+        self.groupReadStatus = groupReadStatus
     }
 
     // Custom decoding to handle backward compatibility with old messages
@@ -103,6 +119,10 @@ struct ChatMessage: Identifiable, Codable {
         replyToMessageID = try container.decodeIfPresent(String.self, forKey: .replyToMessageID)
         replyToText = try container.decodeIfPresent(String.self, forKey: .replyToText)
         replyToSenderName = try container.decodeIfPresent(String.self, forKey: .replyToSenderName)
+        // Reactions with backward compatibility
+        reactions = try container.decodeIfPresent([String: Set<String>].self, forKey: .reactions)
+        // Group read status with backward compatibility
+        groupReadStatus = try container.decodeIfPresent(GroupReadStatus.self, forKey: .groupReadStatus)
     }
 
     static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {

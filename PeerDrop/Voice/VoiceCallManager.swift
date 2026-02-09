@@ -170,7 +170,7 @@ final class VoiceCallManager: ObservableObject {
         }
 
         // Prepare session
-        let session = session(for: senderID)
+        _ = session(for: senderID)
         activePeerID = senderID
 
         Task {

@@ -102,7 +102,7 @@ final class FileTransfer: ObservableObject {
             throw FileTransferError.notConnected
         }
 
-        let transferSession = session ?? self.session(for: peerID)
+        _ = session ?? self.session(for: peerID)
 
         isTransferring = true
         isCancelled = false

@@ -17,6 +17,13 @@ struct GroupChatView: View {
         connectionStatus.connected > 0
     }
 
+    /// Get PeerIdentity for all group members
+    private var groupMembers: [PeerIdentity] {
+        group.deviceIDs.compactMap { deviceID in
+            connectionManager.connection(for: deviceID)?.peerIdentity
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Connection status header
@@ -27,7 +34,7 @@ struct GroupChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 4) {
                         ForEach(chatManager.groupMessages) { message in
-                            GroupChatBubbleView(message: message)
+                            GroupChatBubbleView(message: message, members: groupMembers)
                                 .id(message.id)
                         }
                     }
@@ -126,6 +133,9 @@ struct GroupChatView: View {
 
 struct GroupChatBubbleView: View {
     let message: ChatMessage
+    let members: [PeerIdentity]
+
+    @State private var showReadReceipts = false
 
     private var bubbleColor: Color {
         message.isOutgoing ? Color.green : Color(.systemGray5)
@@ -166,6 +176,9 @@ struct GroupChatBubbleView: View {
 
                         if message.isOutgoing {
                             statusIcon
+                                .onTapGesture {
+                                    showReadReceipts = true
+                                }
                         }
                     }
                 }
@@ -180,37 +193,49 @@ struct GroupChatBubbleView: View {
             }
         }
         .padding(.horizontal, 4)
+        .sheet(isPresented: $showReadReceipts) {
+            GroupReadReceiptView(message: message, members: members)
+        }
     }
 
     @ViewBuilder
     private var statusIcon: some View {
-        switch message.status {
-        case .sending:
-            ProgressView()
-                .scaleEffect(0.5)
-                .frame(width: 12, height: 12)
-        case .sent:
-            Image(systemName: "checkmark")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.7))
-        case .delivered:
-            HStack(spacing: -3) {
+        let status = message.groupReadStatus
+        let deliveredCount = status?.deliveredTo.count ?? 0
+        let readCount = status?.readBy.count ?? 0
+        let totalMembers = members.count
+
+        Group {
+            switch message.status {
+            case .sending:
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 12, height: 12)
+            case .sent:
                 Image(systemName: "checkmark")
-                Image(systemName: "checkmark")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.7))
+            case .delivered, .read:
+                HStack(spacing: 2) {
+                    HStack(spacing: -3) {
+                        Image(systemName: "checkmark")
+                        Image(systemName: "checkmark")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(readCount > 0 ? .cyan : .white.opacity(0.7))
+
+                    // Show count indicator for group messages
+                    if totalMembers > 1 {
+                        Text("\(max(readCount, deliveredCount))")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(readCount > 0 ? .cyan : .white.opacity(0.7))
+                    }
+                }
+            case .failed:
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
             }
-            .font(.caption2)
-            .foregroundStyle(.white.opacity(0.7))
-        case .read:
-            HStack(spacing: -3) {
-                Image(systemName: "checkmark")
-                Image(systemName: "checkmark")
-            }
-            .font(.caption2)
-            .foregroundStyle(.cyan)
-        case .failed:
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.caption2)
-                .foregroundStyle(.red)
         }
     }
 

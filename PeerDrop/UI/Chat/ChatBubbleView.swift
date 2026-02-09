@@ -73,51 +73,93 @@ struct MessageBubbleShape: Shape {
 struct ChatBubbleView: View {
     let message: ChatMessage
     let chatManager: ChatManager?
+    @EnvironmentObject private var voicePlayer: VoicePlayer
+    @State private var showMediaPreview = false
+    @State private var showReactionPicker = false
+    var onReaction: ((String) -> Void)?
 
-    init(message: ChatMessage, chatManager: ChatManager? = nil) {
+    init(message: ChatMessage, chatManager: ChatManager? = nil, onReaction: ((String) -> Void)? = nil) {
         self.message = message
         self.chatManager = chatManager
+        self.onReaction = onReaction
+    }
+
+    private var isVoicePlaying: Bool {
+        voicePlayer.isPlaying(messageID: message.id)
+    }
+
+    private var isPreviewableMedia: Bool {
+        message.mediaType == "image" || message.mediaType == "video"
     }
 
     var body: some View {
         HStack {
             if message.isOutgoing { Spacer(minLength: 50) }
 
-            VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 1) {
-                // Reply preview if this is a reply
-                if message.isReply {
-                    replyPreview
-                }
+            VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 4) {
+                // Bubble content
+                VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 1) {
+                    // Reply preview if this is a reply
+                    if message.isReply {
+                        replyPreview
+                    }
 
-                // Content
-                if message.isMedia {
-                    mediaContent
-                } else {
-                    Text(message.text ?? "")
-                        .font(.body)
-                        .foregroundStyle(message.isOutgoing ? .white : .primary)
-                }
+                    // Content
+                    if message.isMedia {
+                        mediaContent
+                    } else {
+                        Text(message.text ?? "")
+                            .font(.body)
+                            .foregroundStyle(message.isOutgoing ? .white : .primary)
+                    }
 
-                // Timestamp + status inline
-                HStack(spacing: 3) {
-                    Text(message.timestamp, style: .time)
-                        .font(.system(size: 11))
-                        .foregroundStyle(message.isOutgoing ? .white.opacity(0.65) : .secondary)
+                    // Timestamp + status inline
+                    HStack(spacing: 3) {
+                        Text(message.timestamp, style: .time)
+                            .font(.system(size: 11))
+                            .foregroundStyle(message.isOutgoing ? .white.opacity(0.65) : .secondary)
 
-                    if message.isOutgoing {
-                        statusView
+                        if message.isOutgoing {
+                            statusView
+                        }
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(bubbleColor)
+                .clipShape(MessageBubbleShape(isOutgoing: message.isOutgoing))
+                .onLongPressGesture {
+                    showReactionPicker = true
+                }
+
+                // Reactions
+                if let reactions = message.reactions, !reactions.isEmpty {
+                    ReactionsView(reactions: reactions, isOutgoing: message.isOutgoing)
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(bubbleColor)
-            .clipShape(MessageBubbleShape(isOutgoing: message.isOutgoing))
 
             if !message.isOutgoing { Spacer(minLength: 50) }
         }
         .padding(.horizontal, 16)
         .padding(message.isOutgoing ? .trailing : .leading, -6)
+        .fullScreenCover(isPresented: $showMediaPreview) {
+            if let chatManager, isPreviewableMedia {
+                MediaPreviewView(message: message, chatManager: chatManager)
+            }
+        }
+        .sheet(isPresented: $showReactionPicker) {
+            ReactionPickerView(
+                onSelect: { emoji in
+                    showReactionPicker = false
+                    onReaction?(emoji)
+                },
+                onDismiss: {
+                    showReactionPicker = false
+                }
+            )
+            .presentationDetents([.height(80)])
+            .presentationDragIndicator(.hidden)
+        }
     }
 
     // MARK: - Reply Preview
@@ -212,25 +254,31 @@ struct ChatBubbleView: View {
 
     @ViewBuilder
     private var imageContent: some View {
-        if let thumbData = message.thumbnailData, let uiImage = UIImage(data: thumbData) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 220, maxHeight: 220)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        } else if let localPath = message.localFileURL,
-                  let chatManager,
-                  let mediaData = chatManager.loadMediaData(relativePath: localPath),
-                  let uiImage = UIImage(data: mediaData) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 220, maxHeight: 220)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        } else {
-            Label(message.fileName ?? "Image", systemImage: "photo")
-                .font(.subheadline)
-                .foregroundStyle(message.isOutgoing ? .white : .primary)
+        Group {
+            if let thumbData = message.thumbnailData, let uiImage = UIImage(data: thumbData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 220, maxHeight: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if let localPath = message.localFileURL,
+                      let chatManager,
+                      let mediaData = chatManager.loadMediaData(relativePath: localPath),
+                      let uiImage = UIImage(data: mediaData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 220, maxHeight: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Label(message.fileName ?? "Image", systemImage: "photo")
+                    .font(.subheadline)
+                    .foregroundStyle(message.isOutgoing ? .white : .primary)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showMediaPreview = true
         }
     }
 
@@ -253,31 +301,86 @@ struct ChatBubbleView: View {
                 .foregroundStyle(.white)
                 .shadow(radius: 4)
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showMediaPreview = true
+        }
     }
 
     @ViewBuilder
     private var voiceContent: some View {
         HStack(spacing: 8) {
-            Image(systemName: "play.fill")
-                .font(.caption)
-                .foregroundStyle(message.isOutgoing ? .white : .primary)
-
-            // Waveform bars
-            HStack(spacing: 2) {
-                ForEach(0..<20, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(message.isOutgoing ? Color.white.opacity(0.7) : Color.primary.opacity(0.4))
-                        .frame(width: 2, height: CGFloat.random(in: 4...16))
-                }
+            // Play/Pause button
+            Button {
+                toggleVoicePlayback()
+            } label: {
+                Image(systemName: isVoicePlaying ? "pause.fill" : "play.fill")
+                    .font(.body)
+                    .foregroundStyle(message.isOutgoing ? .white : .primary)
             }
 
-            if let duration = message.duration {
+            // Waveform bars with progress
+            GeometryReader { geometry in
+                HStack(spacing: 2) {
+                    ForEach(0..<20, id: \.self) { i in
+                        let progress = isVoicePlaying ? playbackProgress : 0
+                        let barProgress = Double(i) / 20.0
+                        let isPlayed = barProgress < progress
+
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(
+                                isPlayed
+                                    ? (message.isOutgoing ? Color.white : Color.blue)
+                                    : (message.isOutgoing ? Color.white.opacity(0.4) : Color.primary.opacity(0.3))
+                            )
+                            .frame(width: 2, height: waveformHeight(for: i))
+                    }
+                }
+            }
+            .frame(width: 60, height: 20)
+
+            // Duration/Current time
+            if isVoicePlaying {
+                Text(formatDuration(voicePlayer.currentTime))
+                    .font(.caption)
+                    .foregroundStyle(message.isOutgoing ? .white.opacity(0.7) : .secondary)
+                    .monospacedDigit()
+            } else if let duration = message.duration {
                 Text(formatDuration(duration))
                     .font(.caption)
                     .foregroundStyle(message.isOutgoing ? .white.opacity(0.7) : .secondary)
             }
         }
-        .frame(minWidth: 140)
+        .frame(minWidth: 160)
+    }
+
+    private var playbackProgress: Double {
+        guard voicePlayer.duration > 0 else { return 0 }
+        return voicePlayer.currentTime / voicePlayer.duration
+    }
+
+    private func waveformHeight(for index: Int) -> CGFloat {
+        // Generate pseudo-random but consistent heights
+        let seed = message.id.hashValue + index
+        let normalized = abs(sin(Double(seed))) * 0.7 + 0.3
+        return CGFloat(normalized) * 16 + 4
+    }
+
+    private func toggleVoicePlayback() {
+        if isVoicePlaying {
+            voicePlayer.togglePlayPause()
+            return
+        }
+
+        // Stop any current playback
+        voicePlayer.stop()
+
+        // Load and play this voice message
+        if let localPath = message.localFileURL,
+           let chatManager,
+           let data = chatManager.loadMediaData(relativePath: localPath) {
+            voicePlayer.play(data: data, messageID: message.id)
+        }
     }
 
     @ViewBuilder

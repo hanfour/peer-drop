@@ -16,10 +16,11 @@ struct ChatView: View {
     @State private var showPhotoPicker = false
     @State private var showDocumentPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
-    @State private var isRecordingVoice = false
-    @State private var voiceRecordingDuration: TimeInterval = 0
-    @State private var voiceRecordingTimer: Timer?
     @State private var replyingToMessage: ChatMessage?
+    @State private var showMicPermissionAlert = false
+    @State private var showSearch = false
+    @State private var scrollToMessageID: String?
+    @StateObject private var voiceRecorder = VoiceRecorder()
 
     /// Check if this specific peer is connected (multi-connection aware).
     private var isPeerConnected: Bool {
@@ -74,16 +75,27 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 4) {
                         ForEach(chatManager.messages) { message in
-                            ChatBubbleView(message: message, chatManager: chatManager)
-                                .id(message.id)
-                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                    Button {
-                                        replyingToMessage = message
-                                    } label: {
-                                        Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
-                                    }
-                                    .tint(.blue)
+                            ChatBubbleView(
+                                message: message,
+                                chatManager: chatManager,
+                                onReaction: { emoji in
+                                    connectionManager.sendReaction(
+                                        emoji: emoji,
+                                        to: message.id,
+                                        action: .add,
+                                        peerID: peerID
+                                    )
                                 }
+                            )
+                            .id(message.id)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    replyingToMessage = message
+                                } label: {
+                                    Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                                }
+                                .tint(.blue)
+                            }
                         }
                     }
                     .padding(.horizontal, 8)
@@ -93,6 +105,17 @@ struct ChatView: View {
                     if let last = chatManager.messages.last {
                         withAnimation {
                             proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
+                }
+                .onChange(of: scrollToMessageID) { messageID in
+                    if let messageID {
+                        withAnimation {
+                            proxy.scrollTo(messageID, anchor: .center)
+                        }
+                        // Clear after scrolling
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            scrollToMessageID = nil
                         }
                     }
                 }
@@ -155,6 +178,15 @@ struct ChatView: View {
         }
         .navigationTitle(peerName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSearch = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+            }
+        }
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
             chatManager.activeChatPeerID = peerID
@@ -193,6 +225,25 @@ struct ChatView: View {
                     sendFile(url)
                 }
             }
+        }
+        .alert("Microphone Access Required", isPresented: $showMicPermissionAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Please enable microphone access in Settings to record voice messages.")
+        }
+        .sheet(isPresented: $showSearch) {
+            ChatSearchView(
+                chatManager: chatManager,
+                peerID: peerID,
+                onSelectMessage: { message in
+                    scrollToMessageID = message.id
+                }
+            )
         }
     }
 
@@ -235,15 +286,34 @@ struct ChatView: View {
     private var inputBar: some View {
         VStack(spacing: 0) {
             // Recording indicator
-            if isRecordingVoice {
+            if voiceRecorder.isRecording {
                 HStack(spacing: 8) {
                     Circle()
                         .fill(.red)
                         .frame(width: 8, height: 8)
-                    Text("Recording \(formatDuration(voiceRecordingDuration))")
+
+                    Text("Recording \(formatDuration(voiceRecorder.duration))")
                         .font(.caption)
                         .foregroundStyle(.red)
+
+                    // Waveform visualization
+                    HStack(spacing: 2) {
+                        ForEach(0..<15, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(Color.red.opacity(0.6))
+                                .frame(width: 2, height: CGFloat(voiceRecorder.audioLevel * 16 + 4))
+                        }
+                    }
+
                     Spacer()
+
+                    // Cancel button
+                    Button {
+                        voiceRecorder.cancelRecording()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.gray)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
@@ -276,17 +346,17 @@ struct ChatView: View {
                 // Send or Mic button
                 if messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Button {
-                        if isRecordingVoice {
+                        if voiceRecorder.isRecording {
                             stopAndSendVoiceMessage()
                         } else {
                             startVoiceRecording()
                         }
                     } label: {
-                        Image(systemName: isRecordingVoice ? "stop.circle.fill" : "mic.circle.fill")
+                        Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(isRecordingVoice ? Color.red : Color.gray)
+                            .foregroundStyle(voiceRecorder.isRecording ? Color.red : Color.gray)
                     }
-                    .accessibilityLabel(isRecordingVoice ? "Stop recording" : "Voice message")
+                    .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                 } else {
                     Button {
                         sendMessage()
@@ -374,36 +444,56 @@ struct ChatView: View {
         )
     }
 
-    // MARK: - Voice recording (simplified — saves silent placeholder for now)
+    // MARK: - Voice recording
 
     private func startVoiceRecording() {
-        isRecordingVoice = true
-        voiceRecordingDuration = 0
-        voiceRecordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            Task { @MainActor in
-                voiceRecordingDuration += 0.1
+        Task {
+            // Check permission first
+            if !VoiceRecorder.hasPermission {
+                let granted = await VoiceRecorder.requestPermission()
+                if !granted {
+                    await MainActor.run {
+                        showMicPermissionAlert = true
+                    }
+                    return
+                }
+            }
+
+            do {
+                try voiceRecorder.startRecording()
+            } catch {
+                print("[ChatView] Failed to start recording: \(error)")
             }
         }
     }
 
     private func stopAndSendVoiceMessage() {
-        isRecordingVoice = false
-        voiceRecordingTimer?.invalidate()
-        voiceRecordingTimer = nil
+        let duration = voiceRecorder.duration
+        guard let url = voiceRecorder.stopRecording() else { return }
+        guard duration >= 0.5 else {
+            // Ignore very short recordings
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
 
-        let duration = voiceRecordingDuration
-        guard duration >= 0.5 else { return } // Ignore very short recordings
+        // Read the recorded audio data
+        guard let data = try? Data(contentsOf: url) else {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
 
-        // Placeholder: send a voice message record (actual AVAudioRecorder integration is separate)
         let fileName = "Voice_\(Date().timeIntervalSince1970).m4a"
         connectionManager.sendMediaMessage(
             mediaType: .voice,
             fileName: fileName,
-            fileData: Data(),
+            fileData: data,
             mimeType: "audio/mp4",
             duration: duration,
             thumbnailData: nil
         )
+
+        // Clean up temp file
+        try? FileManager.default.removeItem(at: url)
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {

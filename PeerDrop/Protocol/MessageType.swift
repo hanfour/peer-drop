@@ -34,6 +34,7 @@ enum MessageType: String, Codable {
     case chatReject
     case messageReceipt
     case typingIndicator
+    case reaction
 
     // Connection lifecycle
     case disconnect
