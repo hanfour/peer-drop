@@ -73,7 +73,7 @@ struct ConnectionView: View {
                             circleButton(icon: "phone.fill", label: "Voice Call", color: .green, disabled: !voiceCallEnabled) {
                                 if voiceCallEnabled {
                                     Task {
-                                        await connectionManager.voiceCallManager?.startCall()
+                                        await connectionManager.voiceCallManager?.startCall(to: peer.id)
                                     }
                                 } else {
                                     disabledFeatureName = "Voice Calls"

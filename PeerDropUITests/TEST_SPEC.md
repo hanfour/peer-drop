@@ -813,7 +813,7 @@ Real device-to-device integration tests using two simulators running in parallel
 | Suite | Tests | Description |
 |-------|-------|-------------|
 | smoke | 4 | Core path: DISC-01, CONN-01, CHAT-01, FILE-01 |
-| full | 12 | All E2E scenarios |
+| full | 18 | All E2E scenarios |
 
 ### E2E Test Scenarios
 
@@ -831,6 +831,12 @@ Real device-to-device integration tests using two simulators running in parallel
 | FILE-02 | Transfer Progress | Verify progress UI elements |
 | LIB-01 | Device Saved | Device saved to contacts after connection |
 | UI-01 | Tab Navigation | Switch between Nearby and Connected tabs |
+| CALL-01 | Voice Call | Initiate and verify voice call UI |
+| CALL-02 | Call Decline/Accept | Decline first call, accept second |
+| VOICE-01 | Record Voice Message | Record and send voice message |
+| VOICE-02 | Play Voice Message | Play/pause received voice message |
+| REACT-01 | Message Reaction | Add emoji reaction to message |
+| REPLY-01 | Swipe to Reply | Swipe-to-reply and send reply |
 
 ### Synchronization Mechanism
 

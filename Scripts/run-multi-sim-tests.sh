@@ -256,8 +256,8 @@ cmd_run() {
             acceptor_tests="DISC_01,CONN_01,CHAT_01,FILE_01"
             ;;
         full)
-            initiator_tests="DISC_01,DISC_02,CONN_01,CONN_02,CONN_03,CHAT_01,CHAT_02,CHAT_03,FILE_01,FILE_02,LIB_01,UI_01"
-            acceptor_tests="DISC_01,DISC_02,CONN_01,CONN_02,CONN_03,CHAT_01,CHAT_02,CHAT_03,FILE_01,FILE_02,LIB_01,UI_01"
+            initiator_tests="DISC_01,DISC_02,CONN_01,CONN_02,CONN_03,CHAT_01,CHAT_02,CHAT_03,FILE_01,FILE_02,LIB_01,UI_01,CALL_01,CALL_02,VOICE_01,VOICE_02,REACT_01,REPLY_01"
+            acceptor_tests="DISC_01,DISC_02,CONN_01,CONN_02,CONN_03,CHAT_01,CHAT_02,CHAT_03,FILE_01,FILE_02,LIB_01,UI_01,CALL_01,CALL_02,VOICE_01,VOICE_02,REACT_01,REPLY_01"
             ;;
         *)
             log_error "Unknown suite: $suite. Use 'smoke' or 'full'."
