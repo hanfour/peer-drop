@@ -7,7 +7,10 @@
 #   ./Scripts/run-multi-sim-tests.sh setup       # Setup simulators and install app
 #   ./Scripts/run-multi-sim-tests.sh run smoke   # Run smoke tests (core scenarios)
 #   ./Scripts/run-multi-sim-tests.sh run full    # Run full test suite
+#   ./Scripts/run-multi-sim-tests.sh run perf    # Run performance tests
 #   ./Scripts/run-multi-sim-tests.sh single CONN-01  # Run a specific test
+#   ./Scripts/run-multi-sim-tests.sh baseline    # Run perf tests and set baseline
+#   ./Scripts/run-multi-sim-tests.sh compare     # Run perf tests and compare to baseline
 #   ./Scripts/run-multi-sim-tests.sh clean       # Clean sync files and derived data
 #
 # ═══════════════════════════════════════════════════════════════════════════
@@ -23,12 +26,33 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_FILE="$PROJECT_DIR/PeerDrop.xcodeproj"
 SCHEME="PeerDrop"
 
-# Simulator UUIDs (from xcrun simctl list)
-SIM1_UUID="080C1B81-FD68-4ED7-8CE3-A3F40559211D"  # iPhone 17 Pro (Initiator)
-SIM2_UUID="DA3E4A31-66A4-41AA-89A6-99A85679ED26"  # iPhone 17 Pro Max (Acceptor)
-
+# Simulator names (used for auto-detection)
 SIM1_NAME="iPhone 17 Pro"
 SIM2_NAME="iPhone 17 Pro Max"
+
+# Auto-detect simulator UUIDs from names
+get_simulator_uuid() {
+    local name=$1
+    # Get UUID for the first available simulator matching the name
+    xcrun simctl list devices available -j | \
+        python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for runtime, devices in data.get('devices', {}).items():
+    for d in devices:
+        if d.get('name') == '$name' and d.get('isAvailable', False):
+            print(d['udid'])
+            sys.exit(0)
+" 2>/dev/null
+}
+
+# Initialize UUIDs (will be set in init_simulators)
+SIM1_UUID=""
+SIM2_UUID=""
+
+# Unique run ID for test isolation
+RUN_ID=$(date +%s%3N)
+export PEERDROP_TEST_RUN_ID="$RUN_ID"
 
 # Build paths
 DERIVED_DATA="$PROJECT_DIR/DerivedData-MultiSim"
@@ -76,6 +100,28 @@ log_step() {
     echo ""
 }
 
+init_simulators() {
+    if [ -z "$SIM1_UUID" ]; then
+        SIM1_UUID=$(get_simulator_uuid "$SIM1_NAME")
+        if [ -z "$SIM1_UUID" ]; then
+            log_error "Could not find simulator: $SIM1_NAME"
+            log_info "Available simulators:"
+            xcrun simctl list devices available | grep "iPhone"
+            exit 1
+        fi
+        log_info "Detected $SIM1_NAME: $SIM1_UUID"
+    fi
+
+    if [ -z "$SIM2_UUID" ]; then
+        SIM2_UUID=$(get_simulator_uuid "$SIM2_NAME")
+        if [ -z "$SIM2_UUID" ]; then
+            log_error "Could not find simulator: $SIM2_NAME"
+            exit 1
+        fi
+        log_info "Detected $SIM2_NAME: $SIM2_UUID"
+    fi
+}
+
 check_simulator_exists() {
     local uuid=$1
     xcrun simctl list devices | grep -q "$uuid"
@@ -108,18 +154,9 @@ wait_for_simulator_boot() {
 cmd_setup() {
     log_step "Setting up Multi-Simulator Test Environment"
 
-    # Check simulators exist
-    log_info "Checking simulator availability..."
-    if ! check_simulator_exists "$SIM1_UUID"; then
-        log_error "Simulator 1 ($SIM1_NAME) not found: $SIM1_UUID"
-        log_info "Available simulators:"
-        xcrun simctl list devices available | grep "iPhone"
-        exit 1
-    fi
-    if ! check_simulator_exists "$SIM2_UUID"; then
-        log_error "Simulator 2 ($SIM2_NAME) not found: $SIM2_UUID"
-        exit 1
-    fi
+    # Auto-detect simulator UUIDs
+    log_info "Detecting simulators..."
+    init_simulators
     log_success "Both simulators found"
 
     # Boot simulators in parallel
@@ -218,6 +255,9 @@ cmd_run() {
 
     log_step "Running E2E Tests: $suite"
 
+    # Auto-detect simulator UUIDs
+    init_simulators
+
     # Load xctestrun path
     if [ ! -f "$DERIVED_DATA/.xctestrun_path" ]; then
         log_error "No build found. Run 'setup' first."
@@ -246,6 +286,11 @@ cmd_run() {
     mkdir -p "$SYNC_DIR"
     chmod 777 "$SYNC_DIR"
 
+    # Write shared run ID to file for both simulators to read
+    echo "$RUN_ID" > "$SYNC_DIR/run_id"
+    chmod 644 "$SYNC_DIR/run_id"
+    log_info "Shared Run ID: $RUN_ID"
+
     # Determine which tests to run
     local initiator_tests=""
     local acceptor_tests=""
@@ -259,8 +304,12 @@ cmd_run() {
             initiator_tests="DISC_01,DISC_02,CONN_01,CONN_02,CONN_03,CHAT_01,CHAT_02,CHAT_03,FILE_01,FILE_02,LIB_01,UI_01,CALL_01,CALL_02,VOICE_01,VOICE_02,REACT_01,REPLY_01"
             acceptor_tests="DISC_01,DISC_02,CONN_01,CONN_02,CONN_03,CHAT_01,CHAT_02,CHAT_03,FILE_01,FILE_02,LIB_01,UI_01,CALL_01,CALL_02,VOICE_01,VOICE_02,REACT_01,REPLY_01"
             ;;
+        perf)
+            initiator_tests="PERF_01,PERF_02,PERF_03,PERF_04"
+            acceptor_tests="PERF_01,PERF_02,PERF_03,PERF_04"
+            ;;
         *)
-            log_error "Unknown suite: $suite. Use 'smoke' or 'full'."
+            log_error "Unknown suite: $suite. Use 'smoke', 'full', or 'perf'."
             exit 1
             ;;
     esac
@@ -270,6 +319,7 @@ cmd_run() {
     mkdir -p "$result_dir/initiator" "$result_dir/acceptor"
 
     log_info "Results will be saved to: $result_dir"
+    log_info "Test Run ID: $RUN_ID"
 
     # Write suite info to sync dir
     echo "$suite" > "$SYNC_DIR/test_suite"
@@ -358,6 +408,11 @@ cmd_run() {
     # Generate HTML report
     generate_html_report "$result_dir" "$suite"
 
+    # Aggregate performance metrics if this is a perf suite
+    if [ "$suite" = "perf" ]; then
+        aggregate_performance_metrics "$result_dir"
+    fi
+
     # Final status
     echo ""
     if [ $initiator_status -eq 0 ] && [ $acceptor_status -eq 0 ]; then
@@ -367,6 +422,238 @@ cmd_run() {
         log_error "Some tests failed. Check results at: $result_dir"
         return 1
     fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Performance Metrics Aggregation
+# ─────────────────────────────────────────────────────────────────────────────
+
+aggregate_performance_metrics() {
+    local result_dir=$1
+    local metrics_file="$result_dir/metrics.json"
+
+    log_info "Aggregating performance metrics..."
+
+    # Find all metrics files from the sync directory
+    local all_metrics=""
+    local run_dirs=$(find "$SYNC_DIR/$RUN_ID" -type d -name "PERF*" 2>/dev/null)
+
+    python3 << PYEOF
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+
+sync_dir = "$SYNC_DIR/$RUN_ID"
+output_file = "$metrics_file"
+
+all_metrics = {}
+
+# Walk through all PERF test directories
+for test_dir in Path(sync_dir).glob("PERF*"):
+    for metrics_file in test_dir.glob("metrics-*.json"):
+        try:
+            with open(metrics_file) as f:
+                data = json.load(f)
+                for metric in data.get("metrics", []):
+                    name = metric["name"]
+                    value = metric["value"]
+                    if name not in all_metrics:
+                        all_metrics[name] = []
+                    all_metrics[name].append(value)
+        except Exception as e:
+            print(f"Warning: Could not parse {metrics_file}: {e}")
+
+# Calculate aggregated values
+aggregated = []
+for name, values in sorted(all_metrics.items()):
+    if values:
+        avg = sum(values) / len(values)
+        aggregated.append({
+            "name": name,
+            "value": round(avg, 4),
+            "unit": "seconds",
+            "samples": len(values)
+        })
+
+# Write output
+output = {
+    "runId": "$RUN_ID",
+    "timestamp": datetime.now().isoformat(),
+    "metrics": aggregated
+}
+
+os.makedirs(os.path.dirname(output_file), exist_ok=True)
+with open(output_file, 'w') as f:
+    json.dump(output, f, indent=2)
+
+print(f"Aggregated {len(aggregated)} metrics to {output_file}")
+
+# Print summary
+if aggregated:
+    print("\n📊 Performance Metrics Summary:")
+    print("┌────────────────────────────────┬──────────────┬──────────┐")
+    print("│ Metric                         │ Value        │ Target   │")
+    print("├────────────────────────────────┼──────────────┼──────────┤")
+
+    targets = {
+        "discovery-time": 5.0,
+        "connection-time": 10.0,
+        "message-rtt-avg": 10.0,  # Includes UI automation overhead
+        "message-rtt-p95": 15.0,  # Includes UI automation overhead
+    }
+
+    for m in aggregated:
+        name = m["name"][:30]
+        value = m["value"]
+        target = targets.get(m["name"], None)
+        target_str = f"< {target}s" if target else "-"
+        status = ""
+        if target:
+            status = "✅" if value < target else "❌"
+        print(f"│ {name:<30} │ {value:>8.3f}s {status:<2} │ {target_str:<8} │")
+
+    print("└────────────────────────────────┴──────────────┴──────────┘")
+PYEOF
+
+    if [ -f "$metrics_file" ]; then
+        log_success "Metrics written to: $metrics_file"
+    else
+        log_warning "No metrics collected"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Baseline Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+cmd_baseline() {
+    log_step "Setting Performance Baseline"
+
+    # Run perf tests first
+    cmd_run "perf"
+    local perf_status=$?
+
+    if [ $perf_status -ne 0 ]; then
+        log_error "Performance tests failed. Cannot set baseline."
+        return 1
+    fi
+
+    # Find the latest metrics file
+    local latest_result=$(ls -td "$OUTPUT_DIR"/*/ 2>/dev/null | head -1)
+    local metrics_file="$latest_result/metrics.json"
+
+    if [ ! -f "$metrics_file" ]; then
+        log_error "No metrics file found at: $metrics_file"
+        return 1
+    fi
+
+    # Copy to baseline
+    local baseline_file="$OUTPUT_DIR/baseline.json"
+    cp "$metrics_file" "$baseline_file"
+
+    log_success "Baseline saved to: $baseline_file"
+
+    # Show baseline values
+    echo ""
+    echo "Baseline values:"
+    python3 << PYEOF
+import json
+
+with open("$baseline_file") as f:
+    data = json.load(f)
+
+for m in data.get("metrics", []):
+    print(f"  {m['name']}: {m['value']:.4f}s")
+PYEOF
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compare Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+cmd_compare() {
+    log_step "Comparing Performance to Baseline"
+
+    local baseline_file="$OUTPUT_DIR/baseline.json"
+
+    if [ ! -f "$baseline_file" ]; then
+        log_error "No baseline found. Run 'baseline' first."
+        return 1
+    fi
+
+    # Run perf tests
+    cmd_run "perf"
+    local perf_status=$?
+
+    if [ $perf_status -ne 0 ]; then
+        log_error "Performance tests failed."
+        return 1
+    fi
+
+    # Find the latest metrics file
+    local latest_result=$(ls -td "$OUTPUT_DIR"/*/ 2>/dev/null | head -1)
+    local metrics_file="$latest_result/metrics.json"
+
+    if [ ! -f "$metrics_file" ]; then
+        log_error "No metrics file found at: $metrics_file"
+        return 1
+    fi
+
+    # Compare with baseline
+    python3 << PYEOF
+import json
+import sys
+
+with open("$baseline_file") as f:
+    baseline = json.load(f)
+
+with open("$metrics_file") as f:
+    current = json.load(f)
+
+baseline_metrics = {m["name"]: m["value"] for m in baseline.get("metrics", [])}
+current_metrics = {m["name"]: m["value"] for m in current.get("metrics", [])}
+
+THRESHOLD = 0.20  # 20% regression threshold
+
+print("\n📊 Performance Comparison (vs Baseline):")
+print("┌────────────────────────────────┬──────────────┬──────────────┬──────────┬────────┐")
+print("│ Metric                         │ Baseline     │ Current      │ Delta    │ Status │")
+print("├────────────────────────────────┼──────────────┼──────────────┼──────────┼────────┤")
+
+regressions = []
+for name in sorted(set(baseline_metrics.keys()) | set(current_metrics.keys())):
+    base_val = baseline_metrics.get(name, 0)
+    curr_val = current_metrics.get(name, 0)
+
+    if base_val > 0:
+        delta_pct = ((curr_val - base_val) / base_val) * 100
+        delta_str = f"{delta_pct:+.1f}%"
+
+        if delta_pct > THRESHOLD * 100:
+            status = "❌ REGR"
+            regressions.append(name)
+        elif delta_pct < -THRESHOLD * 100:
+            status = "🚀 IMPR"
+        else:
+            status = "✅ OK"
+    else:
+        delta_str = "N/A"
+        status = "➖ NEW"
+
+    print(f"│ {name[:30]:<30} │ {base_val:>10.3f}s │ {curr_val:>10.3f}s │ {delta_str:>8} │ {status:<6} │")
+
+print("└────────────────────────────────┴──────────────┴──────────────┴──────────┴────────┘")
+
+if regressions:
+    print(f"\n⚠️  WARNING: {len(regressions)} metric(s) regressed beyond {THRESHOLD*100:.0f}% threshold!")
+    for r in regressions:
+        print(f"   - {r}")
+    sys.exit(1)
+else:
+    print("\n✅ All metrics within acceptable range.")
+    sys.exit(0)
+PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -390,10 +677,17 @@ cmd_single() {
         echo "  CHAT-03  - Read Receipts"
         echo "  FILE-01  - File Picker UI"
         echo "  FILE-02  - Transfer Progress"
+        echo "  PERF-01  - Discovery Performance"
+        echo "  PERF-02  - Connection Performance"
+        echo "  PERF-03  - Message RTT"
+        echo "  PERF-04  - UI Responsiveness"
         exit 1
     fi
 
     log_step "Running Single Test: $test_id"
+
+    # Auto-detect simulator UUIDs
+    init_simulators
 
     # Convert test ID to test method name (e.g., DISC-01 -> test_DISC_01)
     local method_name="test_${test_id//-/_}"
@@ -409,6 +703,10 @@ cmd_single() {
     rm -rf "$SYNC_DIR"/*
     mkdir -p "$SYNC_DIR"
     chmod 777 "$SYNC_DIR"
+
+    # Write shared run ID to file for both simulators to read
+    echo "$RUN_ID" > "$SYNC_DIR/run_id"
+    chmod 644 "$SYNC_DIR/run_id"
 
     # Write test info
     echo "single" > "$SYNC_DIR/test_suite"
@@ -573,6 +871,44 @@ generate_html_report() {
         .status-fail { background: rgba(248, 113, 113, 0.2); color: #f87171; }
         .test-name { flex: 1; }
         .test-duration { color: #8b8b9e; font-size: 0.9rem; }
+        .perf-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .perf-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .perf-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(45deg, #f59e0b, #ef4444);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .perf-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .perf-metric {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            padding: 16px;
+            border-left: 4px solid #667eea;
+        }
+        .perf-metric.good { border-left-color: #4ade80; }
+        .perf-metric.bad { border-left-color: #f87171; }
+        .perf-metric-name { color: #8b8b9e; font-size: 0.85rem; margin-bottom: 4px; }
+        .perf-metric-value { font-size: 1.5rem; font-weight: bold; }
+        .perf-metric-target { color: #8b8b9e; font-size: 0.8rem; margin-top: 4px; }
         footer {
             text-align: center;
             color: #8b8b9e;
@@ -631,6 +967,8 @@ generate_html_report() {
             </ul>
         </div>
 
+        PERF_SECTION_PLACEHOLDER
+
         <footer>
             Generated by PeerDrop Multi-Simulator Test Runner
         </footer>
@@ -681,6 +1019,73 @@ HTMLEOF
         done < "$result_dir/acceptor/output.log"
     fi
 
+    # Generate performance section if metrics exist
+    local perf_section=""
+    local metrics_file="$result_dir/metrics.json"
+
+    if [ -f "$metrics_file" ]; then
+        perf_section=$(python3 << PYEOF
+import json
+
+with open("$metrics_file") as f:
+    data = json.load(f)
+
+metrics = data.get("metrics", [])
+if not metrics:
+    print("")
+else:
+    targets = {
+        "discovery-time": 5.0,
+        "connection-time": 10.0,
+        "message-rtt-avg": 10.0,  # Includes UI automation overhead
+        "message-rtt-p95": 15.0,  # Includes UI automation overhead
+        "accept-time": 5.0,
+        "tab-switch-avg": 3.0,
+        "rapid-input-avg": 8.0,
+    }
+
+    html = '''
+        <div class="perf-section">
+            <div class="perf-header">
+                <div class="perf-icon">⚡</div>
+                <div>
+                    <h2>Performance Metrics</h2>
+                    <p style="color: #8b8b9e">Measured during test execution</p>
+                </div>
+            </div>
+            <div class="perf-grid">
+    '''
+
+    for m in metrics:
+        name = m["name"]
+        value = m["value"]
+        target = targets.get(name)
+
+        if target:
+            status_class = "good" if value < target else "bad"
+            target_html = f'<div class="perf-metric-target">Target: &lt; {target}s</div>'
+        else:
+            status_class = ""
+            target_html = ""
+
+        html += f'''
+                <div class="perf-metric {status_class}">
+                    <div class="perf-metric-name">{name}</div>
+                    <div class="perf-metric-value">{value:.3f}s</div>
+                    {target_html}
+                </div>
+        '''
+
+    html += '''
+            </div>
+        </div>
+    '''
+
+    print(html)
+PYEOF
+)
+    fi
+
     # Replace placeholders
     sed -i '' "s|TIMESTAMP_PLACEHOLDER|$timestamp|g" "$report_file"
     sed -i '' "s|SUITE_PLACEHOLDER|$suite|g" "$report_file"
@@ -689,6 +1094,28 @@ HTMLEOF
     sed -i '' "s|FAILED_PLACEHOLDER|$failed|g" "$report_file"
     sed -i '' "s|INITIATOR_TESTS_PLACEHOLDER|$init_tests|g" "$report_file"
     sed -i '' "s|ACCEPTOR_TESTS_PLACEHOLDER|$accept_tests|g" "$report_file"
+
+    # Replace performance section (need to use temp file for multiline)
+    if [ -n "$perf_section" ]; then
+        # Write perf section to temp file
+        echo "$perf_section" > "$result_dir/perf_section.tmp"
+        # Use python to replace placeholder with multiline content
+        python3 << PYEOF
+with open("$result_dir/perf_section.tmp") as f:
+    perf_html = f.read()
+
+with open("$report_file") as f:
+    content = f.read()
+
+content = content.replace("PERF_SECTION_PLACEHOLDER", perf_html)
+
+with open("$report_file", "w") as f:
+    f.write(content)
+PYEOF
+        rm -f "$result_dir/perf_section.tmp"
+    else
+        sed -i '' "s|PERF_SECTION_PLACEHOLDER||g" "$report_file"
+    fi
 
     log_success "Report generated: $report_file"
 
@@ -703,9 +1130,12 @@ HTMLEOF
 cmd_status() {
     log_step "System Status"
 
+    # Auto-detect simulator UUIDs
+    init_simulators
+
     echo "Simulators:"
-    echo "  $SIM1_NAME: $(get_simulator_state "$SIM1_UUID")"
-    echo "  $SIM2_NAME: $(get_simulator_state "$SIM2_UUID")"
+    echo "  $SIM1_NAME ($SIM1_UUID): $(get_simulator_state "$SIM1_UUID")"
+    echo "  $SIM2_NAME ($SIM2_UUID): $(get_simulator_state "$SIM2_UUID")"
     echo ""
 
     echo "Build:"
@@ -745,8 +1175,10 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  setup         Boot simulators and build app for testing"
-    echo "  run <suite>   Run test suite (smoke|full)"
+    echo "  run <suite>   Run test suite (smoke|full|perf)"
     echo "  single <id>   Run a single test by ID (e.g., CONN-01)"
+    echo "  baseline      Run performance tests and save as baseline"
+    echo "  compare       Run performance tests and compare to baseline"
     echo "  status        Show system status"
     echo "  clean         Clean sync files and derived data"
     echo ""
@@ -754,7 +1186,10 @@ usage() {
     echo "  $0 setup                   # First-time setup"
     echo "  $0 run smoke               # Run smoke tests"
     echo "  $0 run full                # Run full suite"
+    echo "  $0 run perf                # Run performance tests"
     echo "  $0 single CONN-01          # Run connection test"
+    echo "  $0 baseline                # Set performance baseline"
+    echo "  $0 compare                 # Compare to baseline"
     echo ""
 }
 
@@ -767,6 +1202,12 @@ case ${1:-} in
         ;;
     single)
         cmd_single "${2:-}"
+        ;;
+    baseline)
+        cmd_baseline
+        ;;
+    compare)
+        cmd_compare
         ;;
     status)
         cmd_status

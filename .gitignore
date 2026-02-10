@@ -54,4 +54,5 @@ playground.xcworkspace
 
 # E2E Test artifacts
 TestResults/
+!TestResults/E2E/baseline.json
 DerivedData-MultiSim/

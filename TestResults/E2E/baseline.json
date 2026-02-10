@@ -1,0 +1,150 @@
+{
+  "runId": "17707118393N",
+  "timestamp": "2026-02-10T16:27:38.450244",
+  "metrics": [
+    {
+      "name": "accept-time",
+      "value": 2.9419,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "connection-time",
+      "value": 4.5039,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "discovery-time",
+      "value": 1.4351,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "message-rtt-avg",
+      "value": 6.6498,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "message-rtt-p95",
+      "value": 7.3484,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rapid-input",
+      "value": 26.2364,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rapid-input-avg",
+      "value": 5.2473,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-1",
+      "value": 6.7782,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-10",
+      "value": 6.7938,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-2",
+      "value": 7.3484,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-3",
+      "value": 6.866,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-4",
+      "value": 7.0659,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-5",
+      "value": 6.1826,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-6",
+      "value": 6.1772,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-7",
+      "value": 6.5796,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-8",
+      "value": 6.5721,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "rtt-9",
+      "value": 6.1341,
+      "unit": "seconds",
+      "samples": 1
+    },
+    {
+      "name": "tab-switch-1",
+      "value": 5.7989,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "tab-switch-2",
+      "value": 5.8075,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "tab-switch-3",
+      "value": 5.8031,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "tab-switch-4",
+      "value": 5.7274,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "tab-switch-5",
+      "value": 5.7927,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "tab-switch-avg",
+      "value": 2.893,
+      "unit": "seconds",
+      "samples": 2
+    },
+    {
+      "name": "tab-switch-total",
+      "value": 28.9297,
+      "unit": "seconds",
+      "samples": 2
+    }
+  ]
+}
