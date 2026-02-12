@@ -1,0 +1,348 @@
+//
+//  SnapshotTests.swift
+//  PeerDropUITests
+//
+//  Automated screenshot tests for App Store submission.
+//  Run with: fastlane screenshots
+//
+
+import XCTest
+
+/// Screenshot tests for Fastlane snapshot.
+/// Uses SCREENSHOT_MODE to inject mock data for realistic screenshots without actual P2P connections.
+final class SnapshotTests: XCTestCase {
+
+    var app: XCUIApplication!
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+
+        app = XCUIApplication()
+        setupSnapshot(app)
+
+        // Enable screenshot mode via launch argument
+        app.launchArguments += ["-SCREENSHOT_MODE", "1"]
+
+        app.launch()
+
+        // Wait for app to fully load
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 10), "Tab bar should appear")
+    }
+
+    override func tearDownWithError() throws {
+        app = nil
+    }
+
+    // MARK: - Screenshot Tests
+
+    /// 01: Nearby tab with discovered devices (list view)
+    func test01_NearbyTab() {
+        // Should already be on Nearby tab
+        // Wait for app to fully load and mock data to populate
+        sleep(2)
+
+        // Verify we're on the Nearby tab (try multiple nav bar names)
+        let nearbyTitle = app.navigationBars["PeerDrop"]
+        let tabBar = app.tabBars.firstMatch
+
+        // Wait for either navigation bar or tab bar to confirm app is ready
+        if !nearbyTitle.waitForExistence(timeout: 8) {
+            // Fallback: just verify tab bar exists
+            XCTAssertTrue(tabBar.exists, "App should be loaded with tab bar visible")
+        }
+
+        snapshot("01_NearbyTab")
+    }
+
+    /// 02: Nearby tab in grid view mode
+    func test02_NearbyTabGrid() {
+        // Tap grid toggle button
+        let gridButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'grid' OR identifier CONTAINS[c] 'grid'")).firstMatch
+        if gridButton.waitForExistence(timeout: 3) {
+            gridButton.tap()
+        } else {
+            // Fallback: find button with grid icon in toolbar
+            let navBar = app.navigationBars["PeerDrop"]
+            let buttons = navBar.buttons
+            for i in 0..<buttons.count {
+                let button = buttons.element(boundBy: i)
+                if button.exists {
+                    button.tap()
+                    sleep(1)
+                    // Check if we're now in grid mode
+                    break
+                }
+            }
+        }
+
+        sleep(1)
+        snapshot("02_NearbyTabGrid")
+    }
+
+    /// 03: Connected tab showing active connections and contacts
+    func test03_ConnectedTab() {
+        // First, set up mock connection by tapping a discovered peer
+        setupMockConnection()
+
+        // Navigate to Connected tab
+        app.tabBars.buttons["Connected"].tap()
+        sleep(1)
+
+        // Should show active connection and contacts list
+        let connectedTitle = app.navigationBars["Connected"]
+        XCTAssertTrue(connectedTitle.waitForExistence(timeout: 5))
+
+        snapshot("03_ConnectedTab")
+    }
+
+    /// 04: Connection detail view with peer info and action buttons
+    func test04_ConnectionView() {
+        setupMockConnection()
+
+        // Navigate to connection view and wait for connected state
+        _ = navigateToConnectionView()
+
+        // Wait for action buttons to confirm connected state
+        let chatButton = app.buttons["chat-button"]
+        _ = chatButton.waitForExistence(timeout: 5)
+
+        sleep(1)
+        snapshot("04_ConnectionView")
+    }
+
+    /// 05: Chat view with conversation
+    func test05_ChatView() {
+        setupMockConnection()
+
+        // Navigate to connection view
+        _ = navigateToConnectionView()
+
+        // Wait for and tap Chat button
+        let chatButton = app.buttons["chat-button"]
+        if chatButton.waitForExistence(timeout: 5) {
+            chatButton.tap()
+        } else {
+            // Fallback: find button with message icon
+            let messageButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'chat' OR label CONTAINS[c] 'message'")).firstMatch
+            if messageButton.waitForExistence(timeout: 3) {
+                messageButton.tap()
+            }
+        }
+
+        // Wait for chat view to load with messages
+        sleep(3)
+
+        // Verify we're in chat view by checking for message input field
+        let messageField = app.textFields["Message"]
+        _ = messageField.waitForExistence(timeout: 3)
+
+        snapshot("05_ChatView")
+    }
+
+    /// 06: Voice call view (in-call UI)
+    func test06_VoiceCallView() {
+        setupMockConnection()
+
+        // Navigate to connection view
+        _ = navigateToConnectionView()
+
+        // Wait for and tap Voice Call button
+        let voiceButton = app.buttons["voice-call-button"]
+        if voiceButton.waitForExistence(timeout: 5) {
+            voiceButton.tap()
+        } else {
+            let phoneButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' OR label CONTAINS[c] 'call' OR label CONTAINS[c] 'phone'")).firstMatch
+            if phoneButton.waitForExistence(timeout: 3) {
+                phoneButton.tap()
+            }
+        }
+
+        sleep(2)
+        snapshot("06_VoiceCallView")
+    }
+
+    /// 07: Library tab with device groups and history
+    func test07_LibraryTab() {
+        app.tabBars.buttons["Library"].tap()
+        sleep(1)
+
+        let libraryTitle = app.navigationBars["Library"]
+        XCTAssertTrue(libraryTitle.waitForExistence(timeout: 5))
+
+        snapshot("07_LibraryTab")
+    }
+
+    /// 08: Settings screen
+    func test08_Settings() {
+        // Open menu on Nearby tab
+        let menuOpened = openSettingsMenu()
+
+        if menuOpened {
+            sleep(1)
+            snapshot("08_Settings")
+        } else {
+            // Take screenshot of current state as fallback
+            snapshot("08_Settings_Fallback")
+        }
+    }
+
+    /// 09: Quick Connect (Manual Connect) sheet
+    func test09_QuickConnect() {
+        // Find Quick Connect button
+        let quickConnect = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'quick' OR identifier CONTAINS[c] 'quick'")).firstMatch
+
+        if quickConnect.waitForExistence(timeout: 3) {
+            quickConnect.tap()
+        } else {
+            // Look for bolt icon button in toolbar
+            let navBar = app.navigationBars["PeerDrop"]
+            let boltButton = navBar.buttons.element(boundBy: 0) // Usually first button
+            if boltButton.exists {
+                boltButton.tap()
+            }
+        }
+
+        sleep(1)
+
+        // Should show Manual Connect sheet
+        let navBar = app.navigationBars["Manual Connect"]
+        if navBar.waitForExistence(timeout: 3) {
+            snapshot("09_QuickConnect")
+        } else {
+            snapshot("09_QuickConnect_Fallback")
+        }
+
+        // Dismiss sheet
+        let cancelButton = app.buttons["Cancel"]
+        if cancelButton.exists {
+            cancelButton.tap()
+        }
+    }
+
+    /// 10: File transfer progress (optional - may not trigger in mock mode)
+    func test10_FileTransfer() {
+        setupMockConnection()
+
+        // Navigate to connection view
+        _ = navigateToConnectionView()
+
+        // Wait for and tap Send File button
+        let sendFileButton = app.buttons["send-file-button"]
+        if sendFileButton.waitForExistence(timeout: 5) {
+            sendFileButton.tap()
+        } else {
+            let fileButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'file' OR label CONTAINS[c] 'send'")).firstMatch
+            if fileButton.waitForExistence(timeout: 3) {
+                fileButton.tap()
+            }
+        }
+
+        sleep(1)
+        snapshot("10_FileTransfer")
+
+        // Dismiss file picker if shown
+        let cancelButton = app.buttons["Cancel"]
+        if cancelButton.exists {
+            cancelButton.tap()
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    /// Set up a mock connection and wait for it to be ready.
+    private func setupMockConnection() {
+        // Wait for mock data to be populated
+        sleep(2)
+
+        // Navigate to Connected tab to verify connection is ready
+        app.tabBars.buttons["Connected"].tap()
+
+        // Wait for the active peer row to appear (indicates connection is established)
+        let activePeerRow = app.buttons.matching(NSPredicate(format: "identifier == 'active-peer-row'")).firstMatch
+        let connected = activePeerRow.waitForExistence(timeout: 5)
+
+        if !connected {
+            // Fallback: look for "Connected" text in any cell
+            let connectedText = app.staticTexts["Connected"]
+            _ = connectedText.waitForExistence(timeout: 3)
+        }
+
+        // Return to Nearby tab to reset navigation state
+        app.tabBars.buttons["Nearby"].tap()
+        sleep(1)
+    }
+
+    /// Navigate to ConnectionView and wait for connected state with action buttons.
+    private func navigateToConnectionView() -> Bool {
+        // Navigate to Connected tab
+        app.tabBars.buttons["Connected"].tap()
+        sleep(1)
+
+        // Wait for and tap on active peer row
+        let activePeerRow = app.buttons.matching(NSPredicate(format: "identifier == 'active-peer-row'")).firstMatch
+        guard activePeerRow.waitForExistence(timeout: 5) else {
+            // Try fallback - tap first cell
+            let firstCell = app.cells.firstMatch
+            if firstCell.waitForExistence(timeout: 3) {
+                firstCell.tap()
+                sleep(1)
+                return true
+            }
+            return false
+        }
+
+        activePeerRow.tap()
+        sleep(1)
+
+        // Wait for the connection view to show action buttons (indicates Connected state)
+        let chatButton = app.buttons["chat-button"]
+        let sendFileButton = app.buttons["send-file-button"]
+
+        // Wait up to 5 seconds for buttons to appear
+        for _ in 0..<10 {
+            if chatButton.exists || sendFileButton.exists {
+                return true
+            }
+            usleep(500_000) // 0.5 seconds
+        }
+
+        return true // Continue anyway for screenshot
+    }
+
+    /// Open the Settings screen via the ellipsis menu.
+    private func openSettingsMenu() -> Bool {
+        // Find the ellipsis menu button
+        let menuButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'ellipsis' OR identifier CONTAINS[c] 'ellipsis' OR label CONTAINS[c] 'more'")).firstMatch
+
+        if menuButton.waitForExistence(timeout: 3) {
+            menuButton.tap()
+            sleep(1)
+        } else {
+            // Fallback: tap last button in navigation bar
+            let navBar = app.navigationBars["PeerDrop"]
+            let buttons = navBar.buttons
+            if buttons.count > 0 {
+                buttons.element(boundBy: buttons.count - 1).tap()
+                sleep(1)
+            }
+        }
+
+        // Tap Settings in the menu
+        let settingsButton = app.buttons["Settings"]
+        if settingsButton.waitForExistence(timeout: 3) {
+            settingsButton.tap()
+            sleep(1)
+            return true
+        }
+
+        let settingsText = app.staticTexts["Settings"]
+        if settingsText.waitForExistence(timeout: 2) {
+            settingsText.tap()
+            sleep(1)
+            return true
+        }
+
+        return false
+    }
+}

@@ -184,6 +184,16 @@ final class ConnectionManager: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        // Screenshot mode: automatically start discovery and set up mock connection
+        if ScreenshotModeProvider.shared.isActive {
+            Task { @MainActor in
+                self.startDiscovery()
+                // Delay slightly to ensure UI has rendered discovered peers
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self.setupScreenshotModeConnection()
+            }
+        }
     }
 
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
@@ -378,6 +388,12 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Discovery
 
     func startDiscovery() {
+        // Screenshot mode: inject mock discovered peers without real network discovery
+        if ScreenshotModeProvider.shared.isActive {
+            startScreenshotModeDiscovery()
+            return
+        }
+
         // Tear down any lingering listener/browser first (idempotent)
         stopDiscovery()
 
@@ -408,6 +424,72 @@ final class ConnectionManager: ObservableObject {
 
         // Start network path monitoring
         startNetworkPathMonitor()
+    }
+
+    /// Screenshot mode: inject mock data without real network operations.
+    private func startScreenshotModeDiscovery() {
+        logger.info("Screenshot mode: injecting mock discovered peers")
+        stopDiscovery()
+
+        // Inject mock discovered peers
+        discoveredPeers = ScreenshotModeProvider.shared.mockDiscoveredPeers
+
+        // Inject mock device records (contacts)
+        for record in ScreenshotModeProvider.shared.mockDeviceRecords {
+            deviceStore.addOrUpdate(
+                id: record.id,
+                displayName: record.displayName,
+                sourceType: record.sourceType,
+                host: record.host,
+                port: record.port
+            )
+        }
+
+        // Inject mock transfer history
+        for record in ScreenshotModeProvider.shared.mockTransferRecords {
+            if !transferHistory.contains(where: { $0.id == record.id }) {
+                transferHistory.append(record)
+            }
+        }
+
+        transition(to: .discovering)
+    }
+
+    /// Screenshot mode: create a mock connection to simulate connected state.
+    func setupScreenshotModeConnection() {
+        guard ScreenshotModeProvider.shared.isActive else { return }
+        logger.info("Screenshot mode: setting up mock connection")
+
+        let mockPeer = ScreenshotModeProvider.shared.mockConnectedPeer
+        let mockPeerID = ScreenshotModeProvider.mockConnectedPeerID
+
+        // Update lastConnectedPeer for UI
+        lastConnectedPeer = discoveredPeers.first { $0.id == mockPeerID }
+
+        // Create a mock PeerConnection without real network connection
+        // We use a dummy NWConnection that won't actually connect
+        let dummyParams = NWParameters.tcp
+        let dummyEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: 1)
+        let dummyConnection = NWConnection(to: dummyEndpoint, using: dummyParams)
+
+        let peerConnection = PeerConnection(
+            peerID: mockPeerID,
+            connection: dummyConnection,
+            peerIdentity: mockPeer,
+            localIdentity: localIdentity,
+            state: .connected
+        )
+
+        connections[mockPeerID] = peerConnection
+        focusedPeerID = mockPeerID
+
+        // Transition through valid state path: discovering -> peerFound -> requesting -> connecting -> connected
+        transition(to: .peerFound)
+        transition(to: .requesting)
+        transition(to: .connecting)
+        transition(to: .connected)
+
+        logger.info("Screenshot mode: mock connection established, state = \(String(describing: self.state))")
     }
 
     func stopDiscovery() {

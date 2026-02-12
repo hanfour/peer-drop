@@ -1,0 +1,51 @@
+# Snapfile - Fastlane snapshot configuration for PeerDrop
+
+# The scheme to use for screenshots
+scheme("PeerDropUITests")
+
+# Output directory
+output_directory("./fastlane/screenshots")
+
+# Devices (required for App Store: 6.9" and 6.7")
+devices([
+  "iPhone 17 Pro Max",  # 6.9" (required)
+  "iPhone 17 Pro"       # 6.7" (required)
+])
+
+# Languages to capture
+languages([
+  "en-US",
+  "zh-Hant"
+])
+
+# Launch arguments to enable screenshot mode
+launch_arguments(["-SCREENSHOT_MODE 1"])
+
+# Override status bar for consistent screenshots
+override_status_bar(true)
+
+# Status bar style (light = white text, iOS 13+)
+override_status_bar_arguments("--time '9:41' --dataNetwork 'wifi' --wifiMode 'active' --wifiBars 3 --cellularMode 'active' --cellularBars 4 --batteryState 'charged' --batteryLevel 100")
+
+# Clear previous screenshots before capturing new ones
+clear_previous_screenshots(true)
+
+# Test target to run
+testplan("SnapshotTests")
+
+# Number of concurrent simulators
+concurrent_simulators(true)
+
+# Reinstall app before running
+reinstall_app(false)
+
+# Erase simulator before running
+erase_simulator(false)
+
+# Run tests headless
+headless(true)
+
+# Only run UI test class for screenshots
+only_testing([
+  "PeerDropUITests/SnapshotTests"
+])

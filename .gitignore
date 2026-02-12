@@ -56,3 +56,15 @@ playground.xcworkspace
 TestResults/
 !TestResults/E2E/baseline.json
 DerivedData-MultiSim/
+
+# Fastlane
+fastlane/screenshots/
+fastlane/derived_data/
+fastlane/report.xml
+fastlane/test_output/
+*.itmsp
+
+# Ruby (Fastlane)
+vendor/bundle/
+.bundle/
+Gemfile.lock

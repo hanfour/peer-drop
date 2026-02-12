@@ -99,6 +99,12 @@ final class ChatManager: ObservableObject {
     }
 
     func loadMessages(forPeer peerID: String) {
+        // Screenshot mode: return mock messages for mock peers
+        if ScreenshotModeProvider.shared.isActive && ScreenshotModeProvider.isMockPeer(peerID) {
+            messages = ScreenshotModeProvider.shared.mockChatMessages
+            return
+        }
+
         let file = messagesFile(for: peerID)
         guard fileManager.fileExists(atPath: file.path) else {
             messages = []
