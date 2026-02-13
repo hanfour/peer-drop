@@ -101,4 +101,4 @@ This project is proprietary software. All rights reserved.
 
 ## Author
 
-Han Four
+Hanfour
