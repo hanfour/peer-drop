@@ -57,23 +57,10 @@ final class SnapshotTests: XCTestCase {
 
     /// 02: Nearby tab in grid view mode
     func test02_NearbyTabGrid() {
-        // Tap grid toggle button
-        let gridButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'grid' OR identifier CONTAINS[c] 'grid'")).firstMatch
+        // Tap grid toggle button using its accessibilityIdentifier
+        let gridButton = app.buttons["grid-toggle-button"]
         if gridButton.waitForExistence(timeout: 3) {
             gridButton.tap()
-        } else {
-            // Fallback: find button with grid icon in toolbar
-            let navBar = app.navigationBars["PeerDrop"]
-            let buttons = navBar.buttons
-            for i in 0..<buttons.count {
-                let button = buttons.element(boundBy: i)
-                if button.exists {
-                    button.tap()
-                    sleep(1)
-                    // Check if we're now in grid mode
-                    break
-                }
-            }
         }
 
         sleep(1)
@@ -175,6 +162,10 @@ final class SnapshotTests: XCTestCase {
 
     /// 08: Settings screen
     func test08_Settings() {
+        // Navigate to Nearby tab first (toolbar buttons are only on Nearby tab)
+        app.tabBars.buttons["Nearby"].tap()
+        sleep(1)
+
         // Open menu on Nearby tab
         let menuOpened = openSettingsMenu()
 
@@ -189,25 +180,22 @@ final class SnapshotTests: XCTestCase {
 
     /// 09: Quick Connect (Manual Connect) sheet
     func test09_QuickConnect() {
-        // Find Quick Connect button
-        let quickConnect = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'quick' OR identifier CONTAINS[c] 'quick'")).firstMatch
+        // Navigate to Nearby tab first (Quick Connect button is only on Nearby tab)
+        app.tabBars.buttons["Nearby"].tap()
+        sleep(1)
+
+        // Find Quick Connect button using its accessibilityIdentifier
+        let quickConnect = app.buttons["quick-connect-button"]
 
         if quickConnect.waitForExistence(timeout: 3) {
             quickConnect.tap()
-        } else {
-            // Look for bolt icon button in toolbar
-            let navBar = app.navigationBars["PeerDrop"]
-            let boltButton = navBar.buttons.element(boundBy: 0) // Usually first button
-            if boltButton.exists {
-                boltButton.tap()
-            }
         }
 
         sleep(1)
 
         // Should show Manual Connect sheet
-        let navBar = app.navigationBars["Manual Connect"]
-        if navBar.waitForExistence(timeout: 3) {
+        let manualConnectNavBar = app.navigationBars["Manual Connect"]
+        if manualConnectNavBar.waitForExistence(timeout: 3) {
             snapshot("09_QuickConnect")
         } else {
             snapshot("09_QuickConnect_Fallback")
@@ -312,23 +300,24 @@ final class SnapshotTests: XCTestCase {
 
     /// Open the Settings screen via the ellipsis menu.
     private func openSettingsMenu() -> Bool {
-        // Find the ellipsis menu button
-        let menuButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'ellipsis' OR identifier CONTAINS[c] 'ellipsis' OR label CONTAINS[c] 'more'")).firstMatch
-
+        // Find menu button using its accessibilityIdentifier
+        let menuButton = app.buttons["more-options-menu"]
         if menuButton.waitForExistence(timeout: 3) {
             menuButton.tap()
             sleep(1)
         } else {
-            // Fallback: tap last button in navigation bar
+            // Fallback: last button in navigation bar
             let navBar = app.navigationBars["PeerDrop"]
             let buttons = navBar.buttons
             if buttons.count > 0 {
                 buttons.element(boundBy: buttons.count - 1).tap()
                 sleep(1)
+            } else {
+                return false
             }
         }
 
-        // Tap Settings in the menu
+        // Tap Settings in the menu - SwiftUI menu items appear as buttons
         let settingsButton = app.buttons["Settings"]
         if settingsButton.waitForExistence(timeout: 3) {
             settingsButton.tap()
@@ -336,6 +325,7 @@ final class SnapshotTests: XCTestCase {
             return true
         }
 
+        // Fallback: try static texts
         let settingsText = app.staticTexts["Settings"]
         if settingsText.waitForExistence(timeout: 2) {
             settingsText.tap()

@@ -199,6 +199,7 @@ struct NearbyTab: View {
                 } label: {
                     Image(systemName: "bolt.horizontal.fill")
                 }
+                .accessibilityIdentifier("quick-connect-button")
                 .accessibilityLabel("Quick Connect")
 
                 Button {
@@ -206,6 +207,7 @@ struct NearbyTab: View {
                 } label: {
                     Image(systemName: isGridMode ? "list.bullet" : "square.grid.2x2")
                 }
+                .accessibilityIdentifier("grid-toggle-button")
                 .accessibilityLabel(isGridMode ? "Switch to list" : "Switch to grid")
 
                 // Search button
@@ -259,6 +261,8 @@ struct NearbyTab: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("more-options-menu")
+                .accessibilityLabel("More options")
             }
         }
         .sheet(isPresented: $showManualConnect) {

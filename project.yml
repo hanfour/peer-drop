@@ -73,3 +73,31 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.uitests
         GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  PeerDrop:
+    build:
+      targets:
+        PeerDrop: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PeerDropTests
+    profile:
+      config: Release
+    archive:
+      config: Release
+
+  PeerDropUITests:
+    build:
+      targets:
+        PeerDrop: all
+        PeerDropUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PeerDropUITests

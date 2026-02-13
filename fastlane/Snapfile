@@ -30,8 +30,7 @@ override_status_bar_arguments("--time '9:41' --dataNetwork 'wifi' --wifiMode 'ac
 # Clear previous screenshots before capturing new ones
 clear_previous_screenshots(true)
 
-# Test target to run
-testplan("SnapshotTests")
+# Note: Not using test plan, just the scheme with only_testing
 
 # Number of concurrent simulators
 concurrent_simulators(true)
