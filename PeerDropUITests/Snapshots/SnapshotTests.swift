@@ -10,6 +10,7 @@ import XCTest
 
 /// Screenshot tests for Fastlane snapshot.
 /// Uses SCREENSHOT_MODE to inject mock data for realistic screenshots without actual P2P connections.
+@MainActor
 final class SnapshotTests: XCTestCase {
 
     var app: XCUIApplication!

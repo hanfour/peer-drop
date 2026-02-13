@@ -12,7 +12,7 @@ devices([
   "iPhone 17 Pro Max",  # 6.9" (required)
   "iPhone 17 Pro",      # 6.7" (required)
   # iPad (required: 12.9")
-  "iPad Pro 13-inch (M5)"  # 12.9" (required)
+  "iPad Pro 13-inch (M5)"  # 13" (required)
 ])
 
 # Languages to capture

@@ -33,6 +33,26 @@ platform :ios do
     upload_screenshots
   end
 
+  desc "Add device frames and titles to screenshots (frameit - requires supported devices)"
+  lane :add_frames_frameit do
+    frame_screenshots(
+      path: "./fastlane/screenshots",
+      white: false,
+      force_device_type: nil
+    )
+  end
+
+  desc "Add background and titles to screenshots (custom script - works with all devices)"
+  lane :add_frames do
+    sh("python3 ../fastlane/frame_screenshots.py ../fastlane/screenshots")
+  end
+
+  desc "Capture screenshots and add frames"
+  lane :screenshots_framed do
+    screenshots
+    add_frames
+  end
+
   desc "Download existing metadata from App Store Connect"
   lane :download_metadata do
     download_metadata(

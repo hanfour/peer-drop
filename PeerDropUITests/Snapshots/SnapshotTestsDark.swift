@@ -10,6 +10,7 @@ import XCTest
 
 /// Dark mode screenshot tests for Fastlane snapshot.
 /// Captures all screens in Dark Mode for App Store display.
+@MainActor
 final class SnapshotTestsDark: XCTestCase {
 
     var app: XCUIApplication!

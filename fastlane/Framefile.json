@@ -1,0 +1,36 @@
+{
+  "device_frame_version": "latest",
+  "default": {
+    "background": "./backgrounds/background_blue.png",
+    "padding": 50,
+    "show_complete_frame": false,
+    "keyword": {
+      "color": "#FFFFFF",
+      "font_size": 72
+    },
+    "title": {
+      "color": "#FFFFFF",
+      "font_size": 48
+    },
+    "stack_title": true,
+    "title_below_image": false
+  },
+  "data": [
+    {
+      "filter": "*_Dark*",
+      "background": "./backgrounds/background_dark.png"
+    },
+    {
+      "filter": "*iPhone 17 Pro Max*",
+      "force_device_type": "iPhone 14 Pro Max"
+    },
+    {
+      "filter": "*iPhone 17 Pro-*",
+      "force_device_type": "iPhone 14 Pro"
+    },
+    {
+      "filter": "*iPad Pro 13*",
+      "force_device_type": "iPad Pro (12.9-inch)"
+    }
+  ]
+}

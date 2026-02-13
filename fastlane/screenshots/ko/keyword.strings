@@ -1,0 +1,10 @@
+"01_NearbyTab" = "주변 기기 발견";
+"02_NearbyTabGrid" = "그리드 보기";
+"03_ConnectedTab" = "활성 연결";
+"04_ConnectionView" = "연결 상세";
+"05_ChatView" = "보안 채팅";
+"06_VoiceCallView" = "음성 통화";
+"07_LibraryTab" = "기기 라이브러리";
+"08_Settings" = "설정";
+"09_QuickConnect" = "빠른 연결";
+"10_FileTransfer" = "파일 전송";
