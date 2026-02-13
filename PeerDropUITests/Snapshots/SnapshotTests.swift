@@ -236,6 +236,77 @@ final class SnapshotTests: XCTestCase {
         }
     }
 
+    /// 11: Transfer history view
+    func test11_TransferHistory() {
+        // Navigate to Nearby tab first
+        app.tabBars.buttons["Nearby"].tap()
+        sleep(1)
+
+        // Open menu and tap Transfer History
+        let menuButton = app.buttons["more-options-menu"]
+        if menuButton.waitForExistence(timeout: 3) {
+            menuButton.tap()
+            sleep(1)
+
+            let historyButton = app.buttons["Transfer History"]
+            if historyButton.waitForExistence(timeout: 3) {
+                historyButton.tap()
+                sleep(1)
+                snapshot("11_TransferHistory")
+                return
+            }
+        }
+
+        snapshot("11_TransferHistory_Fallback")
+    }
+
+    /// 12: User profile view
+    func test12_UserProfile() {
+        // Navigate to Settings first
+        app.tabBars.buttons["Nearby"].tap()
+        sleep(1)
+
+        if openSettingsMenu() {
+            // Tap on user profile section (usually at top)
+            let profileButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'profile' OR identifier CONTAINS[c] 'profile'")).firstMatch
+            if profileButton.waitForExistence(timeout: 3) {
+                profileButton.tap()
+                sleep(1)
+                snapshot("12_UserProfile")
+                return
+            }
+
+            // Fallback: just capture Settings view again
+            snapshot("12_UserProfile_Settings")
+        } else {
+            snapshot("12_UserProfile_Fallback")
+        }
+    }
+
+    /// 13: Group detail view (from Library tab)
+    func test13_GroupDetail() {
+        // Navigate to Library tab
+        app.tabBars.buttons["Library"].tap()
+        sleep(1)
+
+        // Look for a group row to tap
+        // In screenshot mode, there should be mock groups
+        let groupCell = app.cells.firstMatch
+        if groupCell.waitForExistence(timeout: 3) {
+            groupCell.tap()
+            sleep(1)
+
+            // Verify we're in group detail view
+            let groupDetailExists = app.navigationBars.element(boundBy: 0).exists
+            if groupDetailExists {
+                snapshot("13_GroupDetail")
+                return
+            }
+        }
+
+        snapshot("13_GroupDetail_Fallback")
+    }
+
     // MARK: - Helper Methods
 
     /// Set up a mock connection and wait for it to be ready.
