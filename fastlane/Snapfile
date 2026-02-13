@@ -6,10 +6,13 @@ scheme("PeerDropUITests")
 # Output directory
 output_directory("./fastlane/screenshots")
 
-# Devices (required for App Store: 6.9" and 6.7")
+# Devices (required for App Store)
 devices([
+  # iPhone (required: 6.9" and 6.7")
   "iPhone 17 Pro Max",  # 6.9" (required)
-  "iPhone 17 Pro"       # 6.7" (required)
+  "iPhone 17 Pro",      # 6.7" (required)
+  # iPad (required: 12.9")
+  "iPad Pro 13-inch (M5)"  # 12.9" (required)
 ])
 
 # Languages to capture

@@ -76,6 +76,17 @@ The screenshot tests capture **23 screenshots** (13 Light + 10 Dark mode):
 Screenshots are saved to `~/Library/Caches/tools.fastlane/` organized by device name:
 - `iPhone 17 Pro Max-01_NearbyTab.png`
 - `iPhone 17 Pro-01_NearbyTab.png`
+- `iPad Pro 13-inch (M5)-01_NearbyTab.png`
+
+## Device Support
+
+The app supports both iPhone and iPad (Universal app). Screenshots are captured for:
+
+| Device | Screen Size | Required |
+|--------|------------|----------|
+| iPhone 17 Pro Max | 6.9" | Yes |
+| iPhone 17 Pro | 6.7" | Yes |
+| iPad Pro 13-inch | 12.9" | Yes |
 
 ## Localization
 

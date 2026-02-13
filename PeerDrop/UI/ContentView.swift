@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// Modifier to force tab bar style on iPad (iOS 18+)
+struct TabBarOnlyModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.tabViewStyle(.tabBarOnly)
+        } else {
+            content
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var selectedTab = 0
@@ -37,6 +48,7 @@ struct ContentView: View {
             }
             .tag(2)
         }
+        .modifier(TabBarOnlyModifier())  // Force tab bar on iPad
         .sheet(item: $connectionManager.pendingIncomingRequest) { request in
             ConsentSheet(request: request)
                 .environmentObject(connectionManager)

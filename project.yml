@@ -14,7 +14,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    TARGETED_DEVICE_FAMILY: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"  # iPhone and iPad
 
 targets:
   PeerDrop:
