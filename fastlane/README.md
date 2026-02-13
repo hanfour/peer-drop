@@ -75,3 +75,40 @@ Mock data automatically adapts to the device's language setting:
 3. **Build errors**: Ensure code signing is set up or use `CODE_SIGNING_REQUIRED=NO` for simulator builds.
 
 4. **Scheme not found**: Ensure shared schemes exist in `PeerDrop.xcodeproj/xcshareddata/xcschemes/`.
+
+## App Store Connect Upload
+
+### Setup API Key
+
+1. Go to [App Store Connect API Keys](https://appstoreconnect.apple.com/access/api)
+2. Create a new key with "App Manager" role
+3. Download the `.p8` file
+4. Create `fastlane/AuthKey.json`:
+   ```json
+   {
+     "key_id": "YOUR_KEY_ID",
+     "issuer_id": "YOUR_ISSUER_ID",
+     "key_filepath": "./AuthKey_YOUR_KEY_ID.p8"
+   }
+   ```
+5. Update `fastlane/Appfile` with your team IDs
+
+### Upload Screenshots
+
+```bash
+# Upload screenshots only
+bundle exec fastlane upload_screenshots
+
+# Capture and upload in one step
+bundle exec fastlane screenshots_and_upload
+```
+
+### Available Lanes
+
+| Lane | Description |
+|------|-------------|
+| `screenshots` | Capture screenshots locally |
+| `upload_screenshots` | Upload screenshots to ASC |
+| `screenshots_and_upload` | Capture and upload |
+| `download_metadata` | Download existing metadata |
+| `upload_metadata` | Upload metadata to ASC |

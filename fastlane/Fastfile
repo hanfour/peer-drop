@@ -16,12 +16,37 @@ platform :ios do
     )
   end
 
-  desc "Capture screenshots and upload to App Store Connect"
+  desc "Upload screenshots to App Store Connect"
   lane :upload_screenshots do
-    screenshots
     upload_to_app_store(
       skip_binary_upload: true,
-      skip_metadata: true
+      skip_metadata: true,
+      screenshots_path: "./fastlane/screenshots",
+      overwrite_screenshots: true,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "Capture screenshots and upload to App Store Connect"
+  lane :screenshots_and_upload do
+    screenshots
+    upload_screenshots
+  end
+
+  desc "Download existing metadata from App Store Connect"
+  lane :download_metadata do
+    download_metadata(
+      path: "./fastlane/metadata"
+    )
+  end
+
+  desc "Upload metadata to App Store Connect"
+  lane :upload_metadata do
+    upload_to_app_store(
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      metadata_path: "./fastlane/metadata",
+      precheck_include_in_app_purchases: false
     )
   end
 end

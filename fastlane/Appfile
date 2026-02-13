@@ -1,0 +1,28 @@
+# Appfile - App Store Connect configuration for PeerDrop
+#
+# For more information about the Appfile, see:
+#     https://docs.fastlane.tools/advanced/#appfile
+
+# App identifier (bundle ID)
+app_identifier("com.peerdrop.app")
+
+# Your Apple Developer team ID
+# team_id("YOUR_TEAM_ID")
+
+# Your App Store Connect team ID (may be different from Developer team ID)
+# itc_team_id("YOUR_ITC_TEAM_ID")
+
+# App Store Connect API Key (recommended for CI/CD)
+# Create one at: https://appstoreconnect.apple.com/access/api
+#
+# Option 1: JSON key file
+# app_store_connect_api_key_path("./fastlane/AuthKey.json")
+#
+# Option 2: Environment variables
+# Set these environment variables:
+#   APP_STORE_CONNECT_API_KEY_ID
+#   APP_STORE_CONNECT_API_ISSUER_ID
+#   APP_STORE_CONNECT_API_KEY (base64 encoded .p8 file content)
+#
+# For local development, you can use Apple ID instead:
+# apple_id("your@email.com")
