@@ -18,7 +18,10 @@ devices([
 # Languages to capture
 languages([
   "en-US",
-  "zh-Hant"
+  "zh-Hant",
+  "zh-Hans",
+  "ja",
+  "ko"
 ])
 
 # Launch arguments to enable screenshot mode

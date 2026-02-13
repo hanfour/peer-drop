@@ -91,8 +91,16 @@ The app supports both iPhone and iPad (Universal app). Screenshots are captured 
 ## Localization
 
 Mock data automatically adapts to the device's language setting:
-- **English (en-US)**: Names like "Sarah's MacBook Pro", "James's iPhone"
-- **Traditional Chinese (zh-Hant)**: Names like "小美的 MacBook Pro", "阿傑的 iPhone"
+
+| Language | Code | Example Names |
+|----------|------|---------------|
+| English | en-US | "Sarah's MacBook Pro", "James's iPhone" |
+| Traditional Chinese | zh-Hant | "小美的 MacBook Pro", "阿傑的 iPhone" |
+| Simplified Chinese | zh-Hans | "小美的 MacBook Pro", "阿杰的 iPhone" |
+| Japanese | ja | "さくらの MacBook Pro", "健太の iPhone" |
+| Korean | ko | "서연의 MacBook Pro", "민준의 iPhone" |
+
+Chat messages are also fully localized for natural-sounding conversations in each language.
 
 ## Troubleshooting
 
