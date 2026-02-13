@@ -44,7 +44,8 @@ erase_simulator(false)
 # Run tests headless
 headless(true)
 
-# Only run UI test class for screenshots
+# Only run UI test classes for screenshots (Light + Dark mode)
 only_testing([
-  "PeerDropUITests/SnapshotTests"
+  "PeerDropUITests/SnapshotTests",
+  "PeerDropUITests/SnapshotTestsDark"
 ])

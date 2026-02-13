@@ -36,7 +36,9 @@ Since iOS simulators cannot perform real P2P connections, the app includes a **S
 
 ### Test Coverage
 
-The `SnapshotTests` class captures 13 screenshots:
+The screenshot tests capture **23 screenshots** (13 Light + 10 Dark mode):
+
+#### Light Mode (`SnapshotTests`)
 
 | # | Screenshot | Description |
 |---|------------|-------------|
@@ -53,6 +55,21 @@ The `SnapshotTests` class captures 13 screenshots:
 | 11 | TransferHistory | Transfer history view |
 | 12 | UserProfile | User profile settings |
 | 13 | GroupDetail | Group detail view |
+
+#### Dark Mode (`SnapshotTestsDark`)
+
+| # | Screenshot | Description |
+|---|------------|-------------|
+| 01 | NearbyTab_Dark | Device discovery (dark) |
+| 02 | NearbyTabGrid_Dark | Grid view (dark) |
+| 03 | ConnectedTab_Dark | Connections (dark) |
+| 04 | ConnectionView_Dark | Connection detail (dark) |
+| 05 | ChatView_Dark | Chat conversation (dark) |
+| 06 | VoiceCallView_Dark | Voice call (dark) |
+| 07 | LibraryTab_Dark | Library (dark) |
+| 08 | Settings_Dark | Settings (dark) |
+| 09 | QuickConnect_Dark | Manual connect (dark) |
+| 10 | FileTransfer_Dark | File transfer (dark) |
 
 ## Output
 
