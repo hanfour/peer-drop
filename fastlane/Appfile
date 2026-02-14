@@ -25,4 +25,4 @@ app_identifier("com.peerdrop.app")
 #   APP_STORE_CONNECT_API_KEY (base64 encoded .p8 file content)
 #
 # For local development, you can use Apple ID instead:
-# apple_id("your@email.com")
+apple_id("hanfour.huang@icloud.com")
