@@ -809,7 +809,11 @@ final class ConnectionManager: ObservableObject {
                     switch self.state {
                     case .connected, .voiceCall:
                         let ping = PeerMessage.ping(senderID: self.localIdentity.id)
-                        try? await self.sendMessage(ping)
+                        do {
+                            try await self.sendMessage(ping)
+                        } catch {
+                            logger.warning("Heartbeat ping failed: \(error.localizedDescription)")
+                        }
                     default:
                         continue
                     }
@@ -838,7 +842,11 @@ final class ConnectionManager: ObservableObject {
                     // Notify the acceptor so they can dismiss the consent sheet
                     if let conn = self.activeConnection {
                         let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
-                        try? await conn.sendMessage(cancel)
+                        do {
+                            try await conn.sendMessage(cancel)
+                        } catch {
+                            logger.warning("Failed to send timeout cancel to peer: \(error.localizedDescription)")
+                        }
                         conn.cancel()
                     }
                     self.activeConnection = nil
@@ -865,7 +873,11 @@ final class ConnectionManager: ObservableObject {
                     // Notify the acceptor so they can dismiss the consent sheet
                     if let conn = self.activeConnection {
                         let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
-                        try? await conn.sendMessage(cancel)
+                        do {
+                            try await conn.sendMessage(cancel)
+                        } catch {
+                            logger.warning("Failed to send setup timeout cancel to peer: \(error.localizedDescription)")
+                        }
                         conn.cancel()
                     }
                     self.activeConnection = nil
@@ -1283,7 +1295,11 @@ final class ConnectionManager: ObservableObject {
 
         Task {
             let reject = PeerMessage.connectionReject(senderID: localIdentity.id)
-            try? await request.connection.sendMessage(reject)
+            do {
+                try await request.connection.sendMessage(reject)
+            } catch {
+                logger.warning("Failed to send rejection to peer: \(error.localizedDescription)")
+            }
             request.connection.cancel()
             activeConnection = nil
             statusToast = "Connection declined"
@@ -1306,7 +1322,11 @@ final class ConnectionManager: ObservableObject {
         Task {
             if let connection {
                 let msg = PeerMessage.disconnect(senderID: localIdentity.id)
-                try? await connection.sendMessage(msg)
+                do {
+                    try await connection.sendMessage(msg)
+                } catch {
+                    logger.warning("Failed to send disconnect message: \(error.localizedDescription)")
+                }
                 connection.cancel()
             }
             cleanupAfterDisconnect()

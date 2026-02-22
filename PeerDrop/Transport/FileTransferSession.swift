@@ -125,8 +125,32 @@ final class FileTransferSession: ObservableObject {
     // MARK: - Receiving
 
     func handleFileOffer(_ message: PeerMessage) {
-        guard let payload = message.payload,
-              let metadata = try? JSONDecoder().decode(TransferMetadata.self, from: payload) else {
+        guard let payload = message.payload else {
+            logger.error("File offer has no payload")
+            lastError = "Invalid file offer received"
+            return
+        }
+
+        let metadata: TransferMetadata
+        do {
+            metadata = try JSONDecoder().decode(TransferMetadata.self, from: payload)
+        } catch {
+            logger.error("Failed to decode file offer metadata: \(error.localizedDescription)")
+            lastError = "Invalid file offer format"
+            return
+        }
+
+        // Check available disk space before accepting
+        if let availableBytes = try? URL(fileURLWithPath: NSTemporaryDirectory())
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage,
+           availableBytes < metadata.fileSize + 10_000_000 { // 10MB buffer
+            logger.error("Insufficient disk space: need \(metadata.fileSize) bytes, available \(availableBytes)")
+            lastError = "Not enough storage space"
+            Task {
+                let reject = PeerMessage.fileReject(senderID: peerID, reason: "insufficientStorage")
+                try? await sendMessage?(reject)
+            }
             return
         }
 
@@ -141,14 +165,27 @@ final class FileTransferSession: ObservableObject {
             .appendingPathComponent(UUID().uuidString + "_" + metadata.fileName)
         FileManager.default.createFile(atPath: tempURL.path, contents: nil)
         receiveTempURL = tempURL
-        receiveFileHandle = try? FileHandle(forWritingTo: tempURL)
+
+        do {
+            receiveFileHandle = try FileHandle(forWritingTo: tempURL)
+        } catch {
+            logger.error("Failed to create file handle for receiving: \(error.localizedDescription)")
+            lastError = "Cannot prepare file for receiving"
+            return
+        }
 
         // Auto-accept for now (consent already given at connection level)
         Task {
             let accept = PeerMessage.fileAccept(senderID: peerID)
-            try? await sendMessage?(accept)
-            isTransferring = true
-            progress = 0
+            do {
+                try await sendMessage?(accept)
+                isTransferring = true
+                progress = 0
+            } catch {
+                logger.error("Failed to send file accept: \(error.localizedDescription)")
+                lastError = "Failed to accept file transfer"
+                cleanupReceiveState(error: "Failed to accept file transfer")
+            }
         }
     }
 
