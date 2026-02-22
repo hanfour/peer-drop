@@ -41,6 +41,8 @@ targets:
         NSBonjourServices:
           - "_peerdrop._tcp"
         NSMicrophoneUsageDescription: "PeerDrop needs microphone access for voice calls."
+        NSCameraUsageDescription: "PeerDrop needs camera access to capture photos for sharing in chats."
+        NSPhotoLibraryUsageDescription: "PeerDrop needs photo library access to share photos and videos in chats."
         UIBackgroundModes:
           - audio
           - voip

@@ -1,0 +1,7 @@
+Initial release of PeerDrop.
+
+- Peer-to-peer file transfer over local network
+- Encrypted chat with media sharing
+- Voice calls with CallKit integration
+- Multi-device connection support
+- Device library and groups

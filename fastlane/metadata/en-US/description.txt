@@ -1,0 +1,32 @@
+PeerDrop lets you share files, chat, and make voice calls directly between devices on your local network — no internet, no cloud, no accounts required.
+
+KEY FEATURES
+
+- Direct File Transfer: Send photos, videos, documents, and any file type directly to nearby devices. Files are chunked and verified with SHA-256 hashes for integrity.
+
+- Encrypted Chat: Send text messages, photos, videos, and voice messages with end-to-end encryption. All chat history is stored locally and encrypted with AES-256-GCM.
+
+- Voice Calls: Make crystal-clear voice calls using WebRTC, fully integrated with iOS CallKit for a native calling experience.
+
+- Device Discovery: Automatically find nearby devices on your Wi-Fi network using Bonjour. Or connect manually by IP address.
+
+- Multi-Connection: Connect to up to 5 devices simultaneously. Each connection has independent chat, file transfer, and voice call capabilities.
+
+- Device Library: Save frequently connected devices for quick reconnection. Organize them into groups.
+
+- Privacy First: No servers, no accounts, no tracking. Everything stays between your devices. All connections use TLS encryption with trust-on-first-use verification.
+
+HOW IT WORKS
+
+1. Open PeerDrop on two devices connected to the same Wi-Fi network
+2. Devices discover each other automatically
+3. Tap to connect — the receiving device approves the connection
+4. Start sharing files, chatting, or making voice calls
+
+SECURITY
+
+- TLS-encrypted connections with ephemeral P-256 key pairs
+- AES-256-GCM encryption for stored chat data
+- Certificate fingerprint verification (trust-on-first-use)
+- SHA-256 file integrity verification
+- No data ever leaves your local network
