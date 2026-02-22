@@ -9,9 +9,13 @@ enum TLSConfiguration {
     static func serverOptions(identity: SecIdentity) -> NWProtocolTLS.Options {
         let options = NWProtocolTLS.Options()
 
+        guard let secIdentity = sec_identity_create(identity) else {
+            print("[TLSConfiguration] Failed to create sec_identity for server")
+            return options
+        }
         sec_protocol_options_set_local_identity(
             options.securityProtocolOptions,
-            sec_identity_create(identity)!
+            secIdentity
         )
 
         sec_protocol_options_set_min_tls_protocol_version(
@@ -38,10 +42,10 @@ enum TLSConfiguration {
     ) -> NWProtocolTLS.Options {
         let options = NWProtocolTLS.Options()
 
-        if let identity {
+        if let identity, let secIdentity = sec_identity_create(identity) {
             sec_protocol_options_set_local_identity(
                 options.securityProtocolOptions,
-                sec_identity_create(identity)!
+                secIdentity
             )
         }
 

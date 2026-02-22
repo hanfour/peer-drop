@@ -99,7 +99,7 @@ enum MiniZipReader {
 
             let compressionMethod = data.readUInt16(at: offset + 8)
             let compressedSize = Int(data.readUInt32(at: offset + 18))
-            let uncompressedSize = Int(data.readUInt32(at: offset + 22))
+            _ = Int(data.readUInt32(at: offset + 22)) // uncompressedSize (reserved for future validation)
             let fileNameLength = Int(data.readUInt16(at: offset + 26))
             let extraFieldLength = Int(data.readUInt16(at: offset + 28))
 

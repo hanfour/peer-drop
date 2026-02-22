@@ -78,8 +78,12 @@ final class VoiceCallManager: ObservableObject {
     private let webRTCClient = WebRTCClient()
     private let callKitManager: CallKitManager
     private weak var connectionManager: ConnectionManager?
-    private lazy var signaling: SDPSignaling = {
-        SDPSignaling(connectionManager: connectionManager!, senderID: "local")
+    private lazy var signaling: SDPSignaling? = {
+        guard let manager = connectionManager else {
+            print("[VoiceCallManager] connectionManager is nil when creating signaling")
+            return nil
+        }
+        return SDPSignaling(connectionManager: manager, senderID: "local")
     }()
 
     init(connectionManager: ConnectionManager, callKitManager: CallKitManager) {
@@ -103,7 +107,7 @@ final class VoiceCallManager: ObservableObject {
 
         webRTCClient.onICECandidate = { [weak self] candidate in
             Task { @MainActor in
-                try? await self?.signaling.sendICECandidate(candidate)
+                try? await self?.signaling?.sendICECandidate(candidate)
             }
         }
 
@@ -221,7 +225,7 @@ final class VoiceCallManager: ObservableObject {
                 } else {
                     // Legacy fallback
                     let offer = try await webRTCClient.createOffer()
-                    try await signaling.sendOffer(offer)
+                    try await signaling?.sendOffer(offer)
                 }
             } catch {
                 print("[VoiceCallManager] Failed to create offer: \(error)")
@@ -279,7 +283,7 @@ final class VoiceCallManager: ObservableObject {
                     let sdp = sdpMsg.toRTCSessionDescription()
                     try await webRTCClient.setRemoteSDP(sdp)
                     let answer = try await webRTCClient.createAnswer()
-                    try await signaling.sendAnswer(answer)
+                    try await signaling?.sendAnswer(answer)
 
                 case .sdpAnswer:
                     let sdpMsg = try JSONDecoder().decode(SDPMessage.self, from: payload)

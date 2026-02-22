@@ -68,3 +68,12 @@ fastlane/test_output/
 vendor/bundle/
 .bundle/
 Gemfile.lock
+
+# Playwright MCP
+.playwright-mcp/
+
+# Claude Code
+.claude/
+
+# Fastlane screenshot backups
+fastlane/screenshots_framed_backup/

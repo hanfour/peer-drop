@@ -2,10 +2,10 @@ import Foundation
 
 @MainActor
 final class ChatManager: ObservableObject {
-    @Published var messages: [ChatMessage] = []
-    @Published var groupMessages: [ChatMessage] = []
-    @Published var unreadCounts: [String: Int] = [:]
-    @Published var groupUnreadCounts: [String: Int] = [:]
+    @Published private(set) var messages: [ChatMessage] = []
+    @Published private(set) var groupMessages: [ChatMessage] = []
+    @Published private(set) var unreadCounts: [String: Int] = [:]
+    @Published private(set) var groupUnreadCounts: [String: Int] = [:]
     @Published var activeChatPeerID: String?
     @Published var activeGroupID: String?
     @Published var typingPeers: Set<String> = []
@@ -126,7 +126,7 @@ final class ChatManager: ObservableObject {
         try? fileManager.removeItem(at: file)
         let mediaDir = mediaDirectory(for: peerID)
         try? fileManager.removeItem(at: mediaDir)
-        if messages.first(where: { _ in true }) != nil {
+        if !messages.isEmpty {
             messages = []
         }
     }

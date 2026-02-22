@@ -61,7 +61,9 @@ extension NWConnection {
                 throw NWConnectionError.timeout
             }
             // Wait for the first task to complete (either message received or timeout)
-            let result = try await group.next()!
+            guard let result = try await group.next() else {
+                throw NWConnectionError.noData
+            }
             // Cancel the remaining task
             group.cancelAll()
             return result

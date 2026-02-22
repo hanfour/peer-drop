@@ -23,18 +23,24 @@ final class CertificateManager {
     private func generateEphemeralKeyPair() {
         let keyTag = "com.peerdrop.ephemeral.\(UUID().uuidString)"
 
+        guard let keyTagData = keyTag.data(using: .utf8) else {
+            setupError = "Failed to encode key tag"
+            return
+        }
+
         let keyAttributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
             kSecAttrKeySizeInBits as String: 256,
             kSecAttrIsPermanent as String: false,
             kSecPrivateKeyAttrs as String: [
-                kSecAttrApplicationTag as String: keyTag.data(using: .utf8)!
+                kSecAttrApplicationTag as String: keyTagData
             ]
         ]
 
         var error: Unmanaged<CFError>?
         guard let privKey = SecKeyCreateRandomKey(keyAttributes as CFDictionary, &error) else {
-            let msg = "Failed to create private key: \(error!.takeRetainedValue())"
+            let cfError = error?.takeRetainedValue()
+            let msg = "Failed to create private key: \(cfError.map { "\($0)" } ?? "unknown error")"
             print("[CertificateManager] \(msg)")
             setupError = msg
             return
@@ -64,11 +70,13 @@ final class CertificateManager {
     }
 
     private func storeIdentity(privateKey: SecKey, keyTag: String) {
+        guard let keyTagData = keyTag.data(using: .utf8) else { return }
+
         // Store the key in keychain so we can retrieve a SecIdentity
         let addKeyQuery: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecValueRef as String: privateKey,
-            kSecAttrApplicationTag as String: keyTag.data(using: .utf8)!,
+            kSecAttrApplicationTag as String: keyTagData,
         ]
         SecItemAdd(addKeyQuery as CFDictionary, nil)
 
@@ -76,17 +84,18 @@ final class CertificateManager {
         var identityRef: CFTypeRef?
         let identityQuery: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
-            kSecAttrApplicationTag as String: keyTag.data(using: .utf8)!,
+            kSecAttrApplicationTag as String: keyTagData,
             kSecReturnRef as String: true
         ]
-        if SecItemCopyMatching(identityQuery as CFDictionary, &identityRef) == errSecSuccess {
-            self.identity = (identityRef as! SecIdentity)
+        if SecItemCopyMatching(identityQuery as CFDictionary, &identityRef) == errSecSuccess,
+           let ref = identityRef {
+            self.identity = (ref as! SecIdentity)
         }
 
         // Clean up keychain entry
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassKey,
-            kSecAttrApplicationTag as String: keyTag.data(using: .utf8)!,
+            kSecAttrApplicationTag as String: keyTagData,
         ]
         SecItemDelete(deleteQuery as CFDictionary)
     }
