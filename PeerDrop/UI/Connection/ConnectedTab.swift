@@ -51,6 +51,8 @@ struct ConnectedTab: View {
                     }
                     .tint(.primary)
                     .accessibilityIdentifier("active-peer-row")
+                    .accessibilityLabel("\(peerConn.peerIdentity.displayName), \(peerConn.isTransferring ? "transferring" : peerConn.isInVoiceCall ? "in call" : "connected")")
+                    .accessibilityHint("Double tap to view connection details")
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             Task {
@@ -128,6 +130,7 @@ struct ConnectedTab: View {
                     .foregroundStyle(.white)
                     .padding(6)
                     .background(Circle().fill(.red))
+                    .accessibilityLabel("\(count) unread messages")
             }
 
             Image(systemName: "chevron.right")
@@ -142,6 +145,7 @@ struct ConnectedTab: View {
             Image(systemName: "person.crop.circle.badge.plus")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("No saved devices")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -150,6 +154,7 @@ struct ConnectedTab: View {
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Contacts Only View (no active connections)

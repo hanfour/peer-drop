@@ -128,6 +128,9 @@ struct ChatBubbleView: View {
                 .padding(.vertical, 7)
                 .background(bubbleColor)
                 .clipShape(MessageBubbleShape(isOutgoing: message.isOutgoing))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(bubbleAccessibilityLabel)
+                .accessibilityHint("Long press to react")
                 .onLongPressGesture {
                     showReactionPicker = true
                 }
@@ -277,6 +280,8 @@ struct ChatBubbleView: View {
             }
         }
         .contentShape(Rectangle())
+        .accessibilityLabel("Image: \(message.fileName ?? "photo")")
+        .accessibilityHint("Double tap to preview")
         .onTapGesture {
             showMediaPreview = true
         }
@@ -302,6 +307,8 @@ struct ChatBubbleView: View {
                 .shadow(radius: 4)
         }
         .contentShape(Rectangle())
+        .accessibilityLabel("Video: \(message.fileName ?? "video")")
+        .accessibilityHint("Double tap to preview")
         .onTapGesture {
             showMediaPreview = true
         }
@@ -318,6 +325,7 @@ struct ChatBubbleView: View {
                     .font(.body)
                     .foregroundStyle(message.isOutgoing ? .white : .primary)
             }
+            .accessibilityLabel(isVoicePlaying ? "Pause voice message" : "Play voice message")
 
             // Waveform bars with progress
             GeometryReader { geometry in
@@ -403,6 +411,32 @@ struct ChatBubbleView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Accessibility
+
+    private var bubbleAccessibilityLabel: String {
+        var parts: [String] = []
+        if message.isOutgoing {
+            parts.append("Sent")
+        } else {
+            let senderName = message.senderName ?? message.peerName
+            parts.append("From \(senderName)")
+        }
+        if message.isMedia {
+            parts.append(message.mediaType ?? "file")
+            if let fileName = message.fileName { parts.append(fileName) }
+        } else if let text = message.text {
+            parts.append(text)
+        }
+        switch message.status {
+        case .sending: parts.append("sending")
+        case .sent: parts.append("sent")
+        case .delivered: parts.append("delivered")
+        case .read: parts.append("read")
+        case .failed: parts.append("failed to send")
+        }
+        return parts.joined(separator: ", ")
     }
 
     // MARK: - Helpers

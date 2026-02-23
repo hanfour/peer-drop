@@ -1428,7 +1428,10 @@ final class ConnectionManager: ObservableObject {
         case .fileOffer:
             guard FeatureSettings.isFileTransferEnabled else {
                 let reject = PeerMessage.fileReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await peerConnection.sendMessage(reject) }
+                Task {
+                    do { try await peerConnection.sendMessage(reject) }
+                    catch { logger.warning("Failed to send file reject: \(error.localizedDescription)") }
+                }
                 return
             }
             // Create or get file transfer session
@@ -1468,7 +1471,10 @@ final class ConnectionManager: ObservableObject {
         case .callRequest:
             guard FeatureSettings.isVoiceCallEnabled else {
                 let reject = PeerMessage.callReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await peerConnection.sendMessage(reject) }
+                Task {
+                    do { try await peerConnection.sendMessage(reject) }
+                    catch { logger.warning("Failed to send call reject: \(error.localizedDescription)") }
+                }
                 return
             }
             voiceCallManager?.handleCallRequest(from: message.senderID)
@@ -1489,7 +1495,10 @@ final class ConnectionManager: ObservableObject {
         case .textMessage:
             guard FeatureSettings.isChatEnabled else {
                 let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await peerConnection.sendMessage(reject) }
+                Task {
+                    do { try await peerConnection.sendMessage(reject) }
+                    catch { logger.warning("Failed to send chat reject: \(error.localizedDescription)") }
+                }
                 return
             }
             if let payload = try? message.decodePayload(TextMessagePayload.self) {
@@ -1513,7 +1522,10 @@ final class ConnectionManager: ObservableObject {
         case .mediaMessage:
             guard FeatureSettings.isChatEnabled else {
                 let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await peerConnection.sendMessage(reject) }
+                Task {
+                    do { try await peerConnection.sendMessage(reject) }
+                    catch { logger.warning("Failed to send chat reject: \(error.localizedDescription)") }
+                }
                 return
             }
             if let payload = try? message.decodePayload(MediaMessagePayload.self) {
@@ -1569,7 +1581,10 @@ final class ConnectionManager: ObservableObject {
 
         case .ping:
             let pong = PeerMessage.pong(senderID: localIdentity.id)
-            Task { try? await peerConnection.sendMessage(pong) }
+            Task {
+                do { try await peerConnection.sendMessage(pong) }
+                catch { logger.warning("Failed to send pong: \(error.localizedDescription)") }
+            }
 
         case .pong:
             logger.debug("Heartbeat pong received from \(peerID)")
@@ -1587,7 +1602,10 @@ final class ConnectionManager: ObservableObject {
             guard case .requesting = state else {
                 logger.info("Received connectionAccept but not in requesting state, sending cancel")
                 let cancel = PeerMessage.connectionCancel(senderID: localIdentity.id)
-                Task { try? await sendMessage(cancel) }
+                Task { [weak self] in
+                    do { try await self?.sendMessage(cancel) }
+                    catch { logger.warning("Failed to send connection cancel: \(error.localizedDescription)") }
+                }
                 return
             }
             cancelTimeouts()
@@ -1663,7 +1681,10 @@ final class ConnectionManager: ObservableObject {
         case .fileOffer:
             guard FeatureSettings.isFileTransferEnabled else {
                 let reject = PeerMessage.fileReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await sendMessage(reject) }
+                Task { [weak self] in
+                    do { try await self?.sendMessage(reject) }
+                    catch { logger.warning("Failed to send file reject: \(error.localizedDescription)") }
+                }
                 return
             }
             fileTransfer?.handleFileOffer(message)
@@ -1684,7 +1705,10 @@ final class ConnectionManager: ObservableObject {
         case .callRequest:
             guard FeatureSettings.isVoiceCallEnabled else {
                 let reject = PeerMessage.callReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await sendMessage(reject) }
+                Task { [weak self] in
+                    do { try await self?.sendMessage(reject) }
+                    catch { logger.warning("Failed to send call reject: \(error.localizedDescription)") }
+                }
                 return
             }
             voiceCallManager?.handleCallRequest(from: message.senderID)
@@ -1705,7 +1729,10 @@ final class ConnectionManager: ObservableObject {
         case .textMessage:
             guard FeatureSettings.isChatEnabled else {
                 let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await sendMessage(reject) }
+                Task { [weak self] in
+                    do { try await self?.sendMessage(reject) }
+                    catch { logger.warning("Failed to send chat reject: \(error.localizedDescription)") }
+                }
                 return
             }
             if let payload = try? message.decodePayload(TextMessagePayload.self) {
@@ -1723,7 +1750,10 @@ final class ConnectionManager: ObservableObject {
         case .mediaMessage:
             guard FeatureSettings.isChatEnabled else {
                 let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { try? await sendMessage(reject) }
+                Task { [weak self] in
+                    do { try await self?.sendMessage(reject) }
+                    catch { logger.warning("Failed to send chat reject: \(error.localizedDescription)") }
+                }
                 return
             }
             if let payload = try? message.decodePayload(MediaMessagePayload.self) {
@@ -1776,7 +1806,10 @@ final class ConnectionManager: ObservableObject {
         case .ping:
             // Respond to keepalive ping with pong
             let pong = PeerMessage.pong(senderID: localIdentity.id)
-            Task { try? await sendMessage(pong) }
+            Task { [weak self] in
+                do { try await self?.sendMessage(pong) }
+                catch { logger.warning("Failed to send pong: \(error.localizedDescription)") }
+            }
 
         case .pong:
             // Keepalive response received — connection is alive
@@ -1869,7 +1902,10 @@ final class ConnectionManager: ObservableObject {
             senderID: groupID != nil ? localIdentity.id : nil
         )
         guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
-        Task { try? await peerConnection.sendMessage(msg) }
+        Task {
+            do { try await peerConnection.sendMessage(msg) }
+            catch { logger.warning("Failed to send delivery receipt: \(error.localizedDescription)") }
+        }
     }
 
     func sendReadReceipts(for peerID: String) {
@@ -1884,7 +1920,10 @@ final class ConnectionManager: ObservableObject {
             timestamp: Date()
         )
         guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
-        Task { try? await peerConn.sendMessage(msg) }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send read receipts: \(error.localizedDescription)") }
+        }
 
         for msgID in unreadIDs {
             chatManager.updateStatus(messageID: msgID, status: .read)
@@ -1908,7 +1947,10 @@ final class ConnectionManager: ObservableObject {
         // Send to all connected group members
         for member in members where member.id != localIdentity.id {
             if let peerConn = connection(for: member.id) {
-                Task { try? await peerConn.sendMessage(msg) }
+                Task {
+                    do { try await peerConn.sendMessage(msg) }
+                    catch { logger.warning("Failed to send group read receipt to \(member.id): \(error.localizedDescription)") }
+                }
             }
         }
 
@@ -1925,7 +1967,10 @@ final class ConnectionManager: ObservableObject {
 
         let payload = TypingIndicatorPayload(isTyping: isTyping, timestamp: Date())
         guard let msg = try? PeerMessage.typingIndicator(payload, senderID: localIdentity.id) else { return }
-        Task { try? await peerConn.sendMessage(msg) }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send typing indicator: \(error.localizedDescription)") }
+        }
     }
 
     func handleTypingChange(in peerID: String, hasText: Bool) {
@@ -1961,7 +2006,8 @@ final class ConnectionManager: ObservableObject {
         guard let msg = try? PeerMessage.reaction(payload, senderID: localIdentity.id) else { return }
 
         Task {
-            try? await peerConn.sendMessage(msg)
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send reaction: \(error.localizedDescription)") }
         }
 
         // Update local state

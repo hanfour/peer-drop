@@ -89,7 +89,8 @@ final class CertificateManager {
         ]
         if SecItemCopyMatching(identityQuery as CFDictionary, &identityRef) == errSecSuccess,
            let ref = identityRef {
-            self.identity = (ref as! SecIdentity)
+            // Safe: SecItemCopyMatching with kSecClassIdentity always returns SecIdentity
+            self.identity = unsafeBitCast(ref, to: SecIdentity.self)
         }
 
         // Clean up keychain entry

@@ -47,6 +47,7 @@ struct LibraryTab: View {
             Image(systemName: "archivebox")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("No saved devices")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -61,8 +62,10 @@ struct LibraryTab: View {
             }
             .buttonStyle(.bordered)
             .padding(.top, 8)
+            .accessibilityHint("Creates a new device group")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     private var contentList: some View {
@@ -92,6 +95,8 @@ struct LibraryTab: View {
                                 .foregroundStyle(.blue)
                         }
                     }
+                    .accessibilityLabel("New Group")
+                    .accessibilityHint("Creates a new device group")
                 } header: {
                     Text("Groups")
                 }

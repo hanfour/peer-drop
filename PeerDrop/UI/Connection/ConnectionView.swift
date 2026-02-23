@@ -67,6 +67,7 @@ struct ConnectionView: View {
                                         .padding(5)
                                         .background(Circle().fill(.red))
                                         .offset(x: 4, y: -4)
+                                        .accessibilityLabel("\(count) unread messages")
                                 }
                             }
 
@@ -107,6 +108,7 @@ struct ConnectionView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(!connectionManager.canReconnect)
                         .transition(.opacity)
+                        .accessibilityHint("Attempts to reconnect to this peer")
                     }
                 } else {
                     Spacer()
@@ -120,6 +122,7 @@ struct ConnectionView: View {
                     Button("Disconnect", role: .destructive) {
                         showDisconnectConfirm = true
                     }
+                    .accessibilityHint("Disconnects from the current peer")
                     .padding(.bottom)
                 } else if isTerminalState {
                     Button("Back to Discovery") {
@@ -184,5 +187,7 @@ struct ConnectionView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityHint(disabled ? "\(label) is disabled. Enable in Settings." : "Double tap to \(label.lowercased())")
     }
 }
