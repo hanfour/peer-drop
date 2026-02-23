@@ -55,6 +55,7 @@ struct GroupDetailView: View {
                     }
                 }
                 .disabled(!hasOnlineMembers || isConnecting)
+                .accessibilityHint(hasOnlineMembers ? "Double tap to connect to all online members" : "No online members available")
 
                 // Group Chat button
                 NavigationLink {
@@ -76,6 +77,7 @@ struct GroupDetailView: View {
                     }
                 }
                 .disabled(!hasConnectedMembers)
+                .accessibilityHint(hasConnectedMembers ? "Double tap to open group chat" : "Connect to members first")
             }
 
             // Members section
@@ -161,6 +163,8 @@ struct GroupDetailView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Connection status: \(connectionStatus.connected) connected, \(connectionStatus.online) online, \(connectionStatus.total) total")
     }
 
     @ViewBuilder
@@ -213,6 +217,8 @@ struct GroupDetailView: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(member.record?.displayName ?? "Unknown Device"), \(member.isConnected ? "Connected" : (member.isOnline ? "Online" : "Offline"))")
     }
 
     private func connectAll() {

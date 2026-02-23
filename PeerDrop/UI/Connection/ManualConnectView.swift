@@ -16,13 +16,19 @@ struct ManualConnectView: View {
                         .keyboardType(.numbersAndPunctuation)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        .accessibilityLabel("IP Address or Hostname")
+                        .accessibilityHint("Enter the peer's IP address or hostname")
 
                     TextField("Port", text: $port)
                         .keyboardType(.numberPad)
+                        .accessibilityLabel("Port")
+                        .accessibilityHint("Enter port number, defaults to 9000")
                 }
 
                 Section("Display Name (Optional)") {
                     TextField("Name", text: $name)
+                        .accessibilityLabel("Display Name")
+                        .accessibilityHint("Optional name for this peer")
                 }
             }
             .navigationTitle("Manual Connect")
@@ -42,6 +48,7 @@ struct ManualConnectView: View {
                         dismiss()
                     }
                     .disabled(host.isEmpty || UInt16(port) == nil)
+                    .accessibilityHint(host.isEmpty ? "Enter a host address first" : "Double tap to connect")
                 }
             }
         }

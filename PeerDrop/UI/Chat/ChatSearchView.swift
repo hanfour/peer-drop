@@ -21,6 +21,8 @@ struct ChatSearchView: View {
                     TextField("Search messages", text: $searchText)
                         .textFieldStyle(.plain)
                         .autocorrectionDisabled()
+                        .accessibilityLabel("Search messages")
+                        .accessibilityHint("Type to search chat history")
                         .onChange(of: searchText) { newValue in
                             performSearch(query: newValue)
                         }
@@ -33,6 +35,8 @@ struct ChatSearchView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
                         }
+                        .accessibilityLabel("Clear search")
+                        .accessibilityHint("Double tap to clear search text")
                     }
                 }
                 .padding(.horizontal, 12)
@@ -50,9 +54,11 @@ struct ChatSearchView: View {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(.largeTitle)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Text("No messages found")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
                     Spacer()
                 } else if results.isEmpty {
                     Spacer()
@@ -60,9 +66,11 @@ struct ChatSearchView: View {
                         Image(systemName: "magnifyingglass")
                             .font(.largeTitle)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Text("Type to search messages")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
                     Spacer()
                 } else {
                     List {
@@ -73,6 +81,7 @@ struct ChatSearchView: View {
                                     onSelectMessage(message)
                                     dismiss()
                                 }
+                                .accessibilityHint("Double tap to jump to this message")
                         }
                     }
                     .listStyle(.plain)
@@ -132,6 +141,18 @@ struct SearchResultRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(searchResultAccessibilityLabel)
+    }
+
+    private var searchResultAccessibilityLabel: String {
+        let sender = message.isOutgoing ? "You" : (message.senderName ?? message.peerName)
+        if let text = message.text {
+            return "\(sender): \(text)"
+        } else if let fileName = message.fileName {
+            return "\(sender): file \(fileName)"
+        }
+        return sender
     }
 
     private func iconForMediaType(_ type: String?) -> String {

@@ -58,6 +58,8 @@ struct MediaPreviewView: View {
                 .foregroundStyle(.white.opacity(0.8))
                 .shadow(radius: 4)
         }
+        .accessibilityLabel("Close preview")
+        .accessibilityHint("Double tap to close")
         .padding()
     }
 
@@ -77,6 +79,7 @@ struct MediaPreviewView: View {
         .foregroundStyle(.white.opacity(0.6))
         .padding()
         .background(.ultraThinMaterial.opacity(0.5))
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Image View
@@ -89,6 +92,8 @@ struct MediaPreviewView: View {
                 .scaledToFit()
                 .scaleEffect(scale)
                 .offset(offset)
+                .accessibilityLabel(message.fileName ?? "Image preview")
+                .accessibilityHint("Double tap to zoom, drag to pan")
                 .gesture(
                     MagnificationGesture()
                         .onChanged { value in
@@ -143,9 +148,11 @@ struct MediaPreviewView: View {
                 Image(systemName: "photo")
                     .font(.largeTitle)
                     .foregroundStyle(.white.opacity(0.6))
+                    .accessibilityHidden(true)
                 Text("Image Unavailable")
                     .foregroundStyle(.white.opacity(0.6))
             }
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -156,6 +163,8 @@ struct MediaPreviewView: View {
         if let player {
             VideoPlayer(player: player)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel(message.fileName ?? "Video player")
+                .accessibilityHint("Tap to play or pause")
                 .onTapGesture {
                     if player.timeControlStatus == .playing {
                         player.pause()

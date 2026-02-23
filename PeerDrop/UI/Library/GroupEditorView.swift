@@ -18,6 +18,8 @@ struct GroupEditorView: View {
                 Section("Group Name") {
                     TextField("Name", text: $name)
                         .autocorrectionDisabled()
+                        .accessibilityLabel("Group Name")
+                        .accessibilityHint("Enter a name for this group")
                 }
             }
             .navigationTitle(group == nil ? "New Group" : "Edit Group")
@@ -32,6 +34,7 @@ struct GroupEditorView: View {
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityHint(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Enter a group name first" : "Double tap to save")
                 }
             }
         }

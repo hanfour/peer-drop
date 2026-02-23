@@ -4,313 +4,1201 @@
     "Nearby" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nearby" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nearby" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "附近" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "附近" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "近くのデバイス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "근처" } }
       }
     },
     "Connected" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続済み" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결됨" } }
       }
     },
     "Library" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Library" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Library" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "資料庫" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "资料库" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ライブラリ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "라이브러리" } }
       }
     },
     "Settings" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "設定" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "設定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설정" } }
       }
     },
     "Done" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "完成" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "完了" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "완료" } }
       }
     },
     "Cancel" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取消" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キャンセル" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "취소" } }
       }
     },
     "Connect" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결" } }
       }
     },
     "Disconnect" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "中斷連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "断开连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "切断" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 해제" } }
       }
     },
     "Reconnect" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reconnect" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reconnect" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重新連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "再接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "재연결" } }
       }
     },
     "Send File" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send File" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send File" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "傳送檔案" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送文件" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ファイル送信" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "파일 전송" } }
       }
     },
     "Chat" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chat" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chat" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "聊天" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "聊天" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "チャット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "채팅" } }
       }
     },
     "Voice Call" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Voice Call" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Voice Call" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "語音通話" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语音通话" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声通話" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "음성 통화" } }
       }
     },
     "Back to Discovery" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Back to Discovery" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Back to Discovery" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "返回搜尋" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "返回搜索" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "検索に戻る" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "탐색으로 돌아가기" } }
       }
     },
     "Cancel Transfer" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel Transfer" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel Transfer" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取消傳輸" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消传输" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "転送をキャンセル" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전송 취소" } }
       }
     },
     "Edit Profile" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Profile" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Profile" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "編輯個人檔案" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑个人资料" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロフィール編集" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프로필 편집" } }
       }
     },
     "Identity" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Identity" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Identity" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "身分" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "身份" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "身元" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "신원" } }
       }
     },
     "Connectivity" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connectivity" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connectivity" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線功能" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接功能" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続設定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 기능" } }
       }
     },
     "Notifications" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notifications" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notifications" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "通知" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "通知" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알림" } }
       }
     },
     "Message Storage" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message Storage" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message Storage" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息儲存" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息存储" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージ保存" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지 저장" } }
       }
     },
     "Archive" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Archive" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Archive" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "封存" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "归档" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アーカイブ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아카이브" } }
       }
     },
     "About" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "About" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "About" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "關於" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关于" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バージョン情報" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "정보" } }
       }
     },
     "File Transfer" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "File Transfer" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File Transfer" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "檔案傳輸" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件传输" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ファイル転送" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "파일 전송" } }
       }
     },
     "Voice Calls" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Voice Calls" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Voice Calls" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "語音通話" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语音通话" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声通話" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "음성 통화" } }
       }
     },
     "Enable Notifications" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Notifications" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Notifications" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "啟用通知" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启用通知" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "通知を有効にする" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알림 활성화" } }
       }
     },
     "Display Name" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Display Name" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Display Name" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "顯示名稱" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示名称" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示名" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시 이름" } }
       }
     },
     "This name is visible to nearby devices." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "This name is visible to nearby devices." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This name is visible to nearby devices." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此名稱對附近的裝置可見。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此名称对附近的设备可见。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この名前は近くのデバイスに表示されます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 이름은 근처 기기에 표시됩니다." } }
       }
     },
     "Disabled features will reject incoming requests automatically." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disabled features will reject incoming requests automatically." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disabled features will reject incoming requests automatically." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已停用的功能將自動拒絕收到的請求。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已禁用的功能将自动拒绝收到的请求。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "無効な機能は受信リクエストを自動的に拒否します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "비활성화된 기능은 수신 요청을 자동으로 거부합니다." } }
       }
     },
     "No saved devices" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No saved devices" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No saved devices" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "沒有已儲存的裝置" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有已保存的设备" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "保存済みデバイスなし" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "저장된 기기 없음" } }
       }
     },
     "Devices you connect to will appear here" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Devices you connect to will appear here" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Devices you connect to will appear here" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線過的裝置會顯示在這裡" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接过的设备会显示在这里" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続したデバイスがここに表示されます" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결한 기기가 여기에 표시됩니다" } }
       }
     },
     "Searching for nearby devices..." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching for nearby devices..." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching for nearby devices..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在搜尋附近的裝置…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在搜索附近的设备…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "近くのデバイスを検索中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "근처 기기 검색 중…" } }
       }
     },
     "Establishing connection..." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Establishing connection..." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Establishing connection..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在建立連線…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在建立连接…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続を確立中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 설정 중…" } }
       }
     },
     "No active connection" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No active connection" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No active connection" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "沒有使用中的連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有活跃的连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アクティブな接続なし" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "활성 연결 없음" } }
       }
     },
     "Contacts" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contacts" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contacts" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "聯絡人" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "联系人" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "連絡先" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연락처" } }
       }
     },
     "Groups" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Groups" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Groups" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "群組" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "群组" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그룹" } }
       }
     },
     "Devices" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Devices" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Devices" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "裝置" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设备" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デバイス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기기" } }
       }
     },
     "New Group" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Group" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Group" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "新增群組" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建群组" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新規グループ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 그룹" } }
       }
     },
     "Create Group" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create Group" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create Group" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "建立群組" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建群组" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループ作成" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그룹 만들기" } }
       }
     },
     "Transfer History" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer History" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer History" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "傳輸紀錄" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "传输记录" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "転送履歴" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전송 기록" } }
       }
     },
     "Export Archive" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export Archive" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export Archive" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "匯出封存" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导出归档" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アーカイブをエクスポート" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아카이브 내보내기" } }
       }
     },
     "Import Archive" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import Archive" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import Archive" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "匯入封存" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导入归档" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アーカイブをインポート" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아카이브 가져오기" } }
       }
     },
     "Notifications Denied" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notifications Denied" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notifications Denied" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "通知已被拒絕" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知被拒绝" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "通知が拒否されました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알림이 거부됨" } }
       }
     },
     "Please enable notifications in Settings to receive alerts." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Please enable notifications in Settings to receive alerts." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Please enable notifications in Settings to receive alerts." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請在設定中啟用通知以接收提醒。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请在设置中启用通知以接收提醒。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "通知を受け取るには設定で通知を有効にしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알림을 받으려면 설정에서 알림을 활성화하세요." } }
       }
     },
     "Transferring..." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transferring..." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transferring..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "傳輸中…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "传输中…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "転送中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전송 중…" } }
       }
     },
     "Mute" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mute" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mute" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "靜音" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "静音" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ミュート" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "음소거" } }
       }
     },
     "Speaker" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Speaker" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Speaker" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "擴音" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "扬声器" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スピーカー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "스피커" } }
       }
     },
     "End" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "End" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "End" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "結束" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "结束" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "終了" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "종료" } }
       }
     },
     "Version" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Version" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Version" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "版本" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "版本" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バージョン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "버전" } }
       }
     },
     "Profile" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Profile" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Profile" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "個人檔案" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人资料" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロフィール" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프로필" } }
       }
     },
     "Local Only" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local Only" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local Only" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅限本機" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅限本地" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルのみ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로컬만" } }
       }
     },
     "Sync to iCloud" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sync to iCloud" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sync to iCloud" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "同步至 iCloud" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "同步到 iCloud" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "iCloudに同期" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "iCloud에 동기화" } }
       }
     },
     "You are offline" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "You are offline" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "You are offline" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你目前離線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你当前离线" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オフラインです" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "오프라인 상태입니다" } }
       }
     },
     "Tap the antenna icon to go online and discover nearby devices." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tap the antenna icon to go online and discover nearby devices." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tap the antenna icon to go online and discover nearby devices." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "點擊天線圖示以上線並搜尋附近的裝置。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "点击天线图标以上线并搜索附近的设备。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アンテナアイコンをタップしてオンラインにし、近くのデバイスを検索します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "안테나 아이콘을 탭하여 온라인으로 전환하고 근처 기기를 검색하세요." } }
+      }
+    },
+    "Search" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "搜尋" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "検索" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "검색" } }
+      }
+    },
+    "Save" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "儲存" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "保存" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "저장" } }
+      }
+    },
+    "Accept" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accept" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "接受" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接受" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "承認" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "수락" } }
+      }
+    },
+    "Decline" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Decline" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "拒絕" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拒绝" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "拒否" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "거절" } }
+      }
+    },
+    "Reply" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reply" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "回覆" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回复" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "返信" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "답장" } }
+      }
+    },
+    "Name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Name" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "名稱" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "名称" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "名前" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이름" } }
+      }
+    },
+    "Message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지" } }
+      }
+    },
+    "Text" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "文字" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文本" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "テキスト" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "텍스트" } }
+      }
+    },
+    "Image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "圖片" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "图片" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "画像" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미지" } }
+      }
+    },
+    "Members" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Members" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "成員" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "成员" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メンバー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "멤버" } }
+      }
+    },
+    "Delivered" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delivered" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已送達" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已送达" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "配信済み" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전달됨" } }
+      }
+    },
+    "Read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已讀" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已读" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "既読" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "읽음" } }
+      }
+    },
+    "Port" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Port" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接埠" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "端口" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ポート" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포트" } }
+      }
+    },
+    "Add Member" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Member" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "新增成員" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加成员" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メンバーを追加" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "멤버 추가" } }
+      }
+    },
+    "Connect All" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect All" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "全部連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全部连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "すべて接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "모두 연결" } }
+      }
+    },
+    "Group Chat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Group Chat" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "群組聊天" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "群组聊天" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループチャット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그룹 채팅" } }
+      }
+    },
+    "Connect More" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect More" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線更多" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接更多" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "さらに接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "더 연결" } }
+      }
+    },
+    "Connection Status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Status" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線狀態" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接状态" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続状態" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 상태" } }
+      }
+    },
+    "Nearby Devices" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nearby Devices" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "附近的裝置" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "附近的设备" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "近くのデバイス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "근처 기기" } }
+      }
+    },
+    "Tailscale / Manual" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tailscale / Manual" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Tailscale / 手動" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Tailscale / 手动" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Tailscale / 手動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Tailscale / 수동" } }
+      }
+    },
+    "Security Degraded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Security Degraded" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "安全性降低" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安全性降低" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "セキュリティ低下" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "보안 저하" } }
+      }
+    },
+    "Connection Error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Error" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線錯誤" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接错误" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続エラー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 오류" } }
+      }
+    },
+    "Manual Connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manual Connect" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "手動連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "手动连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "手動接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "수동 연결" } }
+      }
+    },
+    "Share Clipboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Share Clipboard" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "分享剪貼簿" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分享剪贴板" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "クリップボードを共有" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "클립보드 공유" } }
+      }
+    },
+    "Assign to Group" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Assign to Group" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "指派至群組" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分配到群组" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループに割り当て" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그룹에 할당" } }
+      }
+    },
+    "Message Status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message Status" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息狀態" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息状态" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージ状態" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지 상태" } }
+      }
+    },
+    "Backup Records" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Backup Records" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "備份紀錄" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备份记录" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックアップ記録" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "백업 기록" } }
+      }
+    },
+    "Group Name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Group Name" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "群組名稱" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "群组名称" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループ名" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그룹 이름" } }
+      }
+    },
+    "Peer Address" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Peer Address" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "對等端地址" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "对端地址" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ピアアドレス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "피어 주소" } }
+      }
+    },
+    "Display Name (Optional)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Display Name (Optional)" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "顯示名稱（選填）" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示名称（可选）" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示名（任意）" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시 이름 (선택 사항)" } }
+      }
+    },
+    "Sort By" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sort By" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "排序方式" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "排序方式" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "並べ替え" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "정렬 기준" } }
+      }
+    },
+    "Last Connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Last Connected" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "上次連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上次连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "最終接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "마지막 연결" } }
+      }
+    },
+    "Connection Count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Count" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線次數" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接次数" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続回数" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 횟수" } }
+      }
+    },
+    "Certificate Fingerprint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Certificate Fingerprint" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "憑證指紋" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "证书指纹" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "証明書フィンガープリント" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "인증서 지문" } }
+      }
+    },
+    "Search messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search messages" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "搜尋訊息" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索消息" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージを検索" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지 검색" } }
+      }
+    },
+    "Type to search messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Type to search messages" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入以搜尋訊息" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入以搜索消息" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージを検索するには入力" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지를 검색하려면 입력" } }
+      }
+    },
+    "No messages found" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No messages found" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "找不到訊息" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未找到消息" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージが見つかりません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지를 찾을 수 없음" } }
+      }
+    },
+    "Image Unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image Unavailable" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "圖片無法顯示" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "图片不可用" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "画像を利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미지를 사용할 수 없음" } }
+      }
+    },
+    "IP Address or Hostname" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "IP Address or Hostname" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "IP 位址或主機名稱" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "IP 地址或主机名" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "IPアドレスまたはホスト名" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "IP 주소 또는 호스트 이름" } }
+      }
+    },
+    "No devices available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No devices available" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "沒有可用的裝置" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可用的设备" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用可能なデバイスがありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 가능한 기기 없음" } }
+      }
+    },
+    "Connect to more devices first" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect to more devices first" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先連線更多裝置" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先连接更多设备" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "まず他のデバイスに接続してください" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "먼저 더 많은 기기에 연결하세요" } }
+      }
+    },
+    "No groups yet. Create one first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No groups yet. Create one first." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "尚無群組，請先建立一個。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还没有群组，请先创建一个。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループがありません。まず作成してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아직 그룹이 없습니다. 먼저 만드세요." } }
+      }
+    },
+    "No transfers yet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No transfers yet" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "尚無傳輸紀錄" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还没有传输记录" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "転送履歴はまだありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아직 전송 기록 없음" } }
+      }
+    },
+    "No backup records available." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No backup records available." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "沒有可用的備份紀錄。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可用的备份记录。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用可能なバックアップ記録がありません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 가능한 백업 기록이 없습니다." } }
+      }
+    },
+    "Nothing to share" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nothing to share" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "沒有可分享的內容" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可分享的内容" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "共有するものがありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "공유할 항목 없음" } }
+      }
+    },
+    "Copy some text or an image to your clipboard first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy some text or an image to your clipboard first." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先複製一些文字或圖片到剪貼簿。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先复制一些文字或图片到剪贴板。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "まずテキストや画像をクリップボードにコピーしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "먼저 텍스트나 이미지를 클립보드에 복사하세요." } }
+      }
+    },
+    "Receive alerts for incoming connections and messages." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Receive alerts for incoming connections and messages." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "接收連線和訊息的提醒通知。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接收连接和消息的提醒通知。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "着信接続やメッセージの通知を受け取ります。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "수신 연결 및 메시지에 대한 알림을 받습니다." } }
+      }
+    },
+    "Messages are stored on this device only." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Messages are stored on this device only." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息僅儲存在此裝置上。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息仅存储在此设备上。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージはこのデバイスにのみ保存されます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지는 이 기기에만 저장됩니다." } }
+      }
+    },
+    "Export or import your device records, transfer history, and chat data." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export or import your device records, transfer history, and chat data." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "匯出或匯入裝置紀錄、傳輸紀錄和聊天資料。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导出或导入设备记录、传输记录和聊天数据。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デバイス記録、転送履歴、チャットデータをエクスポートまたはインポートします。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기기 기록, 전송 기록 및 채팅 데이터를 내보내거나 가져옵니다." } }
+      }
+    },
+    "Sending..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "傳送中…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送中…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "送信中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전송 중…" } }
+      }
+    },
+    "Send to Peer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send to Peer" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "傳送給對方" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送给对方" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ピアに送信" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "피어에게 전송" } }
+      }
+    },
+    "Calling..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Calling..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "通話中…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在呼叫…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "発信中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "통화 중…" } }
+      }
+    },
+    "Connecting..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線中…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接中…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 중…" } }
+      }
+    },
+    "Requesting connection..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Requesting connection..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在要求連線…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在请求连接…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続をリクエスト中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 요청 중…" } }
+      }
+    },
+    "Recording..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recording..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "錄音中…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "录音中…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "録音中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "녹음 중…" } }
+      }
+    },
+    "Disconnect from this peer?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect from this peer?" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "要中斷與此對等端的連線嗎？" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "要断开与此设备的连接吗？" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このピアとの接続を切断しますか？" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 피어와 연결을 해제하시겠습니까?" } }
+      }
+    },
+    "wants to connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "wants to connect" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "想要連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "想要连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続をリクエストしています" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결을 요청합니다" } }
+      }
+    },
+    "Connect by IP Address" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect by IP Address" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "透過 IP 位址連線" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过 IP 地址连接" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "IPアドレスで接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "IP 주소로 연결" } }
+      }
+    },
+    "An unknown error occurred." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An unknown error occurred." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "發生未知錯誤。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发生未知错误。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "不明なエラーが発生しました。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알 수 없는 오류가 발생했습니다." } }
+      }
+    },
+    "The peer declined your connection request." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The peer declined your connection request." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "對方已拒絕你的連線請求。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "对方已拒绝你的连接请求。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ピアが接続リクエストを拒否しました。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "피어가 연결 요청을 거부했습니다." } }
+      }
+    },
+    "Microphone Access Required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Microphone Access Required" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "需要麥克風權限" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要麦克风权限" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マイクへのアクセスが必要です" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "마이크 접근 권한 필요" } }
+      }
+    },
+    "Please enable microphone access in Settings to record voice messages." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Please enable microphone access in Settings to record voice messages." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請在設定中啟用麥克風權限以錄製語音訊息。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请在设置中启用麦克风权限以录制语音消息。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声メッセージを録音するには設定でマイクへのアクセスを有効にしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "음성 메시지를 녹음하려면 설정에서 마이크 접근을 활성화하세요." } }
+      }
+    },
+    "Archive Error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Archive Error" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "封存錯誤" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "归档错误" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アーカイブエラー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아카이브 오류" } }
+      }
+    },
+    "Merge with existing data" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Merge with existing data" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "與現有資料合併" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "与现有数据合并" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "既存データとマージ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기존 데이터와 병합" } }
+      }
+    },
+    "Replace all data" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Replace all data" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取代所有資料" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "替换所有数据" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "すべてのデータを置換" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "모든 데이터 대체" } }
+      }
+    },
+    "Import Mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import Mode" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "匯入模式" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导入模式" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "インポートモード" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "가져오기 모드" } }
+      }
+    },
+    "Edit Group" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Group" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "編輯群組" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑群组" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グループを編集" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그룹 편집" } }
+      }
+    },
+    "Search devices..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search devices..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "搜尋裝置…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索设备…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デバイスを検索…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기기 검색…" } }
       }
     }
   },

@@ -18,6 +18,8 @@ struct GroupReadReceiptView: View {
                         Text("\(deliveredCount)/\(members.count)")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Delivered to \(deliveredCount) of \(members.count)")
 
                     HStack {
                         Label("Read", systemImage: "checkmark.circle.fill")
@@ -26,6 +28,8 @@ struct GroupReadReceiptView: View {
                         Text("\(readCount)/\(members.count)")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Read by \(readCount) of \(members.count)")
                 }
 
                 // Individual member status
@@ -41,6 +45,8 @@ struct GroupReadReceiptView: View {
 
                             statusIcon(for: member.id)
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(member.displayName), \(statusLabel(for: member.id))")
                     }
                 }
             }
@@ -62,6 +68,13 @@ struct GroupReadReceiptView: View {
 
     private var readCount: Int {
         message.groupReadStatus?.readBy.count ?? 0
+    }
+
+    private func statusLabel(for memberID: String) -> String {
+        guard let status = message.groupReadStatus else { return "Pending" }
+        if status.readBy.contains(memberID) { return "Read" }
+        if status.deliveredTo.contains(memberID) { return "Delivered" }
+        return "Sent"
     }
 
     @ViewBuilder

@@ -32,11 +32,15 @@ struct UserProfileView: View {
                         }
                         Spacer()
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Profile picture")
                 }
 
                 Section("Display Name") {
                     TextField("Display Name", text: $displayName)
                         .autocorrectionDisabled()
+                        .accessibilityLabel("Display Name")
+                        .accessibilityHint("This name is visible to nearby devices")
                 }
             }
             .navigationTitle("Profile")

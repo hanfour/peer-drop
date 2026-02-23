@@ -26,6 +26,9 @@ struct AssignGroupSheet: View {
                                 }
                             }
                         }
+                        .accessibilityLabel(group.name)
+                        .accessibilityValue(group.deviceIDs.contains(deviceID) ? "Already assigned" : "")
+                        .accessibilityHint("Double tap to assign device to this group")
                     }
                 }
             }

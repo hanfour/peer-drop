@@ -50,6 +50,8 @@ struct PeerActionSheet<MiddleContent: View>: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(peerName), \(subtitle)")
 
             middleContent
 
@@ -74,6 +76,7 @@ struct PeerActionSheet<MiddleContent: View>: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(secondaryColor)
+                .accessibilityIdentifier("sheet-secondary-action")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 32)

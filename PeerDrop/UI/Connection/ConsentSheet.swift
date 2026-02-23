@@ -29,6 +29,9 @@ struct ConsentSheet: View {
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
                 }
                 .padding(.horizontal)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Certificate fingerprint: \(Self.formatFingerprint(fingerprint))")
+                .accessibilityHint("Verify this matches the peer's device")
             }
         }
     }

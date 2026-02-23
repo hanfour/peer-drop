@@ -31,6 +31,8 @@ struct DeviceRecordRow: View {
             }
             .padding(.vertical, 4)
         }
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(record.displayName), \(record.relativeLastConnected), \(record.connectionCount) connections")
+        .accessibilityHint("Double tap to view device details")
     }
 }

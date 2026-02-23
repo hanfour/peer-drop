@@ -7,6 +7,15 @@ struct ReactionPickerView: View {
 
     private let emojis = ["👍", "❤️", "😂", "😮", "😢", "🔥"]
 
+    static let emojiNames: [String: String] = [
+        "👍": "Thumbs up",
+        "❤️": "Heart",
+        "😂": "Laughing",
+        "😮": "Surprised",
+        "😢": "Sad",
+        "🔥": "Fire"
+    ]
+
     var body: some View {
         HStack(spacing: 12) {
             ForEach(emojis, id: \.self) { emoji in
@@ -17,6 +26,8 @@ struct ReactionPickerView: View {
                         .font(.title2)
                 }
                 .buttonStyle(ReactionButtonStyle())
+                .accessibilityLabel(Self.emojiNames[emoji] ?? emoji)
+                .accessibilityHint("Double tap to react")
             }
         }
         .padding(.horizontal, 16)
@@ -58,6 +69,8 @@ struct ReactionsView: View {
                         Capsule()
                             .fill(isOutgoing ? Color.white.opacity(0.2) : Color(.systemGray6))
                     )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(ReactionPickerView.emojiNames[item.emoji] ?? item.emoji), \(item.count)")
                 }
             }
         }

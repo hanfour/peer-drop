@@ -65,6 +65,8 @@ struct ClipboardShareView: View {
             .background(Color(.secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
+            .accessibilityLabel("Text preview")
+            .accessibilityValue(text)
 
             Text("\(text.count) characters")
                 .font(.caption)
@@ -87,6 +89,8 @@ struct ClipboardShareView: View {
                 .frame(maxHeight: 300)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
+                .accessibilityLabel("Image preview")
+                .accessibilityValue("\(Int(image.size.width)) by \(Int(image.size.height)) pixels")
 
             let size = image.pngData().map { Int64($0.count) } ?? 0
             Text("\(Int(image.size.width))x\(Int(image.size.height)) -- \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))")
@@ -103,6 +107,7 @@ struct ClipboardShareView: View {
             Image(systemName: "clipboard")
                 .font(.system(size: 48))
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
             Text("Nothing to share")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -113,6 +118,7 @@ struct ClipboardShareView: View {
                 .padding(.horizontal, 40)
             Spacer()
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var sendButton: some View {
@@ -134,6 +140,8 @@ struct ClipboardShareView: View {
         .buttonStyle(.borderedProminent)
         .tint(.orange)
         .disabled(isSending || (clipboardText == nil && clipboardImage == nil))
+        .accessibilityLabel(isSending ? "Sending" : "Send to Peer")
+        .accessibilityHint(clipboardText == nil && clipboardImage == nil ? "Copy content to clipboard first" : "Double tap to send clipboard content")
     }
 
     // MARK: - Logic

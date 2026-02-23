@@ -25,6 +25,8 @@ struct TypingIndicatorView: View {
         .background(Color(.systemGray6))
         .clipShape(Capsule())
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(peerName) is typing")
         .onAppear {
             startAnimation()
         }

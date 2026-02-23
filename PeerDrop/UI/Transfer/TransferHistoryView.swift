@@ -11,10 +11,12 @@ struct TransferHistoryView: View {
                     Image(systemName: "clock")
                         .font(.system(size: 40))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text("No transfers yet")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .combine)
             } else {
                 List(connectionManager.transferHistory) { record in
                     HStack(spacing: 12) {
@@ -42,6 +44,8 @@ struct TransferHistoryView: View {
                             .foregroundStyle(record.success ? .green : .red)
                     }
                     .padding(.vertical, 4)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(record.direction == .sent ? "Sent" : "Received") \(record.fileName), \(record.formattedSize), \(record.success ? "successful" : "failed")")
                 }
                 .listStyle(.plain)
             }

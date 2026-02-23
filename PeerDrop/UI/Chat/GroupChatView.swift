@@ -79,6 +79,8 @@ struct GroupChatView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(connectionStatus.connected) of \(connectionStatus.total) members connected")
 
             Spacer()
 
@@ -92,6 +94,7 @@ struct GroupChatView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityHint("Double tap to connect to more group members")
             }
         }
         .padding(.horizontal, 16)
@@ -106,6 +109,8 @@ struct GroupChatView: View {
                 .padding(.vertical, 8)
                 .background(Color(.systemGray6))
                 .clipShape(Capsule())
+                .accessibilityLabel("Message")
+                .accessibilityHint(hasConnectedMembers ? "Type a message to the group" : "Connect to members first")
 
             Button {
                 sendMessage()
@@ -193,9 +198,17 @@ struct GroupChatBubbleView: View {
             }
         }
         .padding(.horizontal, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(groupBubbleAccessibilityLabel)
         .sheet(isPresented: $showReadReceipts) {
             GroupReadReceiptView(message: message, members: members)
         }
+    }
+
+    private var groupBubbleAccessibilityLabel: String {
+        let sender = message.isOutgoing ? "You" : (message.senderName ?? "Unknown")
+        let content = message.text ?? "media"
+        return "\(sender): \(content)"
     }
 
     @ViewBuilder

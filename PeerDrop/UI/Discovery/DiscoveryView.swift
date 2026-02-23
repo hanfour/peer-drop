@@ -17,6 +17,8 @@ struct DiscoveryView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 4)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Searching for nearby devices")
                     } else {
                         ForEach(connectionManager.discoveredPeers) { peer in
                             PeerRowView(peer: peer) {
@@ -51,6 +53,7 @@ struct DiscoveryView: View {
                         Label("Connect by IP Address", systemImage: "network")
                     }
                     .disabled(isConnecting)
+                    .accessibilityHint("Double tap to enter an IP address manually")
                 } header: {
                     Text("Tailscale / Manual")
                 }
@@ -69,6 +72,8 @@ struct DiscoveryView: View {
                             Image(systemName: "exclamationmark.shield.fill")
                                 .foregroundStyle(.orange)
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Security degraded: \(error)")
                     }
                 }
             }
@@ -116,6 +121,8 @@ struct DiscoveryView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.ultraThinMaterial)
                 .transition(.opacity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(connectingLabel)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isConnecting)

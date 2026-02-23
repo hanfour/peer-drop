@@ -31,6 +31,8 @@ struct ContentView: View {
                 Label("Nearby", systemImage: "wifi")
             }
             .tag(0)
+            .accessibilityLabel("Nearby")
+            .accessibilityHint("Discover nearby devices")
 
             NavigationStack {
                 ConnectedTab()
@@ -39,6 +41,8 @@ struct ContentView: View {
                 Label("Connected", systemImage: "link")
             }
             .tag(1)
+            .accessibilityLabel("Connected")
+            .accessibilityHint("View connected devices")
 
             NavigationStack {
                 LibraryTab()
@@ -47,6 +51,8 @@ struct ContentView: View {
                 Label("Library", systemImage: "archivebox")
             }
             .tag(2)
+            .accessibilityLabel("Library")
+            .accessibilityHint("View saved devices and groups")
         }
         .modifier(TabBarOnlyModifier())  // Force tab bar on iPad
         .sheet(item: $connectionManager.pendingIncomingRequest) { request in

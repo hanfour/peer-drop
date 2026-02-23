@@ -70,5 +70,7 @@ struct GroupRow: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(group.name), \(statusText)")
     }
 }
