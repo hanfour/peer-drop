@@ -32,15 +32,19 @@ struct TransferProgressView: View {
                 ProgressView(value: transfer.progress)
                     .progressViewStyle(.linear)
                     .padding(.horizontal, 40)
+                    .accessibilityLabel("Transfer progress")
+                    .accessibilityValue("\(Int(transfer.progress * 100)) percent")
 
                 Text("\(Int(transfer.progress * 100))%")
                     .font(.title2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
 
                 if let error = transfer.lastError {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)
+                        .accessibilityLabel("Transfer error: \(error)")
                 }
             }
 
@@ -52,6 +56,7 @@ struct TransferProgressView: View {
             .buttonStyle(.bordered)
             .tint(.red)
             .padding(.bottom, 32)
+            .accessibilityHint("Cancels the current file transfer")
         }
         .presentationDetents([.medium])
     }

@@ -28,10 +28,22 @@ struct SettingsView: View {
             Form {
                 Section { TextField("Display Name", text: $displayName).autocorrectionDisabled() } header: { Text("Identity") } footer: { Text("This name is visible to nearby devices.") }
                 Section("Profile") { NavigationLink("Edit Profile") { UserProfileView() } }
-                Section { Toggle("File Transfer", isOn: $fileTransferEnabled); Toggle("Voice Calls", isOn: $voiceCallEnabled); Toggle("Chat", isOn: $chatEnabled) } header: { Text("Connectivity") } footer: { Text("Disabled features will reject incoming requests automatically.") }
+                Section {
+                    Toggle("File Transfer", isOn: $fileTransferEnabled)
+                        .accessibilityHint("Allows sending and receiving files")
+                    Toggle("Voice Calls", isOn: $voiceCallEnabled)
+                        .accessibilityHint("Allows making and receiving voice calls")
+                    Toggle("Chat", isOn: $chatEnabled)
+                        .accessibilityHint("Allows sending and receiving messages")
+                } header: { Text("Connectivity") } footer: { Text("Disabled features will reject incoming requests automatically.") }
                 Section { Toggle("Enable Notifications", isOn: $notificationsEnabled) } header: { Text("Notifications") } footer: { Text("Receive alerts for incoming connections and messages.") }
                 Section("Message Storage") { Picker("Storage Mode", selection: $storageMode) { Text("Local Only").tag("local"); Text("Sync to iCloud").tag("icloud") }.pickerStyle(.segmented); Text("Messages are stored on this device only.").font(.caption).foregroundStyle(.secondary) }
-                Section { Button { exportArchive() } label: { Label("Export Archive", systemImage: "square.and.arrow.up") }; Button { showDocumentPicker = true } label: { Label("Import Archive", systemImage: "square.and.arrow.down") } } header: { Text("Archive") } footer: { Text("Export or import your device records, transfer history, and chat data.") }
+                Section {
+                    Button { exportArchive() } label: { Label("Export Archive", systemImage: "square.and.arrow.up") }
+                        .accessibilityHint("Exports device records, transfer history, and chat data")
+                    Button { showDocumentPicker = true } label: { Label("Import Archive", systemImage: "square.and.arrow.down") }
+                        .accessibilityHint("Imports data from a previously exported archive")
+                } header: { Text("Archive") } footer: { Text("Export or import your device records, transfer history, and chat data.") }
                 Section { LabeledContent("Version", value: appVersion) } header: { Text("About") }
             }
             .navigationTitle("Settings")

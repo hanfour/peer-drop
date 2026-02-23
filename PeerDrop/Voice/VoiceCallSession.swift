@@ -1,6 +1,9 @@
 import Foundation
 import AVFoundation
 import WebRTC
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoiceCallSession")
 
 /// Per-peer voice call session that manages WebRTC state for a single connection.
 @MainActor
@@ -32,7 +35,11 @@ final class VoiceCallSession: ObservableObject {
         webRTCClient.onICECandidate = { [weak self] candidate in
             Task { @MainActor in
                 guard let self else { return }
-                try? await self.sendICECandidate(candidate)
+                do {
+                    try await self.sendICECandidate(candidate)
+                } catch {
+                    logger.warning("Failed to send ICE candidate: \(error.localizedDescription)")
+                }
             }
         }
 
@@ -58,7 +65,11 @@ final class VoiceCallSession: ObservableObject {
     func endCall() async {
         if isInCall {
             let end = PeerMessage(type: .callEnd, senderID: peerID)
-            try? await sendMessage?(end)
+            do {
+                try await sendMessage?(end)
+            } catch {
+                logger.warning("Failed to send call end: \(error.localizedDescription)")
+            }
         }
         endCallLocally()
     }

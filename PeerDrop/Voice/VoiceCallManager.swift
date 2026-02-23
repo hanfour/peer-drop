@@ -1,6 +1,9 @@
 import Foundation
 import AVFoundation
 import WebRTC
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoiceCallManager")
 
 /// Coordinates WebRTC + CallKit for voice call lifecycle.
 /// Supports both legacy single-connection mode and multi-connection session pool.
@@ -107,7 +110,11 @@ final class VoiceCallManager: ObservableObject {
 
         webRTCClient.onICECandidate = { [weak self] candidate in
             Task { @MainActor in
-                try? await self?.signaling?.sendICECandidate(candidate)
+                do {
+                    try await self?.signaling?.sendICECandidate(candidate)
+                } catch {
+                    logger.warning("Failed to send ICE candidate: \(error.localizedDescription)")
+                }
             }
         }
 
@@ -136,7 +143,11 @@ final class VoiceCallManager: ObservableObject {
 
         // Send call request over TCP
         let request = PeerMessage(type: .callRequest, senderID: manager.localIdentity.id)
-        try? await manager.sendMessage(request, to: peerID)
+        do {
+            try await manager.sendMessage(request, to: peerID)
+        } catch {
+            logger.warning("Failed to send call request: \(error.localizedDescription)")
+        }
 
         callKitManager.startOutgoingCall(to: peer.displayName)
     }
@@ -155,7 +166,11 @@ final class VoiceCallManager: ObservableObject {
         manager.showVoiceCall = true
 
         let request = PeerMessage(type: .callRequest, senderID: manager.localIdentity.id)
-        try? await manager.sendMessage(request, to: peerID)
+        do {
+            try await manager.sendMessage(request, to: peerID)
+        } catch {
+            logger.warning("Failed to send call request to peer: \(error.localizedDescription)")
+        }
 
         callKitManager.startOutgoingCall(to: peerConn.peerIdentity.displayName)
     }
@@ -183,7 +198,11 @@ final class VoiceCallManager: ObservableObject {
             } catch {
                 print("[VoiceCallManager] Failed to report incoming call: \(error)")
                 let reject = PeerMessage(type: .callReject, senderID: connectionManager?.localIdentity.id ?? "local")
-                try? await connectionManager?.sendMessage(reject, to: senderID)
+                do {
+                    try await connectionManager?.sendMessage(reject, to: senderID)
+                } catch {
+                    logger.warning("Failed to send call reject: \(error.localizedDescription)")
+                }
                 removeSession(for: senderID)
             }
         }
@@ -198,7 +217,11 @@ final class VoiceCallManager: ObservableObject {
             connectionManager?.showVoiceCall = true
 
             let accept = PeerMessage(type: .callAccept, senderID: connectionManager?.localIdentity.id ?? "local")
-            try? await connectionManager?.sendMessage(accept)
+            do {
+                try await connectionManager?.sendMessage(accept)
+            } catch {
+                logger.warning("Failed to send call accept: \(error.localizedDescription)")
+            }
             return
         }
 
@@ -210,7 +233,11 @@ final class VoiceCallManager: ObservableObject {
         connectionManager?.showVoiceCall = true
 
         let accept = PeerMessage(type: .callAccept, senderID: connectionManager?.localIdentity.id ?? "local")
-        try? await connectionManager?.sendMessage(accept, to: peerID)
+        do {
+            try await connectionManager?.sendMessage(accept, to: peerID)
+        } catch {
+            logger.warning("Failed to send call accept to peer: \(error.localizedDescription)")
+        }
     }
 
     func handleCallAccept() {
@@ -316,7 +343,11 @@ final class VoiceCallManager: ObservableObject {
             // Legacy end
             Task {
                 let end = PeerMessage(type: .callEnd, senderID: connectionManager?.localIdentity.id ?? "local")
-                try? await connectionManager?.sendMessage(end)
+                do {
+                    try await connectionManager?.sendMessage(end)
+                } catch {
+                    logger.warning("Failed to send call end: \(error.localizedDescription)")
+                }
             }
         }
         callKitManager.endCall()
