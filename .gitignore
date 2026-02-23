@@ -75,5 +75,8 @@ Gemfile.lock
 # Claude Code
 .claude/
 
+# Git worktrees
+.worktrees/
+
 # Fastlane screenshot backups
 fastlane/screenshots_framed_backup/
