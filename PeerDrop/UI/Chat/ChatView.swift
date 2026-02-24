@@ -77,6 +77,16 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        if chatManager.hasMoreMessages {
+                            Button("Load earlier messages") {
+                                chatManager.loadMoreMessages()
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                        }
+
                         ForEach(chatManager.messages) { message in
                             ChatBubbleView(
                                 message: message,

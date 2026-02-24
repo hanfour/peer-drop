@@ -14,6 +14,9 @@ final class ChatManager: ObservableObject {
     @Published var typingPeers: Set<String> = []
 
     private var typingExpirationTasks: [String: Task<Void, Never>] = [:]
+    private var allMessagesForCurrentPeer: [ChatMessage] = []
+    private let pageSize = 50
+    var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count }
 
     var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
@@ -105,23 +108,37 @@ final class ChatManager: ObservableObject {
         // Screenshot mode: return mock messages for mock peers
         if ScreenshotModeProvider.shared.isActive && ScreenshotModeProvider.isMockPeer(peerID) {
             messages = ScreenshotModeProvider.shared.mockChatMessages
+            allMessagesForCurrentPeer = messages
             return
         }
 
         let file = messagesFile(for: peerID)
         guard fileManager.fileExists(atPath: file.path) else {
             messages = []
+            allMessagesForCurrentPeer = []
             markAsRead(peerID: peerID)
             return
         }
         do {
             let raw = try Data(contentsOf: file)
             let data = try encryptor.decrypt(raw)
-            messages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            allMessagesForCurrentPeer = try JSONDecoder().decode([ChatMessage].self, from: data)
         } catch {
-            messages = []
+            allMessagesForCurrentPeer = []
+            logger.warning("Failed to load messages: \(error.localizedDescription)")
         }
+        // Show last pageSize messages
+        messages = Array(allMessagesForCurrentPeer.suffix(pageSize))
         markAsRead(peerID: peerID)
+    }
+
+    func loadMoreMessages() {
+        let currentCount = messages.count
+        guard currentCount < allMessagesForCurrentPeer.count else { return }
+        let startIndex = max(0, allMessagesForCurrentPeer.count - currentCount - pageSize)
+        let endIndex = allMessagesForCurrentPeer.count - currentCount
+        let olderMessages = Array(allMessagesForCurrentPeer[startIndex..<endIndex])
+        messages.insert(contentsOf: olderMessages, at: 0)
     }
 
     func deleteMessages(forPeer peerID: String) {
