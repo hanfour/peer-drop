@@ -18,7 +18,10 @@ final class ChatManager: ObservableObject {
     private var pendingMessages: [String: [ChatMessage]] = [:]
     private var allMessagesForCurrentPeer: [ChatMessage] = []
     private let pageSize = 50
-    var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count }
+    private let maxInMemoryMessages = 500
+    private var hasOlderMessagesOnDisk = false
+    private var currentPeerID: String?
+    var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count || hasOlderMessagesOnDisk }
 
     var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
@@ -109,11 +112,13 @@ final class ChatManager: ObservableObject {
     func loadMessages(forPeer peerID: String) {
         // Flush any pending writes so disk is up to date
         flushPendingPersist(for: peerID)
+        currentPeerID = peerID
 
         // Screenshot mode: return mock messages for mock peers
         if ScreenshotModeProvider.shared.isActive && ScreenshotModeProvider.isMockPeer(peerID) {
             messages = ScreenshotModeProvider.shared.mockChatMessages
             allMessagesForCurrentPeer = messages
+            hasOlderMessagesOnDisk = false
             return
         }
 
@@ -121,16 +126,25 @@ final class ChatManager: ObservableObject {
         guard fileManager.fileExists(atPath: file.path) else {
             messages = []
             allMessagesForCurrentPeer = []
+            hasOlderMessagesOnDisk = false
             markAsRead(peerID: peerID)
             return
         }
+        var decoded: [ChatMessage] = []
         do {
             let raw = try Data(contentsOf: file)
             let data = try encryptor.decrypt(raw)
-            allMessagesForCurrentPeer = try JSONDecoder().decode([ChatMessage].self, from: data)
+            decoded = try JSONDecoder().decode([ChatMessage].self, from: data)
         } catch {
-            allMessagesForCurrentPeer = []
             logger.warning("Failed to load messages: \(error.localizedDescription)")
+        }
+        // Cap in-memory messages to avoid unbounded memory growth
+        if decoded.count > maxInMemoryMessages {
+            allMessagesForCurrentPeer = Array(decoded.suffix(maxInMemoryMessages))
+            hasOlderMessagesOnDisk = true
+        } else {
+            allMessagesForCurrentPeer = decoded
+            hasOlderMessagesOnDisk = false
         }
         // Show last pageSize messages
         messages = Array(allMessagesForCurrentPeer.suffix(pageSize))
@@ -139,11 +153,45 @@ final class ChatManager: ObservableObject {
 
     func loadMoreMessages() {
         let currentCount = messages.count
-        guard currentCount < allMessagesForCurrentPeer.count else { return }
-        let startIndex = max(0, allMessagesForCurrentPeer.count - currentCount - pageSize)
-        let endIndex = allMessagesForCurrentPeer.count - currentCount
-        let olderMessages = Array(allMessagesForCurrentPeer[startIndex..<endIndex])
-        messages.insert(contentsOf: olderMessages, at: 0)
+        if currentCount < allMessagesForCurrentPeer.count {
+            let startIndex = max(0, allMessagesForCurrentPeer.count - currentCount - pageSize)
+            let endIndex = allMessagesForCurrentPeer.count - currentCount
+            let olderMessages = Array(allMessagesForCurrentPeer[startIndex..<endIndex])
+            messages.insert(contentsOf: olderMessages, at: 0)
+        } else if hasOlderMessagesOnDisk {
+            loadOlderMessagesFromDisk()
+        }
+    }
+
+    /// Load the next batch of older messages from disk when in-memory pages are exhausted.
+    private func loadOlderMessagesFromDisk() {
+        guard let peerID = currentPeerID else { return }
+        let file = messagesFile(for: peerID)
+        guard fileManager.fileExists(atPath: file.path) else {
+            hasOlderMessagesOnDisk = false
+            return
+        }
+        do {
+            let raw = try Data(contentsOf: file)
+            let data = try encryptor.decrypt(raw)
+            let allOnDisk = try JSONDecoder().decode([ChatMessage].self, from: data)
+            let currentOldestCount = allMessagesForCurrentPeer.count
+            let remainingCount = allOnDisk.count - currentOldestCount
+            guard remainingCount > 0 else {
+                hasOlderMessagesOnDisk = false
+                return
+            }
+            let batchStart = max(0, remainingCount - maxInMemoryMessages)
+            let nextBatch = Array(allOnDisk[batchStart..<remainingCount])
+            allMessagesForCurrentPeer.insert(contentsOf: nextBatch, at: 0)
+            hasOlderMessagesOnDisk = batchStart > 0
+            // Load a page from the newly loaded batch
+            let olderPage = Array(nextBatch.suffix(pageSize))
+            messages.insert(contentsOf: olderPage, at: 0)
+        } catch {
+            hasOlderMessagesOnDisk = false
+            logger.warning("Failed to load older messages from disk: \(error.localizedDescription)")
+        }
     }
 
     func deleteMessages(forPeer peerID: String) {
@@ -458,7 +506,7 @@ final class ChatManager: ObservableObject {
     }
 
     /// Flush all pending persists across all peers.
-    private func flushAllPendingPersists() {
+    func flushAllPendingPersists() {
         for peerID in persistTasks.keys {
             flushPendingPersist(for: peerID)
         }

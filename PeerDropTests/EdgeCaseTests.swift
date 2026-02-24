@@ -3,6 +3,19 @@ import Network
 import CryptoKit
 @testable import PeerDrop
 
+private func withTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await operation() }
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            throw CancellationError()
+        }
+        let result = try await group.next()!
+        group.cancelAll()
+        return result
+    }
+}
+
 /// Edge-case tests: mid-transfer disconnect, zero-byte files, cancellation
 /// cleanup, framer boundaries, and rapid sequential transfers.
 final class EdgeCaseTests: XCTestCase {
@@ -139,15 +152,17 @@ final class EdgeCaseTests: XCTestCase {
         // Give network time to propagate the disconnect
         try await Task.sleep(nanoseconds: 500_000_000)
 
-        // Sender should eventually fail when trying to send more chunks
+        // Sender should eventually fail when trying to send more chunks.
+        // Wrap in timeout to prevent hanging if the connection buffers indefinitely.
         var hitError = false
-        for i in 1..<chunks.count {
-            do {
-                try await client.sendMessage(PeerMessage.fileChunk(chunks[i], senderID: "sender"))
-            } catch {
-                hitError = true
-                break
+        do {
+            try await withTimeout(seconds: 10) {
+                for i in 1..<chunks.count {
+                    try await client.sendMessage(PeerMessage.fileChunk(chunks[i], senderID: "sender"))
+                }
             }
+        } catch {
+            hitError = true
         }
 
         // The connection may buffer some sends before failing — that's OK.

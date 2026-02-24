@@ -693,6 +693,9 @@ final class ConnectionManager: ObservableObject {
                 break
             }
         case .background:
+            // Flush pending writes before entering background
+            deviceStore.saveImmediately()
+            chatManager.flushAllPendingPersists()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
