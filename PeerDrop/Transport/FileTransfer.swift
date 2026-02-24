@@ -265,17 +265,25 @@ final class FileTransfer: ObservableObject {
         }
 
         // Check available disk space before accepting
-        if let availableBytes = try? URL(fileURLWithPath: NSTemporaryDirectory())
-            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            .volumeAvailableCapacityForImportantUsage,
-           availableBytes < metadata.fileSize + 10_000_000 { // 10MB buffer
-            logger.error("Insufficient disk space: need \(metadata.fileSize) bytes, available \(availableBytes)")
-            lastError = "Not enough storage space"
-            Task {
-                let reject = PeerMessage.fileReject(senderID: "local", reason: "insufficientStorage")
-                try? await connectionManager?.sendMessage(reject)
+        do {
+            let availableBytes = try URL(fileURLWithPath: NSTemporaryDirectory())
+                .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                .volumeAvailableCapacityForImportantUsage ?? 0
+            if availableBytes < metadata.fileSize + 10_000_000 { // 10MB buffer
+                logger.error("Insufficient disk space: need \(metadata.fileSize) bytes, available \(availableBytes)")
+                lastError = "Not enough storage space"
+                Task {
+                    let reject = PeerMessage.fileReject(senderID: "local", reason: "insufficientStorage")
+                    do {
+                        try await connectionManager?.sendMessage(reject)
+                    } catch {
+                        logger.error("Failed to send rejection: \(error.localizedDescription)")
+                    }
+                }
+                return
             }
-            return
+        } catch {
+            logger.error("Failed to check disk space: \(error.localizedDescription)")
         }
 
         receiveMetadata = metadata
@@ -340,7 +348,7 @@ final class FileTransfer: ObservableObject {
         receiveFileHandle?.closeFile()
         receiveFileHandle = nil
         if let tempURL = receiveTempURL {
-            try? FileManager.default.removeItem(at: tempURL)
+            try? FileManager.default.removeItem(at: tempURL) // P2: temp cleanup, failure is acceptable
         }
         receiveTempURL = nil
         receiveMetadata = nil
@@ -387,13 +395,25 @@ final class FileTransfer: ObservableObject {
         if success, let tempURL = receiveTempURL {
             let destURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(metadata.fileName)
-            try? FileManager.default.removeItem(at: destURL)
-            try? FileManager.default.moveItem(at: tempURL, to: destURL)
+            do {
+                if FileManager.default.fileExists(atPath: destURL.path) {
+                    try FileManager.default.removeItem(at: destURL)
+                }
+                try FileManager.default.moveItem(at: tempURL, to: destURL)
+            } catch {
+                logger.error("Failed to finalize file transfer: \(error.localizedDescription)")
+            }
 
             let finalURL: URL
-            if metadata.isDirectory, let unzippedURL = try? destURL.unzipFile() {
-                finalURL = unzippedURL
-                try? FileManager.default.removeItem(at: destURL)
+            if metadata.isDirectory {
+                do {
+                    let unzippedURL = try destURL.unzipFile()
+                    finalURL = unzippedURL
+                    try? FileManager.default.removeItem(at: destURL) // P2: temp cleanup, failure is acceptable
+                } catch {
+                    logger.error("Failed to unzip: \(error.localizedDescription)")
+                    finalURL = destURL
+                }
             } else {
                 finalURL = destURL
             }
@@ -409,7 +429,7 @@ final class FileTransfer: ObservableObject {
             HapticManager.transferComplete()
         } else {
             if let tempURL = receiveTempURL {
-                try? FileManager.default.removeItem(at: tempURL)
+                try? FileManager.default.removeItem(at: tempURL) // P2: temp cleanup, failure is acceptable
             }
             lastError = "Hash verification failed"
             HapticManager.transferFailed()

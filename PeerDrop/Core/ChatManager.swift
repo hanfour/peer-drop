@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "ChatManager")
 
 @MainActor
 final class ChatManager: ObservableObject {
@@ -123,9 +126,17 @@ final class ChatManager: ObservableObject {
 
     func deleteMessages(forPeer peerID: String) {
         let file = messagesFile(for: peerID)
-        try? fileManager.removeItem(at: file)
+        do {
+            try fileManager.removeItem(at: file)
+        } catch {
+            logger.warning("Failed to delete messages file: \(error.localizedDescription)")
+        }
         let mediaDir = mediaDirectory(for: peerID)
-        try? fileManager.removeItem(at: mediaDir)
+        do {
+            try fileManager.removeItem(at: mediaDir)
+        } catch {
+            logger.warning("Failed to delete media directory: \(error.localizedDescription)")
+        }
         if !messages.isEmpty {
             messages = []
         }
@@ -384,15 +395,26 @@ final class ChatManager: ObservableObject {
     private func appendMessage(_ message: ChatMessage, peerID: String) {
         let file = messagesFile(for: peerID)
         let dir = file.deletingLastPathComponent()
-        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        do {
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            logger.error("Failed to create chat directory: \(error.localizedDescription)")
+        }
         var existing: [ChatMessage] = []
-        if let raw = try? Data(contentsOf: file),
-           let decrypted = try? encryptor.decrypt(raw) {
-            existing = (try? JSONDecoder().decode([ChatMessage].self, from: decrypted)) ?? []
+        do {
+            let raw = try Data(contentsOf: file)
+            let decrypted = try encryptor.decrypt(raw)
+            existing = try JSONDecoder().decode([ChatMessage].self, from: decrypted)
+        } catch {
+            // File doesn't exist yet or is corrupted — start fresh
+            logger.debug("Loading existing messages: \(error.localizedDescription)")
         }
         existing.append(message)
-        if let encoded = try? JSONEncoder().encode(existing) {
-            try? encryptor.encryptAndWrite(encoded, to: file)
+        do {
+            let encoded = try JSONEncoder().encode(existing)
+            try encryptor.encryptAndWrite(encoded, to: file)
+        } catch {
+            logger.error("Failed to persist message: \(error.localizedDescription)")
         }
         messages.append(message)
     }
