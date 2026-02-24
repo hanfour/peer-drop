@@ -1,5 +1,8 @@
 import Foundation
 import Network
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "MessageFramer")
 
 /// Length-prefixed message framer using NWProtocolFramer.
 /// Wire format: [4-byte big-endian length][JSON payload]
@@ -44,7 +47,7 @@ final class PeerDropFramer: NWProtocolFramerImplementation {
             }
 
             guard length > 0, length <= Self.maxMessageSize else {
-                print("[PeerDropFramer] Rejecting message with invalid size: \(length) bytes")
+                logger.warning("Rejecting message with invalid size: \(length) bytes")
                 return 0
             }
 

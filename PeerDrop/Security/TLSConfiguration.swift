@@ -2,6 +2,9 @@ import Foundation
 import Network
 import Security
 import CryptoKit
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "TLSConfiguration")
 
 /// Creates NWProtocolTLS.Options with certificate pinning for peer connections.
 enum TLSConfiguration {
@@ -10,7 +13,7 @@ enum TLSConfiguration {
         let options = NWProtocolTLS.Options()
 
         guard let secIdentity = sec_identity_create(identity) else {
-            print("[TLSConfiguration] Failed to create sec_identity for server")
+            logger.error("Failed to create sec_identity for server")
             return options
         }
         sec_protocol_options_set_local_identity(

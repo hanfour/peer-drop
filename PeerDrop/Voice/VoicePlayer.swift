@@ -1,8 +1,10 @@
 import AVFoundation
+import os
 
 /// Plays voice messages using AVAudioPlayer.
 @MainActor
 final class VoicePlayer: NSObject, ObservableObject {
+    private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoicePlayer")
     @Published private(set) var isPlaying = false
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
@@ -36,7 +38,7 @@ final class VoicePlayer: NSObject, ObservableObject {
             audioPlayer?.play()
             startProgressTimer()
         } catch {
-            print("[VoicePlayer] Failed to play: \(error)")
+            logger.error("Failed to play: \(error.localizedDescription)")
         }
     }
 
@@ -61,7 +63,7 @@ final class VoicePlayer: NSObject, ObservableObject {
             audioPlayer?.play()
             startProgressTimer()
         } catch {
-            print("[VoicePlayer] Failed to play data: \(error)")
+            logger.error("Failed to play data: \(error.localizedDescription)")
         }
     }
 

@@ -1,11 +1,13 @@
 import Foundation
 import Security
 import CryptoKit
+import os
 
 /// Manages ephemeral self-signed TLS certificates for peer connections.
 /// Uses a P-256 key pair; the "certificate" is derived from the public key
 /// and used solely for fingerprint-based trust-on-first-use verification.
 final class CertificateManager {
+    private let logger = Logger(subsystem: "com.peerdrop.app", category: "CertificateManager")
     private(set) var identity: SecIdentity?
     private(set) var certificate: SecCertificate?
     private(set) var fingerprint: String?
@@ -41,7 +43,7 @@ final class CertificateManager {
         guard let privKey = SecKeyCreateRandomKey(keyAttributes as CFDictionary, &error) else {
             let cfError = error?.takeRetainedValue()
             let msg = "Failed to create private key: \(cfError.map { "\($0)" } ?? "unknown error")"
-            print("[CertificateManager] \(msg)")
+            logger.error("\(msg)")
             setupError = msg
             return
         }
@@ -49,14 +51,14 @@ final class CertificateManager {
 
         guard let publicKey = SecKeyCopyPublicKey(privKey) else {
             let msg = "Failed to derive public key"
-            print("[CertificateManager] \(msg)")
+            logger.warning("\(msg)")
             setupError = msg
             return
         }
 
         guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
             let msg = "Failed to export public key"
-            print("[CertificateManager] \(msg)")
+            logger.error("\(msg)")
             setupError = msg
             return
         }

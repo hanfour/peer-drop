@@ -2,6 +2,9 @@ import SwiftUI
 import UIKit
 import PhotosUI
 import UniformTypeIdentifiers
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "ChatView")
 
 struct ChatView: View {
     @ObservedObject var chatManager: ChatManager
@@ -462,7 +465,7 @@ struct ChatView: View {
             do {
                 try voiceRecorder.startRecording()
             } catch {
-                print("[ChatView] Failed to start recording: \(error)")
+                logger.error("Failed to start recording: \(error.localizedDescription)")
             }
         }
     }

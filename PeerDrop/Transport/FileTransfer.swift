@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.peerdrop.app", category: "FileTransfer")
 
 /// Manages chunked file transfer with back-pressure and hash verification.
 /// Supports both legacy single-connection mode and multi-connection session pool.
@@ -247,7 +250,7 @@ final class FileTransfer: ObservableObject {
 
     func handleFileOffer(_ message: PeerMessage) {
         guard let payload = message.payload else {
-            print("[FileTransfer] File offer has no payload")
+            logger.error("File offer has no payload")
             lastError = "Invalid file offer received"
             return
         }
@@ -256,7 +259,7 @@ final class FileTransfer: ObservableObject {
         do {
             metadata = try JSONDecoder().decode(TransferMetadata.self, from: payload)
         } catch {
-            print("[FileTransfer] Failed to decode file offer metadata: \(error.localizedDescription)")
+            logger.error("Failed to decode file offer metadata: \(error.localizedDescription)")
             lastError = "Invalid file offer format"
             return
         }
@@ -266,7 +269,7 @@ final class FileTransfer: ObservableObject {
             .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             .volumeAvailableCapacityForImportantUsage,
            availableBytes < metadata.fileSize + 10_000_000 { // 10MB buffer
-            print("[FileTransfer] Insufficient disk space: need \(metadata.fileSize) bytes, available \(availableBytes)")
+            logger.error("Insufficient disk space: need \(metadata.fileSize) bytes, available \(availableBytes)")
             lastError = "Not enough storage space"
             Task {
                 let reject = PeerMessage.fileReject(senderID: "local", reason: "insufficientStorage")
@@ -290,7 +293,7 @@ final class FileTransfer: ObservableObject {
         do {
             receiveFileHandle = try FileHandle(forWritingTo: tempURL)
         } catch {
-            print("[FileTransfer] Failed to create file handle for receiving: \(error.localizedDescription)")
+            logger.error("Failed to create file handle for receiving: \(error.localizedDescription)")
             lastError = "Cannot prepare file for receiving"
             return
         }
@@ -304,7 +307,7 @@ final class FileTransfer: ObservableObject {
                 progress = 0
                 connectionManager?.showTransferProgress = true
             } catch {
-                print("[FileTransfer] Failed to send file accept: \(error.localizedDescription)")
+                logger.error("Failed to send file accept: \(error.localizedDescription)")
                 lastError = "Failed to accept file transfer"
                 cleanupReceiveState(error: "Failed to accept file transfer")
             }

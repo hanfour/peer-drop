@@ -1,9 +1,11 @@
 import Foundation
 import CallKit
 import AVFoundation
+import os
 
 /// Wraps CXProvider for native iOS call UI integration.
 final class CallKitManager: NSObject, ObservableObject {
+    private let logger = Logger(subsystem: "com.peerdrop.app", category: "CallKitManager")
     private let provider: CXProvider
     private let callController = CXCallController()
     private var activeCallUUID: UUID?
@@ -36,7 +38,7 @@ final class CallKitManager: NSObject, ObservableObject {
         let transaction = CXTransaction(action: startAction)
         callController.request(transaction) { error in
             if let error {
-                print("[CallKit] Failed to start call: \(error)")
+                self.logger.error("Failed to start call: \(error.localizedDescription)")
             }
         }
     }
@@ -73,7 +75,7 @@ final class CallKitManager: NSObject, ObservableObject {
         let transaction = CXTransaction(action: endAction)
         callController.request(transaction) { error in
             if let error {
-                print("[CallKit] Failed to end call: \(error)")
+                self.logger.error("Failed to end call: \(error.localizedDescription)")
             }
         }
         activeCallUUID = nil
@@ -93,7 +95,7 @@ final class CallKitManager: NSObject, ObservableObject {
             try session.setCategory(.playAndRecord, mode: .voiceChat)
             try session.setActive(true)
         } catch {
-            print("[CallKit] Audio session error: \(error)")
+            logger.error("Audio session error: \(error.localizedDescription)")
         }
     }
 }
