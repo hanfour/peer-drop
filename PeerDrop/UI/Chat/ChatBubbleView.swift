@@ -258,12 +258,19 @@ struct ChatBubbleView: View {
     @ViewBuilder
     private var imageContent: some View {
         Group {
-            if let thumbData = message.thumbnailData, let uiImage = UIImage(data: thumbData) {
+            if let cached = ImageCache.shared.image(forKey: message.id) {
+                Image(uiImage: cached)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 220, maxHeight: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if let thumbData = message.thumbnailData, let uiImage = UIImage(data: thumbData) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: 220, maxHeight: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .onAppear { ImageCache.shared.setImage(uiImage, forKey: message.id) }
             } else if let localPath = message.localFileURL,
                       let chatManager,
                       let mediaData = chatManager.loadMediaData(relativePath: localPath),
@@ -273,6 +280,7 @@ struct ChatBubbleView: View {
                     .scaledToFit()
                     .frame(maxWidth: 220, maxHeight: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .onAppear { ImageCache.shared.setImage(uiImage, forKey: message.id) }
             } else {
                 Label(message.fileName ?? "Image", systemImage: "photo")
                     .font(.subheadline)
