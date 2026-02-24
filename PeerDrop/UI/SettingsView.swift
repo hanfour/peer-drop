@@ -72,8 +72,10 @@ struct SettingsView: View {
     }
 
     private func exportArchive() {
-        do { let url = try ArchiveManager.exportArchive(deviceStore: connectionManager.deviceStore, transferHistory: connectionManager.transferHistory, chatManager: connectionManager.chatManager); exportURL = url; showShareSheet = true }
-        catch { archiveError = error.localizedDescription; showArchiveError = true }
+        Task {
+            do { let url = try await ArchiveManager.exportArchive(deviceStore: connectionManager.deviceStore, transferHistory: connectionManager.transferHistory, chatManager: connectionManager.chatManager); exportURL = url; showShareSheet = true }
+            catch { archiveError = error.localizedDescription; showArchiveError = true }
+        }
     }
 
     private func performImport(merge: Bool) {

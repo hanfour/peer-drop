@@ -19,7 +19,7 @@ enum ArchiveManager {
     }
 
     @MainActor
-    static func exportArchive(deviceStore: DeviceRecordStore, transferHistory: [TransferRecord], chatManager: ChatManager) throws -> URL {
+    static func exportArchive(deviceStore: DeviceRecordStore, transferHistory: [TransferRecord], chatManager: ChatManager) async throws -> URL {
         let fm = FileManager.default
         let archiveDir = fm.temporaryDirectory.appendingPathComponent("PeerDropArchive", isDirectory: true)
         try? fm.removeItem(at: archiveDir)
@@ -56,7 +56,7 @@ enum ArchiveManager {
             }
         }
 
-        let zipURL = try archiveDir.zipDirectory()
+        let zipURL = try await archiveDir.zipDirectory()
         try? fm.removeItem(at: archiveDir)
         return zipURL
     }

@@ -4,52 +4,30 @@ extension URL {
     /// Zip a directory using NSFileCoordinator (iOS creates zip automatically for directories).
     /// - Returns: URL to the temporary zip file
     /// - Throws: Error if the directory cannot be zipped
-    func zipDirectory() throws -> URL {
-        var coordinatorError: NSError?
-        var resultURL: URL?
-        var copyError: Error?
+    func zipDirectory() async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            let coordinator = NSFileCoordinator()
+            let intent = NSFileAccessIntent.readingIntent(with: self, options: .forUploading)
 
-        let semaphore = DispatchSemaphore(value: 0)
-        let coordinator = NSFileCoordinator()
-        let intent = NSFileAccessIntent.readingIntent(with: self, options: .forUploading)
+            coordinator.coordinate(with: [intent], queue: OperationQueue()) { err in
+                if let err = err {
+                    continuation.resume(throwing: err)
+                    return
+                }
 
-        coordinator.coordinate(with: [intent], queue: OperationQueue()) { err in
-            defer { semaphore.signal() }
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(self.lastPathComponent + ".zip")
 
-            if let err = err as NSError? {
-                coordinatorError = err
-                return
-            }
+                try? FileManager.default.removeItem(at: tempURL) // P2: temp cleanup, failure is acceptable
 
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(self.lastPathComponent + ".zip")
-
-            // Remove any existing zip file at this location
-            try? FileManager.default.removeItem(at: tempURL)
-
-            do {
-                try FileManager.default.copyItem(at: intent.url, to: tempURL)
-                resultURL = tempURL
-            } catch {
-                copyError = error
+                do {
+                    try FileManager.default.copyItem(at: intent.url, to: tempURL)
+                    continuation.resume(returning: tempURL)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
         }
-
-        semaphore.wait()
-
-        if let coordinatorError {
-            throw coordinatorError
-        }
-
-        if let copyError {
-            throw copyError
-        }
-
-        guard let url = resultURL else {
-            throw URLError(.cannotOpenFile)
-        }
-
-        return url
     }
 
     /// Unzip a file into a temporary directory.

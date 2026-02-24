@@ -42,7 +42,7 @@ struct FilePickerView: UIViewControllerRepresentable {
                         defer { url.stopAccessingSecurityScopedResource() }
 
                         if url.hasDirectoryPath {
-                            let zippedURL = try url.zipDirectory()
+                            let zippedURL = try await url.zipDirectory()
                             processedURLs.append(zippedURL)
                             directoryFlags[zippedURL] = true
                         } else {
