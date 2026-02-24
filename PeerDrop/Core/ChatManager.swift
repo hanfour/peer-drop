@@ -14,6 +14,7 @@ final class ChatManager: ObservableObject {
     @Published var typingPeers: Set<String> = []
 
     private var typingExpirationTasks: [String: Task<Void, Never>] = [:]
+    private var persistTasks: [String: Task<Void, Never>] = [:]
     private var allMessagesForCurrentPeer: [ChatMessage] = []
     private let pageSize = 50
     var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count }
@@ -417,6 +418,27 @@ final class ChatManager: ObservableObject {
     // MARK: - Private
 
     private func appendMessage(_ message: ChatMessage, peerID: String) {
+        // Update in-memory immediately
+        messages.append(message)
+        allMessagesForCurrentPeer.append(message)
+        // Schedule debounced persist to disk
+        schedulePersist(peerID: peerID)
+    }
+
+    private func schedulePersist(peerID: String) {
+        persistTasks[peerID]?.cancel()
+        persistTasks[peerID] = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 500_000_000) // 500ms debounce
+            } catch {
+                return // Task cancelled
+            }
+            guard let self else { return }
+            self.persistMessages(peerID: peerID)
+        }
+    }
+
+    private func persistMessages(peerID: String) {
         let file = messagesFile(for: peerID)
         let dir = file.deletingLastPathComponent()
         do {
@@ -424,23 +446,12 @@ final class ChatManager: ObservableObject {
         } catch {
             logger.error("Failed to create chat directory: \(error.localizedDescription)")
         }
-        var existing: [ChatMessage] = []
         do {
-            let raw = try Data(contentsOf: file)
-            let decrypted = try encryptor.decrypt(raw)
-            existing = try JSONDecoder().decode([ChatMessage].self, from: decrypted)
-        } catch {
-            // File doesn't exist yet or is corrupted — start fresh
-            logger.debug("Loading existing messages: \(error.localizedDescription)")
-        }
-        existing.append(message)
-        do {
-            let encoded = try JSONEncoder().encode(existing)
+            let encoded = try JSONEncoder().encode(allMessagesForCurrentPeer)
             try encryptor.encryptAndWrite(encoded, to: file)
         } catch {
-            logger.error("Failed to persist message: \(error.localizedDescription)")
+            logger.error("Failed to persist messages: \(error.localizedDescription)")
         }
-        messages.append(message)
     }
 
     // MARK: - Group Messages

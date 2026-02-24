@@ -6,6 +6,7 @@ final class DeviceRecordStore: ObservableObject {
     @Published var records: [DeviceRecord] = []
 
     private let key = "peerDropDeviceRecords"
+    private var saveTask: Task<Void, Never>?
 
     init() {
         load()
@@ -143,6 +144,21 @@ final class DeviceRecordStore: ObservableObject {
     }
 
     func save() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 500_000_000) // 500ms debounce
+            } catch {
+                return // Task cancelled
+            }
+            guard let self else { return }
+            guard let data = try? JSONEncoder().encode(self.records) else { return }
+            UserDefaults.standard.set(data, forKey: self.key)
+        }
+    }
+
+    func saveImmediately() {
+        saveTask?.cancel()
         guard let data = try? JSONEncoder().encode(records) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
