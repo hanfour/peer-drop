@@ -132,7 +132,7 @@ final class VoiceCallSession: ObservableObject {
                 try session.overrideOutputAudioPort(.none)
             }
         } catch {
-            print("[VoiceCallSession] Audio output error: \(error)")
+            logger.error("Audio output error: \(error.localizedDescription)")
         }
     }
 

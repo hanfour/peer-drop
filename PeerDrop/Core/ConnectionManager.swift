@@ -347,7 +347,7 @@ final class ConnectionManager: ObservableObject {
     func transition(to newState: ConnectionState) {
         let target = TransitionTarget(from: newState)
         guard state.canTransition(to: target) else {
-            print("[ConnectionManager] Invalid transition: \(state) → \(newState)")
+            logger.warning("Invalid transition: \(String(describing: state)) → \(String(describing: newState))")
             return
         }
         let oldState = state
@@ -838,7 +838,7 @@ final class ConnectionManager: ObservableObject {
                 try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
                 guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .requesting = self.state {
-                    print("[ConnectionManager] Connection request timed out after 15s")
+                    logger.warning("Connection request timed out after 15s")
                     // Notify the acceptor so they can dismiss the consent sheet
                     if let conn = self.activeConnection {
                         let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
@@ -869,7 +869,7 @@ final class ConnectionManager: ObservableObject {
                 try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
                 guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .connecting = self.state {
-                    print("[ConnectionManager] Connection setup timed out after 10s")
+                    logger.warning("Connection setup timed out after 10s")
                     // Notify the acceptor so they can dismiss the consent sheet
                     if let conn = self.activeConnection {
                         let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
@@ -1856,13 +1856,13 @@ final class ConnectionManager: ObservableObject {
     private func handleConnectionStateChange(_ nwState: NWConnection.State) {
         switch nwState {
         case .setup:
-            print("[ConnectionManager] Network connection initializing")
+            logger.debug("Network connection initializing")
         case .waiting(let error):
-            print("[ConnectionManager] Network connection waiting: \(error.localizedDescription)")
+            logger.info("Network connection waiting: \(error.localizedDescription)")
         case .preparing:
-            print("[ConnectionManager] Network connection preparing (TLS handshake in progress)")
+            logger.debug("Network connection preparing (TLS handshake in progress)")
         case .ready:
-            print("[ConnectionManager] Network connection established and ready")
+            logger.info("Network connection established and ready")
         case .failed(let error):
             cancelTimeouts()
             fileTransfer?.handleConnectionFailure()
@@ -1887,7 +1887,7 @@ final class ConnectionManager: ObservableObject {
                 break
             }
         @unknown default:
-            print("[ConnectionManager] Unknown network connection state")
+            logger.warning("Unknown network connection state")
         }
     }
 

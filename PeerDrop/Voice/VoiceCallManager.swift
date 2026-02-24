@@ -83,7 +83,7 @@ final class VoiceCallManager: ObservableObject {
     private weak var connectionManager: ConnectionManager?
     private lazy var signaling: SDPSignaling? = {
         guard let manager = connectionManager else {
-            print("[VoiceCallManager] connectionManager is nil when creating signaling")
+            logger.error("connectionManager is nil when creating signaling")
             return nil
         }
         return SDPSignaling(connectionManager: manager, senderID: "local")
@@ -196,7 +196,7 @@ final class VoiceCallManager: ObservableObject {
             do {
                 try await callKitManager.reportIncomingCall(from: peerName)
             } catch {
-                print("[VoiceCallManager] Failed to report incoming call: \(error)")
+                logger.error("Failed to report incoming call: \(error.localizedDescription)")
                 let reject = PeerMessage(type: .callReject, senderID: connectionManager?.localIdentity.id ?? "local")
                 do {
                     try await connectionManager?.sendMessage(reject, to: senderID)
@@ -255,7 +255,7 @@ final class VoiceCallManager: ObservableObject {
                     try await signaling?.sendOffer(offer)
                 }
             } catch {
-                print("[VoiceCallManager] Failed to create offer: \(error)")
+                logger.error("Failed to create offer: \(error.localizedDescription)")
             }
         }
     }
@@ -326,7 +326,7 @@ final class VoiceCallManager: ObservableObject {
                     break
                 }
             } catch {
-                print("[VoiceCallManager] Signaling error: \(error)")
+                logger.error("Signaling error: \(error.localizedDescription)")
             }
         }
     }
@@ -380,7 +380,7 @@ final class VoiceCallManager: ObservableObject {
                 try session.overrideOutputAudioPort(.none)
             }
         } catch {
-            print("[VoiceCallManager] Audio output error: \(error)")
+            logger.error("Audio output error: \(error.localizedDescription)")
         }
     }
 

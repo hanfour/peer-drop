@@ -63,7 +63,7 @@ final class BonjourDiscovery: DiscoveryBackend {
                 case .ready:
                     logger.info("Listener ready on port: \(listener.port?.rawValue ?? 0)")
                 case .failed(let error):
-                    print("[BonjourDiscovery] Listener failed: \(error), restarting...")
+                    logger.error("Listener failed: \(error.localizedDescription), restarting...")
                     listener.cancel()
                     // Restart after brief delay
                     self?.queue.asyncAfter(deadline: .now() + 2.0) {
@@ -83,7 +83,7 @@ final class BonjourDiscovery: DiscoveryBackend {
             listener.start(queue: queue)
             self.listener = listener
         } catch {
-            print("[BonjourDiscovery] Failed to create listener: \(error)")
+            logger.error("Failed to create listener: \(error.localizedDescription)")
         }
     }
 
@@ -111,7 +111,7 @@ final class BonjourDiscovery: DiscoveryBackend {
             case .ready:
                 break
             case .failed(let error):
-                print("[BonjourDiscovery] Browser failed: \(error), restarting...")
+                logger.error("Browser failed: \(error.localizedDescription), restarting...")
                 browser.cancel()
                 self?.queue.asyncAfter(deadline: .now() + 2.0) {
                     self?.startBrowsing()
