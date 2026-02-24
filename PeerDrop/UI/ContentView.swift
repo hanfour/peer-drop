@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var receivedFileURL: URL?
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -85,6 +86,12 @@ struct ContentView: View {
             }
         } message: {
             Text(errorMessage ?? "An unknown error occurred.")
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { !hasCompletedOnboarding },
+            set: { if !$0 { hasCompletedOnboarding = true } }
+        )) {
+            OnboardingView()
         }
         .onChange(of: connectionManager.state) { _ in
             switch connectionManager.state {
