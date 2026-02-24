@@ -276,7 +276,7 @@ final class ChatManager: ObservableObject {
         if isTyping {
             typingPeers.insert(peerID)
             typingExpirationTasks[peerID] = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // P2: sleep interruption is acceptable
                 typingPeers.remove(peerID)
             }
         } else {
@@ -380,14 +380,21 @@ final class ChatManager: ObservableObject {
     }
 
     private func loadUnreadCounts() {
-        guard let data = UserDefaults.standard.data(forKey: unreadKey),
-              let decoded = try? JSONDecoder().decode([String: Int].self, from: data) else { return }
-        unreadCounts = decoded
+        guard let data = UserDefaults.standard.data(forKey: unreadKey) else { return }
+        do {
+            unreadCounts = try JSONDecoder().decode([String: Int].self, from: data)
+        } catch {
+            logger.warning("Failed to decode unread counts: \(error.localizedDescription)")
+        }
     }
 
     private func saveUnreadCounts() {
-        guard let data = try? JSONEncoder().encode(unreadCounts) else { return }
-        UserDefaults.standard.set(data, forKey: unreadKey)
+        do {
+            let data = try JSONEncoder().encode(unreadCounts)
+            UserDefaults.standard.set(data, forKey: unreadKey)
+        } catch {
+            logger.warning("Failed to save unread counts: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private
@@ -509,14 +516,21 @@ final class ChatManager: ObservableObject {
     }
 
     private func loadGroupUnreadCounts() {
-        guard let data = UserDefaults.standard.data(forKey: groupUnreadKey),
-              let decoded = try? JSONDecoder().decode([String: Int].self, from: data) else { return }
-        groupUnreadCounts = decoded
+        guard let data = UserDefaults.standard.data(forKey: groupUnreadKey) else { return }
+        do {
+            groupUnreadCounts = try JSONDecoder().decode([String: Int].self, from: data)
+        } catch {
+            logger.warning("Failed to decode group unread counts: \(error.localizedDescription)")
+        }
     }
 
     private func saveGroupUnreadCounts() {
-        guard let data = try? JSONEncoder().encode(groupUnreadCounts) else { return }
-        UserDefaults.standard.set(data, forKey: groupUnreadKey)
+        do {
+            let data = try JSONEncoder().encode(groupUnreadCounts)
+            UserDefaults.standard.set(data, forKey: groupUnreadKey)
+        } catch {
+            logger.warning("Failed to save group unread counts: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Migration

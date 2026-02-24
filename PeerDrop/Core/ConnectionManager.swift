@@ -1501,23 +1501,25 @@ final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            if let payload = try? message.decodePayload(TextMessagePayload.self) {
-                // Determine the storage key: groupID for group messages, peerID for 1-to-1
-                let storageKey = payload.groupID ?? peerID
-                let savedMsg = chatManager.saveIncoming(
-                    text: payload.text,
-                    peerID: storageKey,
-                    peerName: peerConnection.peerIdentity.displayName,
-                    groupID: payload.groupID,
-                    senderID: payload.groupID != nil ? message.senderID : nil,
-                    senderName: payload.senderName,
-                    replyToMessageID: payload.replyToMessageID,
-                    replyToText: payload.replyToText,
-                    replyToSenderName: payload.replyToSenderName
-                )
-                NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
-                sendDeliveryReceipt(for: savedMsg.id, to: peerConnection, groupID: payload.groupID)
+            guard let payload = try? message.decodePayload(TextMessagePayload.self) else {
+                logger.warning("Failed to decode TextMessagePayload")
+                return
             }
+            // Determine the storage key: groupID for group messages, peerID for 1-to-1
+            let storageKey = payload.groupID ?? peerID
+            let savedMsg = chatManager.saveIncoming(
+                text: payload.text,
+                peerID: storageKey,
+                peerName: peerConnection.peerIdentity.displayName,
+                groupID: payload.groupID,
+                senderID: payload.groupID != nil ? message.senderID : nil,
+                senderName: payload.senderName,
+                replyToMessageID: payload.replyToMessageID,
+                replyToText: payload.replyToText,
+                replyToSenderName: payload.replyToSenderName
+            )
+            NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
+            sendDeliveryReceipt(for: savedMsg.id, to: peerConnection, groupID: payload.groupID)
 
         case .mediaMessage:
             guard FeatureSettings.isChatEnabled else {
@@ -1528,54 +1530,62 @@ final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            if let payload = try? message.decodePayload(MediaMessagePayload.self) {
-                chatManager.saveIncomingMedia(
-                    payload: payload,
-                    fileData: Data(),
-                    peerID: peerID,
-                    peerName: peerConnection.peerIdentity.displayName
-                )
-                NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
+            guard let payload = try? message.decodePayload(MediaMessagePayload.self) else {
+                logger.warning("Failed to decode MediaMessagePayload")
+                return
             }
+            chatManager.saveIncomingMedia(
+                payload: payload,
+                fileData: Data(),
+                peerID: peerID,
+                peerName: peerConnection.peerIdentity.displayName
+            )
+            NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
 
         case .messageReceipt:
-            if let payload = try? message.decodePayload(MessageReceiptPayload.self) {
-                // Check if this is a group receipt
-                if let groupID = payload.groupID, let senderID = payload.senderID {
-                    // Group message receipt - update per-member status
-                    for msgID in payload.messageIDs {
-                        if payload.receiptType == .read {
-                            chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
-                        } else {
-                            chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
-                        }
+            guard let payload = try? message.decodePayload(MessageReceiptPayload.self) else {
+                logger.warning("Failed to decode MessageReceiptPayload")
+                return
+            }
+            // Check if this is a group receipt
+            if let groupID = payload.groupID, let senderID = payload.senderID {
+                // Group message receipt - update per-member status
+                for msgID in payload.messageIDs {
+                    if payload.receiptType == .read {
+                        chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
+                    } else {
+                        chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
                     }
-                } else {
-                    // 1-to-1 message receipt
-                    let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                    for msgID in payload.messageIDs {
-                        chatManager.updateStatus(messageID: msgID, status: newStatus)
-                    }
+                }
+            } else {
+                // 1-to-1 message receipt
+                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
+                for msgID in payload.messageIDs {
+                    chatManager.updateStatus(messageID: msgID, status: newStatus)
                 }
             }
 
         case .typingIndicator:
-            if let payload = try? message.decodePayload(TypingIndicatorPayload.self) {
-                chatManager.setTyping(payload.isTyping, for: peerID)
+            guard let payload = try? message.decodePayload(TypingIndicatorPayload.self) else {
+                logger.warning("Failed to decode TypingIndicatorPayload")
+                return
             }
+            chatManager.setTyping(payload.isTyping, for: peerID)
 
         case .reaction:
-            if let payload = try? message.decodePayload(ReactionPayload.self) {
-                switch payload.action {
-                case .add:
-                    chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
-                case .remove:
-                    chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
-                }
+            guard let payload = try? message.decodePayload(ReactionPayload.self) else {
+                logger.warning("Failed to decode ReactionPayload")
+                return
+            }
+            switch payload.action {
+            case .add:
+                chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
+            case .remove:
+                chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
             }
 
         case .chatReject:
-            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason // P1: rejection reason is optional, nil is acceptable
             let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
             chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
 
@@ -1735,17 +1745,19 @@ final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            if let payload = try? message.decodePayload(TextMessagePayload.self) {
-                chatManager.saveIncoming(
-                    text: payload.text,
-                    peerID: message.senderID,
-                    peerName: connectedPeer?.displayName ?? "Unknown",
-                    replyToMessageID: payload.replyToMessageID,
-                    replyToText: payload.replyToText,
-                    replyToSenderName: payload.replyToSenderName
-                )
-                NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
+            guard let payload = try? message.decodePayload(TextMessagePayload.self) else {
+                logger.warning("Failed to decode TextMessagePayload")
+                return
             }
+            chatManager.saveIncoming(
+                text: payload.text,
+                peerID: message.senderID,
+                peerName: connectedPeer?.displayName ?? "Unknown",
+                replyToMessageID: payload.replyToMessageID,
+                replyToText: payload.replyToText,
+                replyToSenderName: payload.replyToSenderName
+            )
+            NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
 
         case .mediaMessage:
             guard FeatureSettings.isChatEnabled else {
@@ -1756,19 +1768,22 @@ final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            if let payload = try? message.decodePayload(MediaMessagePayload.self) {
-                chatManager.saveIncomingMedia(
-                    payload: payload,
-                    fileData: Data(),
-                    peerID: message.senderID,
-                    peerName: connectedPeer?.displayName ?? "Unknown"
-                )
-                NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.fileName)
+            guard let payload = try? message.decodePayload(MediaMessagePayload.self) else {
+                logger.warning("Failed to decode MediaMessagePayload")
+                return
             }
+            chatManager.saveIncomingMedia(
+                payload: payload,
+                fileData: Data(),
+                peerID: message.senderID,
+                peerName: connectedPeer?.displayName ?? "Unknown"
+            )
+            NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.fileName)
+
         case .chatReject:
             // Remote peer has chat disabled — mark last outgoing message as failed
             if let peerID = connectedPeer?.id {
-                let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
+                let reason = (try? message.decodePayload(RejectionPayload.self))?.reason // P1: rejection reason is optional, nil is acceptable
                 let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
                 chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
             }
@@ -1816,39 +1831,45 @@ final class ConnectionManager: ObservableObject {
             logger.debug("Heartbeat pong received from \(message.senderID)")
 
         case .messageReceipt:
-            if let payload = try? message.decodePayload(MessageReceiptPayload.self) {
-                // Check if this is a group receipt
-                if let groupID = payload.groupID, let senderID = payload.senderID {
-                    // Group message receipt - update per-member status
-                    for msgID in payload.messageIDs {
-                        if payload.receiptType == .read {
-                            chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
-                        } else {
-                            chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
-                        }
+            guard let payload = try? message.decodePayload(MessageReceiptPayload.self) else {
+                logger.warning("Failed to decode MessageReceiptPayload")
+                return
+            }
+            // Check if this is a group receipt
+            if let groupID = payload.groupID, let senderID = payload.senderID {
+                // Group message receipt - update per-member status
+                for msgID in payload.messageIDs {
+                    if payload.receiptType == .read {
+                        chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
+                    } else {
+                        chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
                     }
-                } else {
-                    // 1-to-1 message receipt
-                    let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                    for msgID in payload.messageIDs {
-                        chatManager.updateStatus(messageID: msgID, status: newStatus)
-                    }
+                }
+            } else {
+                // 1-to-1 message receipt
+                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
+                for msgID in payload.messageIDs {
+                    chatManager.updateStatus(messageID: msgID, status: newStatus)
                 }
             }
 
         case .typingIndicator:
-            if let payload = try? message.decodePayload(TypingIndicatorPayload.self) {
-                chatManager.setTyping(payload.isTyping, for: message.senderID)
+            guard let payload = try? message.decodePayload(TypingIndicatorPayload.self) else {
+                logger.warning("Failed to decode TypingIndicatorPayload")
+                return
             }
+            chatManager.setTyping(payload.isTyping, for: message.senderID)
 
         case .reaction:
-            if let payload = try? message.decodePayload(ReactionPayload.self) {
-                switch payload.action {
-                case .add:
-                    chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
-                case .remove:
-                    chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
-                }
+            guard let payload = try? message.decodePayload(ReactionPayload.self) else {
+                logger.warning("Failed to decode ReactionPayload")
+                return
+            }
+            switch payload.action {
+            case .add:
+                chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
+            case .remove:
+                chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
             }
         }
     }
@@ -1901,7 +1922,10 @@ final class ConnectionManager: ObservableObject {
             groupID: groupID,
             senderID: groupID != nil ? localIdentity.id : nil
         )
-        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageReceipt")
+            return
+        }
         Task {
             do { try await peerConnection.sendMessage(msg) }
             catch { logger.warning("Failed to send delivery receipt: \(error.localizedDescription)") }
@@ -1919,7 +1943,10 @@ final class ConnectionManager: ObservableObject {
             receiptType: .read,
             timestamp: Date()
         )
-        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageReceipt")
+            return
+        }
         Task {
             do { try await peerConn.sendMessage(msg) }
             catch { logger.warning("Failed to send read receipts: \(error.localizedDescription)") }
@@ -1942,7 +1969,10 @@ final class ConnectionManager: ObservableObject {
             groupID: groupID,
             senderID: localIdentity.id
         )
-        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.messageReceipt(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageReceipt")
+            return
+        }
 
         // Send to all connected group members
         for member in members where member.id != localIdentity.id {
@@ -1966,7 +1996,10 @@ final class ConnectionManager: ObservableObject {
         guard let peerConn = connection(for: peerID) else { return }
 
         let payload = TypingIndicatorPayload(isTyping: isTyping, timestamp: Date())
-        guard let msg = try? PeerMessage.typingIndicator(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.typingIndicator(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for typingIndicator")
+            return
+        }
         Task {
             do { try await peerConn.sendMessage(msg) }
             catch { logger.warning("Failed to send typing indicator: \(error.localizedDescription)") }
@@ -2003,7 +2036,10 @@ final class ConnectionManager: ObservableObject {
             action: action,
             timestamp: Date()
         )
-        guard let msg = try? PeerMessage.reaction(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.reaction(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for reaction")
+            return
+        }
 
         Task {
             do { try await peerConn.sendMessage(msg) }
@@ -2033,7 +2069,10 @@ final class ConnectionManager: ObservableObject {
             replyToText: replyTo?.text ?? replyTo?.fileName,
             replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
         )
-        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for textMessage")
+            return
+        }
         let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         Task {
             do {
@@ -2057,7 +2096,10 @@ final class ConnectionManager: ObservableObject {
             replyToText: replyTo?.text ?? replyTo?.fileName,
             replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
         )
-        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for textMessage")
+            return
+        }
         let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         Task {
             do {
@@ -2076,7 +2118,10 @@ final class ConnectionManager: ObservableObject {
         let peer = peerConn.peerIdentity
 
         let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData)
-        guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for mediaMessage")
+            return
+        }
 
         // Save locally
         let localPath: String?
@@ -2167,7 +2212,10 @@ final class ConnectionManager: ObservableObject {
             groupID: groupID,
             senderName: localIdentity.displayName
         )
-        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else { return }
+        guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for textMessage")
+            return
+        }
 
         var sentCount = 0
         var failCount = 0
@@ -2239,13 +2287,19 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Transfer History Persistence
 
     private func loadTransferHistory() {
-        guard let data = UserDefaults.standard.data(forKey: Self.transferHistoryKey),
-              let decoded = try? JSONDecoder().decode([TransferRecord].self, from: data) else { return }
-        transferHistory = decoded
+        guard let data = UserDefaults.standard.data(forKey: Self.transferHistoryKey) else { return }
+        do {
+            transferHistory = try JSONDecoder().decode([TransferRecord].self, from: data)
+        } catch {
+            logger.warning("Failed to decode transfer history: \(error.localizedDescription)")
+        }
     }
 
     private func saveTransferHistory() {
-        guard let data = try? JSONEncoder().encode(transferHistory) else { return }
+        guard let data = try? JSONEncoder().encode(transferHistory) else {
+            logger.warning("Failed to encode transfer history")
+            return
+        }
         UserDefaults.standard.set(data, forKey: Self.transferHistoryKey)
     }
 }
