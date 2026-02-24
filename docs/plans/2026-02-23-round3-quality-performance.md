@@ -32,7 +32,7 @@ Add `import os` and Logger declaration at the top, then replace 3 print statemen
 import os
 
 // Add after class declaration:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "CallKitManager")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CallKitManager")
 
 // Line 39: print("[CallKit] Failed to start call: \(error)")
 // → logger.error("Failed to start call: \(error.localizedDescription)")
@@ -51,7 +51,7 @@ private let logger = Logger(subsystem: "com.peerdrop.app", category: "CallKitMan
 import os
 
 // Add after class/struct declaration:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoicePlayer")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "VoicePlayer")
 
 // Line 39: print("[VoicePlayer] Failed to play: \(error)")
 // → logger.error("Failed to play: \(error.localizedDescription)")
@@ -67,7 +67,7 @@ private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoicePlaye
 import os
 
 // Add after class declaration:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "CertificateManager")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CertificateManager")
 
 // Line 44: print("[CertificateManager] \(msg)")
 // → logger.info("\(msg)")
@@ -88,7 +88,7 @@ Note: Check the context of each print to determine the correct log level (info/w
 import os
 
 // Add at file level:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "FileTransfer")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "FileTransfer")
 
 // Line 250: print("[FileTransfer] File offer has no payload")
 // → logger.error("File offer has no payload")
@@ -113,7 +113,7 @@ private let logger = Logger(subsystem: "com.peerdrop.app", category: "FileTransf
 import os
 
 // Add at file level:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "TLSConfiguration")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TLSConfiguration")
 
 // Line 13: print("[TLSConfiguration] Failed to create sec_identity for server")
 // → logger.error("Failed to create sec_identity for server")
@@ -126,7 +126,7 @@ private let logger = Logger(subsystem: "com.peerdrop.app", category: "TLSConfigu
 import os
 
 // Add at file level:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "MessageFramer")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "MessageFramer")
 
 // Line 47: print("[PeerDropFramer] Rejecting message with invalid size: \(length) bytes")
 // → logger.warning("Rejecting message with invalid size: \(length) bytes")
@@ -139,7 +139,7 @@ private let logger = Logger(subsystem: "com.peerdrop.app", category: "MessageFra
 import os
 
 // Add at file level:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ChatView")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatView")
 
 // Line 465: print("[ChatView] Failed to start recording: \(error)")
 // → logger.error("Failed to start recording: \(error.localizedDescription)")
@@ -247,7 +247,7 @@ Convert critical `try?` blocks to `do/catch` with `logger.error()` in file trans
 import os
 
 // Add inside class, after properties:
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ChatManager")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatManager")
 ```
 
 **Step 2: Convert P0 try? in FileTransfer.swift**
@@ -460,7 +460,7 @@ Create an `ImageCache` class using `NSCache` and integrate it into views that lo
 import UIKit
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ImageCache")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ImageCache")
 
 final class ImageCache {
     static let shared = ImageCache()

@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "FileTransfer")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "FileTransfer")
 
 /// Manages chunked file transfer with back-pressure and hash verification.
 /// Supports both legacy single-connection mode and multi-connection session pool.

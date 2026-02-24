@@ -7,7 +7,7 @@ import os
 /// Uses a P-256 key pair; the "certificate" is derived from the public key
 /// and used solely for fingerprint-based trust-on-first-use verification.
 final class CertificateManager {
-    private let logger = Logger(subsystem: "com.peerdrop.app", category: "CertificateManager")
+    private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CertificateManager")
     private(set) var identity: SecIdentity?
     private(set) var certificate: SecCertificate?
     private(set) var fingerprint: String?

@@ -4,7 +4,7 @@ import Security
 import CryptoKit
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "TLSConfiguration")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TLSConfiguration")
 
 /// Creates NWProtocolTLS.Options with certificate pinning for peer connections.
 enum TLSConfiguration {

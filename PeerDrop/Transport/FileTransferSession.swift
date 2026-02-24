@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "FileTransferSession")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "FileTransferSession")
 
 /// Per-peer file transfer session that manages receiving state for a single connection.
 @MainActor

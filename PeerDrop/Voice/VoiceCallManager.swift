@@ -3,7 +3,7 @@ import AVFoundation
 import WebRTC
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoiceCallManager")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "VoiceCallManager")
 
 /// Coordinates WebRTC + CallKit for voice call lifecycle.
 /// Supports both legacy single-connection mode and multi-connection session pool.

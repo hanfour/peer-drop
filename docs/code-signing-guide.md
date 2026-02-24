@@ -6,7 +6,7 @@ This guide walks through setting up code signing for PeerDrop and submitting the
 
 | Field | Value |
 |---|---|
-| Bundle ID | `com.peerdrop.app` |
+| Bundle ID | `com.hanfour.peerdrop` |
 | Version | 1.0.0 (build 1) |
 | Deployment target | iOS 16.0 |
 | Apple ID | `hanfour.huang@icloud.com` |
@@ -39,8 +39,8 @@ xcodegen generate
    - **Platform:** iOS
    - **Name:** PeerDrop
    - **Primary Language:** English (U.S.)
-   - **Bundle ID:** Select `com.peerdrop.app` (it must already be registered in the Developer portal -- see step 2a below).
-   - **SKU:** `com.peerdrop.app` (or any unique identifier you prefer)
+   - **Bundle ID:** Select `com.hanfour.peerdrop` (it must already be registered in the Developer portal -- see step 2a below).
+   - **SKU:** `com.hanfour.peerdrop` (or any unique identifier you prefer)
    - **User Access:** Full Access
 4. Click **Create**.
 
@@ -51,7 +51,7 @@ xcodegen generate
 3. Select **App IDs**, then **App**.
 4. Enter:
    - **Description:** PeerDrop
-   - **Bundle ID:** Explicit -- `com.peerdrop.app`
+   - **Bundle ID:** Explicit -- `com.hanfour.peerdrop`
 5. Under **Capabilities**, enable:
    - **Background Modes**
 6. Click **Continue**, then **Register**.
@@ -82,7 +82,7 @@ targets:
   PeerDrop:
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
 ```

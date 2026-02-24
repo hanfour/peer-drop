@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ConnectionManager")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ConnectionManager")
 
 /// Convert any error to a user-friendly message for display.
 private func userFriendlyErrorMessage(_ error: Error) -> String {

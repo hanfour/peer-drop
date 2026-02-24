@@ -3,7 +3,7 @@ import Network
 import Combine
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "BonjourDiscovery")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "BonjourDiscovery")
 
 final class BonjourDiscovery: DiscoveryBackend {
     private static let serviceType = "_peerdrop._tcp"

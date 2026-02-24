@@ -4,7 +4,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ChatView")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatView")
 
 struct ChatView: View {
     @ObservedObject var chatManager: ChatManager

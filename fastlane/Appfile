@@ -4,7 +4,7 @@
 #     https://docs.fastlane.tools/advanced/#appfile
 
 # App identifier (bundle ID)
-app_identifier("com.peerdrop.app")
+app_identifier("com.hanfour.peerdrop")
 
 # Your Apple Developer team ID
 # team_id("YOUR_TEAM_ID")

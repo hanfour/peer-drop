@@ -384,7 +384,7 @@ No commit needed — verification only.
 Create a step-by-step document covering:
 
 1. **Apple Developer Program** — Enroll at developer.apple.com ($99/year)
-2. **App Store Connect Setup** — Create the app record with bundle ID `com.peerdrop.app`
+2. **App Store Connect Setup** — Create the app record with bundle ID `com.hanfour.peerdrop`
 3. **Xcode Signing Configuration**:
    - Open project in Xcode
    - Select PeerDrop target > Signing & Capabilities

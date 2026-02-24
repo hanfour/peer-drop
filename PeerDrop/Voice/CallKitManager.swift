@@ -5,7 +5,7 @@ import os
 
 /// Wraps CXProvider for native iOS call UI integration.
 final class CallKitManager: NSObject, ObservableObject {
-    private let logger = Logger(subsystem: "com.peerdrop.app", category: "CallKitManager")
+    private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CallKitManager")
     private let provider: CXProvider
     private let callController = CXCallController()
     private var activeCallUUID: UUID?

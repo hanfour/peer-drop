@@ -3,7 +3,7 @@ import AVFoundation
 import WebRTC
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "VoiceCallSession")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "VoiceCallSession")
 
 /// Per-peer voice call session that manages WebRTC state for a single connection.
 @MainActor

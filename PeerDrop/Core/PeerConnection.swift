@@ -3,7 +3,7 @@ import Network
 import Combine
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "PeerConnection")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PeerConnection")
 
 /// Encapsulates a single peer connection with its own state, identity, and sessions.
 @MainActor

@@ -2,7 +2,7 @@ import Foundation
 import Network
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "MessageFramer")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "MessageFramer")
 
 /// Length-prefixed message framer using NWProtocolFramer.
 /// Wire format: [4-byte big-endian length][JSON payload]

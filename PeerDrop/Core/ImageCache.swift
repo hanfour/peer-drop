@@ -1,7 +1,7 @@
 import UIKit
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ImageCache")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ImageCache")
 
 final class ImageCache {
     static let shared = ImageCache()

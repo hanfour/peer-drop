@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.peerdrop.app", category: "ChatManager")
+private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatManager")
 
 @MainActor
 final class ChatManager: ObservableObject {
