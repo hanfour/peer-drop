@@ -347,7 +347,7 @@ final class ConnectionManager: ObservableObject {
     func transition(to newState: ConnectionState) {
         let target = TransitionTarget(from: newState)
         guard state.canTransition(to: target) else {
-            logger.warning("Invalid transition: \(String(describing: state)) → \(String(describing: newState))")
+            logger.warning("Invalid transition: \(String(describing: self.state)) → \(String(describing: newState))")
             return
         }
         let oldState = state

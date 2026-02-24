@@ -15,6 +15,7 @@ final class ChatManager: ObservableObject {
 
     private var typingExpirationTasks: [String: Task<Void, Never>] = [:]
     private var persistTasks: [String: Task<Void, Never>] = [:]
+    private var pendingMessages: [String: [ChatMessage]] = [:]
     private var allMessagesForCurrentPeer: [ChatMessage] = []
     private let pageSize = 50
     var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count }
@@ -106,6 +107,9 @@ final class ChatManager: ObservableObject {
     }
 
     func loadMessages(forPeer peerID: String) {
+        // Flush any pending writes so disk is up to date
+        flushPendingPersist(for: peerID)
+
         // Screenshot mode: return mock messages for mock peers
         if ScreenshotModeProvider.shared.isActive && ScreenshotModeProvider.isMockPeer(peerID) {
             messages = ScreenshotModeProvider.shared.mockChatMessages
@@ -199,6 +203,11 @@ final class ChatManager: ObservableObject {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx].status = status
         }
+        if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
+            allMessagesForCurrentPeer[idx].status = status
+        }
+        // Flush pending writes so disk is up to date before scanning
+        flushAllPendingPersists()
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {
@@ -421,6 +430,8 @@ final class ChatManager: ObservableObject {
         // Update in-memory immediately
         messages.append(message)
         allMessagesForCurrentPeer.append(message)
+        // Track pending messages per peer for correct persistence
+        pendingMessages[peerID, default: []].append(message)
         // Schedule debounced persist to disk
         schedulePersist(peerID: peerID)
     }
@@ -438,7 +449,25 @@ final class ChatManager: ObservableObject {
         }
     }
 
+    /// Flush any pending debounced persist for the given peer immediately.
+    private func flushPendingPersist(for peerID: String) {
+        guard persistTasks[peerID] != nil else { return }
+        persistTasks[peerID]?.cancel()
+        persistTasks[peerID] = nil
+        persistMessages(peerID: peerID)
+    }
+
+    /// Flush all pending persists across all peers.
+    private func flushAllPendingPersists() {
+        for peerID in persistTasks.keys {
+            flushPendingPersist(for: peerID)
+        }
+    }
+
     private func persistMessages(peerID: String) {
+        guard let pending = pendingMessages[peerID], !pending.isEmpty else { return }
+        pendingMessages[peerID] = nil
+
         let file = messagesFile(for: peerID)
         let dir = file.deletingLastPathComponent()
         do {
@@ -447,7 +476,15 @@ final class ChatManager: ObservableObject {
             logger.error("Failed to create chat directory: \(error.localizedDescription)")
         }
         do {
-            let encoded = try JSONEncoder().encode(allMessagesForCurrentPeer)
+            // Load existing messages from disk, append pending, write back
+            var existing: [ChatMessage] = []
+            if fileManager.fileExists(atPath: file.path) {
+                let raw = try Data(contentsOf: file)
+                let data = try encryptor.decrypt(raw)
+                existing = try JSONDecoder().decode([ChatMessage].self, from: data)
+            }
+            existing.append(contentsOf: pending)
+            let encoded = try JSONEncoder().encode(existing)
             try encryptor.encryptAndWrite(encoded, to: file)
         } catch {
             logger.error("Failed to persist messages: \(error.localizedDescription)")
