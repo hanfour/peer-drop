@@ -28,6 +28,8 @@ targets:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop
+        DEVELOPMENT_TEAM: UK48R5KWLV
+        CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "3"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
