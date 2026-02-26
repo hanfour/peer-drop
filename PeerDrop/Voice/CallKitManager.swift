@@ -4,30 +4,51 @@ import AVFoundation
 import os
 
 /// Wraps CXProvider for native iOS call UI integration.
+/// CallKit is disabled in China per MIIT regulations (App Store Guideline 5.0).
 final class CallKitManager: NSObject, ObservableObject {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CallKitManager")
-    private let provider: CXProvider
-    private let callController = CXCallController()
+    private let provider: CXProvider?
+    private let callController: CXCallController?
     private var activeCallUUID: UUID?
+
+    /// CallKit is disabled in China per MIIT regulations (App Store Guideline 5.0).
+    static let isCallKitDisabled: Bool = {
+        if let regionCode = Locale.current.region?.identifier {
+            if regionCode == "CN" { return true }
+        }
+        let countryCode = Locale.current.language.region?.identifier ?? ""
+        return countryCode == "CN"
+    }()
 
     var onAnswerCall: (() -> Void)?
     var onEndCall: (() -> Void)?
 
     override init() {
+        if Self.isCallKitDisabled {
+            provider = nil
+            callController = nil
+            super.init()
+            return
+        }
+
         let config = CXProviderConfiguration()
         config.supportsVideo = false
         config.maximumCallsPerCallGroup = 1
         config.supportedHandleTypes = [.generic]
         config.iconTemplateImageData = nil
 
-        provider = CXProvider(configuration: config)
+        let p = CXProvider(configuration: config)
+        provider = p
+        callController = CXCallController()
         super.init()
-        provider.setDelegate(self, queue: .main)
+        p.setDelegate(self, queue: .main)
     }
 
     // MARK: - Outgoing Call
 
     func startOutgoingCall(to peerName: String) {
+        guard !Self.isCallKitDisabled, let callController else { return }
+
         let uuid = UUID()
         activeCallUUID = uuid
 
@@ -44,6 +65,7 @@ final class CallKitManager: NSObject, ObservableObject {
     }
 
     func reportOutgoingCallConnected() {
+        guard !Self.isCallKitDisabled, let provider else { return }
         guard let uuid = activeCallUUID else { return }
         provider.reportOutgoingCall(with: uuid, connectedAt: Date())
     }
@@ -51,6 +73,8 @@ final class CallKitManager: NSObject, ObservableObject {
     // MARK: - Incoming Call
 
     func reportIncomingCall(from peerName: String) async throws {
+        guard !Self.isCallKitDisabled, let provider else { return }
+
         let uuid = UUID()
         activeCallUUID = uuid
 
@@ -69,6 +93,7 @@ final class CallKitManager: NSObject, ObservableObject {
     // MARK: - End Call
 
     func endCall() {
+        guard !Self.isCallKitDisabled, let callController else { return }
         guard let uuid = activeCallUUID else { return }
 
         let endAction = CXEndCallAction(call: uuid)
@@ -82,6 +107,7 @@ final class CallKitManager: NSObject, ObservableObject {
     }
 
     func reportCallEnded(reason: CXCallEndedReason = .remoteEnded) {
+        guard !Self.isCallKitDisabled, let provider else { return }
         guard let uuid = activeCallUUID else { return }
         provider.reportCall(with: uuid, endedAt: Date(), reason: reason)
         activeCallUUID = nil
