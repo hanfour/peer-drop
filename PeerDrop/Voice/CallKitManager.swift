@@ -1,6 +1,7 @@
 import Foundation
 import CallKit
 import AVFoundation
+import StoreKit
 import os
 
 /// Wraps CXProvider for native iOS call UI integration.
@@ -12,12 +13,21 @@ final class CallKitManager: NSObject, ObservableObject {
     private var activeCallUUID: UUID?
 
     /// CallKit is disabled in China per MIIT regulations (App Store Guideline 5.0).
+    /// Uses multiple detection signals: device locale/region AND App Store storefront.
     static let isCallKitDisabled: Bool = {
-        if let regionCode = Locale.current.region?.identifier {
-            if regionCode == "CN" { return true }
+        // 1. Check device locale region
+        if let regionCode = Locale.current.region?.identifier, regionCode == "CN" {
+            return true
         }
-        let countryCode = Locale.current.language.region?.identifier ?? ""
-        return countryCode == "CN"
+        if Locale.current.language.region?.identifier == "CN" {
+            return true
+        }
+        // 2. Check App Store storefront (most reliable for App Store region)
+        if let storefront = SKPaymentQueue.default().storefront,
+           storefront.countryCode == "CHN" {
+            return true
+        }
+        return false
     }()
 
     var onAnswerCall: (() -> Void)?
