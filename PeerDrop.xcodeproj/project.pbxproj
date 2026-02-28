@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -185,7 +185,7 @@
 		0D98B7E882918091D8A90224 /* DisconnectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisconnectSheet.swift; sourceTree = "<group>"; };
 		0F97E28AE05420CF10F681A8 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockDiscovery.swift; sourceTree = "<group>"; };
-		107432E165DB757DDBC416BC /* PeerDropTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		107432E165DB757DDBC416BC /* PeerDropTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PeerDropTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerActionSheet.swift; sourceTree = "<group>"; };
 		164E30461F67A2E80FD9DA0A /* ReactionPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPayload.swift; sourceTree = "<group>"; };
 		17AAAEF08C9D347971BD3E47 /* FeatureSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureSettings.swift; sourceTree = "<group>"; };
@@ -268,7 +268,7 @@
 		A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewView.swift; sourceTree = "<group>"; };
 		A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifierTests.swift; sourceTree = "<group>"; };
 		A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A8034F4F86233093A4E36905 /* FilePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerView.swift; sourceTree = "<group>"; };
 		A979FF3DD437916760AAC312 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
 		AD1B2B945FCDC84E81364EED /* FileTransferSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferSession.swift; sourceTree = "<group>"; };
@@ -314,9 +314,9 @@
 		ED5A1838BC61752B0CC5210B /* TextMessagePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextMessagePayload.swift; sourceTree = "<group>"; };
 		ED61426A4AA5BA587AA09CE9 /* DeviceRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecord.swift; sourceTree = "<group>"; };
 		EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullFeatureVerificationTests.swift; sourceTree = "<group>"; };
-		F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PeerDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PeerDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1547C59857B7BD88CF8516D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F54D0BBEF964AFC6DD1DEAE2 /* ImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCache.swift; sourceTree = "<group>"; };
 		F5D979E35021B42ECC2F105F /* TailscalePeer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscalePeer.swift; sourceTree = "<group>"; };
 		F60F92B4EC5901ADDE61782D /* VoiceCallSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallSession.swift; sourceTree = "<group>"; };
@@ -756,7 +756,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					0A0CD5FF6A828E9185B2315B = {
 						DevelopmentTeam = UK48R5KWLV;
@@ -784,7 +784,6 @@
 			packageReferences = (
 				6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -1111,6 +1110,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1144,6 +1144,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1157,6 +1158,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -1169,6 +1171,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1202,6 +1205,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1222,6 +1226,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
