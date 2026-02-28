@@ -60,6 +60,7 @@ DerivedData-MultiSim/
 # Fastlane
 fastlane/screenshots/
 fastlane/derived_data/
+fastlane/Preview.html
 fastlane/report.xml
 fastlane/test_output/
 *.itmsp
