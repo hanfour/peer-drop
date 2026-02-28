@@ -40,7 +40,7 @@ struct UserProfileView: View {
                     TextField("Display Name", text: $displayName)
                         .autocorrectionDisabled()
                         .accessibilityLabel("Display Name")
-                        .accessibilityHint("This name is visible to nearby devices")
+                        .accessibilityHint("This name is visible to nearby devices.")
                 }
             }
             .navigationTitle("Profile")

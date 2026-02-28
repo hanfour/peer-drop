@@ -33,7 +33,7 @@ struct ContentView: View {
             }
             .tag(0)
             .accessibilityLabel("Nearby")
-            .accessibilityHint("Discover nearby devices")
+            .accessibilityHint("Discover Nearby Devices")
 
             NavigationStack {
                 ConnectedTab()
