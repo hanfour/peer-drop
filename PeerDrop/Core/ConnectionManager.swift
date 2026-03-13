@@ -838,18 +838,11 @@ final class ConnectionManager: ObservableObject {
         let gen = generation ?? connectionGeneration
         requestingTimeoutTask = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
                 guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .requesting = self.state {
-                    logger.warning("Connection request timed out after 15s")
-                    // Notify the acceptor so they can dismiss the consent sheet
+                    logger.warning("Connection request timed out after 10s")
                     if let conn = self.activeConnection {
-                        let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
-                        do {
-                            try await conn.sendMessage(cancel)
-                        } catch {
-                            logger.warning("Failed to send timeout cancel to peer: \(error.localizedDescription)")
-                        }
                         conn.cancel()
                     }
                     self.activeConnection = nil
@@ -873,14 +866,7 @@ final class ConnectionManager: ObservableObject {
                 guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .connecting = self.state {
                     logger.warning("Connection setup timed out after 10s")
-                    // Notify the acceptor so they can dismiss the consent sheet
                     if let conn = self.activeConnection {
-                        let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
-                        do {
-                            try await conn.sendMessage(cancel)
-                        } catch {
-                            logger.warning("Failed to send setup timeout cancel to peer: \(error.localizedDescription)")
-                        }
                         conn.cancel()
                     }
                     self.activeConnection = nil
@@ -987,6 +973,14 @@ final class ConnectionManager: ObservableObject {
             do {
                 logger.info("Waiting for connection to be ready...")
                 try await connection.waitReady()
+                // Restore stateUpdateHandler (waitReady replaces it internally)
+                connection.stateUpdateHandler = { [weak self] nwState in
+                    logger.info("NWConnection state: \(String(describing: nwState))")
+                    Task { @MainActor in
+                        guard let self, self.connectionGeneration == generation else { return }
+                        self.handleConnectionStateChange(nwState)
+                    }
+                }
                 logger.info("Connection ready! Sending HELLO...")
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await connection.sendMessage(hello)

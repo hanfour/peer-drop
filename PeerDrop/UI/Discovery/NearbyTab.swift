@@ -163,6 +163,10 @@ struct NearbyTab: View {
                     Text(connectingLabel)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Button("Cancel") {
+                        connectionManager.disconnect()
+                    }
+                    .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.ultraThinMaterial)
