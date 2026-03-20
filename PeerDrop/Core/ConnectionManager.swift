@@ -1377,6 +1377,8 @@ final class ConnectionManager: ObservableObject {
 
     /// Active relay session timer.
     private var relaySessionTimer: Task<Void, Never>?
+    /// Holds the PeerConnection waiting for PIN verification before handshake.
+    private var pendingRelayPeerConnection: PeerConnection?
     /// Active BLE signaling instance.
     private(set) var bleSignaling: BLESignaling?
 
@@ -1447,16 +1449,15 @@ final class ConnectionManager: ObservableObject {
                 }
 
                 // Exchange ICE candidates
-                client.onICECandidate = { candidate in
-                    signaling.sendICECandidate(
+                client.onICECandidate = { [weak signaling] candidate in
+                    signaling?.sendICECandidate(
                         sdp: candidate.sdp,
                         sdpMid: candidate.sdpMid,
                         sdpMLineIndex: candidate.sdpMLineIndex
                     )
                 }
 
-                signaling.onICECandidate = { [weak self] sdp, sdpMid, sdpMLineIndex in
-                    guard self != nil else { return }
+                signaling.onICECandidate = { sdp, sdpMid, sdpMLineIndex in
                     Task {
                         let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
                         try? await client.addICECandidate(candidate)
@@ -1474,12 +1475,12 @@ final class ConnectionManager: ObservableObject {
                 // Wait for data channel to open
                 let transport = DataChannelTransport(client: client)
 
-                transport.onStateChange = { [weak self] state in
+                transport.onStateChange = { [weak self, weak signaling] state in
                     guard let self, self.connectionGeneration == generation else { return }
                     Task { @MainActor in
                         switch state {
                         case .ready:
-                            signaling.disconnect()
+                            signaling?.disconnect()
                             self.completeRelayConnection(transport: transport, roomCode: roomCode)
                         case .failed(let error):
                             self.transition(to: .failed(reason: error.localizedDescription))
@@ -1549,16 +1550,15 @@ final class ConnectionManager: ObservableObject {
         }
 
         // Exchange ICE candidates
-        client.onICECandidate = { candidate in
-            signaling.sendICECandidate(
+        client.onICECandidate = { [weak signaling] candidate in
+            signaling?.sendICECandidate(
                 sdp: candidate.sdp,
                 sdpMid: candidate.sdpMid,
                 sdpMLineIndex: candidate.sdpMLineIndex
             )
         }
 
-        signaling.onICECandidate = { [weak self] sdp, sdpMid, sdpMLineIndex in
-            guard self != nil else { return }
+        signaling.onICECandidate = { sdp, sdpMid, sdpMLineIndex in
             Task {
                 let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
                 try? await client.addICECandidate(candidate)
@@ -1576,12 +1576,12 @@ final class ConnectionManager: ObservableObject {
         // When remote data channel opens
         let transport = DataChannelTransport(client: client)
 
-        transport.onStateChange = { [weak self] state in
+        transport.onStateChange = { [weak self, weak signaling] state in
             guard let self, self.connectionGeneration == generation else { return }
             Task { @MainActor in
                 switch state {
                 case .ready:
-                    signaling.disconnect()
+                    signaling?.disconnect()
                     self.completeRelayConnection(transport: transport, roomCode: roomCode)
                 case .failed(let error):
                     self.transition(to: .failed(reason: error.localizedDescription))
@@ -1618,43 +1618,60 @@ final class ConnectionManager: ObservableObject {
         transition(to: .connected)
 
         // Check if peer is already known (skip PIN verification)
+        let needsPIN: Bool
         if let remoteFP = remoteFingerprint,
            RelayAuthenticator.isKnownDevice(peerID: peerID, remoteFingerprint: remoteFP, store: deviceStore) {
             logger.info("Relay peer is known device — skipping PIN verification")
+            needsPIN = false
         } else if let localFP = localFingerprint, let remoteFP = remoteFingerprint {
-            // New device — show PIN verification
+            // New device — show PIN verification, defer handshake
             let pin = RelayAuthenticator.derivePIN(localFingerprint: localFP, remoteFingerprint: remoteFP)
             pendingRelayPIN = RelayPINRequest(pin: pin, peerID: peerID, remoteFingerprint: remoteFP)
+            pendingRelayPeerConnection = peerConnection
+            needsPIN = true
+        } else {
+            needsPIN = false
         }
 
-        // Start the handshake — send HELLO
-        Task {
-            do {
-                let hello = try PeerMessage.hello(identity: localIdentity)
-                try await peerConnection.sendMessage(hello)
-                peerConnection.startReceiving()
-            } catch {
-                logger.error("Relay handshake failed: \(error.localizedDescription)")
-                transition(to: .failed(reason: error.localizedDescription))
-            }
-        }
+        guard !needsPIN else { return }
 
-        // Start 15-minute session timer
-        startRelaySessionTimer(peerID: peerID, ttlSeconds: 900)
+        // Start the handshake — send HELLO (startReceiving already called by addConnection)
+        startRelayHandshake(peerConnection)
     }
 
-    /// Confirm PIN verification for a relay connection.
+    /// Confirm PIN verification — store fingerprint and begin handshake.
     func confirmRelayPIN() {
         guard let request = pendingRelayPIN else { return }
         RelayAuthenticator.storeFingerprint(request.remoteFingerprint, for: request.peerID, store: deviceStore)
         pendingRelayPIN = nil
+
+        // Resume the deferred handshake
+        if let pc = pendingRelayPeerConnection {
+            pendingRelayPeerConnection = nil
+            startRelayHandshake(pc)
+        }
     }
 
     /// Reject PIN verification — disconnect the relay peer.
     func rejectRelayPIN() {
         guard let request = pendingRelayPIN else { return }
         pendingRelayPIN = nil
+        pendingRelayPeerConnection = nil
         Task { await disconnect(from: request.peerID) }
+    }
+
+    /// Send HELLO and start the session timer for a relay connection.
+    private func startRelayHandshake(_ peerConnection: PeerConnection) {
+        Task {
+            do {
+                let hello = try PeerMessage.hello(identity: localIdentity)
+                try await peerConnection.sendMessage(hello)
+            } catch {
+                logger.error("Relay handshake failed: \(error.localizedDescription)")
+                transition(to: .failed(reason: error.localizedDescription))
+            }
+        }
+        startRelaySessionTimer(peerID: peerConnection.id, ttlSeconds: 900)
     }
 
     /// Start a timer that disconnects the relay after TTL expires.

@@ -45,6 +45,9 @@ final class BLESignaling: NSObject {
     // Reassembly buffers
     private var receiveBuffers: [CBUUID: Data] = [:]
 
+    // Pending notification queue (when updateValue returns false)
+    private var pendingNotifications: [(data: Data, characteristic: CBMutableCharacteristic)] = []
+
     // MARK: - Callbacks
 
     var onRelayRequest: ((String) -> Void)?  // peer ID
@@ -173,10 +176,33 @@ final class BLESignaling: NSObject {
     }
 
     /// Notify chunked data on a characteristic (peripheral → central).
+    /// Queues unsent chunks when the transmit queue is full.
     private func notifyChunked(data: Data, on characteristic: CBMutableCharacteristic, via pm: CBPeripheralManager) {
         let chunks = Self.chunkData(data)
+        var queueRemainder = false
         for chunk in chunks {
-            pm.updateValue(chunk, for: characteristic, onSubscribedCentrals: nil)
+            if queueRemainder {
+                pendingNotifications.append((data: chunk, characteristic: characteristic))
+                continue
+            }
+            let sent = pm.updateValue(chunk, for: characteristic, onSubscribedCentrals: nil)
+            if !sent {
+                pendingNotifications.append((data: chunk, characteristic: characteristic))
+                queueRemainder = true
+            }
+        }
+    }
+
+    /// Called by BLEDiscovery when the peripheral manager is ready to send more notifications.
+    func flushPendingNotifications(via pm: CBPeripheralManager) {
+        while !pendingNotifications.isEmpty {
+            let pending = pendingNotifications[0]
+            let sent = pm.updateValue(pending.data, for: pending.characteristic, onSubscribedCentrals: nil)
+            if sent {
+                pendingNotifications.removeFirst()
+            } else {
+                break  // Still full, wait for next callback
+            }
         }
     }
 

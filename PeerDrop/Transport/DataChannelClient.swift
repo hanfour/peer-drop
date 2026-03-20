@@ -235,6 +235,14 @@ final class DataChannelClient: NSObject {
         dataChannel = nil
         peerConnection?.close()
         peerConnection = nil
+        // Break retain cycles by clearing all callbacks
+        onLocalSDP = nil
+        onICECandidate = nil
+        onConnectionStateChange = nil
+        onDataChannelOpen = nil
+        onDataChannelClose = nil
+        onDataReceived = nil
+        onRemoteDataChannel = nil
     }
 }
 
