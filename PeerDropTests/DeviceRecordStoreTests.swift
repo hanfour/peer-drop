@@ -41,6 +41,7 @@ final class DeviceRecordStoreTests: XCTestCase {
     func testPersistence() {
         let store1 = DeviceRecordStore()
         store1.addOrUpdate(id: "peer1", displayName: "iPhone", sourceType: "bonjour", host: nil, port: nil)
+        store1.saveImmediately() // Flush debounced save before reading from a new store
         let store2 = DeviceRecordStore()
         XCTAssertEqual(store2.records.count, 1)
         XCTAssertEqual(store2.records[0].displayName, "iPhone")

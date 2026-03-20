@@ -50,6 +50,7 @@ final class ScreenshotModeProvider {
     static let mockPeerID2 = "MOCK-PEER-002-SCREENSHOT"
     static let mockPeerID3 = "MOCK-PEER-003-SCREENSHOT"
     static let mockPeerID4 = "MOCK-PEER-004-SCREENSHOT"
+    static let mockPeerID5 = "MOCK-PEER-005-SCREENSHOT"
     static let mockConnectedPeerID = mockPeerID1
 
     // MARK: - Mock Discovered Peers
@@ -79,6 +80,10 @@ final class ScreenshotModeProvider {
             ("Dad's iPhone", "爸爸的 iPhone", "爸爸的 iPhone", "パパの iPhone", "아빠의 iPhone")
         ]
 
+        let bleName: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) = (
+            "Mike's iPhone", "小明的 iPhone", "小明的 iPhone", "太郎の iPhone", "준호의 iPhone"
+        )
+
         return [
             DiscoveredPeer(
                 id: Self.mockPeerID1,
@@ -107,6 +112,14 @@ final class ScreenshotModeProvider {
                 endpoint: .manual(host: "192.168.1.13", port: 54321),
                 source: .bonjour,
                 lastSeen: Date().addingTimeInterval(-180)
+            ),
+            DiscoveredPeer(
+                id: Self.mockPeerID5,
+                displayName: localizedName(bleName),
+                endpoint: .bleOnly(peripheralIdentifier: "MOCK-BLE-PERIPHERAL-001"),
+                source: .bluetooth,
+                lastSeen: Date().addingTimeInterval(-30),
+                rssi: -65
             )
         ]
     }

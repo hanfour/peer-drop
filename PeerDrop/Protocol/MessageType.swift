@@ -39,6 +39,10 @@ enum MessageType: String, Codable {
     // Connection lifecycle
     case disconnect
 
+    // Nearby Interaction token exchange
+    case niTokenOffer
+    case niTokenResponse
+
     // Heartbeat keepalive
     case ping
     case pong
