@@ -1,0 +1,12 @@
+name = "peerdrop-signal"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Set TURN_KEY_ID via `wrangler secret put TURN_KEY_ID`
+# Set TURN_API_TOKEN via `wrangler secret put TURN_API_TOKEN`
+
+[[kv_namespaces]]
+binding = "ROOMS"
+id = ""        # Fill after `wrangler kv:namespace create ROOMS`
+preview_id = "" # Fill after `wrangler kv:namespace create ROOMS --preview`

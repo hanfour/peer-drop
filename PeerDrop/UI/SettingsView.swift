@@ -8,7 +8,11 @@ struct SettingsView: View {
     @AppStorage("peerDropFileTransferEnabled") private var fileTransferEnabled = true
     @AppStorage("peerDropVoiceCallEnabled") private var voiceCallEnabled = true
     @AppStorage("peerDropChatEnabled") private var chatEnabled = true
+    @AppStorage("peerDropBLEDiscoveryEnabled") private var bleDiscoveryEnabled = true
+    @AppStorage("peerDropRelayEnabled") private var relayEnabled = false
     @AppStorage("peerDropNotificationsEnabled") private var notificationsEnabled = false
+    @AppStorage("peerDropWorkerURL") private var workerURL = "https://peerdrop-signal.workers.dev"
+    @State private var showAdvancedRelay = false
     @State private var showNotificationDeniedAlert = false
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var showShareSheet = false
@@ -35,7 +39,21 @@ struct SettingsView: View {
                         .accessibilityHint("Allows making and receiving voice calls")
                     Toggle("Chat", isOn: $chatEnabled)
                         .accessibilityHint("Allows sending and receiving messages")
-                } header: { Text("Connectivity") } footer: { Text("Disabled features will reject incoming requests automatically.") }
+                    Toggle("Bluetooth Discovery", isOn: $bleDiscoveryEnabled)
+                        .accessibilityHint("Discover nearby devices via Bluetooth without WiFi")
+                    Toggle("Relay", isOn: $relayEnabled)
+                        .accessibilityHint("Connect to devices outside your local network via relay server")
+                } header: { Text("Connectivity") } footer: { Text("Disabled features will reject incoming requests automatically. Bluetooth Discovery requires restarting discovery.") }
+                if relayEnabled {
+                    Section {
+                        DisclosureGroup("Advanced Relay Settings", isExpanded: $showAdvancedRelay) {
+                            TextField("Worker URL", text: $workerURL)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .font(.caption.monospaced())
+                        }
+                    } footer: { Text("Change the relay server URL only if you host your own signaling worker.") }
+                }
                 Section { Toggle("Enable Notifications", isOn: $notificationsEnabled) } header: { Text("Notifications") } footer: { Text("Receive alerts for incoming connections and messages.") }
                 Section("Message Storage") { Picker("Storage Mode", selection: $storageMode) { Text("Local Only").tag("local"); Text("Sync to iCloud").tag("icloud") }.pickerStyle(.segmented); Text("Messages are stored on this device only.").font(.caption).foregroundStyle(.secondary) }
                 Section {

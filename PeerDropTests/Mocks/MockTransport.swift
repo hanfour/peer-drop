@@ -5,6 +5,8 @@ final class MockTransport: TransportProtocol {
     var sentMessages: [PeerMessage] = []
     var messagesToReceive: [PeerMessage] = []
     var isClosed = false
+    var isReady: Bool = true
+    var onStateChange: ((TransportState) -> Void)?
 
     func send(_ message: PeerMessage) async throws {
         sentMessages.append(message)
@@ -19,6 +21,7 @@ final class MockTransport: TransportProtocol {
 
     func close() {
         isClosed = true
+        onStateChange?(.cancelled)
     }
 }
 

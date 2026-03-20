@@ -15,6 +15,7 @@ struct DeviceRecord: Identifiable, Codable, Hashable {
     var lastConnected: Date
     var connectionCount: Int
     var connectionHistory: [Date] = []
+    var certificateFingerprint: String?
 
     var relativeLastConnected: String {
         let formatter = RelativeDateTimeFormatter()
