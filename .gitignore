@@ -1,3 +1,6 @@
+# Node
+node_modules/
+
 # Xcode user data
 xcuserdata/
 *.xcodeproj/xcuserdata/
