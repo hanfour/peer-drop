@@ -203,12 +203,6 @@ final class BLEDiscovery: NSObject, DiscoveryBackend {
         peersSubject.send(peers)
     }
 
-    // MARK: - Self-Filtering
-
-    private func isSelf(_ manufacturerData: Data?) -> Bool {
-        guard let data = manufacturerData, data.count >= 8 else { return false }
-        return data.prefix(8) == localIDHash
-    }
 }
 
 // MARK: - CBCentralManagerDelegate
@@ -238,13 +232,10 @@ extension BLEDiscovery: CBCentralManagerDelegate {
             ?? peripheral.name
             ?? "Unknown Device"
 
-        // Self-filtering: check manufacturer data for our ID hash
-        if let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data,
-           isSelf(manufacturerData) {
-            return
-        }
-        // Fallback: also filter by truncated name match (best-effort)
-        if advertisedName == String(localDisplayName.prefix(8)) && advertisedName == localDisplayName {
+        // Self-filtering: CoreBluetooth does not include manufacturer data in
+        // peripheral advertisements, so filter by matching the truncated local name.
+        let truncatedLocalName = String(localDisplayName.prefix(8))
+        if advertisedName == truncatedLocalName {
             return
         }
 
@@ -298,7 +289,7 @@ extension BLEDiscovery: CBPeripheralManagerDelegate {
                 BLESignaling.controlUUID
             ]
             if signalingUUIDs.contains(uuid), let value = request.value {
-                signaling.handleWriteRequest(characteristicUUID: uuid, value: value)
+                signaling.handleWriteRequest(characteristicUUID: uuid, value: value, centralID: request.central.identifier.uuidString)
                 peripheral.respond(to: request, withResult: .success)
             } else {
                 peripheral.respond(to: request, withResult: .requestNotSupported)

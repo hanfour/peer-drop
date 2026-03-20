@@ -34,6 +34,8 @@
 	<string>PeerDrop needs microphone access for voice calls.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>PeerDrop needs photo library access to share photos and videos in chats.</string>
+	<key>PeerDropWorkerAPIKey</key>
+	<string>$(PEERDROP_WORKER_API_KEY)</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>voip</string>

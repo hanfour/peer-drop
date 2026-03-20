@@ -29,16 +29,19 @@ final class WorkerSignaling: NSObject {
         UserDefaults.standard.string(forKey: "peerDropWorkerURL") ?? defaultWorkerURL
     }
 
-    private static let defaultAPIKey = "f9ecf9c66fc765696d943ebe97e21dbfccd816c83cec08fe14a4683441a044df"
-
     /// API key for authenticating with the Worker.
     private let apiKey: String?
+
+    /// Read the API key from Info.plist (injected via build settings).
+    private static var bundledAPIKey: String? {
+        Bundle.main.object(forInfoDictionaryKey: "PeerDropWorkerAPIKey") as? String
+    }
 
     // MARK: - Init
 
     init(baseURL: URL? = nil, apiKey: String? = nil) {
         self.baseURL = baseURL ?? URL(string: Self.workerURL)!
-        self.apiKey = apiKey ?? UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? Self.defaultAPIKey
+        self.apiKey = apiKey ?? UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? Self.bundledAPIKey
         self.session = URLSession(configuration: .default)
         super.init()
     }
@@ -49,8 +52,14 @@ final class WorkerSignaling: NSObject {
 
     // MARK: - Room Management
 
-    /// Create a new signaling room. Returns the 6-character room code.
-    func createRoom() async throws -> String {
+    /// Room creation result containing code and auth token.
+    struct RoomInfo {
+        let roomCode: String
+        let roomToken: String
+    }
+
+    /// Create a new signaling room. Returns the room code and auth token.
+    func createRoom() async throws -> RoomInfo {
         let url = baseURL.appendingPathComponent("room")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -66,36 +75,38 @@ final class WorkerSignaling: NSObject {
 
         struct RoomResponse: Decodable {
             let roomCode: String
+            let roomToken: String
         }
 
         let roomResponse = try JSONDecoder().decode(RoomResponse.self, from: data)
         logger.info("Created room: \(roomResponse.roomCode)")
-        return roomResponse.roomCode
+        return RoomInfo(roomCode: roomResponse.roomCode, roomToken: roomResponse.roomToken)
     }
 
     /// Join an existing room via WebSocket for signaling.
-    func joinRoom(code: String) {
-        let wsURL: URL
-        if baseURL.scheme == "https" {
-            var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
-            components.scheme = "wss"
-            components.path = "/room/\(code)"
-            wsURL = components.url!
-        } else {
-            var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
-            components.scheme = "ws"
-            components.path = "/room/\(code)"
-            wsURL = components.url!
+    func joinRoom(code: String, token: String? = nil) {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.scheme = baseURL.scheme == "https" ? "wss" : "ws"
+        components.path = "/room/\(code)"
+        if let token {
+            components.queryItems = [URLQueryItem(name: "token", value: token)]
         }
 
+        let wsURL = components.url!
         webSocketTask = session.webSocketTask(with: wsURL)
         webSocketTask?.resume()
         logger.info("WebSocket connecting to room: \(code)")
         startReceiving()
     }
 
-    /// Request ICE/TURN credentials for a room.
-    func requestICECredentials(roomCode: String) async throws -> ICECredentials {
+    /// ICE credentials result, optionally including a room token for WebSocket auth.
+    struct ICEResult {
+        let credentials: ICECredentials?
+        let roomToken: String?
+    }
+
+    /// Request ICE/TURN credentials for a room. Also returns the room token for WebSocket auth.
+    func requestICECredentials(roomCode: String) async throws -> ICEResult {
         let url = baseURL.appendingPathComponent("room/\(roomCode)/ice")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -111,6 +122,7 @@ final class WorkerSignaling: NSObject {
 
         struct ICEResponse: Decodable {
             let iceServers: [ICEServerResponse]
+            let roomToken: String?
         }
         struct ICEServerResponse: Decodable {
             let urls: [String]
@@ -121,16 +133,19 @@ final class WorkerSignaling: NSObject {
         let iceResponse = try JSONDecoder().decode(ICEResponse.self, from: data)
 
         // Find the TURN server entry
+        let creds: ICECredentials?
         if let turnServer = iceResponse.iceServers.first(where: { $0.username != nil }) {
-            return ICECredentials(
+            creds = ICECredentials(
                 username: turnServer.username!,
                 credential: turnServer.credential ?? "",
                 urls: turnServer.urls,
                 ttl: 900
             )
+        } else {
+            creds = nil
         }
 
-        throw WorkerSignalingError.noTURNCredentials
+        return ICEResult(credentials: creds, roomToken: iceResponse.roomToken)
     }
 
     // MARK: - Signaling Messages
@@ -179,9 +194,11 @@ final class WorkerSignaling: NSObject {
     private func startReceiving() {
         receiveTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, let task = self.webSocketTask else { break }
+                guard let task = self?.webSocketTask else { break }
                 do {
                     let message = try await task.receive()
+                    // Re-check self after await to avoid retaining across suspension
+                    guard let self else { break }
                     switch message {
                     case .string(let text):
                         self.handleMessage(text)
@@ -195,7 +212,7 @@ final class WorkerSignaling: NSObject {
                 } catch {
                     if !Task.isCancelled {
                         logger.error("WebSocket receive error: \(error.localizedDescription)")
-                        self.onError?(error)
+                        self?.onError?(error)
                     }
                     break
                 }

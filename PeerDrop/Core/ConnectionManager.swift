@@ -1383,7 +1383,7 @@ final class ConnectionManager: ObservableObject {
     private(set) var bleSignaling: BLESignaling?
 
     /// Start a relay connection as the room creator (offerer).
-    func startWorkerRelayAsCreator(roomCode: String, signaling: WorkerSignaling) {
+    func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
         logger.info("Starting relay as creator for room: \(roomCode)")
 
         let generation = UUID()
@@ -1404,13 +1404,13 @@ final class ConnectionManager: ObservableObject {
         Task {
             do {
                 // Get ICE/TURN credentials (fallback to STUN if TURN unavailable)
-                let credentials = try? await signaling.requestICECredentials(roomCode: roomCode)
+                let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
 
                 // Set up DataChannelClient
                 let client = DataChannelClient()
                 let iceServers: [RTCIceServer]
-                if let credentials {
-                    iceServers = ICEConfigurationProvider.iceServers(from: credentials)
+                if let creds = iceResult?.credentials {
+                    iceServers = ICEConfigurationProvider.iceServers(from: creds)
                 } else {
                     iceServers = ICEConfigurationProvider.stunServers
                 }
@@ -1419,8 +1419,8 @@ final class ConnectionManager: ObservableObject {
                     throw DataChannelError.notInitialized
                 }
 
-                // Join room WebSocket
-                signaling.joinRoom(code: roomCode)
+                // Join room WebSocket (with auth token)
+                signaling.joinRoom(code: roomCode, token: roomToken)
 
                 // Wait for peer to join, then create and send offer
                 signaling.onPeerJoined = { [weak self] in
@@ -1492,6 +1492,15 @@ final class ConnectionManager: ObservableObject {
                     }
                 }
 
+                // Timeout if negotiation doesn't complete in 30 seconds
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    guard let self, self.connectionGeneration == generation else { return }
+                    if case .requesting = self.state {
+                        self.transition(to: .failed(reason: "Relay connection timed out"))
+                    }
+                }
+
             } catch {
                 guard connectionGeneration == generation else { return }
                 transition(to: .failed(reason: error.localizedDescription))
@@ -1518,21 +1527,21 @@ final class ConnectionManager: ObservableObject {
         }
         transition(to: .requesting)
 
-        // Get ICE/TURN credentials (fallback to STUN if TURN unavailable)
-        let credentials = try? await signaling.requestICECredentials(roomCode: roomCode)
+        // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
+        let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
 
         let client = DataChannelClient()
         let iceServers: [RTCIceServer]
-        if let credentials {
-            iceServers = ICEConfigurationProvider.iceServers(from: credentials)
+        if let creds = iceResult?.credentials {
+            iceServers = ICEConfigurationProvider.iceServers(from: creds)
         } else {
             iceServers = ICEConfigurationProvider.stunServers
         }
         client.setup(iceServers: iceServers)
         // Joiner doesn't create data channel — it receives one from the offerer
 
-        // Join room WebSocket
-        signaling.joinRoom(code: roomCode)
+        // Join room WebSocket (with auth token from ICE response)
+        signaling.joinRoom(code: roomCode, token: iceResult?.roomToken)
 
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
@@ -1590,6 +1599,15 @@ final class ConnectionManager: ObservableObject {
                 case .connecting:
                     break
                 }
+            }
+        }
+
+        // Timeout if negotiation doesn't complete in 30 seconds
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            guard let self, self.connectionGeneration == generation else { return }
+            if case .requesting = self.state {
+                self.transition(to: .failed(reason: "Relay connection timed out"))
             }
         }
     }

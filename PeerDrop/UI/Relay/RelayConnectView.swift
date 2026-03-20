@@ -196,10 +196,10 @@ struct RelayConnectView: View {
         Task {
             do {
                 let signaling = WorkerSignaling()
-                let code = try await signaling.createRoom()
-                generatedCode = code
+                let roomInfo = try await signaling.createRoom()
+                generatedCode = roomInfo.roomCode
                 isLoading = false
-                connectionManager.startWorkerRelayAsCreator(roomCode: code, signaling: signaling)
+                connectionManager.startWorkerRelayAsCreator(roomCode: roomInfo.roomCode, roomToken: roomInfo.roomToken, signaling: signaling)
             } catch {
                 isLoading = false
                 errorMessage = error.localizedDescription

@@ -27,9 +27,11 @@ const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 30;
 
 function generateRoomCode(): string {
+  const randomBytes = new Uint8Array(ROOM_CODE_LENGTH);
+  crypto.getRandomValues(randomBytes);
   const chars: string[] = [];
   for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-    chars.push(ALPHABET[Math.floor(Math.random() * ALPHABET.length)]);
+    chars.push(ALPHABET[randomBytes[i] % ALPHABET.length]);
   }
   return chars.join("");
 }
@@ -125,24 +127,39 @@ export default {
         );
       }
 
-      await env.ROOMS.put(roomCode, JSON.stringify({ created: Date.now(), peers: 0 }), {
+      // Generate a room token for WebSocket authentication
+      const tokenBytes = new Uint8Array(16);
+      crypto.getRandomValues(tokenBytes);
+      const roomToken = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+
+      await env.ROOMS.put(roomCode, JSON.stringify({ created: Date.now(), peers: 0, token: roomToken }), {
         expirationTtl: ROOM_TTL_SECONDS,
       });
 
-      return new Response(JSON.stringify({ roomCode }), {
+      return new Response(JSON.stringify({ roomCode, roomToken }), {
         status: 201,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // WebSocket /room/:code — signaling relay
+    // WebSocket /room/:code?token=xxx — signaling relay
     const wsMatch = path.match(/^\/room\/([A-Z0-9]{6})$/);
     if (wsMatch && request.headers.get("Upgrade") === "websocket") {
       const code = wsMatch[1];
-      const room = await env.ROOMS.get(code);
-      if (!room) {
+      const roomData = await env.ROOMS.get(code);
+      if (!roomData) {
         return new Response(JSON.stringify({ error: "Room not found" }), {
           status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Validate room token
+      const roomInfo = JSON.parse(roomData) as { token?: string };
+      const providedToken = url.searchParams.get("token");
+      if (roomInfo.token && providedToken !== roomInfo.token) {
+        return new Response(JSON.stringify({ error: "Invalid room token" }), {
+          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -203,7 +220,7 @@ export default {
       });
     }
 
-    // POST /room/:code/ice — generate TURN credentials
+    // POST /room/:code/ice — generate TURN credentials + return room token
     const iceMatch = path.match(/^\/room\/([A-Z0-9]{6})\/ice$/);
     if (iceMatch && request.method === "POST") {
       const code = iceMatch[1];
@@ -215,6 +232,9 @@ export default {
         });
       }
 
+      const roomInfo = JSON.parse(room) as { token?: string };
+      const roomToken = roomInfo.token;
+
       // Request TURN credentials from Cloudflare API
       if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) {
         // Return STUN-only fallback if TURN is not configured
@@ -224,6 +244,7 @@ export default {
               { urls: ["stun:stun.cloudflare.com:3478"] },
               { urls: ["stun:stun.l.google.com:19302"] },
             ],
+            roomToken,
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -257,7 +278,7 @@ export default {
           ? turnData.iceServers
           : [turnData.iceServers];
 
-        return new Response(JSON.stringify({ iceServers }), {
+        return new Response(JSON.stringify({ iceServers, roomToken }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (error) {
@@ -268,6 +289,7 @@ export default {
               { urls: ["stun:stun.cloudflare.com:3478"] },
               { urls: ["stun:stun.l.google.com:19302"] },
             ],
+            roomToken,
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
