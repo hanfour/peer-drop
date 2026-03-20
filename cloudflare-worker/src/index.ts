@@ -249,10 +249,15 @@ export default {
         }
 
         const turnData = (await turnResponse.json()) as {
-          iceServers: { urls: string[]; username: string; credential: string }[];
+          iceServers: { urls: string[]; username: string; credential: string } | { urls: string[]; username: string; credential: string }[];
         };
 
-        return new Response(JSON.stringify(turnData), {
+        // Cloudflare API returns iceServers as an object; normalize to array for iOS client
+        const iceServers = Array.isArray(turnData.iceServers)
+          ? turnData.iceServers
+          : [turnData.iceServers];
+
+        return new Response(JSON.stringify({ iceServers }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (error) {
