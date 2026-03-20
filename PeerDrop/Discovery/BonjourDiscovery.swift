@@ -9,6 +9,8 @@ final class BonjourDiscovery: DiscoveryBackend {
     private static let serviceType = "_peerdrop._tcp"
     private static let serviceDomain = "local"
 
+    let source: DiscoverySource = .bonjour
+
     private let peersSubject = CurrentValueSubject<[DiscoveredPeer], Never>([])
     var peersPublisher: AnyPublisher<[DiscoveredPeer], Never> {
         peersSubject.eraseToAnyPublisher()

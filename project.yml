@@ -32,7 +32,7 @@ targets:
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "6"
+        CURRENT_PROJECT_VERSION: "7"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     info:
@@ -44,10 +44,12 @@ targets:
         NSBonjourServices:
           - "_peerdrop._tcp"
         NSMicrophoneUsageDescription: "PeerDrop needs microphone access for voice calls."
+        NSBluetoothAlwaysUsageDescription: "PeerDrop uses Bluetooth to discover nearby devices for file sharing."
         NSCameraUsageDescription: "PeerDrop needs camera access to capture photos for sharing in chats."
         NSPhotoLibraryUsageDescription: "PeerDrop needs photo library access to share photos and videos in chats."
         UIBackgroundModes:
           - voip
+          - bluetooth-central
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

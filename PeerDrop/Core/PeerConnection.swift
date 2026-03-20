@@ -9,7 +9,7 @@ private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PeerCo
 @MainActor
 final class PeerConnection: ObservableObject, Identifiable {
     let id: String  // peerID
-    private(set) var connection: NWConnection
+    private(set) var transport: TransportProtocol
     @Published private(set) var peerIdentity: PeerIdentity
     @Published private(set) var state: PeerConnectionState
 
@@ -43,18 +43,51 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// Local identity for sending messages.
     private let localIdentity: PeerIdentity
 
+    /// Backward-compatible accessor for the underlying NWConnection (TCP transport only).
+    var nwConnection: NWConnection? {
+        (transport as? TCPTransport)?.connection
+    }
+
+    /// Backward-compatible accessor (alias for `nwConnection`).
+    var connection: NWConnection {
+        get {
+            guard let conn = nwConnection else {
+                fatalError("Attempted to access NWConnection on a non-TCP transport")
+            }
+            return conn
+        }
+    }
+
     init(
+        peerID: String,
+        transport: TransportProtocol,
+        peerIdentity: PeerIdentity,
+        localIdentity: PeerIdentity,
+        state: PeerConnectionState = .connecting
+    ) {
+        self.id = peerID
+        self.transport = transport
+        self.peerIdentity = peerIdentity
+        self.localIdentity = localIdentity
+        self.state = state
+    }
+
+    /// Convenience initializer for backward compatibility with NWConnection.
+    convenience init(
         peerID: String,
         connection: NWConnection,
         peerIdentity: PeerIdentity,
         localIdentity: PeerIdentity,
         state: PeerConnectionState = .connecting
     ) {
-        self.id = peerID
-        self.connection = connection
-        self.peerIdentity = peerIdentity
-        self.localIdentity = localIdentity
-        self.state = state
+        let tcpTransport = TCPTransport(connection: connection)
+        self.init(
+            peerID: peerID,
+            transport: tcpTransport,
+            peerIdentity: peerIdentity,
+            localIdentity: localIdentity,
+            state: state
+        )
     }
 
     deinit {
@@ -84,9 +117,14 @@ final class PeerConnection: ObservableObject, Identifiable {
         peerIdentity = identity
     }
 
-    func replaceConnection(_ newConnection: NWConnection) {
-        connection = newConnection
+    func replaceTransport(_ newTransport: TransportProtocol) {
+        transport = newTransport
         connectionGeneration = UUID()
+    }
+
+    /// Backward-compatible method for replacing the underlying NWConnection.
+    func replaceConnection(_ newConnection: NWConnection) {
+        replaceTransport(TCPTransport(connection: newConnection))
     }
 
     // MARK: - Transfer State
@@ -130,7 +168,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         guard state.isActive else {
             throw ConnectionError.notConnected
         }
-        try await connection.sendMessage(message)
+        try await transport.send(message)
     }
 
     // MARK: - Receive Loop
@@ -142,7 +180,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         Task {
             while connectionGeneration == generation && state.isActive {
                 do {
-                    let message = try await connection.receiveMessage()
+                    let message = try await transport.receive()
                     guard connectionGeneration == generation else { break }
                     onMessageReceived?(message)
                 } catch {
@@ -163,15 +201,15 @@ final class PeerConnection: ObservableObject, Identifiable {
 
         if sendMessage {
             let msg = PeerMessage.disconnect(senderID: localIdentity.id)
-            try? await connection.sendMessage(msg)
+            try? await transport.send(msg)
         }
 
-        connection.cancel()
+        transport.close()
         updateState(.disconnected)
     }
 
     func cancel() {
         connectionGeneration = UUID()
-        connection.cancel()
+        transport.close()
     }
 }

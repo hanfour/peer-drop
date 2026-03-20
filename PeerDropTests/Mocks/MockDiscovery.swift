@@ -3,6 +3,8 @@ import Combine
 @testable import PeerDrop
 
 final class MockDiscovery: DiscoveryBackend {
+    let source: DiscoverySource = .manual
+
     private let peersSubject = CurrentValueSubject<[DiscoveredPeer], Never>([])
     var peersPublisher: AnyPublisher<[DiscoveredPeer], Never> {
         peersSubject.eraseToAnyPublisher()
