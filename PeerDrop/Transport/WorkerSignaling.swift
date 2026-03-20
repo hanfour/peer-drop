@@ -23,20 +23,22 @@ final class WorkerSignaling: NSObject {
 
     // MARK: - Default Worker URL
 
-    private static let defaultWorkerURL = "https://peerdrop-signal.workers.dev"
+    private static let defaultWorkerURL = "https://peerdrop-signal.hanfourhuang.workers.dev"
 
     static var workerURL: String {
         UserDefaults.standard.string(forKey: "peerDropWorkerURL") ?? defaultWorkerURL
     }
 
-    /// API key for authenticating with the Worker (set via app config or UserDefaults).
+    private static let defaultAPIKey = "f9ecf9c66fc765696d943ebe97e21dbfccd816c83cec08fe14a4683441a044df"
+
+    /// API key for authenticating with the Worker.
     private let apiKey: String?
 
     // MARK: - Init
 
     init(baseURL: URL? = nil, apiKey: String? = nil) {
         self.baseURL = baseURL ?? URL(string: Self.workerURL)!
-        self.apiKey = apiKey ?? UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey")
+        self.apiKey = apiKey ?? UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? Self.defaultAPIKey
         self.session = URLSession(configuration: .default)
         super.init()
     }
