@@ -2,6 +2,7 @@ import XCTest
 import NearbyInteraction
 @testable import PeerDrop
 
+@MainActor
 final class NearbyInteractionTests: XCTestCase {
 
     // MARK: - Support Check

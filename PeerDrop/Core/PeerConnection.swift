@@ -49,14 +49,8 @@ final class PeerConnection: ObservableObject, Identifiable {
     }
 
     /// Backward-compatible accessor (alias for `nwConnection`).
-    var connection: NWConnection {
-        get {
-            guard let conn = nwConnection else {
-                fatalError("Attempted to access NWConnection on a non-TCP transport")
-            }
-            return conn
-        }
-    }
+    /// Returns nil for non-TCP transports (e.g. DataChannelTransport).
+    var connection: NWConnection? { nwConnection }
 
     init(
         peerID: String,

@@ -130,7 +130,12 @@ final class DataChannelTransport: TransportProtocol {
 
     func receive() async throws -> PeerMessage {
         for await data in receiveStream {
-            return try PeerMessage.decoded(from: data)
+            do {
+                return try PeerMessage.decoded(from: data)
+            } catch {
+                logger.warning("Skipping malformed message (\(data.count) bytes): \(error.localizedDescription)")
+                continue
+            }
         }
         throw DataChannelError.dataChannelClosed
     }

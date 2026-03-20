@@ -42,8 +42,8 @@ final class BLESignaling: NSObject {
     private var remoteICECandidateChar: CBCharacteristic?
     private var remoteControlChar: CBCharacteristic?
 
-    // Reassembly buffers
-    private var receiveBuffers: [CBUUID: Data] = [:]
+    // Reassembly buffers keyed by "centralID:characteristicUUID" for per-central isolation
+    private var receiveBuffers: [String: Data] = [:]
 
     // Pending notification queue (when updateValue returns false)
     private var pendingNotifications: [(data: Data, characteristic: CBMutableCharacteristic)] = []
@@ -234,7 +234,11 @@ final class BLESignaling: NSObject {
     }
 
     /// Process a received chunk and return reassembled data if complete.
-    func processChunk(_ data: Data, for characteristicUUID: CBUUID) -> Data? {
+    /// - Parameters:
+    ///   - data: The chunk data.
+    ///   - characteristicUUID: The characteristic UUID.
+    ///   - centralID: Optional central identifier for per-connection isolation.
+    func processChunk(_ data: Data, for characteristicUUID: CBUUID, from centralID: String? = nil) -> Data? {
         guard !data.isEmpty else { return nil }
         let flags = data[0]
         let payload = data.count > 1 ? data[1...] : Data()
@@ -242,14 +246,16 @@ final class BLESignaling: NSObject {
         let isFirst = (flags & Self.flagFirst) != 0
         let isLast = (flags & Self.flagLast) != 0
 
+        let bufferKey = "\(centralID ?? "default"):\(characteristicUUID.uuidString)"
+
         if isFirst {
-            receiveBuffers[characteristicUUID] = Data(payload)
+            receiveBuffers[bufferKey] = Data(payload)
         } else {
-            receiveBuffers[characteristicUUID]?.append(contentsOf: payload)
+            receiveBuffers[bufferKey]?.append(contentsOf: payload)
         }
 
         if isLast {
-            let assembled = receiveBuffers.removeValue(forKey: characteristicUUID)
+            let assembled = receiveBuffers.removeValue(forKey: bufferKey)
             return assembled
         }
 
@@ -259,7 +265,7 @@ final class BLESignaling: NSObject {
     // MARK: - Peripheral Delegate Handling
 
     /// Called by BLEDiscovery when a write request is received on signaling characteristics.
-    func handleWriteRequest(characteristicUUID: CBUUID, value: Data) {
+    func handleWriteRequest(characteristicUUID: CBUUID, value: Data, centralID: String? = nil) {
         if characteristicUUID == Self.controlUUID {
             // Control messages are short, no chunking
             if let message = String(data: value, encoding: .utf8) {
@@ -275,7 +281,7 @@ final class BLESignaling: NSObject {
             return
         }
 
-        guard let assembled = processChunk(value, for: characteristicUUID) else { return }
+        guard let assembled = processChunk(value, for: characteristicUUID, from: centralID) else { return }
 
         guard let text = String(data: assembled, encoding: .utf8) else {
             logger.warning("Failed to decode assembled data as UTF-8")

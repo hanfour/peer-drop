@@ -4,6 +4,17 @@ import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "DataChannelClient")
 
+/// Thread-safe one-time RTCInitializeSSL wrapper.
+enum RTCSSLInitializer {
+    private static let once: Void = {
+        RTCInitializeSSL()
+    }()
+
+    static func initialize() {
+        _ = once
+    }
+}
+
 /// Manages a WebRTC PeerConnection for Data Channel communication (non-audio).
 final class DataChannelClient: NSObject {
     private let peerConnectionFactory: RTCPeerConnectionFactory
@@ -20,13 +31,8 @@ final class DataChannelClient: NSObject {
     var onDataReceived: ((Data) -> Void)?
     var onRemoteDataChannel: ((RTCDataChannel) -> Void)?
 
-    private static var sslInitialized = false
-
     override init() {
-        if !Self.sslInitialized {
-            RTCInitializeSSL()
-            Self.sslInitialized = true
-        }
+        RTCSSLInitializer.initialize()
         // Data-only — no video encoder/decoder needed
         peerConnectionFactory = RTCPeerConnectionFactory()
         super.init()

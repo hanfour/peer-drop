@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "Nearby
 
 /// Manages Nearby Interaction sessions for distance/direction between connected peers.
 /// This is NOT a DiscoveryBackend — it enhances already-connected peers with proximity data.
+@MainActor
 final class NearbyInteractionManager: NSObject, ObservableObject {
 
     /// Published proximity data keyed by peer ID.
@@ -154,52 +155,54 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
 // MARK: - NISessionDelegate
 
 extension NearbyInteractionManager: NISessionDelegate {
-    func session(_ session: NISession, didUpdate nearbyObjects: [NINearbyObject]) {
-        guard let peerID = peerID(for: session),
-              let object = nearbyObjects.first else { return }
-
-        let info = ProximityInfo(
-            distance: object.distance,
-            direction: object.direction
-        )
-        DispatchQueue.main.async { [weak self] in
-            self?.peerProximity[peerID] = info
+    nonisolated func session(_ session: NISession, didUpdate nearbyObjects: [NINearbyObject]) {
+        guard let object = nearbyObjects.first else { return }
+        let distance = object.distance
+        let direction = object.direction
+        Task { @MainActor [weak self] in
+            guard let self, let peerID = self.peerID(for: session) else { return }
+            self.peerProximity[peerID] = ProximityInfo(distance: distance, direction: direction)
         }
     }
 
-    func session(_ session: NISession, didRemove nearbyObjects: [NINearbyObject], reason: NINearbyObject.RemovalReason) {
-        guard let peerID = peerID(for: session) else { return }
-
-        switch reason {
-        case .peerEnded:
-            logger.info("NI peer ended: \(peerID)")
-            stopSession(for: peerID)
-        case .timeout:
-            logger.info("NI session timed out: \(peerID)")
-            stopSession(for: peerID)
-        @unknown default:
-            break
+    nonisolated func session(_ session: NISession, didRemove nearbyObjects: [NINearbyObject], reason: NINearbyObject.RemovalReason) {
+        Task { @MainActor [weak self] in
+            guard let self, let peerID = self.peerID(for: session) else { return }
+            switch reason {
+            case .peerEnded:
+                logger.info("NI peer ended: \(peerID)")
+                self.stopSession(for: peerID)
+            case .timeout:
+                logger.info("NI session timed out: \(peerID)")
+                self.stopSession(for: peerID)
+            @unknown default:
+                break
+            }
         }
     }
 
-    func sessionWasSuspended(_ session: NISession) {
-        guard let peerID = peerID(for: session) else { return }
-        logger.info("NI session suspended for \(peerID)")
+    nonisolated func sessionWasSuspended(_ session: NISession) {
+        Task { @MainActor [weak self] in
+            guard let self, let peerID = self.peerID(for: session) else { return }
+            logger.info("NI session suspended for \(peerID)")
+        }
     }
 
-    func sessionSuspensionEnded(_ session: NISession) {
-        guard let peerID = peerID(for: session) else { return }
-        logger.info("NI session suspension ended for \(peerID)")
-        // Session will automatically resume
+    nonisolated func sessionSuspensionEnded(_ session: NISession) {
+        Task { @MainActor [weak self] in
+            guard let self, let peerID = self.peerID(for: session) else { return }
+            logger.info("NI session suspension ended for \(peerID)")
+        }
     }
 
-    func session(_ session: NISession, didInvalidateWith error: Error) {
-        guard let peerID = peerID(for: session) else { return }
-        logger.error("NI session invalidated for \(peerID): \(error.localizedDescription)")
-        sessions.removeValue(forKey: peerID)
-        tokenSendCallbacks.removeValue(forKey: peerID)
-        DispatchQueue.main.async { [weak self] in
-            self?.peerProximity.removeValue(forKey: peerID)
+    nonisolated func session(_ session: NISession, didInvalidateWith error: Error) {
+        let errorDesc = error.localizedDescription
+        Task { @MainActor [weak self] in
+            guard let self, let peerID = self.peerID(for: session) else { return }
+            logger.error("NI session invalidated for \(peerID): \(errorDesc)")
+            self.sessions.removeValue(forKey: peerID)
+            self.tokenSendCallbacks.removeValue(forKey: peerID)
+            self.peerProximity.removeValue(forKey: peerID)
         }
     }
 }
