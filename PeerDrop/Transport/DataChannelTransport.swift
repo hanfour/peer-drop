@@ -22,16 +22,33 @@ final class DataChannelTransport: TransportProtocol {
     private let receiveStream: AsyncStream<Data>
     private let receiveContinuation: AsyncStream<Data>.Continuation
 
+    /// Serial queue protecting mutable state (nextMessageID, reassemblyBuffer, _isReady).
+    private let queue = DispatchQueue(label: "com.hanfour.peerdrop.DataChannelTransport")
+
     /// Monotonically increasing message ID for chunked sends.
     private var nextMessageID: UInt16 = 0
     /// Reassembly buffer for chunked messages, keyed by message ID.
     private var reassemblyBuffer: [UInt16: ReassemblyState] = [:]
 
+    /// Stale reassembly entries older than this are purged.
+    private static let reassemblyTimeout: TimeInterval = 30
+
     private struct ReassemblyState {
         let totalChunks: UInt16
         var chunks: [UInt16: Data]
+        let createdAt: Date
+
+        init(totalChunks: UInt16, chunks: [UInt16: Data] = [:]) {
+            self.totalChunks = totalChunks
+            self.chunks = chunks
+            self.createdAt = Date()
+        }
 
         var isComplete: Bool { chunks.count == Int(totalChunks) }
+
+        var isExpired: Bool {
+            Date().timeIntervalSince(createdAt) > DataChannelTransport.reassemblyTimeout
+        }
 
         func assemble() -> Data {
             var result = Data()
@@ -61,14 +78,17 @@ final class DataChannelTransport: TransportProtocol {
     // MARK: - TransportProtocol
 
     var isReady: Bool {
-        _isReady
+        queue.sync { _isReady }
     }
     private var _isReady = false
 
     func send(_ message: PeerMessage) async throws {
         let data = try message.encoded()
-        let messageID = nextMessageID
-        nextMessageID &+= 1
+        let messageID = queue.sync { () -> UInt16 in
+            let id = nextMessageID
+            nextMessageID &+= 1
+            return id
+        }
 
         if data.count <= Self.maxChunkPayload {
             // Single message, no chunking needed. Wrap with header indicating 1 chunk.
@@ -118,7 +138,7 @@ final class DataChannelTransport: TransportProtocol {
     func close() {
         receiveContinuation.finish()
         client.close()
-        _isReady = false
+        queue.sync { _isReady = false }
         onStateChange?(.cancelled)
     }
 
@@ -153,26 +173,29 @@ final class DataChannelTransport: TransportProtocol {
 
     private func setupCallbacks() {
         client.onDataChannelOpen = { [weak self] in
-            self?._isReady = true
-            self?.onStateChange?(.ready)
+            guard let self else { return }
+            self.queue.sync { self._isReady = true }
+            self.onStateChange?(.ready)
         }
 
         client.onDataChannelClose = { [weak self] in
-            self?._isReady = false
-            self?.onStateChange?(.cancelled)
-            self?.receiveContinuation.finish()
+            guard let self else { return }
+            self.queue.sync { self._isReady = false }
+            self.onStateChange?(.cancelled)
+            self.receiveContinuation.finish()
         }
 
         client.onConnectionStateChange = { [weak self] state in
+            guard let self else { return }
             switch state {
             case .failed:
-                self?._isReady = false
-                self?.onStateChange?(.failed(DataChannelError.dataChannelClosed))
-                self?.receiveContinuation.finish()
+                self.queue.sync { self._isReady = false }
+                self.onStateChange?(.failed(DataChannelError.dataChannelClosed))
+                self.receiveContinuation.finish()
             case .disconnected:
-                self?._isReady = false
-                self?.onStateChange?(.cancelled)
-                self?.receiveContinuation.finish()
+                self.queue.sync { self._isReady = false }
+                self.onStateChange?(.cancelled)
+                self.receiveContinuation.finish()
             default:
                 break
             }
@@ -197,19 +220,28 @@ final class DataChannelTransport: TransportProtocol {
             return
         }
 
-        // Multi-chunk reassembly keyed by messageID
-        if reassemblyBuffer[messageID] == nil {
-            reassemblyBuffer[messageID] = ReassemblyState(
-                totalChunks: totalChunks,
-                chunks: [:]
-            )
+        // Multi-chunk reassembly keyed by messageID — synchronized
+        let assembled: Data? = queue.sync {
+            // Purge expired entries
+            reassemblyBuffer = reassemblyBuffer.filter { !$0.value.isExpired }
+
+            if reassemblyBuffer[messageID] == nil {
+                reassemblyBuffer[messageID] = ReassemblyState(
+                    totalChunks: totalChunks
+                )
+            }
+
+            reassemblyBuffer[messageID]?.chunks[chunkIndex] = payload
+
+            if reassemblyBuffer[messageID]?.isComplete == true {
+                let result = reassemblyBuffer[messageID]!.assemble()
+                reassemblyBuffer.removeValue(forKey: messageID)
+                return result
+            }
+            return nil
         }
 
-        reassemblyBuffer[messageID]?.chunks[chunkIndex] = payload
-
-        if reassemblyBuffer[messageID]?.isComplete == true {
-            let assembled = reassemblyBuffer[messageID]!.assemble()
-            reassemblyBuffer.removeValue(forKey: messageID)
+        if let assembled {
             logger.debug("Reassembled \(totalChunks) chunks → \(assembled.count) bytes")
             receiveContinuation.yield(assembled)
         }

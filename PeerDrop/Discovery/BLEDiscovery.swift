@@ -305,4 +305,8 @@ extension BLEDiscovery: CBPeripheralManagerDelegate {
             }
         }
     }
+
+    func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+        signaling.flushPendingNotifications(via: peripheral)
+    }
 }
