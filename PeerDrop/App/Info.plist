@@ -32,6 +32,8 @@
 	<string>PeerDrop uses the local network to discover and connect to nearby devices for file transfer and voice calls.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PeerDrop needs microphone access for voice calls.</string>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>PeerDrop uses Nearby Interaction to measure the distance and direction of nearby devices for precise file sharing.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>PeerDrop needs photo library access to share photos and videos in chats.</string>
 	<key>PeerDropWorkerAPIKey</key>
