@@ -236,8 +236,9 @@ extension BLEDiscovery: CBCentralManagerDelegate {
         // advertisement to its own central manager, so no self-filtering is needed.
 
         let rssiValue = RSSI.intValue
-        // Ignore very weak signals (likely far away or noise)
-        guard rssiValue > -90 else { return }
+        // Ignore very weak signals (likely far away or noise).
+        // Use -100 dBm to avoid filtering real peers in attenuated indoor environments.
+        guard rssiValue > -100 else { return }
 
         let peripheralID = peripheral.identifier
         let existing = discoveredPeripherals[peripheralID]

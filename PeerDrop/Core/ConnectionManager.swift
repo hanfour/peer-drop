@@ -539,6 +539,9 @@ final class ConnectionManager: ObservableObject {
         discoveryCoordinator?.stop()
         discoveryCoordinator = nil
         bonjourDiscovery = nil
+        bleDiscovery = nil
+        nearbyInteractionManager?.stopAllSessions()
+        nearbyInteractionManager = nil
         stopNetworkPathMonitor()
     }
 

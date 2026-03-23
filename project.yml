@@ -55,6 +55,7 @@ targets:
         UIBackgroundModes:
           - voip
           - bluetooth-central
+          - bluetooth-peripheral
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
