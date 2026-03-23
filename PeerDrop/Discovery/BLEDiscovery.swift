@@ -232,12 +232,8 @@ extension BLEDiscovery: CBCentralManagerDelegate {
             ?? peripheral.name
             ?? "Unknown Device"
 
-        // Self-filtering: CoreBluetooth does not include manufacturer data in
-        // peripheral advertisements, so filter by matching the truncated local name.
-        let truncatedLocalName = String(localDisplayName.prefix(8))
-        if advertisedName == truncatedLocalName {
-            return
-        }
+        // Note: CoreBluetooth on iOS never delivers a device's own peripheral
+        // advertisement to its own central manager, so no self-filtering is needed.
 
         let rssiValue = RSSI.intValue
         // Ignore very weak signals (likely far away or noise)
