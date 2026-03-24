@@ -25,6 +25,14 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// Tracks whether this connection is in a voice call.
     @Published private(set) var isInVoiceCall: Bool = false
 
+    /// When this connection entered the connected state.
+    private(set) var connectedSince: Date?
+
+    /// Bytes transferred in the last measurement window (for speed calculation).
+    @Published private(set) var transferSpeed: Int64 = 0
+    private var lastBytesCount: Int64 = 0
+    private var speedTimer: Timer?
+
     /// Callback when the connection state changes.
     var onStateChange: ((PeerConnectionState) -> Void)?
 
@@ -86,6 +94,7 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     deinit {
         heartbeatTask?.cancel()
+        speedTimer?.invalidate()
     }
 
     // MARK: - State Management
@@ -98,8 +107,10 @@ final class PeerConnection: ObservableObject, Identifiable {
 
         switch newState {
         case .connected:
+            connectedSince = Date()
             startHeartbeat()
         case .disconnected, .failed:
+            connectedSince = nil
             stopHeartbeat()
             onDisconnected?()
         case .connecting:
@@ -125,6 +136,34 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     func setTransferring(_ transferring: Bool) {
         isTransferring = transferring
+        if transferring {
+            startSpeedTracking()
+        } else {
+            stopSpeedTracking()
+        }
+    }
+
+    func recordBytesTransferred(_ bytes: Int64) {
+        lastBytesCount += bytes
+    }
+
+    private func startSpeedTracking() {
+        lastBytesCount = 0
+        transferSpeed = 0
+        speedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.transferSpeed = self.lastBytesCount
+                self.lastBytesCount = 0
+            }
+        }
+    }
+
+    private func stopSpeedTracking() {
+        speedTimer?.invalidate()
+        speedTimer = nil
+        transferSpeed = 0
+        lastBytesCount = 0
     }
 
     func setInVoiceCall(_ inCall: Bool) {

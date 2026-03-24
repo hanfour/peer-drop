@@ -40,6 +40,10 @@ struct ChatMessage: Identifiable, Codable {
     let replyToText: String?         // Preview text of replied message
     let replyToSenderName: String?   // Sender name of replied message
 
+    // Edit / Delete support
+    var editedAt: Date?
+    var isDeleted: Bool
+
     // Reactions (emoji -> set of senderIDs)
     var reactions: [String: Set<String>]?
 
@@ -67,6 +71,8 @@ struct ChatMessage: Identifiable, Codable {
         replyToMessageID: String? = nil,
         replyToText: String? = nil,
         replyToSenderName: String? = nil,
+        editedAt: Date? = nil,
+        isDeleted: Bool = false,
         reactions: [String: Set<String>]? = nil,
         groupReadStatus: GroupReadStatus? = nil
     ) {
@@ -90,6 +96,8 @@ struct ChatMessage: Identifiable, Codable {
         self.replyToMessageID = replyToMessageID
         self.replyToText = replyToText
         self.replyToSenderName = replyToSenderName
+        self.editedAt = editedAt
+        self.isDeleted = isDeleted
         self.reactions = reactions
         self.groupReadStatus = groupReadStatus
     }
@@ -119,6 +127,9 @@ struct ChatMessage: Identifiable, Codable {
         replyToMessageID = try container.decodeIfPresent(String.self, forKey: .replyToMessageID)
         replyToText = try container.decodeIfPresent(String.self, forKey: .replyToText)
         replyToSenderName = try container.decodeIfPresent(String.self, forKey: .replyToSenderName)
+        // Edit/Delete with backward compatibility
+        editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
         // Reactions with backward compatibility
         reactions = try container.decodeIfPresent([String: Set<String>].self, forKey: .reactions)
         // Group read status with backward compatibility
@@ -183,5 +194,10 @@ struct ChatMessage: Identifiable, Codable {
     /// Whether this message is a reply to another message.
     var isReply: Bool {
         replyToMessageID != nil
+    }
+
+    /// Whether this message can still be edited or deleted (within 5 minutes).
+    var canEditOrDelete: Bool {
+        isOutgoing && !isDeleted && !isMedia && Date().timeIntervalSince(timestamp) < 300
     }
 }

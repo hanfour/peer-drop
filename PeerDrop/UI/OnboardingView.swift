@@ -31,28 +31,34 @@ struct OnboardingView: View {
                     ).tag(1)
 
                     OnboardingPage(
+                        icon: { AnyView(Image(systemName: "antenna.radiowaves.left.and.right.circle").font(.system(size: 60)).foregroundStyle(.white)) },
+                        title: "Connect Anywhere",
+                        subtitle: "Share across different networks using relay transport — no same WiFi required"
+                    ).tag(2)
+
+                    OnboardingPage(
                         icon: { AnyView(Image(systemName: "arrow.up.arrow.down.circle").font(.system(size: 60)).foregroundStyle(.white)) },
                         title: "Share Anything",
                         subtitle: "Send files, photos, videos, and messages securely"
-                    ).tag(2)
+                    ).tag(3)
 
                     OnboardingPage(
                         icon: { AnyView(Image(systemName: "checkmark.circle").font(.system(size: 60)).foregroundStyle(.white)) },
                         title: "You're All Set",
                         subtitle: "Start sharing with nearby devices"
-                    ).tag(3)
+                    ).tag(4)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
 
                 Button {
-                    if currentPage < 3 {
+                    if currentPage < 4 {
                         withAnimation { currentPage += 1 }
                     } else {
                         hasCompletedOnboarding = true
                     }
                 } label: {
-                    Text(currentPage < 3 ? "Next" : "Get Started")
+                    Text(currentPage < 4 ? "Next" : "Get Started")
                         .font(.headline)
                         .foregroundStyle(gradientColors[0])
                         .frame(maxWidth: .infinity)
@@ -62,7 +68,7 @@ struct OnboardingView: View {
                 .padding(.horizontal, 32)
                 .padding(.bottom, 16)
 
-                if currentPage < 3 {
+                if currentPage < 4 {
                     Button("Skip") {
                         hasCompletedOnboarding = true
                     }

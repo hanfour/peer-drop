@@ -21,8 +21,12 @@ enum FeatureSettings {
         guard UserDefaults.standard.object(forKey: "peerDropNearbyInteractionEnabled") != nil else { return true }
         return UserDefaults.standard.bool(forKey: "peerDropNearbyInteractionEnabled")
     }
+    static var isClipboardSyncEnabled: Bool {
+        guard UserDefaults.standard.object(forKey: "peerDropClipboardSyncEnabled") != nil else { return true }
+        return UserDefaults.standard.bool(forKey: "peerDropClipboardSyncEnabled")
+    }
     static var isRelayEnabled: Bool {
-        guard UserDefaults.standard.object(forKey: "peerDropRelayEnabled") != nil else { return false }
+        guard UserDefaults.standard.object(forKey: "peerDropRelayEnabled") != nil else { return true }
         return UserDefaults.standard.bool(forKey: "peerDropRelayEnabled")
     }
 }

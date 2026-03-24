@@ -174,6 +174,7 @@ final class ConnectionManager: ObservableObject {
     let deviceStore = DeviceRecordStore()
     let chatManager = ChatManager()
     let groupStore = DeviceGroupStore()
+    let clipboardSyncManager = ClipboardSyncManager()
 
     // MARK: - Typing Indicator State
 
@@ -197,6 +198,12 @@ final class ConnectionManager: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
+        clipboardSyncManager.onClipboardChanged = { [weak self] payload in
+            self?.sendClipboardSyncToAll(payload)
+        }
+        clipboardSyncManager.startMonitoring()
 
         // Screenshot mode: automatically start discovery and set up mock connection
         if ScreenshotModeProvider.shared.isActive {
@@ -2019,6 +2026,48 @@ final class ConnectionManager: ObservableObject {
             guard let payload = message.payload else { return }
             nearbyInteractionManager?.handleTokenResponse(payload, from: peerID)
 
+        case .clipboardSync:
+            guard FeatureSettings.isClipboardSyncEnabled else { return }
+            guard let payload = try? message.decodePayload(ClipboardSyncPayload.self) else {
+                logger.warning("Failed to decode ClipboardSyncPayload")
+                return
+            }
+            clipboardSyncManager.applyReceivedClipboard(payload)
+            NotificationManager.shared.postChatMessage(
+                from: peerConnection.peerIdentity.displayName,
+                text: NSLocalizedString("Clipboard synced", comment: "")
+            )
+
+        case .messageEdit:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageEditPayload.self) else {
+                logger.warning("Failed to decode MessageEditPayload")
+                return
+            }
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: peerID)
+
+        case .messageDelete:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageDeletePayload.self) else {
+                logger.warning("Failed to decode MessageDeletePayload")
+                return
+            }
+            chatManager.applyDelete(messageID: payload.messageID, peerID: peerID)
+
+        case .fileResume:
+            guard let payload = try? message.decodePayload(FileResumePayload.self) else {
+                logger.warning("Failed to decode FileResumePayload")
+                return
+            }
+            peerConnection.fileTransferSession?.handleResumeRequest(payload, peerConnection: peerConnection, senderID: localIdentity.id)
+
+        case .fileResumeAck:
+            guard let payload = try? message.decodePayload(FileResumeAckPayload.self) else {
+                logger.warning("Failed to decode FileResumeAckPayload")
+                return
+            }
+            peerConnection.fileTransferSession?.handleResumeAck(payload)
+
         default:
             break
         }
@@ -2300,6 +2349,28 @@ final class ConnectionManager: ObservableObject {
         case .niTokenOffer, .niTokenResponse:
             // NI tokens in legacy path — only handled in multi-connection path
             break
+
+        case .clipboardSync:
+            guard FeatureSettings.isClipboardSyncEnabled else { return }
+            guard let payload = try? message.decodePayload(ClipboardSyncPayload.self) else {
+                logger.warning("Failed to decode ClipboardSyncPayload")
+                return
+            }
+            clipboardSyncManager.applyReceivedClipboard(payload)
+
+        case .messageEdit:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageEditPayload.self) else { return }
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: message.senderID)
+
+        case .messageDelete:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageDeletePayload.self) else { return }
+            chatManager.applyDelete(messageID: payload.messageID, peerID: message.senderID)
+
+        case .fileResume, .fileResumeAck:
+            // File resume only supported in multi-connection path
+            break
         }
     }
 
@@ -2482,6 +2553,63 @@ final class ConnectionManager: ObservableObject {
         case .remove:
             chatManager.removeReaction(emoji: emoji, from: messageID, by: localIdentity.id)
         }
+    }
+
+    // MARK: - Clipboard Sync
+
+    func sendClipboardSync(_ payload: ClipboardSyncPayload, to peerID: String) {
+        guard FeatureSettings.isClipboardSyncEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
+        guard let msg = try? PeerMessage.clipboardSync(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for clipboardSync")
+            return
+        }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send clipboard sync: \(error.localizedDescription)") }
+        }
+    }
+
+    func sendClipboardSyncToAll(_ payload: ClipboardSyncPayload) {
+        for (peerID, peerConn) in connections where peerConn.state.isConnected {
+            sendClipboardSync(payload, to: peerID)
+        }
+    }
+
+    // MARK: - Message Edit / Delete
+
+    func sendMessageEdit(messageID: String, newText: String, to peerID: String, groupID: String? = nil) {
+        guard FeatureSettings.isChatEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let payload = MessageEditPayload(messageID: messageID, newText: newText, groupID: groupID)
+        guard let msg = try? PeerMessage.messageEdit(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageEdit")
+            return
+        }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send message edit: \(error.localizedDescription)") }
+        }
+
+        chatManager.applyEdit(messageID: messageID, newText: newText, editedAt: Date(), peerID: peerID)
+    }
+
+    func sendMessageDelete(messageID: String, to peerID: String, groupID: String? = nil) {
+        guard FeatureSettings.isChatEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let payload = MessageDeletePayload(messageID: messageID, groupID: groupID)
+        guard let msg = try? PeerMessage.messageDelete(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageDelete")
+            return
+        }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send message delete: \(error.localizedDescription)") }
+        }
+
+        chatManager.applyDelete(messageID: messageID, peerID: peerID)
     }
 
     // MARK: - Chat

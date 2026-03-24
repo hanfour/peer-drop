@@ -30,11 +30,13 @@ final class BLEDiscoveryTests: XCTestCase {
     }
 
     func testBLEPeerEquality() {
+        let now = Date()
         let peer1 = DiscoveredPeer(
             id: "ble-1",
             displayName: "Device",
             endpoint: .bleOnly(peripheralIdentifier: "1"),
             source: .bluetooth,
+            lastSeen: now,
             rssi: -50
         )
         let peer2 = DiscoveredPeer(
@@ -42,6 +44,7 @@ final class BLEDiscoveryTests: XCTestCase {
             displayName: "Device",
             endpoint: .bleOnly(peripheralIdentifier: "1"),
             source: .bluetooth,
+            lastSeen: now,
             rssi: -50
         )
         XCTAssertEqual(peer1, peer2)

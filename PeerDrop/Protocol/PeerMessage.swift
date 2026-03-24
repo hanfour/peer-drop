@@ -125,6 +125,31 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .reaction, payload: data, senderID: senderID)
     }
 
+    static func messageEdit(_ payload: MessageEditPayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .messageEdit, payload: data, senderID: senderID)
+    }
+
+    static func messageDelete(_ payload: MessageDeletePayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .messageDelete, payload: data, senderID: senderID)
+    }
+
+    static func clipboardSync(_ payload: ClipboardSyncPayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .clipboardSync, payload: data, senderID: senderID)
+    }
+
+    static func fileResume(_ payload: FileResumePayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .fileResume, payload: data, senderID: senderID)
+    }
+
+    static func fileResumeAck(_ payload: FileResumeAckPayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .fileResumeAck, payload: data, senderID: senderID)
+    }
+
     // MARK: - Serialization
 
     func encoded() throws -> Data {

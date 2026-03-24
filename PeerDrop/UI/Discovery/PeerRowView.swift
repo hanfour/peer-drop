@@ -3,6 +3,7 @@ import SwiftUI
 struct PeerRowView: View {
     let peer: DiscoveredPeer
     let onTap: () -> Void
+    var proximityDirection: SIMD3<Float>?
 
     var body: some View {
         Button(action: onTap) {
@@ -21,6 +22,9 @@ struct PeerRowView: View {
                         if let distance = peer.distance {
                             Text(String(format: "%.1f m", distance))
                                 .fontWeight(.medium)
+                        }
+                        if let dir = proximityDirection ?? peer.direction {
+                            directionArrow(for: dir)
                         }
                     }
                     .font(.caption)
@@ -93,5 +97,13 @@ struct PeerRowView: View {
             return Image(systemName: "wifi")
                 .foregroundStyle(.red)
         }
+    }
+
+    private func directionArrow(for direction: SIMD3<Float>) -> some View {
+        let angle = atan2(direction.x, direction.z)
+        return Image(systemName: "location.north.fill")
+            .font(.caption)
+            .foregroundStyle(.blue)
+            .rotationEffect(.radians(Double(angle)))
     }
 }
