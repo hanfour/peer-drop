@@ -55,7 +55,7 @@ final class WorkerSignaling: NSObject {
     /// Room creation result containing code and auth token.
     struct RoomInfo {
         let roomCode: String
-        let roomToken: String
+        let roomToken: String?
     }
 
     /// Create a new signaling room. Returns the room code and auth token.
@@ -75,7 +75,7 @@ final class WorkerSignaling: NSObject {
 
         struct RoomResponse: Decodable {
             let roomCode: String
-            let roomToken: String
+            let roomToken: String?
         }
 
         let roomResponse = try JSONDecoder().decode(RoomResponse.self, from: data)

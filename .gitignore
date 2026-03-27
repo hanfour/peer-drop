@@ -61,6 +61,8 @@ TestResults/
 DerivedData-MultiSim/
 
 # Fastlane
+fastlane/AuthKey*.p8
+fastlane/api_key.json
 fastlane/screenshots/
 fastlane/derived_data/
 fastlane/Preview.html
