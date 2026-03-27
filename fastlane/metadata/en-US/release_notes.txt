@@ -1,8 +1,4 @@
-What's new in PeerDrop 1.2.0:
+PeerDrop 1.2.1 Bug Fix:
 
-- Relay enabled by default — share across different networks out of the box
-- Clipboard sync — automatically share clipboard content with connected peers
-- Message edit & delete — long press to edit or delete sent messages within 5 minutes
-- File transfer resume — reconnect and continue interrupted transfers
-- Nearby Interaction — see distance and direction to connected devices
-- Connection list improvements — transfer speed, connection duration display
+- Fixed Relay connection failure ("The data couldn't be read because it is missing")
+- Improved Relay connection stability with defensive JSON decoding
