@@ -5,6 +5,7 @@ struct PeerDropApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var connectionManager = ConnectionManager()
     @StateObject private var voicePlayer = VoicePlayer()
+    @StateObject private var petEngine = PetEngine()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
 
@@ -14,6 +15,8 @@ struct PeerDropApp: App {
                 ContentView()
                     .environmentObject(connectionManager)
                     .environmentObject(voicePlayer)
+                    .environmentObject(petEngine)
+                    .overlay(FloatingPetView(engine: petEngine).allowsHitTesting(true).ignoresSafeArea())
                     .opacity(showLaunch ? 0 : 1)
 
                 if showLaunch {
@@ -34,6 +37,22 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropDataMigrated")
                 }
 
+                // Load saved pet
+                if let saved = try? PetStore().load() {
+                    petEngine.pet = saved
+                }
+
+                // Wire pet callbacks
+                connectionManager.onPeerConnectedForPet = { _ in
+                    petEngine.handleInteraction(.peerConnected)
+                }
+                connectionManager.onPeerDisconnectedForPet = { _ in
+                    petEngine.pet.mood = .lonely
+                }
+                connectionManager.chatManager.onMessageReceivedForPet = {
+                    petEngine.handleChatMessage()
+                }
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     showLaunch = false
                 }
@@ -44,6 +63,32 @@ struct PeerDropApp: App {
         }
         .onChange(of: scenePhase) { newPhase in
             connectionManager.handleScenePhaseChange(newPhase)
+            if newPhase == .background {
+                try? PetStore().save(petEngine.pet)
+                try? PetCloudSync().syncFullState(petEngine.pet)
+            }
+        }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "peerdrop" else { return }
+        switch url.host {
+        case "relay":
+            // peerdrop://relay/XXXXXX
+            guard let code = url.pathComponents.dropFirst().first,
+                  code.count == 6 else { return }
+            connectionManager.pendingRelayJoinCode = code.uppercased()
+            connectionManager.shouldShowRelayConnect = true
+        case "connect":
+            // peerdrop://connect/192.168.1.100:9000  or  peerdrop://connect/192.168.1.100:9000/Name
+            guard let hostPort = url.pathComponents.dropFirst().first else { return }
+            let parts = hostPort.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2, let port = UInt16(parts[1]) else { return }
+            let host = String(parts[0])
+            let name = url.pathComponents.count > 2 ? url.pathComponents[2] : nil
+            connectionManager.addManualPeer(host: host, port: port, name: name)
+        default:
+            break
         }
     }
 

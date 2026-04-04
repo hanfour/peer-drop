@@ -95,6 +95,9 @@ final class ConnectionManager: ObservableObject {
     /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
     @Published var shouldShowRelayConnect = false
 
+    var onPeerConnectedForPet: ((String) -> Void)?
+    var onPeerDisconnectedForPet: ((String) -> Void)?
+
     // MARK: - Multi-Connection Support
 
     /// All active peer connections, keyed by peerID.
@@ -270,6 +273,7 @@ final class ConnectionManager: ObservableObject {
         peerConnection.startReceiving()
 
         objectWillChange.send()
+        onPeerConnectedForPet?(peerID)
     }
 
     /// Remove a peer connection.
@@ -302,6 +306,7 @@ final class ConnectionManager: ObservableObject {
 
         removeConnection(peerID: peerID)
         updateGlobalState()
+        onPeerDisconnectedForPet?(peerID)
     }
 
     /// Update the global ConnectionState based on all peer connections.
