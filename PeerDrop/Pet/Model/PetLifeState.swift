@@ -1,6 +1,6 @@
 import Foundation
 
-enum PetLifeState: String, Codable {
+enum PetLifeState: String, Codable, CaseIterable {
     case sleeping
     case waking
     case active
