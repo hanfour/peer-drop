@@ -58,10 +58,8 @@ struct PeerDropApp: App {
             connectionManager.shouldShowRelayConnect = true
         case "connect":
             // peerdrop://connect/192.168.1.100:9000  or  peerdrop://connect/192.168.1.100:9000/Name
-            guard let hostPort = url.pathComponents.dropFirst().first else { return }
-            let parts = hostPort.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2, let port = UInt16(parts[1]) else { return }
-            let host = String(parts[0])
+            guard let hostPort = url.pathComponents.dropFirst().first,
+                  let (host, port) = parseHostPort(hostPort) else { return }
             let name = url.pathComponents.count > 2 ? url.pathComponents[2] : nil
             connectionManager.addManualPeer(host: host, port: port, name: name)
         case "smart":
@@ -97,6 +95,23 @@ struct PeerDropApp: App {
     private func parseHostPort(_ value: String) -> (String, UInt16)? {
         let parts = value.split(separator: ":", maxSplits: 1)
         guard parts.count == 2, let port = UInt16(parts[1]) else { return nil }
-        return (String(parts[0]), port)
+        let host = String(parts[0])
+        guard isAllowedPeerHost(host) else { return nil }
+        return (host, port)
+    }
+
+    /// Reject loopback, link-local, and non-unicast addresses from deep links.
+    private func isAllowedPeerHost(_ host: String) -> Bool {
+        let octets = host.split(separator: ".").compactMap { UInt8($0) }
+        guard octets.count == 4 else { return false }
+        // Block loopback (127.x.x.x)
+        if octets[0] == 127 { return false }
+        // Block link-local (169.254.x.x)
+        if octets[0] == 169 && octets[1] == 254 { return false }
+        // Block multicast/broadcast (224-255.x.x.x)
+        if octets[0] >= 224 { return false }
+        // Block 0.x.x.x
+        if octets[0] == 0 { return false }
+        return true
     }
 }

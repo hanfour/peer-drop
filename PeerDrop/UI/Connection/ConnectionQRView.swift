@@ -156,6 +156,8 @@ struct ConnectionQRView: View {
             let signaling = WorkerSignaling()
             let room = try await signaling.createRoom()
             relayCode = room.roomCode
+            // Start listening on the relay so the joiner finds us
+            connectionManager.startWorkerRelayAsCreator(roomCode: room.roomCode, roomToken: room.roomToken, signaling: signaling)
         } catch {
             relayError = error.localizedDescription
         }

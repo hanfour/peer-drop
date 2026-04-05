@@ -98,7 +98,13 @@ export default {
     // API key authentication (required for room creation and ICE credentials)
     const requiresAuth = (path === "/room" && request.method === "POST") ||
                           (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST");
-    if (requiresAuth && env.API_KEY) {
+    if (requiresAuth) {
+      if (!env.API_KEY) {
+        return new Response(
+          JSON.stringify({ error: "Server misconfigured: API_KEY not set" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const providedKey = request.headers.get("X-API-Key");
       if (providedKey !== env.API_KEY) {
         return new Response(
@@ -156,7 +162,7 @@ export default {
       // Validate room token
       const roomInfo = JSON.parse(roomData) as { token?: string };
       const providedToken = url.searchParams.get("token");
-      if (roomInfo.token && providedToken !== roomInfo.token) {
+      if (!providedToken || providedToken !== roomInfo.token) {
         return new Response(JSON.stringify({ error: "Invalid room token" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
