@@ -83,28 +83,6 @@ struct PeerDropApp: App {
             connectionManager.shouldShowRelayConnect = true
         case "connect":
             // peerdrop://connect/192.168.1.100:9000  or  peerdrop://connect/192.168.1.100:9000/Name
-            guard let hostPort = url.pathComponents.dropFirst().first else { return }
-            let parts = hostPort.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2, let port = UInt16(parts[1]) else { return }
-            let host = String(parts[0])
-            let name = url.pathComponents.count > 2 ? url.pathComponents[2] : nil
-            connectionManager.addManualPeer(host: host, port: port, name: name)
-        default:
-            break
-        }
-    }
-
-    private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "peerdrop" else { return }
-        switch url.host {
-        case "relay":
-            // peerdrop://relay/XXXXXX
-            guard let code = url.pathComponents.dropFirst().first,
-                  code.count == 6 else { return }
-            connectionManager.pendingRelayJoinCode = code.uppercased()
-            connectionManager.shouldShowRelayConnect = true
-        case "connect":
-            // peerdrop://connect/192.168.1.100:9000  or  peerdrop://connect/192.168.1.100:9000/Name
             guard let hostPort = url.pathComponents.dropFirst().first,
                   let (host, port) = parseHostPort(hostPort) else { return }
             let name = url.pathComponents.count > 2 ? url.pathComponents[2] : nil
