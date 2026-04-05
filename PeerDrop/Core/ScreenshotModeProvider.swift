@@ -301,6 +301,77 @@ final class ScreenshotModeProvider {
         }
     }
 
+    // MARK: - Mock Pet State
+
+    var mockPetState: PetState {
+        let petNames: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) =
+            ("Mochi", "麻糬", "麻薯", "もち", "모찌")
+
+        let genome = PetGenome(
+            body: .round,
+            eyes: .dot,
+            limbs: .short,
+            pattern: .none,
+            personalityGene: 0.4
+        )
+
+        // Social entries with localized partner names and dialogue
+        let partnerNames1: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) =
+            ("Buddy", "小夥伴", "小伙伴", "バディ", "버디")
+        let partnerNames2: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) =
+            ("Luna", "月月", "月月", "ルナ", "루나")
+        let partnerNames3: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) =
+            ("Pixel", "像素", "像素", "ピクセル", "픽셀")
+
+        let entry1 = SocialEntry(
+            id: UUID(uuidString: "MOCK-SOC1-0001-0001-0001-000000000001")!,
+            partnerPetID: UUID(uuidString: "MOCK-PET-0002-0001-0001-000000000001")!,
+            partnerName: localizedName(partnerNames1),
+            date: Date().addingTimeInterval(-86400), // 1 day ago
+            interaction: .greet,
+            dialogue: [
+                DialogueLine(speaker: localizedName(petNames), text: localizedName(("Hi there!", "嗨！", "嗨！", "やあ！", "안녕!"))),
+                DialogueLine(speaker: localizedName(partnerNames1), text: localizedName(("Nice to meet you!", "很高興認識你！", "很高兴认识你！", "はじめまして！", "만나서 반가워!")))
+            ],
+            isRevealed: true
+        )
+
+        let entry2 = SocialEntry(
+            id: UUID(uuidString: "MOCK-SOC2-0001-0001-0001-000000000001")!,
+            partnerPetID: UUID(uuidString: "MOCK-PET-0003-0001-0001-000000000001")!,
+            partnerName: localizedName(partnerNames2),
+            date: Date().addingTimeInterval(-43200), // 12 hours ago
+            interaction: .play,
+            dialogue: [
+                DialogueLine(speaker: localizedName(partnerNames2), text: localizedName(("Let's play!", "一起玩吧！", "一起玩吧！", "遊ぼう！", "같이 놀자!"))),
+                DialogueLine(speaker: localizedName(petNames), text: localizedName(("Yay! So fun!", "好耶！好好玩！", "好耶！好好玩！", "わーい！楽しい！", "야호! 재밌다!")))
+            ],
+            isRevealed: true
+        )
+
+        let entry3 = SocialEntry(
+            id: UUID(uuidString: "MOCK-SOC3-0001-0001-0001-000000000001")!,
+            partnerPetID: UUID(uuidString: "MOCK-PET-0004-0001-0001-000000000001")!,
+            partnerName: localizedName(partnerNames3),
+            date: Date().addingTimeInterval(-3600), // 1 hour ago
+            interaction: .chat,
+            dialogue: [],
+            isRevealed: false
+        )
+
+        return PetState(
+            id: UUID(uuidString: "MOCK-PET0-0001-0001-0001-000000000001")!,
+            name: localizedName(petNames),
+            birthDate: Date().addingTimeInterval(-259200), // 3 days ago
+            level: .baby,
+            experience: 75,
+            genome: genome,
+            mood: .happy,
+            socialLog: [entry1, entry2, entry3],
+            lastInteraction: Date().addingTimeInterval(-1800) // 30 min ago
+        )
+    }
+
     // MARK: - Check if a peer ID is mock
 
     static func isMockPeer(_ peerID: String) -> Bool {

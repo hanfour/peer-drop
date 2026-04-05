@@ -37,8 +37,10 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropDataMigrated")
                 }
 
-                // Load saved pet
-                if let saved = try? PetStore().load() {
+                // Load pet (mock for screenshots, saved for normal)
+                if ScreenshotModeProvider.shared.isActive {
+                    petEngine.pet = ScreenshotModeProvider.shared.mockPetState
+                } else if let saved = try? PetStore().load() {
                     petEngine.pet = saved
                 }
 
