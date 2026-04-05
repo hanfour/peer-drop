@@ -5,6 +5,7 @@ struct PeerDropApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var connectionManager = ConnectionManager()
     @StateObject private var voicePlayer = VoicePlayer()
+    @StateObject private var petEngine = PetEngine()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
 
@@ -14,6 +15,8 @@ struct PeerDropApp: App {
                 ContentView()
                     .environmentObject(connectionManager)
                     .environmentObject(voicePlayer)
+                    .environmentObject(petEngine)
+                    .overlay(FloatingPetView(engine: petEngine).allowsHitTesting(true).ignoresSafeArea())
                     .opacity(showLaunch ? 0 : 1)
 
                 if showLaunch {
@@ -34,6 +37,24 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropDataMigrated")
                 }
 
+                // Load pet (mock for screenshots, saved for normal)
+                if ScreenshotModeProvider.shared.isActive {
+                    petEngine.pet = ScreenshotModeProvider.shared.mockPetState
+                } else if let saved = try? PetStore().load() {
+                    petEngine.pet = saved
+                }
+
+                // Wire pet callbacks
+                connectionManager.onPeerConnectedForPet = { _ in
+                    petEngine.handleInteraction(.peerConnected)
+                }
+                connectionManager.onPeerDisconnectedForPet = { _ in
+                    petEngine.pet.mood = .lonely
+                }
+                connectionManager.chatManager.onMessageReceivedForPet = {
+                    petEngine.handleChatMessage()
+                }
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     showLaunch = false
                 }
@@ -44,6 +65,10 @@ struct PeerDropApp: App {
         }
         .onChange(of: scenePhase) { newPhase in
             connectionManager.handleScenePhaseChange(newPhase)
+            if newPhase == .background {
+                try? PetStore().save(petEngine.pet)
+                try? PetCloudSync().syncFullState(petEngine.pet)
+            }
         }
     }
 

@@ -23,6 +23,8 @@ final class ChatManager: ObservableObject {
     private var currentPeerID: String?
     var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count || hasOlderMessagesOnDisk }
 
+    var onMessageReceivedForPet: (() -> Void)?
+
     var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
     private let fileManager = FileManager.default
@@ -90,6 +92,7 @@ final class ChatManager: ObservableObject {
         if activeChatPeerID != peerID {
             incrementUnread(peerID: peerID)
         }
+        onMessageReceivedForPet?()
         return msg
     }
 

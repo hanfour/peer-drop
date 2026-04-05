@@ -53,5 +53,7 @@ headless(true)
 # Only run UI test classes for screenshots (Light + Dark mode)
 only_testing([
   "PeerDropUITests/SnapshotTests",
-  "PeerDropUITests/SnapshotTestsDark"
+  "PeerDropUITests/SnapshotTestsDark",
+  "PeerDropUITests/PetSnapshotTests",
+  "PeerDropUITests/PetSnapshotTestsDark"
 ])
