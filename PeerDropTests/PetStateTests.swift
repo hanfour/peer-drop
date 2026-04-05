@@ -23,7 +23,7 @@ final class PetStateTests: XCTestCase {
     // MARK: - PetGenome
 
     func testCanvasSize() {
-        XCTAssertEqual(PetGenome.canvasSize, 64)
+        XCTAssertEqual(PetGenome.canvasSize, 32)
     }
 
     func testGenomeMutation() {

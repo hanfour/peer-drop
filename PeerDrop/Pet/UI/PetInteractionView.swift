@@ -9,7 +9,7 @@ struct PetInteractionView: View {
             List {
                 Section("狀態") {
                     HStack(spacing: 16) {
-                        PixelView(grid: engine.renderedGrid, displaySize: 96)
+                        PixelView(grid: engine.renderedGrid, palette: engine.palette, displaySize: 128)
                             .background(Color.gray.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         VStack(alignment: .leading, spacing: 4) {

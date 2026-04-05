@@ -16,6 +16,10 @@ class PetEngine: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var lastBehaviorDate = Date.distantPast
 
+    var palette: ColorPalette {
+        PetPalettes.palette(for: pet.genome)
+    }
+
     var evolutionProgress: Double {
         guard let req = EvolutionRequirement.for(pet.level) else { return 1.0 }
         return min(1.0, Double(pet.experience) / Double(req.requiredExperience))

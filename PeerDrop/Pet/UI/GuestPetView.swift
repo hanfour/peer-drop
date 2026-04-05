@@ -16,7 +16,8 @@ struct GuestPetView: View {
         PixelView(
             grid: renderer.render(genome: greeting.genome, level: greeting.level,
                                    mood: greeting.mood, animationFrame: frame),
-            displaySize: 48
+            palette: PetPalettes.palette(for: greeting.genome),
+            displaySize: 64
         )
         .opacity(0.8)
         .position(position)

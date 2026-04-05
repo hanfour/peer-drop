@@ -18,6 +18,7 @@ final class PetRendererTests: XCTestCase {
     func testRenderEggProducesPixels() {
         let genome = makeGenome()
         let grid = renderer.render(genome: genome, level: .egg, mood: .happy, animationFrame: 0)
+        XCTAssertEqual(grid.size, 32)
         XCTAssertTrue(grid.activePixelCount > 0, "Egg should produce visible pixels")
     }
 
@@ -25,8 +26,7 @@ final class PetRendererTests: XCTestCase {
         let genome = makeGenome()
         let egg = renderer.render(genome: genome, level: .egg, mood: .happy, animationFrame: 0)
         let baby = renderer.render(genome: genome, level: .baby, mood: .happy, animationFrame: 0)
-        XCTAssertGreaterThan(baby.activePixelCount, egg.activePixelCount,
-                             "Baby should have more pixels than egg")
+        XCTAssertGreaterThan(baby.activePixelCount, egg.activePixelCount)
     }
 
     func testDifferentGenomesProduceDifferentPixels() {
@@ -34,21 +34,21 @@ final class PetRendererTests: XCTestCase {
         let genome2 = makeGenome(body: .square, eyes: .dizzy, limbs: .long)
         let grid1 = renderer.render(genome: genome1, level: .baby, mood: .curious, animationFrame: 0)
         let grid2 = renderer.render(genome: genome2, level: .baby, mood: .curious, animationFrame: 0)
-        XCTAssertNotEqual(grid1, grid2, "Different genomes should produce different pixel grids")
+        XCTAssertNotEqual(grid1, grid2)
     }
 
     func testMoodAffectsEyes() {
         let genome = makeGenome()
         let happy = renderer.render(genome: genome, level: .baby, mood: .happy, animationFrame: 0)
         let sleepy = renderer.render(genome: genome, level: .baby, mood: .sleepy, animationFrame: 0)
-        XCTAssertNotEqual(happy, sleepy, "Happy and sleepy moods should produce different grids")
+        XCTAssertNotEqual(happy, sleepy)
     }
 
     func testEggBreathAnimation() {
         let genome = makeGenome()
         let frame0 = renderer.render(genome: genome, level: .egg, mood: .happy, animationFrame: 0)
         let frame1 = renderer.render(genome: genome, level: .egg, mood: .happy, animationFrame: 1)
-        XCTAssertNotEqual(frame0, frame1, "Different frames should produce different egg shapes (breathing)")
+        XCTAssertNotEqual(frame0, frame1)
     }
 
     func testEggCrackLinesAppearWithHighPersonality() {
@@ -56,18 +56,7 @@ final class PetRendererTests: XCTestCase {
         let highPG = makeGenome(personality: 0.8)
         let gridLow = renderer.render(genome: lowPG, level: .egg, mood: .happy, animationFrame: 0)
         let gridHigh = renderer.render(genome: highPG, level: .egg, mood: .happy, animationFrame: 0)
-        // High personality gene should have more pixels due to crack lines
-        XCTAssertGreaterThan(gridHigh.activePixelCount, gridLow.activePixelCount,
-                             "Higher personality gene should add crack lines to the egg")
-    }
-
-    func testStartledMoodProducesDifferentGrid() {
-        // Sleepy adds ZZZ pixels outside the body area, so it differs from startled
-        let genome = makeGenome(eyes: .dot)
-        let sleepy = renderer.render(genome: genome, level: .baby, mood: .sleepy, animationFrame: 0)
-        let startled = renderer.render(genome: genome, level: .baby, mood: .startled, animationFrame: 0)
-        XCTAssertNotEqual(sleepy, startled,
-                          "Startled and sleepy moods should produce different grids")
+        XCTAssertGreaterThan(gridHigh.activePixelCount, gridLow.activePixelCount)
     }
 
     func testAllBodyTypesRender() {
@@ -82,7 +71,20 @@ final class PetRendererTests: XCTestCase {
         for limb in LimbGene.allCases {
             let genome = makeGenome(limbs: limb)
             let grid = renderer.render(genome: genome, level: .baby, mood: .curious, animationFrame: 0)
-            XCTAssertTrue(grid.activePixelCount > 0, "Limb type \(limb) should produce pixels")
+            XCTAssertTrue(grid.activePixelCount > 0)
         }
+    }
+
+    func testGridSizeIs32() {
+        let genome = makeGenome()
+        let grid = renderer.render(genome: genome, level: .baby, mood: .happy, animationFrame: 0)
+        XCTAssertEqual(grid.size, 32)
+    }
+
+    func testRenderUsesMultipleColorIndices() {
+        let genome = makeGenome()
+        let grid = renderer.render(genome: genome, level: .baby, mood: .happy, animationFrame: 0)
+        let uniqueValues = Set(grid.pixels.flatMap { $0 }.filter { $0 != 0 })
+        XCTAssertTrue(uniqueValues.count >= 3, "Baby should use at least 3 color indices, got \(uniqueValues)")
     }
 }

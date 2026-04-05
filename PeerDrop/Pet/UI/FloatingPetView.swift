@@ -9,11 +9,11 @@ struct FloatingPetView: View {
 
     var body: some View {
         ZStack {
-            PixelView(grid: engine.renderedGrid, displaySize: 64)
+            PixelView(grid: engine.renderedGrid, palette: engine.palette, displaySize: 128)
                 .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
             if let dialogue = engine.currentDialogue {
                 PetBubbleView(text: dialogue)
-                    .offset(y: -44)
+                    .offset(y: -72)
                     .transition(.scale.combined(with: .opacity))
             }
         }

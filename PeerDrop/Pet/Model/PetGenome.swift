@@ -54,7 +54,11 @@ struct PersonalityTraits: Codable, Equatable {
 // MARK: - PetGenome
 
 struct PetGenome: Codable, Equatable {
-    static let canvasSize = 64
+    static let canvasSize = 32
+
+    var paletteIndex: Int {
+        min(Int(personalityGene * 8), 7)
+    }
 
     var body: BodyGene
     var eyes: EyeGene
