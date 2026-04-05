@@ -324,8 +324,8 @@ final class ScreenshotModeProvider {
             ("Pixel", "像素", "像素", "ピクセル", "픽셀")
 
         let entry1 = SocialEntry(
-            id: UUID(uuidString: "MOCK-SOC1-0001-0001-0001-000000000001")!,
-            partnerPetID: UUID(uuidString: "MOCK-PET-0002-0001-0001-000000000001")!,
+            id: UUID(uuidString: "00000001-0001-0001-0001-000000000001")!,
+            partnerPetID: UUID(uuidString: "00000002-0001-0001-0001-000000000001")!,
             partnerName: localizedName(partnerNames1),
             date: Date().addingTimeInterval(-86400), // 1 day ago
             interaction: .greet,
@@ -337,8 +337,8 @@ final class ScreenshotModeProvider {
         )
 
         let entry2 = SocialEntry(
-            id: UUID(uuidString: "MOCK-SOC2-0001-0001-0001-000000000001")!,
-            partnerPetID: UUID(uuidString: "MOCK-PET-0003-0001-0001-000000000001")!,
+            id: UUID(uuidString: "00000003-0001-0001-0001-000000000001")!,
+            partnerPetID: UUID(uuidString: "00000004-0001-0001-0001-000000000001")!,
             partnerName: localizedName(partnerNames2),
             date: Date().addingTimeInterval(-43200), // 12 hours ago
             interaction: .play,
@@ -350,8 +350,8 @@ final class ScreenshotModeProvider {
         )
 
         let entry3 = SocialEntry(
-            id: UUID(uuidString: "MOCK-SOC3-0001-0001-0001-000000000001")!,
-            partnerPetID: UUID(uuidString: "MOCK-PET-0004-0001-0001-000000000001")!,
+            id: UUID(uuidString: "00000005-0001-0001-0001-000000000001")!,
+            partnerPetID: UUID(uuidString: "00000006-0001-0001-0001-000000000001")!,
             partnerName: localizedName(partnerNames3),
             date: Date().addingTimeInterval(-3600), // 1 hour ago
             interaction: .chat,
@@ -360,7 +360,7 @@ final class ScreenshotModeProvider {
         )
 
         return PetState(
-            id: UUID(uuidString: "MOCK-PET0-0001-0001-0001-000000000001")!,
+            id: UUID(uuidString: "00000007-0001-0001-0001-000000000001")!,
             name: localizedName(petNames),
             birthDate: Date().addingTimeInterval(-259200), // 3 days ago
             level: .baby,
