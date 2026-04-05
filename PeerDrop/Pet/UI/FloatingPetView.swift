@@ -26,6 +26,8 @@ struct FloatingPetView: View {
         .sheet(isPresented: $showInteractionPanel) {
             PetInteractionView(engine: engine)
         }
+        .accessibilityIdentifier("floating-pet")
+        .accessibilityLabel("Pet")
         .onAppear { startWandering() }
         .onDisappear { wanderTimer?.invalidate() }
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: position)
