@@ -7,9 +7,11 @@ struct NearbyTab: View {
     @AppStorage("peerDropSortMode") private var sortModeRaw = "name"
     @AppStorage("peerDropIsOnline") private var isOnline = true
     @State private var showManualConnect = false
+    @State private var editingPeer: DiscoveredPeer?
     @State private var showSettings = false
     @State private var showTransferHistory = false
     @State private var showRelayConnect = false
+    @State private var showConnectionQR = false
     @State private var isSearchActive = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -118,6 +120,25 @@ struct NearbyTab: View {
                                             .font(.caption2.bold())
                                             .foregroundStyle(.green)
                                             .padding(.trailing, 8)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    if peer.source == .manual {
+                                        Button(role: .destructive) {
+                                            connectionManager.removeManualPeer(id: peer.id)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                                }
+                                .swipeActions(edge: .leading) {
+                                    if peer.source == .manual {
+                                        Button {
+                                            editingPeer = peer
+                                        } label: {
+                                            Label("Edit", systemImage: "pencil")
+                                        }
+                                        .tint(.blue)
                                     }
                                 }
                                 .disabled(isConnecting)
@@ -301,6 +322,11 @@ struct NearbyTab: View {
                     }
                     Section {
                         Button {
+                            showConnectionQR = true
+                        } label: {
+                            Label("My QR Code", systemImage: "qrcode")
+                        }
+                        Button {
                             showSettings = true
                         } label: {
                             Label("Settings", systemImage: "gearshape")
@@ -322,6 +348,14 @@ struct NearbyTab: View {
             ManualConnectView()
                 .environmentObject(connectionManager)
         }
+        .sheet(item: $editingPeer) { peer in
+            ManualConnectView(editingPeer: peer)
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showConnectionQR) {
+            ConnectionQRView()
+                .environmentObject(connectionManager)
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(connectionManager)
@@ -332,9 +366,16 @@ struct NearbyTab: View {
                     .environmentObject(connectionManager)
             }
         }
-        .sheet(isPresented: $showRelayConnect) {
+        .sheet(isPresented: $showRelayConnect, onDismiss: {
+            connectionManager.shouldShowRelayConnect = false
+        }) {
             RelayConnectView()
                 .environmentObject(connectionManager)
+        }
+        .onChange(of: connectionManager.shouldShowRelayConnect) { shouldShow in
+            if shouldShow && !showRelayConnect {
+                showRelayConnect = true
+            }
         }
         .onAppear {
             if isOnline, case .idle = connectionManager.state {

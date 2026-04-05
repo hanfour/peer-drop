@@ -2,15 +2,17 @@
  * PeerDrop Signaling Worker
  *
  * Lightweight HTTP + WebSocket relay for WebRTC signaling.
+ * Uses Durable Objects to ensure both peers in a room share the same isolate.
  *
  * Endpoints:
  *   POST /room           → Create a new room, returns { roomCode }
- *   GET  /room/:code     → Upgrade to WebSocket for signaling
+ *   GET  /room/:code     → Upgrade to WebSocket for signaling (via Durable Object)
  *   POST /room/:code/ice → Generate Cloudflare TURN credentials
  */
 
 export interface Env {
   ROOMS: KVNamespace;
+  SIGNALING_ROOM: DurableObjectNamespace;
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
@@ -65,20 +67,17 @@ function cleanupRateLimits() {
   }
 }
 
-// Per-room WebSocket state (in-memory, per worker instance)
-const roomSockets = new Map<string, Set<WebSocket>>();
+// CORS headers shared across all responses
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
+};
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
-
-    // CORS headers
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
-    };
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
@@ -142,7 +141,7 @@ export default {
       });
     }
 
-    // WebSocket /room/:code?token=xxx — signaling relay
+    // WebSocket /room/:code?token=xxx — signaling relay (delegated to Durable Object)
     const wsMatch = path.match(/^\/room\/([A-Z0-9]{6})$/);
     if (wsMatch && request.headers.get("Upgrade") === "websocket") {
       const code = wsMatch[1];
@@ -164,60 +163,10 @@ export default {
         });
       }
 
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair);
-
-      // Track this socket in the room
-      if (!roomSockets.has(code)) {
-        roomSockets.set(code, new Set());
-      }
-      const sockets = roomSockets.get(code)!;
-
-      if (sockets.size >= 2) {
-        return new Response(JSON.stringify({ error: "Room is full" }), {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      sockets.add(server);
-
-      server.accept();
-
-      // Notify existing peer that someone joined
-      for (const peer of sockets) {
-        if (peer !== server && peer.readyState === WebSocket.READY_STATE_OPEN) {
-          peer.send(JSON.stringify({ type: "peer-joined" }));
-        }
-      }
-
-      server.addEventListener("message", (event) => {
-        // Relay to all other peers in the room
-        for (const peer of sockets) {
-          if (peer !== server && peer.readyState === WebSocket.READY_STATE_OPEN) {
-            peer.send(event.data as string);
-          }
-        }
-      });
-
-      server.addEventListener("close", () => {
-        sockets.delete(server);
-        if (sockets.size === 0) {
-          roomSockets.delete(code);
-        }
-      });
-
-      server.addEventListener("error", () => {
-        sockets.delete(server);
-        if (sockets.size === 0) {
-          roomSockets.delete(code);
-        }
-      });
-
-      return new Response(null, {
-        status: 101,
-        webSocket: client,
-      });
+      // Forward to Durable Object — same room code always routes to same instance
+      const id = env.SIGNALING_ROOM.idFromName(code);
+      const stub = env.SIGNALING_ROOM.get(id);
+      return stub.fetch(request);
     }
 
     // POST /room/:code/ice — generate TURN credentials + return room token
@@ -301,3 +250,89 @@ export default {
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
+
+// ---------------------------------------------------------------------------
+// Durable Object: SignalingRoom
+//
+// Each room code maps to exactly one DO instance, guaranteeing that both
+// WebSocket peers land in the same isolate. Uses the Hibernation API so
+// the DO can sleep between messages without burning wall-clock billing.
+// ---------------------------------------------------------------------------
+
+const MAX_PEERS_PER_ROOM = 2;
+
+export class SignalingRoom {
+  private state: DurableObjectState;
+
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("Upgrade") !== "websocket") {
+      return new Response("Expected WebSocket", { status: 400 });
+    }
+
+    const activeSockets = this.state.getWebSockets();
+    if (activeSockets.length >= MAX_PEERS_PER_ROOM) {
+      return new Response(JSON.stringify({ error: "Room is full" }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+
+    // Accept with Hibernation API — lets the DO hibernate between messages
+    this.state.acceptWebSocket(server);
+
+    // Notify existing peer(s) that someone joined
+    for (const peer of activeSockets) {
+      try {
+        peer.send(JSON.stringify({ type: "peer-joined" }));
+      } catch {
+        // Stale socket — will be cleaned up on next event
+      }
+    }
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // Hibernation API callbacks ------------------------------------------------
+
+  webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    const allSockets = this.state.getWebSockets();
+    const data = typeof message === "string" ? message : new TextDecoder().decode(message);
+    for (const peer of allSockets) {
+      if (peer !== ws) {
+        try {
+          peer.send(data);
+        } catch {
+          // Peer gone — will be cleaned up via webSocketClose/webSocketError
+        }
+      }
+    }
+  }
+
+  webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
+    try { ws.close(code, reason); } catch { /* already closed */ }
+    this.notifyPeerLeft(ws);
+  }
+
+  webSocketError(ws: WebSocket, error: unknown) {
+    try { ws.close(1011, "WebSocket error"); } catch { /* already closed */ }
+    this.notifyPeerLeft(ws);
+  }
+
+  private notifyPeerLeft(closedWs: WebSocket) {
+    const remaining = this.state.getWebSockets();
+    for (const peer of remaining) {
+      if (peer !== closedWs) {
+        try {
+          peer.send(JSON.stringify({ type: "peer-left" }));
+        } catch { /* ignore */ }
+      }
+    }
+  }
+}

@@ -9,6 +9,8 @@ struct RelayConnectView: View {
     @State private var generatedCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var didAutoJoin = false
+    @FocusState private var isCodeFieldFocused: Bool
 
     enum RelayMode {
         case choose
@@ -37,12 +39,32 @@ struct RelayConnectView: View {
             }
             .alert("Error", isPresented: .init(
                 get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
+                set: { if !$0 {
+                    errorMessage = nil
+                    roomCode = ""
+                } }
             )) {
                 Button("OK", role: .cancel) {}
             } message: {
                 if let error = errorMessage {
                     Text(error)
+                }
+            }
+            .onChange(of: connectionManager.state) { newState in
+                if case .failed(_) = newState {
+                    // Reset to discovering so user can retry
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        connectionManager.transition(to: .discovering)
+                    }
+                }
+            }
+            .onAppear {
+                if let code = connectionManager.pendingRelayJoinCode {
+                    connectionManager.pendingRelayJoinCode = nil
+                    roomCode = code
+                    mode = .join
+                    didAutoJoin = true
+                    joinRoom()
                 }
             }
             .sheet(item: $connectionManager.pendingRelayPIN) { request in
@@ -117,7 +139,7 @@ struct RelayConnectView: View {
                         .font(.system(size: 48, weight: .bold, design: .monospaced))
                         .tracking(8)
 
-                    if let qrImage = generateQRCode(from: generatedCode) {
+                    if let qrImage = generateQRCode(from: "peerdrop://relay/\(generatedCode)") {
                         Image(uiImage: qrImage)
                             .interpolation(.none)
                             .resizable()
@@ -161,7 +183,9 @@ struct RelayConnectView: View {
                 .multilineTextAlignment(.center)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
+                .focused($isCodeFieldFocused)
                 .frame(maxWidth: 240)
+                .onAppear { isCodeFieldFocused = true }
 
             Button {
                 joinRoom()

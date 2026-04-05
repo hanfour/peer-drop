@@ -22,6 +22,31 @@ final class FileTransferSession: ObservableObject {
     /// Callback to send messages through the connection.
     var sendMessage: ((PeerMessage) async throws -> Void)?
 
+    /// Persistent directory for received files, visible in Files.app.
+    static var receivedFilesDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("PeerDrop", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Return a unique file URL in receivedFilesDirectory, appending " (N)" for duplicates.
+    static func uniqueDestination(for fileName: String) -> URL {
+        let dir = receivedFilesDirectory
+        var destURL = dir.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: destURL.path) else { return destURL }
+
+        let stem = destURL.deletingPathExtension().lastPathComponent
+        let ext = destURL.pathExtension
+        var counter = 1
+        repeat {
+            let newName = ext.isEmpty ? "\(stem) (\(counter))" : "\(stem) (\(counter)).\(ext)"
+            destURL = dir.appendingPathComponent(newName)
+            counter += 1
+        } while FileManager.default.fileExists(atPath: destURL.path)
+        return destURL
+    }
+
     private let chunkSize = Data.defaultChunkSize
     private var isCancelled = false
 
@@ -298,12 +323,8 @@ final class FileTransferSession: ObservableObject {
         var resultRecord: TransferRecord?
 
         if success, let tempURL = receiveTempURL {
-            let destURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(metadata.fileName)
+            let destURL = Self.uniqueDestination(for: metadata.fileName)
             do {
-                if FileManager.default.fileExists(atPath: destURL.path) {
-                    try FileManager.default.removeItem(at: destURL)
-                }
                 try FileManager.default.moveItem(at: tempURL, to: destURL)
             } catch {
                 logger.error("Failed to finalize file transfer: \(error.localizedDescription)")
@@ -314,7 +335,7 @@ final class FileTransferSession: ObservableObject {
                 do {
                     let unzippedURL = try destURL.unzipFile()
                     finalURL = unzippedURL
-                    try? FileManager.default.removeItem(at: destURL) // P2: temp cleanup, failure is acceptable
+                    try? FileManager.default.removeItem(at: destURL)
                 } catch {
                     logger.error("Failed to unzip: \(error.localizedDescription)")
                     finalURL = destURL

@@ -231,6 +231,8 @@ final class PeerConnection: ObservableObject, Identifiable {
     func disconnect(sendMessage: Bool = true) async {
         logger.info("PeerConnection[\(self.id.prefix(8))] disconnecting")
         connectionGeneration = UUID()
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
 
         if sendMessage {
             let msg = PeerMessage.disconnect(senderID: localIdentity.id)

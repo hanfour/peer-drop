@@ -4,9 +4,14 @@ struct ManualConnectView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @Environment(\.dismiss) private var dismiss
 
+    /// When non-nil, the view is in edit mode for an existing manual peer.
+    var editingPeer: DiscoveredPeer?
+
     @State private var host = ""
     @State private var port = "9000"
     @State private var name = ""
+
+    private var isEditing: Bool { editingPeer != nil }
 
     var body: some View {
         NavigationStack {
@@ -31,15 +36,18 @@ struct ManualConnectView: View {
                         .accessibilityHint("Optional name for this peer")
                 }
             }
-            .navigationTitle("Manual Connect")
+            .navigationTitle(isEditing ? "Edit Peer" : "Manual Connect")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Connect") {
+                    Button(isEditing ? "Save" : "Connect") {
                         guard let portNum = UInt16(port), !host.isEmpty else { return }
+                        if let existing = editingPeer {
+                            connectionManager.removeManualPeer(id: existing.id)
+                        }
                         connectionManager.addManualPeer(
                             host: host,
                             port: portNum,
@@ -49,6 +57,13 @@ struct ManualConnectView: View {
                     }
                     .disabled(host.isEmpty || UInt16(port) == nil)
                     .accessibilityHint(host.isEmpty ? "Enter a host address first" : "Double tap to connect")
+                }
+            }
+            .onAppear {
+                if let peer = editingPeer, case .manual(let h, let p) = peer.endpoint {
+                    host = h
+                    port = "\(p)"
+                    name = peer.displayName
                 }
             }
         }
