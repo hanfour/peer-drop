@@ -6,7 +6,6 @@ struct BodyTemplate {
     let limbLeftAnchor: (x: Int, y: Int)
     let limbRightAnchor: (x: Int, y: Int)
     let patternOrigin: (x: Int, y: Int)
-    let patternSize: (w: Int, h: Int)
 }
 
 struct EggTemplate {
