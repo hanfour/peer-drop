@@ -90,6 +90,10 @@ final class ConnectionManager: ObservableObject {
     @Published var suppressErrorAlert: Bool = false
     /// Pending PIN verification for relay connections (nil = no verification needed).
     @Published var pendingRelayPIN: RelayPINRequest?
+    /// Relay room code received via deep link, triggers RelayConnectView auto-join.
+    @Published var pendingRelayJoinCode: String?
+    /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
+    @Published var shouldShowRelayConnect = false
 
     // MARK: - Multi-Connection Support
 
@@ -404,6 +408,43 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Force the state machine to `.requesting` from any state, using valid transition paths.
+    /// Used by relay functions that need to start from a clean `.requesting` state.
+    private func forceTransitionToRequesting() {
+        switch state {
+        case .requesting:
+            return // Already there
+        case .discovering:
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .peerFound:
+            transition(to: .requesting)
+        case .idle:
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .disconnected, .failed, .rejected:
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .connected, .transferring, .voiceCall:
+            // Already connected — force through disconnected path
+            transition(to: .disconnected)
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .connecting:
+            transition(to: .failed(reason: ""))
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .incomingRequest:
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        }
+    }
+
     private func triggerHaptic(for newState: ConnectionState) {
         switch newState {
         case .connected:
@@ -631,8 +672,17 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// The port this device's Bonjour listener is running on (for QR code / deep link).
+    var localListenerPort: UInt16? {
+        bonjourDiscovery?.actualPort
+    }
+
     func addManualPeer(host: String, port: UInt16, name: String?) {
         discoveryCoordinator?.addManualPeer(host: host, port: port, name: name)
+    }
+
+    func removeManualPeer(id: String) {
+        discoveryCoordinator?.removeManualPeer(id: id)
     }
 
     // MARK: - Reconnect
@@ -692,6 +742,15 @@ final class ConnectionManager: ObservableObject {
         failure.lastFailed = Date()
         failedPeers[peerID] = failure
         logger.info("Connection failure recorded for peer \(peerID.prefix(8)): \(failure.count) failures")
+
+        // Auto-remove manual peers after 5 consecutive failures
+        if failure.count >= 5,
+           let peer = discoveredPeers.first(where: { $0.id == peerID }),
+           peer.source == .manual {
+            logger.info("Removing manual peer \(peerID.prefix(8)) after \(failure.count) consecutive failures")
+            removeManualPeer(id: peerID)
+            failedPeers.removeValue(forKey: peerID)
+        }
     }
 
     /// Record a successful connection, resetting the failure count.
@@ -727,6 +786,7 @@ final class ConnectionManager: ObservableObject {
         switch phase {
         case .active:
             endBackgroundTask()
+            discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
@@ -760,7 +820,16 @@ final class ConnectionManager: ObservableObject {
                 beginBackgroundTask()
                 stopDiscoveryOnly()
             default:
-                stopDiscovery()
+                // Stop Bonjour to save power, but keep BLE advertising
+                // so this device remains discoverable in background
+                bonjourDiscovery?.stopDiscovery()
+                bonjourDiscovery = nil
+                discoveryCoordinator?.stop()
+                discoveryCoordinator = nil
+                nearbyInteractionManager?.stopAllSessions()
+                nearbyInteractionManager = nil
+                stopNetworkPathMonitor()
+                // BLE kept alive via bluetooth-peripheral background mode
             }
         case .inactive:
             break
@@ -826,19 +895,21 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func handleBackgroundExpiration() {
-        logger.warning("Background task expiring, disconnecting gracefully")
+        logger.warning("Background task expiring")
 
-        // Gracefully close all connections
+        // Only disconnect relay (WebRTC) connections; keep local TCP connections alive
         Task {
-            for (_, connection) in connections {
-                await connection.disconnect()
+            for (peerID, peerConn) in connections {
+                if peerConn.transport is DataChannelTransport {
+                    logger.info("Closing relay connection for \(peerID.prefix(8)) on background expiry")
+                    await peerConn.disconnect()
+                    await MainActor.run { removeConnection(peerID: peerID) }
+                }
+                // Local TCP connections: preserved via iOS socket keepalive
             }
         }
 
-        // Also close legacy active connection
-        activeConnection?.cancel()
-        activeConnection = nil
-
+        // Legacy active connection: preserve (TCP), iOS maintains socket
         endBackgroundTask()
     }
 
@@ -956,6 +1027,24 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Early return for endpoints that don't use NWConnection — no state transition needed
+        switch peer.endpoint {
+        case .bleOnly:
+            if FeatureSettings.isRelayEnabled {
+                logger.info("BLE-only peer tapped with relay enabled, opening Relay Connect: \(peer.displayName)")
+                shouldShowRelayConnect = true
+            } else {
+                logger.info("BLE-only peer tapped: \(peer.displayName), showing WiFi required toast")
+                statusToast = String(localized: "Connect to the same WiFi network to transfer files")
+            }
+            return
+        case .relay:
+            logger.info("Relay peer connection not handled here")
+            return
+        default:
+            break
+        }
+
         // Guard against duplicate requests (double-tap, rapid Reconnect)
         switch state {
         case .requesting, .connecting:
@@ -995,25 +1084,8 @@ final class ConnectionManager: ObservableObject {
         case .manual(let host, let port):
             endpoint = .hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!)
             logger.info("Connecting to manual peer: \(host):\(port)")
-        case .bleOnly:
-            if FeatureSettings.isRelayEnabled {
-                // Start relay connection via BLE signaling
-                logger.info("BLE-only peer tapped with relay enabled: \(peer.displayName)")
-                statusToast = String(localized: "Use Relay Connect to transfer files with this device")
-                transition(to: .discovering)
-                return
-            } else {
-                // BLE-only peers cannot be connected directly — need same WiFi
-                logger.info("BLE-only peer tapped: \(peer.displayName), showing WiFi required toast")
-                statusToast = String(localized: "Connect to the same WiFi network to transfer files")
-                transition(to: .discovering)
-                return
-            }
-        case .relay:
-            // Relay peers handled via startWorkerRelayAsJoiner
-            logger.info("Relay peer connection not handled here")
-            transition(to: .discovering)
-            return
+        case .bleOnly, .relay:
+            return // Already handled above
         }
 
         // Use TLS for outgoing connections only if we have an identity
@@ -1399,17 +1471,8 @@ final class ConnectionManager: ObservableObject {
         let generation = UUID()
         connectionGeneration = generation
 
-        // Normalize state
-        switch state {
-        case .disconnected, .failed, .rejected, .idle:
-            transition(to: .discovering)
-        default:
-            break
-        }
-        if case .discovering = state {
-            transition(to: .peerFound)
-        }
-        transition(to: .requesting)
+        // Force state to .requesting via valid path, handling any current state
+        forceTransitionToRequesting()
 
         Task {
             do {
@@ -1525,17 +1588,8 @@ final class ConnectionManager: ObservableObject {
         let generation = UUID()
         connectionGeneration = generation
 
-        // Normalize state
-        switch state {
-        case .disconnected, .failed, .rejected, .idle:
-            transition(to: .discovering)
-        default:
-            break
-        }
-        if case .discovering = state {
-            transition(to: .peerFound)
-        }
-        transition(to: .requesting)
+        // Force state to .requesting via valid path, handling any current state
+        forceTransitionToRequesting()
 
         // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
         let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
@@ -1642,8 +1696,16 @@ final class ConnectionManager: ObservableObject {
         addConnection(peerConnection)
         focusedPeerID = peerID
 
-        transition(to: .connecting)
-        transition(to: .connected)
+        // Force to .connected — state may be .requesting or other states
+        if case .requesting = state {
+            transition(to: .connecting)
+            transition(to: .connected)
+        } else {
+            // Fallback: force through valid path
+            forceTransitionToRequesting()
+            transition(to: .connecting)
+            transition(to: .connected)
+        }
 
         // Check if peer is already known (skip PIN verification)
         let needsPIN: Bool
@@ -1728,6 +1790,12 @@ final class ConnectionManager: ObservableObject {
         let connection = activeConnection
         activeConnection = nil
         Task {
+            // Disconnect all multi-peer connections
+            for (peerID, peerConn) in self.connections {
+                await peerConn.disconnect(sendMessage: false)
+                await MainActor.run { self.removeConnection(peerID: peerID) }
+            }
+            // Legacy single connection cleanup
             if let connection {
                 let msg = PeerMessage.disconnect(senderID: localIdentity.id)
                 do {
@@ -1744,6 +1812,9 @@ final class ConnectionManager: ObservableObject {
     /// Disconnect from a specific peer.
     func disconnect(from peerID: String) async {
         guard let peerConn = connections[peerID] else { return }
+        if peerID == focusedPeerID {
+            activeConnection = nil
+        }
         await peerConn.disconnect()
         nearbyInteractionManager?.stopSession(for: peerID)
         removeConnection(peerID: peerID)
@@ -1762,6 +1833,18 @@ final class ConnectionManager: ObservableObject {
     /// Cleanup after the local user initiates disconnect.
     private func cleanupAfterDisconnect() {
         activeConnection = nil
+        consentMonitorTask?.cancel()
+        consentMonitorTask = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
+        pendingRelayPeerConnection = nil
+        pendingRelayPIN = nil
+        pendingIncomingRequest = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+        if let peerID = focusedPeerID {
+            failedPeers.removeValue(forKey: peerID)
+        }
         focusedPeerID = nil
         nearbyInteractionManager?.stopAllSessions()
         relaySessionTimer?.cancel()
