@@ -35,9 +35,22 @@ enum MessageType: String, Codable {
     case messageReceipt
     case typingIndicator
     case reaction
+    case messageEdit
+    case messageDelete
+
+    // Clipboard sync
+    case clipboardSync
+
+    // File transfer resume
+    case fileResume
+    case fileResumeAck
 
     // Connection lifecycle
     case disconnect
+
+    // Nearby Interaction token exchange
+    case niTokenOffer
+    case niTokenResponse
 
     // Heartbeat keepalive
     case ping

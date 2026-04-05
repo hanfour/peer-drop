@@ -22,6 +22,31 @@ final class FileTransferSession: ObservableObject {
     /// Callback to send messages through the connection.
     var sendMessage: ((PeerMessage) async throws -> Void)?
 
+    /// Persistent directory for received files, visible in Files.app.
+    static var receivedFilesDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("PeerDrop", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Return a unique file URL in receivedFilesDirectory, appending " (N)" for duplicates.
+    static func uniqueDestination(for fileName: String) -> URL {
+        let dir = receivedFilesDirectory
+        var destURL = dir.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: destURL.path) else { return destURL }
+
+        let stem = destURL.deletingPathExtension().lastPathComponent
+        let ext = destURL.pathExtension
+        var counter = 1
+        repeat {
+            let newName = ext.isEmpty ? "\(stem) (\(counter))" : "\(stem) (\(counter)).\(ext)"
+            destURL = dir.appendingPathComponent(newName)
+            counter += 1
+        } while FileManager.default.fileExists(atPath: destURL.path)
+        return destURL
+    }
+
     private let chunkSize = Data.defaultChunkSize
     private var isCancelled = false
 
@@ -36,6 +61,18 @@ final class FileTransferSession: ObservableObject {
     private var batchMetadata: BatchMetadata?
     private var batchReceivedURLs: [URL] = []
     private var batchFilesCompleted: Int = 0
+
+    // Resume state
+    private(set) var lastInterruptedTransfer: InterruptedTransfer?
+    private var pendingResumeOffset: Int64 = 0
+
+    struct InterruptedTransfer {
+        let fileName: String
+        let fileSize: Int64
+        let sha256Hash: String
+        let receivedBytes: Int64
+        let tempURL: URL
+    }
 
     init(peerID: String) {
         self.peerID = peerID
@@ -202,7 +239,33 @@ final class FileTransferSession: ObservableObject {
     }
 
     func handleConnectionFailure() {
-        cleanupReceiveState(error: "Connection lost during transfer")
+        // Save interrupted transfer state for potential resume
+        if isTransferring, let metadata = receiveMetadata, let tempURL = receiveTempURL {
+            receiveFileHandle?.closeFile()
+            receiveFileHandle = nil
+            lastInterruptedTransfer = InterruptedTransfer(
+                fileName: metadata.fileName,
+                fileSize: metadata.fileSize,
+                sha256Hash: metadata.sha256Hash,
+                receivedBytes: receivedBytes,
+                tempURL: tempURL
+            )
+            logger.info("Saved interrupted transfer: \(metadata.fileName) at \(self.receivedBytes)/\(metadata.fileSize) bytes")
+        }
+        isCancelled = true
+        isTransferring = false
+        currentFileName = nil
+        isCurrentTransferDirectory = false
+        receiveFileHandle = nil
+        receiveTempURL = nil
+        receiveMetadata = nil
+        batchMetadata = nil
+        batchReceivedURLs = []
+        batchFilesCompleted = 0
+        overallProgress = 0
+        totalFileCount = 0
+        currentFileIndex = 0
+        lastError = "Connection lost during transfer"
     }
 
     private func cleanupReceiveState(error: String) {
@@ -260,12 +323,8 @@ final class FileTransferSession: ObservableObject {
         var resultRecord: TransferRecord?
 
         if success, let tempURL = receiveTempURL {
-            let destURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(metadata.fileName)
+            let destURL = Self.uniqueDestination(for: metadata.fileName)
             do {
-                if FileManager.default.fileExists(atPath: destURL.path) {
-                    try FileManager.default.removeItem(at: destURL)
-                }
                 try FileManager.default.moveItem(at: tempURL, to: destURL)
             } catch {
                 logger.error("Failed to finalize file transfer: \(error.localizedDescription)")
@@ -276,7 +335,7 @@ final class FileTransferSession: ObservableObject {
                 do {
                     let unzippedURL = try destURL.unzipFile()
                     finalURL = unzippedURL
-                    try? FileManager.default.removeItem(at: destURL) // P2: temp cleanup, failure is acceptable
+                    try? FileManager.default.removeItem(at: destURL)
                 } catch {
                     logger.error("Failed to unzip: \(error.localizedDescription)")
                     finalURL = destURL
@@ -324,6 +383,143 @@ final class FileTransferSession: ObservableObject {
         }
 
         return resultRecord
+    }
+
+    // MARK: - Resume Support
+
+    /// Check if we can resume a previously interrupted transfer for a new file offer.
+    func canResume(metadata: TransferMetadata) -> Bool {
+        guard let interrupted = lastInterruptedTransfer else { return false }
+        return interrupted.fileName == metadata.fileName
+            && interrupted.fileSize == metadata.fileSize
+            && interrupted.sha256Hash == metadata.sha256Hash
+            && interrupted.receivedBytes > 0
+            && FileManager.default.fileExists(atPath: interrupted.tempURL.path)
+    }
+
+    /// Handle an incoming resume request from the sender.
+    func handleResumeRequest(_ payload: FileResumePayload, peerConnection: PeerConnection, senderID: String) {
+        guard let interrupted = lastInterruptedTransfer,
+              interrupted.fileName == payload.fileName,
+              interrupted.sha256Hash == payload.sha256Hash,
+              FileManager.default.fileExists(atPath: interrupted.tempURL.path) else {
+            // Cannot resume — send rejection
+            let ack = FileResumeAckPayload(accepted: false, resumeOffset: 0)
+            if let msg = try? PeerMessage.fileResumeAck(ack, senderID: senderID) {
+                Task { try? await peerConnection.sendMessage(msg) }
+            }
+            return
+        }
+
+        // Accept resume from the interrupted point
+        let ack = FileResumeAckPayload(accepted: true, resumeOffset: interrupted.receivedBytes)
+        if let msg = try? PeerMessage.fileResumeAck(ack, senderID: senderID) {
+            Task { try? await peerConnection.sendMessage(msg) }
+        }
+
+        // Restore receive state
+        receiveTempURL = interrupted.tempURL
+        receivedBytes = interrupted.receivedBytes
+        receiveMetadata = TransferMetadata(
+            fileName: payload.fileName,
+            fileSize: payload.fileSize,
+            mimeType: nil,
+            sha256Hash: payload.sha256Hash,
+            resumeOffset: interrupted.receivedBytes
+        )
+        currentFileName = payload.fileName
+        isTransferring = true
+        isCancelled = false
+        progress = Double(receivedBytes) / Double(payload.fileSize)
+
+        // Restore hasher by feeding it the already-received partial data
+        receiveHasher = HashVerifier()
+        do {
+            let readHandle = try FileHandle(forReadingFrom: interrupted.tempURL)
+            defer { readHandle.closeFile() }
+            while true {
+                let chunk = readHandle.readData(ofLength: chunkSize)
+                guard !chunk.isEmpty else { break }
+                receiveHasher.update(with: chunk)
+            }
+        } catch {
+            logger.error("Failed to restore hash state from partial file: \(error.localizedDescription)")
+            lastError = "Failed to resume transfer"
+            return
+        }
+
+        do {
+            receiveFileHandle = try FileHandle(forWritingTo: interrupted.tempURL)
+            receiveFileHandle?.seekToEndOfFile()
+        } catch {
+            logger.error("Failed to reopen temp file for resume: \(error.localizedDescription)")
+            lastError = "Failed to resume transfer"
+        }
+
+        lastInterruptedTransfer = nil
+    }
+
+    /// Handle resume acknowledgment from the receiver.
+    func handleResumeAck(_ payload: FileResumeAckPayload) {
+        if payload.accepted {
+            pendingResumeOffset = payload.resumeOffset
+            logger.info("Resume accepted at offset \(payload.resumeOffset)")
+        } else {
+            pendingResumeOffset = 0
+            logger.info("Resume rejected, will start from beginning")
+        }
+    }
+
+    /// Send a file with resume support, skipping bytes up to resumeOffset.
+    func sendFileWithResume(at url: URL, resumeOffset: Int64, isDirectory: Bool = false) async throws {
+        guard let sendMessage else { throw FileTransferError.notConnected }
+
+        isTransferring = true
+        isCancelled = false
+        lastError = nil
+        isCurrentTransferDirectory = isDirectory
+        currentFileName = url.lastPathComponent
+
+        defer {
+            isTransferring = false
+            currentFileName = nil
+            isCurrentTransferDirectory = false
+        }
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = (attrs[.size] as? Int64) ?? 0
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { handle.closeFile() }
+
+        // Seek past already-sent bytes
+        handle.seek(toFileOffset: UInt64(resumeOffset))
+        var sentBytes = resumeOffset
+
+        progress = Double(resumeOffset) / Double(fileSize)
+
+        while !isCancelled {
+            let data = handle.readData(ofLength: chunkSize)
+            guard !data.isEmpty else { break }
+            let chunkMsg = PeerMessage.fileChunk(data, senderID: peerID)
+            try await sendMessage(chunkMsg)
+            sentBytes += Int64(data.count)
+            progress = Double(sentBytes) / Double(fileSize)
+        }
+
+        guard !isCancelled else { throw FileTransferError.cancelled }
+
+        let hash = try HashVerifier.sha256(fileAt: url, chunkSize: chunkSize)
+        let complete = try PeerMessage.fileComplete(hash: hash, senderID: peerID)
+        try await sendMessage(complete)
+        progress = 1.0
+    }
+
+    func clearInterruptedTransfer() {
+        if let interrupted = lastInterruptedTransfer {
+            try? FileManager.default.removeItem(at: interrupted.tempURL)
+        }
+        lastInterruptedTransfer = nil
     }
 }
 

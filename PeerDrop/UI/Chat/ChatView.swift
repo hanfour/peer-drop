@@ -98,6 +98,19 @@ struct ChatView: View {
                                         action: .add,
                                         peerID: peerID
                                     )
+                                },
+                                onEdit: { messageID, newText in
+                                    connectionManager.sendMessageEdit(
+                                        messageID: messageID,
+                                        newText: newText,
+                                        to: peerID
+                                    )
+                                },
+                                onDelete: { messageID in
+                                    connectionManager.sendMessageDelete(
+                                        messageID: messageID,
+                                        to: peerID
+                                    )
                                 }
                             )
                             .id(message.id)

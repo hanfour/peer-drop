@@ -9,6 +9,8 @@ final class BonjourDiscovery: DiscoveryBackend {
     private static let serviceType = "_peerdrop._tcp"
     private static let serviceDomain = "local"
 
+    let source: DiscoverySource = .bonjour
+
     private let peersSubject = CurrentValueSubject<[DiscoveredPeer], Never>([])
     var peersPublisher: AnyPublisher<[DiscoveredPeer], Never> {
         peersSubject.eraseToAnyPublisher()
@@ -20,6 +22,8 @@ final class BonjourDiscovery: DiscoveryBackend {
     private let localPeerName: String
     private let tlsOptions: NWProtocolTLS.Options?
     private let queue = DispatchQueue(label: "com.peerdrop.bonjour")
+    private var isRestartingListener = false
+    private var isRestartingBrowser = false
 
     init(port: UInt16 = 0, localPeerName: String, tlsOptions: NWProtocolTLS.Options? = nil) {
         self.listenerPort = port == 0 ? .any : NWEndpoint.Port(rawValue: port)!
@@ -65,8 +69,11 @@ final class BonjourDiscovery: DiscoveryBackend {
                 case .failed(let error):
                     logger.error("Listener failed: \(error.localizedDescription), restarting...")
                     listener.cancel()
-                    // Restart after brief delay
+                    self?.listener = nil
+                    guard self?.isRestartingListener != true else { return }
+                    self?.isRestartingListener = true
                     self?.queue.asyncAfter(deadline: .now() + 2.0) {
+                        self?.isRestartingListener = false
                         self?.startAdvertising()
                     }
                 case .cancelled:
@@ -113,7 +120,11 @@ final class BonjourDiscovery: DiscoveryBackend {
             case .failed(let error):
                 logger.error("Browser failed: \(error.localizedDescription), restarting...")
                 browser.cancel()
+                self?.browser = nil
+                guard self?.isRestartingBrowser != true else { return }
+                self?.isRestartingBrowser = true
                 self?.queue.asyncAfter(deadline: .now() + 2.0) {
+                    self?.isRestartingBrowser = false
                     self?.startBrowsing()
                 }
             case .cancelled:

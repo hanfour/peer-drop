@@ -3,8 +3,10 @@ import Network
 
 /// TCP transport wrapping NWConnection with optional TLS and message framing.
 final class TCPTransport: TransportProtocol {
-    private let connection: NWConnection
+    let connection: NWConnection
     private let queue = DispatchQueue(label: "com.peerdrop.transport")
+
+    var onStateChange: ((TransportState) -> Void)?
 
     init(connection: NWConnection) {
         self.connection = connection
@@ -18,9 +20,14 @@ final class TCPTransport: TransportProtocol {
 
     var nwConnection: NWConnection { connection }
 
+    var isReady: Bool {
+        connection.state == .ready
+    }
+
     func start() async throws {
         connection.start(queue: queue)
         try await connection.waitReady()
+        onStateChange?(.ready)
     }
 
     func send(_ message: PeerMessage) async throws {
@@ -33,5 +40,6 @@ final class TCPTransport: TransportProtocol {
 
     func close() {
         connection.cancel()
+        onStateChange?(.cancelled)
     }
 }

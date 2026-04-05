@@ -9,7 +9,7 @@ private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PeerCo
 @MainActor
 final class PeerConnection: ObservableObject, Identifiable {
     let id: String  // peerID
-    private(set) var connection: NWConnection
+    private(set) var transport: TransportProtocol
     @Published private(set) var peerIdentity: PeerIdentity
     @Published private(set) var state: PeerConnectionState
 
@@ -24,6 +24,14 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     /// Tracks whether this connection is in a voice call.
     @Published private(set) var isInVoiceCall: Bool = false
+
+    /// When this connection entered the connected state.
+    private(set) var connectedSince: Date?
+
+    /// Bytes transferred in the last measurement window (for speed calculation).
+    @Published private(set) var transferSpeed: Int64 = 0
+    private var lastBytesCount: Int64 = 0
+    private var speedTimer: Timer?
 
     /// Callback when the connection state changes.
     var onStateChange: ((PeerConnectionState) -> Void)?
@@ -43,22 +51,50 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// Local identity for sending messages.
     private let localIdentity: PeerIdentity
 
+    /// Backward-compatible accessor for the underlying NWConnection (TCP transport only).
+    var nwConnection: NWConnection? {
+        (transport as? TCPTransport)?.connection
+    }
+
+    /// Backward-compatible accessor (alias for `nwConnection`).
+    /// Returns nil for non-TCP transports (e.g. DataChannelTransport).
+    var connection: NWConnection? { nwConnection }
+
     init(
+        peerID: String,
+        transport: TransportProtocol,
+        peerIdentity: PeerIdentity,
+        localIdentity: PeerIdentity,
+        state: PeerConnectionState = .connecting
+    ) {
+        self.id = peerID
+        self.transport = transport
+        self.peerIdentity = peerIdentity
+        self.localIdentity = localIdentity
+        self.state = state
+    }
+
+    /// Convenience initializer for backward compatibility with NWConnection.
+    convenience init(
         peerID: String,
         connection: NWConnection,
         peerIdentity: PeerIdentity,
         localIdentity: PeerIdentity,
         state: PeerConnectionState = .connecting
     ) {
-        self.id = peerID
-        self.connection = connection
-        self.peerIdentity = peerIdentity
-        self.localIdentity = localIdentity
-        self.state = state
+        let tcpTransport = TCPTransport(connection: connection)
+        self.init(
+            peerID: peerID,
+            transport: tcpTransport,
+            peerIdentity: peerIdentity,
+            localIdentity: localIdentity,
+            state: state
+        )
     }
 
     deinit {
         heartbeatTask?.cancel()
+        speedTimer?.invalidate()
     }
 
     // MARK: - State Management
@@ -71,8 +107,10 @@ final class PeerConnection: ObservableObject, Identifiable {
 
         switch newState {
         case .connected:
+            connectedSince = Date()
             startHeartbeat()
         case .disconnected, .failed:
+            connectedSince = nil
             stopHeartbeat()
             onDisconnected?()
         case .connecting:
@@ -84,15 +122,48 @@ final class PeerConnection: ObservableObject, Identifiable {
         peerIdentity = identity
     }
 
-    func replaceConnection(_ newConnection: NWConnection) {
-        connection = newConnection
+    func replaceTransport(_ newTransport: TransportProtocol) {
+        transport = newTransport
         connectionGeneration = UUID()
+    }
+
+    /// Backward-compatible method for replacing the underlying NWConnection.
+    func replaceConnection(_ newConnection: NWConnection) {
+        replaceTransport(TCPTransport(connection: newConnection))
     }
 
     // MARK: - Transfer State
 
     func setTransferring(_ transferring: Bool) {
         isTransferring = transferring
+        if transferring {
+            startSpeedTracking()
+        } else {
+            stopSpeedTracking()
+        }
+    }
+
+    func recordBytesTransferred(_ bytes: Int64) {
+        lastBytesCount += bytes
+    }
+
+    private func startSpeedTracking() {
+        lastBytesCount = 0
+        transferSpeed = 0
+        speedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.transferSpeed = self.lastBytesCount
+                self.lastBytesCount = 0
+            }
+        }
+    }
+
+    private func stopSpeedTracking() {
+        speedTimer?.invalidate()
+        speedTimer = nil
+        transferSpeed = 0
+        lastBytesCount = 0
     }
 
     func setInVoiceCall(_ inCall: Bool) {
@@ -130,7 +201,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         guard state.isActive else {
             throw ConnectionError.notConnected
         }
-        try await connection.sendMessage(message)
+        try await transport.send(message)
     }
 
     // MARK: - Receive Loop
@@ -142,7 +213,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         Task {
             while connectionGeneration == generation && state.isActive {
                 do {
-                    let message = try await connection.receiveMessage()
+                    let message = try await transport.receive()
                     guard connectionGeneration == generation else { break }
                     onMessageReceived?(message)
                 } catch {
@@ -160,18 +231,20 @@ final class PeerConnection: ObservableObject, Identifiable {
     func disconnect(sendMessage: Bool = true) async {
         logger.info("PeerConnection[\(self.id.prefix(8))] disconnecting")
         connectionGeneration = UUID()
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
 
         if sendMessage {
             let msg = PeerMessage.disconnect(senderID: localIdentity.id)
-            try? await connection.sendMessage(msg)
+            try? await transport.send(msg)
         }
 
-        connection.cancel()
+        transport.close()
         updateState(.disconnected)
     }
 
     func cancel() {
         connectionGeneration = UUID()
-        connection.cancel()
+        transport.close()
     }
 }

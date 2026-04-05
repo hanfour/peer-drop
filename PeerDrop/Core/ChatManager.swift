@@ -646,6 +646,75 @@ final class ChatManager: ObservableObject {
         }
     }
 
+    // MARK: - Edit / Delete
+
+    func applyEdit(messageID: String, newText: String, editedAt: Date, peerID: String) {
+        if let idx = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[idx] = ChatMessage(
+                id: messages[idx].id,
+                text: newText,
+                isMedia: messages[idx].isMedia,
+                mediaType: messages[idx].mediaType,
+                fileName: messages[idx].fileName,
+                fileSize: messages[idx].fileSize,
+                mimeType: messages[idx].mimeType,
+                duration: messages[idx].duration,
+                thumbnailData: messages[idx].thumbnailData,
+                localFileURL: messages[idx].localFileURL,
+                isOutgoing: messages[idx].isOutgoing,
+                peerName: messages[idx].peerName,
+                status: messages[idx].status,
+                timestamp: messages[idx].timestamp,
+                groupID: messages[idx].groupID,
+                senderID: messages[idx].senderID,
+                senderName: messages[idx].senderName,
+                replyToMessageID: messages[idx].replyToMessageID,
+                replyToText: messages[idx].replyToText,
+                replyToSenderName: messages[idx].replyToSenderName,
+                editedAt: editedAt,
+                isDeleted: messages[idx].isDeleted,
+                reactions: messages[idx].reactions,
+                groupReadStatus: messages[idx].groupReadStatus
+            )
+        }
+        // Also update the full in-memory cache
+        if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
+            allMessagesForCurrentPeer[idx] = messages.first(where: { $0.id == messageID }) ?? allMessagesForCurrentPeer[idx]
+        }
+        persistEditOrDelete(messageID: messageID, peerID: peerID)
+    }
+
+    func applyDelete(messageID: String, peerID: String) {
+        if let idx = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[idx].isDeleted = true
+        }
+        // Also update the full in-memory cache
+        if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
+            allMessagesForCurrentPeer[idx].isDeleted = true
+        }
+        persistEditOrDelete(messageID: messageID, peerID: peerID)
+    }
+
+    private func persistEditOrDelete(messageID: String, peerID: String) {
+        let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
+        guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "json" {
+            guard let raw = try? Data(contentsOf: file),
+                  let decrypted = try? encryptor.decrypt(raw),
+                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
+            if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
+                // Find the in-memory version if available
+                if let memIdx = messages.firstIndex(where: { $0.id == messageID }) {
+                    msgs[idx] = messages[memIdx]
+                }
+                if let encoded = try? JSONEncoder().encode(msgs) {
+                    try? encryptor.encryptAndWrite(encoded, to: file)
+                }
+                return
+            }
+        }
+    }
+
     // MARK: - Migration
 
     func migrateExistingDataToEncrypted() {

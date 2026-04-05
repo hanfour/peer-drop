@@ -76,12 +76,18 @@ struct ChatBubbleView: View {
     @EnvironmentObject private var voicePlayer: VoicePlayer
     @State private var showMediaPreview = false
     @State private var showReactionPicker = false
+    @State private var showEditSheet = false
+    @State private var editText = ""
     var onReaction: ((String) -> Void)?
+    var onEdit: ((String, String) -> Void)?
+    var onDelete: ((String) -> Void)?
 
-    init(message: ChatMessage, chatManager: ChatManager? = nil, onReaction: ((String) -> Void)? = nil) {
+    init(message: ChatMessage, chatManager: ChatManager? = nil, onReaction: ((String) -> Void)? = nil, onEdit: ((String, String) -> Void)? = nil, onDelete: ((String) -> Void)? = nil) {
         self.message = message
         self.chatManager = chatManager
         self.onReaction = onReaction
+        self.onEdit = onEdit
+        self.onDelete = onDelete
     }
 
     private var isVoicePlaying: Bool {
@@ -105,7 +111,16 @@ struct ChatBubbleView: View {
                     }
 
                     // Content
-                    if message.isMedia {
+                    if message.isDeleted {
+                        HStack(spacing: 4) {
+                            Image(systemName: "nosign")
+                                .font(.caption)
+                            Text("Message deleted")
+                                .italic()
+                        }
+                        .font(.body)
+                        .foregroundStyle(message.isOutgoing ? .white.opacity(0.6) : .secondary)
+                    } else if message.isMedia {
                         mediaContent
                     } else {
                         Text(message.text ?? "")
@@ -113,8 +128,15 @@ struct ChatBubbleView: View {
                             .foregroundStyle(message.isOutgoing ? .white : .primary)
                     }
 
-                    // Timestamp + status inline
+                    // Timestamp + edited label + status inline
                     HStack(spacing: 3) {
+                        if message.editedAt != nil {
+                            Text("edited")
+                                .font(.system(size: 10))
+                                .italic()
+                                .foregroundStyle(message.isOutgoing ? .white.opacity(0.5) : .secondary)
+                        }
+
                         Text(message.timestamp, style: .time)
                             .font(.system(size: 11))
                             .foregroundStyle(message.isOutgoing ? .white.opacity(0.65) : .secondary)
@@ -131,8 +153,27 @@ struct ChatBubbleView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(bubbleAccessibilityLabel)
                 .accessibilityHint("Long press to react")
-                .onLongPressGesture {
-                    showReactionPicker = true
+                .contextMenu {
+                    Button {
+                        showReactionPicker = true
+                    } label: {
+                        Label("React", systemImage: "face.smiling")
+                    }
+
+                    if message.canEditOrDelete {
+                        Button {
+                            editText = message.text ?? ""
+                            showEditSheet = true
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+
+                        Button(role: .destructive) {
+                            onDelete?(message.id)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
 
                 // Reactions
@@ -162,6 +203,34 @@ struct ChatBubbleView: View {
             )
             .presentationDetents([.height(80)])
             .presentationDragIndicator(.hidden)
+        }
+        .sheet(isPresented: $showEditSheet) {
+            NavigationStack {
+                VStack {
+                    TextField("Message", text: $editText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .padding()
+                    Spacer()
+                }
+                .navigationTitle("Edit Message")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showEditSheet = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty {
+                                onEdit?(message.id, trimmed)
+                            }
+                            showEditSheet = false
+                        }
+                        .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
         }
     }
 

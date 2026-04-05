@@ -95,7 +95,7 @@ struct ConnectedTab: View {
         HStack {
             PeerAvatar(name: peerConn.peerIdentity.displayName)
 
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(peerConn.peerIdentity.displayName)
                     .font(.body.bold())
 
@@ -104,6 +104,11 @@ struct ConnectedTab: View {
                         Text("Transferring")
                             .font(.caption)
                             .foregroundStyle(.blue)
+                        if peerConn.transferSpeed > 0 {
+                            Text(ByteCountFormatter.string(fromByteCount: peerConn.transferSpeed, countStyle: .file) + "/s")
+                                .font(.caption2)
+                                .foregroundStyle(.blue.opacity(0.7))
+                        }
                     } else if peerConn.isInVoiceCall {
                         Text("In Call")
                             .font(.caption)
@@ -119,6 +124,32 @@ struct ConnectedTab: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                // NI proximity info
+                if let proximity = connectionManager.nearbyInteractionManager?.peerProximity[peerConn.id] {
+                    HStack(spacing: 4) {
+                        if let distance = proximity.distance {
+                            Image(systemName: "ruler")
+                                .font(.system(size: 9))
+                            Text(String(format: "%.1f m", distance))
+                                .font(.caption2)
+                        }
+                        if let direction = proximity.direction {
+                            Image(systemName: "location.north.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.blue)
+                                .rotationEffect(.radians(Double(atan2(direction.x, direction.z))))
+                        }
+                    }
+                    .foregroundStyle(.secondary)
+                }
+
+                // Connection duration
+                if let connectedSince = peerConn.connectedSince {
+                    Text(connectedSince, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
 

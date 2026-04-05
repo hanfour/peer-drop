@@ -7,8 +7,11 @@ struct NearbyTab: View {
     @AppStorage("peerDropSortMode") private var sortModeRaw = "name"
     @AppStorage("peerDropIsOnline") private var isOnline = true
     @State private var showManualConnect = false
+    @State private var editingPeer: DiscoveredPeer?
     @State private var showSettings = false
     @State private var showTransferHistory = false
+    @State private var showRelayConnect = false
+    @State private var showConnectionQR = false
     @State private var isSearchActive = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -44,6 +47,14 @@ struct NearbyTab: View {
         return sortedPeers.filter {
             $0.displayName.localizedCaseInsensitiveContains(searchText)
         }
+    }
+
+    private var networkPeers: [DiscoveredPeer] {
+        filteredPeers.filter { $0.source != .bluetooth }
+    }
+
+    private var bleOnlyPeers: [DiscoveredPeer] {
+        filteredPeers.filter { $0.source == .bluetooth }
     }
 
     var body: some View {
@@ -93,8 +104,9 @@ struct NearbyTab: View {
                     }
                 } else {
                     List {
+                        if !networkPeers.isEmpty {
                         Section {
-                            ForEach(filteredPeers) { peer in
+                            ForEach(networkPeers) { peer in
                                 PeerRowView(peer: peer) {
                                     if isConnectedPeer(peer) {
                                         selectedTab = 1
@@ -110,19 +122,67 @@ struct NearbyTab: View {
                                             .padding(.trailing, 8)
                                     }
                                 }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    if peer.source == .manual {
+                                        Button(role: .destructive) {
+                                            connectionManager.removeManualPeer(id: peer.id)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                                }
+                                .swipeActions(edge: .leading) {
+                                    if peer.source == .manual {
+                                        Button {
+                                            editingPeer = peer
+                                        } label: {
+                                            Label("Edit", systemImage: "pencil")
+                                        }
+                                        .tint(.blue)
+                                    }
+                                }
                                 .disabled(isConnecting)
                             }
                         } header: {
                             HStack {
-                                Text("Nearby Devices")
+                                Label("Local Network", systemImage: "wifi")
                                 Spacer()
-                                Text("\(connectionManager.discoveredPeers.count)")
+                                Text("\(networkPeers.count)")
                                     .font(.caption2.weight(.medium))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(.blue, in: Capsule())
                             }
+                        }
+                        }
+
+                        if !bleOnlyPeers.isEmpty {
+                        Section {
+                            ForEach(bleOnlyPeers) { peer in
+                                PeerRowView(peer: peer) {
+                                    connectionManager.requestConnection(to: peer)
+                                }
+                                .disabled(isConnecting)
+                            }
+                        } header: {
+                            HStack {
+                                Label("Bluetooth", systemImage: "wave.3.right")
+                                Spacer()
+                                Text("\(bleOnlyPeers.count)")
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.cyan, in: Capsule())
+                            }
+                        } footer: {
+                            if FeatureSettings.isRelayEnabled {
+                                Text("Use Relay Connect to transfer files with this device")
+                            } else {
+                                Text("These devices were discovered via Bluetooth. Connect to the same WiFi network to transfer files.")
+                            }
+                        }
                         }
 
                         if let error = connectionManager.certificateManager.setupError {
@@ -163,6 +223,10 @@ struct NearbyTab: View {
                     Text(connectingLabel)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Button("Cancel") {
+                        connectionManager.disconnect()
+                    }
+                    .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.ultraThinMaterial)
@@ -228,6 +292,16 @@ struct NearbyTab: View {
                     .accessibilityLabel(isSearchActive ? "Close search" : "Search devices")
                 }
 
+                if FeatureSettings.isRelayEnabled {
+                    Button {
+                        showRelayConnect = true
+                    } label: {
+                        Image(systemName: "antenna.radiowaves.left.and.right.circle")
+                    }
+                    .accessibilityIdentifier("relay-connect-button")
+                    .accessibilityLabel("Relay Connect")
+                }
+
                 Menu {
                     Section("Sort By") {
                         Button {
@@ -247,6 +321,11 @@ struct NearbyTab: View {
                         }
                     }
                     Section {
+                        Button {
+                            showConnectionQR = true
+                        } label: {
+                            Label("My QR Code", systemImage: "qrcode")
+                        }
                         Button {
                             showSettings = true
                         } label: {
@@ -269,6 +348,14 @@ struct NearbyTab: View {
             ManualConnectView()
                 .environmentObject(connectionManager)
         }
+        .sheet(item: $editingPeer) { peer in
+            ManualConnectView(editingPeer: peer)
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showConnectionQR) {
+            ConnectionQRView()
+                .environmentObject(connectionManager)
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(connectionManager)
@@ -277,6 +364,17 @@ struct NearbyTab: View {
             NavigationStack {
                 TransferHistoryView()
                     .environmentObject(connectionManager)
+            }
+        }
+        .sheet(isPresented: $showRelayConnect, onDismiss: {
+            connectionManager.shouldShowRelayConnect = false
+        }) {
+            RelayConnectView()
+                .environmentObject(connectionManager)
+        }
+        .onChange(of: connectionManager.shouldShowRelayConnect) { shouldShow in
+            if shouldShow && !showRelayConnect {
+                showRelayConnect = true
             }
         }
         .onAppear {

@@ -88,7 +88,7 @@ struct ContentView: View {
             Text(errorMessage ?? "An unknown error occurred.")
         }
         .fullScreenCover(isPresented: Binding(
-            get: { !hasCompletedOnboarding },
+            get: { !hasCompletedOnboarding && !ScreenshotModeProvider.shared.isActive },
             set: { if !$0 { hasCompletedOnboarding = true } }
         )) {
             OnboardingView()

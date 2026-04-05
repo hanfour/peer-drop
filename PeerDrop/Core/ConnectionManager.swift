@@ -4,6 +4,7 @@ import Combine
 import SwiftUI
 import UIKit
 import os
+@preconcurrency import WebRTC
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ConnectionManager")
 
@@ -61,6 +62,14 @@ struct IncomingRequest: Identifiable {
     let connection: NWConnection
 }
 
+/// Pending PIN verification for a relay connection.
+struct RelayPINRequest: Identifiable {
+    let id = UUID()
+    let pin: String
+    let peerID: String
+    let remoteFingerprint: String
+}
+
 /// Central state machine that orchestrates discovery, connections, transfers, and calls.
 @MainActor
 final class ConnectionManager: ObservableObject {
@@ -79,6 +88,12 @@ final class ConnectionManager: ObservableObject {
     @Published var statusToast: String?
     /// When true, the ContentView error alert is suppressed (e.g., user is in ChatView handling the error locally)
     @Published var suppressErrorAlert: Bool = false
+    /// Pending PIN verification for relay connections (nil = no verification needed).
+    @Published var pendingRelayPIN: RelayPINRequest?
+    /// Relay room code received via deep link, triggers RelayConnectView auto-join.
+    @Published var pendingRelayJoinCode: String?
+    /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
+    @Published var shouldShowRelayConnect = false
 
     // MARK: - Multi-Connection Support
 
@@ -121,6 +136,8 @@ final class ConnectionManager: ObservableObject {
 
     private var discoveryCoordinator: DiscoveryCoordinator?
     private var bonjourDiscovery: BonjourDiscovery?
+    private var bleDiscovery: BLEDiscovery?
+    private(set) var nearbyInteractionManager: NearbyInteractionManager?
     private var activeConnection: NWConnection?
     private var cancellables = Set<AnyCancellable>()
     private(set) var localIdentity: PeerIdentity
@@ -161,6 +178,7 @@ final class ConnectionManager: ObservableObject {
     let deviceStore = DeviceRecordStore()
     let chatManager = ChatManager()
     let groupStore = DeviceGroupStore()
+    let clipboardSyncManager = ClipboardSyncManager()
 
     // MARK: - Typing Indicator State
 
@@ -184,6 +202,12 @@ final class ConnectionManager: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
+        clipboardSyncManager.onClipboardChanged = { [weak self] payload in
+            self?.sendClipboardSyncToAll(payload)
+        }
+        clipboardSyncManager.startMonitoring()
 
         // Screenshot mode: automatically start discovery and set up mock connection
         if ScreenshotModeProvider.shared.isActive {
@@ -328,11 +352,13 @@ final class ConnectionManager: ObservableObject {
             switch lastPeer.source {
             case .bonjour: sourceType = "bonjour"
             case .manual: sourceType = "manual"
+            case .bluetooth: sourceType = "bluetooth"
+            case .relay: sourceType = "relay"
             }
             switch lastPeer.endpoint {
             case .manual(let h, let p):
                 host = h; port = p
-            case .bonjour:
+            case .bonjour, .bleOnly, .relay:
                 host = nil; port = nil
             }
         } else {
@@ -340,6 +366,20 @@ final class ConnectionManager: ObservableObject {
         }
         let id = lastConnectedPeer?.id ?? peer.id
         deviceStore.addOrUpdate(id: id, displayName: peer.displayName, sourceType: sourceType, host: host, port: port)
+    }
+
+    // MARK: - Nearby Interaction
+
+    private func startNearbyInteractionSession(for peerID: String, via peerConnection: PeerConnection) {
+        guard let niManager = nearbyInteractionManager else { return }
+        niManager.startSession(for: peerID) { [weak self] tokenData in
+            guard let self else { return }
+            let offer = PeerMessage(type: .niTokenOffer, payload: tokenData, senderID: self.localIdentity.id)
+            Task {
+                do { try await peerConnection.sendMessage(offer) }
+                catch { logger.warning("Failed to send NI token offer: \(error.localizedDescription)") }
+            }
+        }
     }
 
     // MARK: - State Transitions
@@ -365,6 +405,43 @@ final class ConnectionManager: ObservableObject {
             stopHeartbeat()
         default:
             break
+        }
+    }
+
+    /// Force the state machine to `.requesting` from any state, using valid transition paths.
+    /// Used by relay functions that need to start from a clean `.requesting` state.
+    private func forceTransitionToRequesting() {
+        switch state {
+        case .requesting:
+            return // Already there
+        case .discovering:
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .peerFound:
+            transition(to: .requesting)
+        case .idle:
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .disconnected, .failed, .rejected:
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .connected, .transferring, .voiceCall:
+            // Already connected — force through disconnected path
+            transition(to: .disconnected)
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .connecting:
+            transition(to: .failed(reason: ""))
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
+        case .incomingRequest:
+            transition(to: .discovering)
+            transition(to: .peerFound)
+            transition(to: .requesting)
         }
     }
 
@@ -412,7 +489,16 @@ final class ConnectionManager: ObservableObject {
             }
         }
 
-        let coordinator = DiscoveryCoordinator(backends: [bonjour])
+        var backends: [DiscoveryBackend] = [bonjour]
+
+        // Add BLE discovery if enabled
+        if FeatureSettings.isBLEDiscoveryEnabled {
+            let ble = BLEDiscovery(localPeerID: localIdentity.id, localDisplayName: localIdentity.displayName)
+            backends.append(ble)
+            self.bleDiscovery = ble
+        }
+
+        let coordinator = DiscoveryCoordinator(backends: backends)
         coordinator.$peers
             .receive(on: DispatchQueue.main)
             .assign(to: &$discoveredPeers)
@@ -420,6 +506,11 @@ final class ConnectionManager: ObservableObject {
         coordinator.start()
         self.bonjourDiscovery = bonjour
         self.discoveryCoordinator = coordinator
+
+        // Start Nearby Interaction if enabled
+        if FeatureSettings.isNearbyInteractionEnabled {
+            self.nearbyInteractionManager = NearbyInteractionManager()
+        }
         transition(to: .discovering)
 
         // Start network path monitoring
@@ -496,6 +587,9 @@ final class ConnectionManager: ObservableObject {
         discoveryCoordinator?.stop()
         discoveryCoordinator = nil
         bonjourDiscovery = nil
+        bleDiscovery = nil
+        nearbyInteractionManager?.stopAllSessions()
+        nearbyInteractionManager = nil
         stopNetworkPathMonitor()
     }
 
@@ -578,8 +672,17 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// The port this device's Bonjour listener is running on (for QR code / deep link).
+    var localListenerPort: UInt16? {
+        bonjourDiscovery?.actualPort
+    }
+
     func addManualPeer(host: String, port: UInt16, name: String?) {
         discoveryCoordinator?.addManualPeer(host: host, port: port, name: name)
+    }
+
+    func removeManualPeer(id: String) {
+        discoveryCoordinator?.removeManualPeer(id: id)
     }
 
     // MARK: - Reconnect
@@ -639,6 +742,15 @@ final class ConnectionManager: ObservableObject {
         failure.lastFailed = Date()
         failedPeers[peerID] = failure
         logger.info("Connection failure recorded for peer \(peerID.prefix(8)): \(failure.count) failures")
+
+        // Auto-remove manual peers after 5 consecutive failures
+        if failure.count >= 5,
+           let peer = discoveredPeers.first(where: { $0.id == peerID }),
+           peer.source == .manual {
+            logger.info("Removing manual peer \(peerID.prefix(8)) after \(failure.count) consecutive failures")
+            removeManualPeer(id: peerID)
+            failedPeers.removeValue(forKey: peerID)
+        }
     }
 
     /// Record a successful connection, resetting the failure count.
@@ -674,6 +786,7 @@ final class ConnectionManager: ObservableObject {
         switch phase {
         case .active:
             endBackgroundTask()
+            discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
@@ -707,7 +820,16 @@ final class ConnectionManager: ObservableObject {
                 beginBackgroundTask()
                 stopDiscoveryOnly()
             default:
-                stopDiscovery()
+                // Stop Bonjour to save power, but keep BLE advertising
+                // so this device remains discoverable in background
+                bonjourDiscovery?.stopDiscovery()
+                bonjourDiscovery = nil
+                discoveryCoordinator?.stop()
+                discoveryCoordinator = nil
+                nearbyInteractionManager?.stopAllSessions()
+                nearbyInteractionManager = nil
+                stopNetworkPathMonitor()
+                // BLE kept alive via bluetooth-peripheral background mode
             }
         case .inactive:
             break
@@ -773,19 +895,21 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func handleBackgroundExpiration() {
-        logger.warning("Background task expiring, disconnecting gracefully")
+        logger.warning("Background task expiring")
 
-        // Gracefully close all connections
+        // Only disconnect relay (WebRTC) connections; keep local TCP connections alive
         Task {
-            for (_, connection) in connections {
-                await connection.disconnect()
+            for (peerID, peerConn) in connections {
+                if peerConn.transport is DataChannelTransport {
+                    logger.info("Closing relay connection for \(peerID.prefix(8)) on background expiry")
+                    await peerConn.disconnect()
+                    await MainActor.run { removeConnection(peerID: peerID) }
+                }
+                // Local TCP connections: preserved via iOS socket keepalive
             }
         }
 
-        // Also close legacy active connection
-        activeConnection?.cancel()
-        activeConnection = nil
-
+        // Legacy active connection: preserve (TCP), iOS maintains socket
         endBackgroundTask()
     }
 
@@ -838,18 +962,11 @@ final class ConnectionManager: ObservableObject {
         let gen = generation ?? connectionGeneration
         requestingTimeoutTask = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
                 guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .requesting = self.state {
-                    logger.warning("Connection request timed out after 15s")
-                    // Notify the acceptor so they can dismiss the consent sheet
+                    logger.warning("Connection request timed out after 10s")
                     if let conn = self.activeConnection {
-                        let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
-                        do {
-                            try await conn.sendMessage(cancel)
-                        } catch {
-                            logger.warning("Failed to send timeout cancel to peer: \(error.localizedDescription)")
-                        }
                         conn.cancel()
                     }
                     self.activeConnection = nil
@@ -873,14 +990,7 @@ final class ConnectionManager: ObservableObject {
                 guard let self, !Task.isCancelled, self.connectionGeneration == gen else { return }
                 if case .connecting = self.state {
                     logger.warning("Connection setup timed out after 10s")
-                    // Notify the acceptor so they can dismiss the consent sheet
                     if let conn = self.activeConnection {
-                        let cancel = PeerMessage.connectionCancel(senderID: self.localIdentity.id)
-                        do {
-                            try await conn.sendMessage(cancel)
-                        } catch {
-                            logger.warning("Failed to send setup timeout cancel to peer: \(error.localizedDescription)")
-                        }
                         conn.cancel()
                     }
                     self.activeConnection = nil
@@ -915,6 +1025,24 @@ final class ConnectionManager: ObservableObject {
         if activeConnectionCount >= maxConnections {
             statusToast = "Maximum connections reached (\(maxConnections))"
             return
+        }
+
+        // Early return for endpoints that don't use NWConnection — no state transition needed
+        switch peer.endpoint {
+        case .bleOnly:
+            if FeatureSettings.isRelayEnabled {
+                logger.info("BLE-only peer tapped with relay enabled, opening Relay Connect: \(peer.displayName)")
+                shouldShowRelayConnect = true
+            } else {
+                logger.info("BLE-only peer tapped: \(peer.displayName), showing WiFi required toast")
+                statusToast = String(localized: "Connect to the same WiFi network to transfer files")
+            }
+            return
+        case .relay:
+            logger.info("Relay peer connection not handled here")
+            return
+        default:
+            break
         }
 
         // Guard against duplicate requests (double-tap, rapid Reconnect)
@@ -956,6 +1084,8 @@ final class ConnectionManager: ObservableObject {
         case .manual(let host, let port):
             endpoint = .hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!)
             logger.info("Connecting to manual peer: \(host):\(port)")
+        case .bleOnly, .relay:
+            return // Already handled above
         }
 
         // Use TLS for outgoing connections only if we have an identity
@@ -987,6 +1117,14 @@ final class ConnectionManager: ObservableObject {
             do {
                 logger.info("Waiting for connection to be ready...")
                 try await connection.waitReady()
+                // Restore stateUpdateHandler (waitReady replaces it internally)
+                connection.stateUpdateHandler = { [weak self] nwState in
+                    logger.info("NWConnection state: \(String(describing: nwState))")
+                    Task { @MainActor in
+                        guard let self, self.connectionGeneration == generation else { return }
+                        self.handleConnectionStateChange(nwState)
+                    }
+                }
                 logger.info("Connection ready! Sending HELLO...")
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await connection.sendMessage(hello)
@@ -1274,6 +1412,9 @@ final class ConnectionManager: ObservableObject {
                 recordConnectedDevice()
                 resetReconnectAttempts()
                 recordConnectionSuccess(for: peerID)
+
+                // Start Nearby Interaction session if available
+                self.startNearbyInteractionSession(for: peerID, via: peerConnection)
             } catch {
                 cancelTimeouts()
                 activeConnection?.cancel()
@@ -1314,6 +1455,332 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    // MARK: - Relay Connection (Worker Signaling)
+
+    /// Active relay session timer.
+    private var relaySessionTimer: Task<Void, Never>?
+    /// Holds the PeerConnection waiting for PIN verification before handshake.
+    private var pendingRelayPeerConnection: PeerConnection?
+    /// Active BLE signaling instance.
+    private(set) var bleSignaling: BLESignaling?
+
+    /// Start a relay connection as the room creator (offerer).
+    func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
+        logger.info("Starting relay as creator for room: \(roomCode)")
+
+        let generation = UUID()
+        connectionGeneration = generation
+
+        // Force state to .requesting via valid path, handling any current state
+        forceTransitionToRequesting()
+
+        Task {
+            do {
+                // Get ICE/TURN credentials (fallback to STUN if TURN unavailable)
+                let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
+
+                // Set up DataChannelClient
+                let client = DataChannelClient()
+                let iceServers: [RTCIceServer]
+                if let creds = iceResult?.credentials {
+                    iceServers = ICEConfigurationProvider.iceServers(from: creds)
+                } else {
+                    iceServers = ICEConfigurationProvider.stunServers
+                }
+                client.setup(iceServers: iceServers)
+                guard client.createDataChannel() != nil else {
+                    throw DataChannelError.notInitialized
+                }
+
+                // Join room WebSocket (with auth token)
+                signaling.joinRoom(code: roomCode, token: roomToken)
+
+                // Wait for peer to join, then create and send offer
+                signaling.onPeerJoined = { [weak self] in
+                    guard let self, self.connectionGeneration == generation else { return }
+                    Task {
+                        do {
+                            let offer = try await client.createOffer()
+                            signaling.sendSDP(offer.sdp, type: "offer")
+                        } catch {
+                            logger.error("Failed to create offer: \(error.localizedDescription)")
+                        }
+                    }
+                }
+
+                // Handle answer
+                signaling.onSDPAnswer = { [weak self] sdp in
+                    guard let self, self.connectionGeneration == generation else { return }
+                    Task {
+                        do {
+                            let answer = RTCSessionDescription(type: .answer, sdp: sdp)
+                            try await client.setRemoteSDP(answer)
+                        } catch {
+                            logger.error("Failed to set remote SDP: \(error.localizedDescription)")
+                        }
+                    }
+                }
+
+                // Exchange ICE candidates
+                client.onICECandidate = { [weak signaling] candidate in
+                    signaling?.sendICECandidate(
+                        sdp: candidate.sdp,
+                        sdpMid: candidate.sdpMid,
+                        sdpMLineIndex: candidate.sdpMLineIndex
+                    )
+                }
+
+                signaling.onICECandidate = { sdp, sdpMid, sdpMLineIndex in
+                    Task {
+                        let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
+                        try? await client.addICECandidate(candidate)
+                    }
+                }
+
+                // Handle signaling errors
+                signaling.onError = { [weak self] error in
+                    guard let self, self.connectionGeneration == generation else { return }
+                    Task { @MainActor in
+                        self.transition(to: .failed(reason: error.localizedDescription))
+                    }
+                }
+
+                // Wait for data channel to open
+                let transport = DataChannelTransport(client: client)
+
+                transport.onStateChange = { [weak self, weak signaling] state in
+                    guard let self, self.connectionGeneration == generation else { return }
+                    Task { @MainActor in
+                        switch state {
+                        case .ready:
+                            signaling?.disconnect()
+                            self.completeRelayConnection(transport: transport, roomCode: roomCode)
+                        case .failed(let error):
+                            self.transition(to: .failed(reason: error.localizedDescription))
+                        case .cancelled:
+                            break
+                        case .connecting:
+                            break
+                        }
+                    }
+                }
+
+                // Timeout if negotiation doesn't complete in 30 seconds
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    guard let self, self.connectionGeneration == generation else { return }
+                    if case .requesting = self.state {
+                        self.transition(to: .failed(reason: "Relay connection timed out"))
+                    }
+                }
+
+            } catch {
+                guard connectionGeneration == generation else { return }
+                transition(to: .failed(reason: error.localizedDescription))
+            }
+        }
+    }
+
+    /// Start a relay connection as a joiner (answerer).
+    func startWorkerRelayAsJoiner(roomCode: String, signaling: WorkerSignaling) async throws {
+        logger.info("Starting relay as joiner for room: \(roomCode)")
+
+        let generation = UUID()
+        connectionGeneration = generation
+
+        // Force state to .requesting via valid path, handling any current state
+        forceTransitionToRequesting()
+
+        // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
+        let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
+
+        let client = DataChannelClient()
+        let iceServers: [RTCIceServer]
+        if let creds = iceResult?.credentials {
+            iceServers = ICEConfigurationProvider.iceServers(from: creds)
+        } else {
+            iceServers = ICEConfigurationProvider.stunServers
+        }
+        client.setup(iceServers: iceServers)
+        // Joiner doesn't create data channel — it receives one from the offerer
+
+        // Join room WebSocket (with auth token from ICE response)
+        signaling.joinRoom(code: roomCode, token: iceResult?.roomToken)
+
+        // Handle offer
+        signaling.onSDPOffer = { [weak self] sdp in
+            guard let self, self.connectionGeneration == generation else { return }
+            Task {
+                do {
+                    let offer = RTCSessionDescription(type: .offer, sdp: sdp)
+                    try await client.setRemoteSDP(offer)
+                    let answer = try await client.createAnswer()
+                    signaling.sendSDP(answer.sdp, type: "answer")
+                } catch {
+                    logger.error("Failed to handle offer: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        // Exchange ICE candidates
+        client.onICECandidate = { [weak signaling] candidate in
+            signaling?.sendICECandidate(
+                sdp: candidate.sdp,
+                sdpMid: candidate.sdpMid,
+                sdpMLineIndex: candidate.sdpMLineIndex
+            )
+        }
+
+        signaling.onICECandidate = { sdp, sdpMid, sdpMLineIndex in
+            Task {
+                let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
+                try? await client.addICECandidate(candidate)
+            }
+        }
+
+        // Handle signaling errors
+        signaling.onError = { [weak self] error in
+            guard let self, self.connectionGeneration == generation else { return }
+            Task { @MainActor in
+                self.transition(to: .failed(reason: error.localizedDescription))
+            }
+        }
+
+        // When remote data channel opens
+        let transport = DataChannelTransport(client: client)
+
+        transport.onStateChange = { [weak self, weak signaling] state in
+            guard let self, self.connectionGeneration == generation else { return }
+            Task { @MainActor in
+                switch state {
+                case .ready:
+                    signaling?.disconnect()
+                    self.completeRelayConnection(transport: transport, roomCode: roomCode)
+                case .failed(let error):
+                    self.transition(to: .failed(reason: error.localizedDescription))
+                case .cancelled:
+                    break
+                case .connecting:
+                    break
+                }
+            }
+        }
+
+        // Timeout if negotiation doesn't complete in 30 seconds
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            guard let self, self.connectionGeneration == generation else { return }
+            if case .requesting = self.state {
+                self.transition(to: .failed(reason: "Relay connection timed out"))
+            }
+        }
+    }
+
+    /// Complete the relay connection after DataChannel opens.
+    private func completeRelayConnection(transport: DataChannelTransport, roomCode: String) {
+        logger.info("Relay DataChannel open for room: \(roomCode)")
+
+        let peerID = "relay-\(roomCode)"
+        let remoteFingerprint = transport.client.remoteDTLSFingerprint
+        let localFingerprint = transport.client.localDTLSFingerprint
+        let peerIdentity = PeerIdentity(id: peerID, displayName: "Relay Peer", certificateFingerprint: remoteFingerprint)
+
+        let peerConnection = PeerConnection(
+            peerID: peerID,
+            transport: transport,
+            peerIdentity: peerIdentity,
+            localIdentity: localIdentity,
+            state: .connected
+        )
+
+        addConnection(peerConnection)
+        focusedPeerID = peerID
+
+        // Force to .connected — state may be .requesting or other states
+        if case .requesting = state {
+            transition(to: .connecting)
+            transition(to: .connected)
+        } else {
+            // Fallback: force through valid path
+            forceTransitionToRequesting()
+            transition(to: .connecting)
+            transition(to: .connected)
+        }
+
+        // Check if peer is already known (skip PIN verification)
+        let needsPIN: Bool
+        if let remoteFP = remoteFingerprint,
+           RelayAuthenticator.isKnownDevice(peerID: peerID, remoteFingerprint: remoteFP, store: deviceStore) {
+            logger.info("Relay peer is known device — skipping PIN verification")
+            needsPIN = false
+        } else if let localFP = localFingerprint, let remoteFP = remoteFingerprint {
+            // New device — show PIN verification, defer handshake
+            let pin = RelayAuthenticator.derivePIN(localFingerprint: localFP, remoteFingerprint: remoteFP)
+            pendingRelayPIN = RelayPINRequest(pin: pin, peerID: peerID, remoteFingerprint: remoteFP)
+            pendingRelayPeerConnection = peerConnection
+            needsPIN = true
+        } else {
+            needsPIN = false
+        }
+
+        guard !needsPIN else { return }
+
+        // Start the handshake — send HELLO (startReceiving already called by addConnection)
+        startRelayHandshake(peerConnection)
+    }
+
+    /// Confirm PIN verification — store fingerprint and begin handshake.
+    func confirmRelayPIN() {
+        guard let request = pendingRelayPIN else { return }
+        RelayAuthenticator.storeFingerprint(request.remoteFingerprint, for: request.peerID, store: deviceStore)
+        pendingRelayPIN = nil
+
+        // Resume the deferred handshake
+        if let pc = pendingRelayPeerConnection {
+            pendingRelayPeerConnection = nil
+            startRelayHandshake(pc)
+        }
+    }
+
+    /// Reject PIN verification — disconnect the relay peer.
+    func rejectRelayPIN() {
+        guard let request = pendingRelayPIN else { return }
+        pendingRelayPIN = nil
+        pendingRelayPeerConnection = nil
+        Task { await disconnect(from: request.peerID) }
+    }
+
+    /// Send HELLO and start the session timer for a relay connection.
+    private func startRelayHandshake(_ peerConnection: PeerConnection) {
+        Task {
+            do {
+                let hello = try PeerMessage.hello(identity: localIdentity)
+                try await peerConnection.sendMessage(hello)
+            } catch {
+                logger.error("Relay handshake failed: \(error.localizedDescription)")
+                transition(to: .failed(reason: error.localizedDescription))
+            }
+        }
+        startRelaySessionTimer(peerID: peerConnection.id, ttlSeconds: 900)
+    }
+
+    /// Start a timer that disconnects the relay after TTL expires.
+    private func startRelaySessionTimer(peerID: String, ttlSeconds: Int) {
+        relaySessionTimer?.cancel()
+        relaySessionTimer = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(ttlSeconds) * 1_000_000_000)
+                guard let self else { return }
+                await MainActor.run {
+                    self.statusToast = "Relay session expired"
+                    Task { await self.disconnect(from: peerID) }
+                }
+            } catch {
+                // Task cancelled
+            }
+        }
+    }
+
     func disconnect() {
         logger.info("disconnect() called — state=\(String(describing: self.state)), activeConnection=\(self.activeConnection != nil ? "exists" : "nil")")
         cancelTimeouts()
@@ -1323,6 +1790,12 @@ final class ConnectionManager: ObservableObject {
         let connection = activeConnection
         activeConnection = nil
         Task {
+            // Disconnect all multi-peer connections
+            for (peerID, peerConn) in self.connections {
+                await peerConn.disconnect(sendMessage: false)
+                await MainActor.run { self.removeConnection(peerID: peerID) }
+            }
+            // Legacy single connection cleanup
             if let connection {
                 let msg = PeerMessage.disconnect(senderID: localIdentity.id)
                 do {
@@ -1339,7 +1812,11 @@ final class ConnectionManager: ObservableObject {
     /// Disconnect from a specific peer.
     func disconnect(from peerID: String) async {
         guard let peerConn = connections[peerID] else { return }
+        if peerID == focusedPeerID {
+            activeConnection = nil
+        }
         await peerConn.disconnect()
+        nearbyInteractionManager?.stopSession(for: peerID)
         removeConnection(peerID: peerID)
         updateGlobalState()
     }
@@ -1356,7 +1833,22 @@ final class ConnectionManager: ObservableObject {
     /// Cleanup after the local user initiates disconnect.
     private func cleanupAfterDisconnect() {
         activeConnection = nil
+        consentMonitorTask?.cancel()
+        consentMonitorTask = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
+        pendingRelayPeerConnection = nil
+        pendingRelayPIN = nil
+        pendingIncomingRequest = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+        if let peerID = focusedPeerID {
+            failedPeers.removeValue(forKey: peerID)
+        }
         focusedPeerID = nil
+        nearbyInteractionManager?.stopAllSessions()
+        relaySessionTimer?.cancel()
+        relaySessionTimer = nil
         endBackgroundTask()
         transition(to: .disconnected)
         // Auto-resume discovery so the user returns to the Nearby tab seamlessly.
@@ -1602,6 +2094,63 @@ final class ConnectionManager: ObservableObject {
         case .pong:
             logger.debug("Heartbeat pong received from \(peerID)")
 
+        case .niTokenOffer:
+            guard let payload = message.payload else { return }
+            nearbyInteractionManager?.handleTokenOffer(payload, from: peerID) { [weak self] responseData in
+                guard let self else { return }
+                let response = PeerMessage(type: .niTokenResponse, payload: responseData, senderID: self.localIdentity.id)
+                Task {
+                    do { try await peerConnection.sendMessage(response) }
+                    catch { logger.warning("Failed to send NI token response: \(error.localizedDescription)") }
+                }
+            }
+
+        case .niTokenResponse:
+            guard let payload = message.payload else { return }
+            nearbyInteractionManager?.handleTokenResponse(payload, from: peerID)
+
+        case .clipboardSync:
+            guard FeatureSettings.isClipboardSyncEnabled else { return }
+            guard let payload = try? message.decodePayload(ClipboardSyncPayload.self) else {
+                logger.warning("Failed to decode ClipboardSyncPayload")
+                return
+            }
+            clipboardSyncManager.applyReceivedClipboard(payload)
+            NotificationManager.shared.postChatMessage(
+                from: peerConnection.peerIdentity.displayName,
+                text: NSLocalizedString("Clipboard synced", comment: "")
+            )
+
+        case .messageEdit:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageEditPayload.self) else {
+                logger.warning("Failed to decode MessageEditPayload")
+                return
+            }
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: peerID)
+
+        case .messageDelete:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageDeletePayload.self) else {
+                logger.warning("Failed to decode MessageDeletePayload")
+                return
+            }
+            chatManager.applyDelete(messageID: payload.messageID, peerID: peerID)
+
+        case .fileResume:
+            guard let payload = try? message.decodePayload(FileResumePayload.self) else {
+                logger.warning("Failed to decode FileResumePayload")
+                return
+            }
+            peerConnection.fileTransferSession?.handleResumeRequest(payload, peerConnection: peerConnection, senderID: localIdentity.id)
+
+        case .fileResumeAck:
+            guard let payload = try? message.decodePayload(FileResumeAckPayload.self) else {
+                logger.warning("Failed to decode FileResumeAckPayload")
+                return
+            }
+            peerConnection.fileTransferSession?.handleResumeAck(payload)
+
         default:
             break
         }
@@ -1649,6 +2198,11 @@ final class ConnectionManager: ObservableObject {
             resetReconnectAttempts()
             if let identity = peerIdentity {
                 recordConnectionSuccess(for: identity.id)
+            }
+
+            // Start Nearby Interaction for legacy path
+            if let peerID = peerIdentity?.id, let peerConn = connections[peerID] {
+                startNearbyInteractionSession(for: peerID, via: peerConn)
             }
 
         case .connectionReject:
@@ -1874,6 +2428,32 @@ final class ConnectionManager: ObservableObject {
             case .remove:
                 chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
             }
+
+        case .niTokenOffer, .niTokenResponse:
+            // NI tokens in legacy path — only handled in multi-connection path
+            break
+
+        case .clipboardSync:
+            guard FeatureSettings.isClipboardSyncEnabled else { return }
+            guard let payload = try? message.decodePayload(ClipboardSyncPayload.self) else {
+                logger.warning("Failed to decode ClipboardSyncPayload")
+                return
+            }
+            clipboardSyncManager.applyReceivedClipboard(payload)
+
+        case .messageEdit:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageEditPayload.self) else { return }
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: message.senderID)
+
+        case .messageDelete:
+            guard FeatureSettings.isChatEnabled else { return }
+            guard let payload = try? message.decodePayload(MessageDeletePayload.self) else { return }
+            chatManager.applyDelete(messageID: payload.messageID, peerID: message.senderID)
+
+        case .fileResume, .fileResumeAck:
+            // File resume only supported in multi-connection path
+            break
         }
     }
 
@@ -2056,6 +2636,63 @@ final class ConnectionManager: ObservableObject {
         case .remove:
             chatManager.removeReaction(emoji: emoji, from: messageID, by: localIdentity.id)
         }
+    }
+
+    // MARK: - Clipboard Sync
+
+    func sendClipboardSync(_ payload: ClipboardSyncPayload, to peerID: String) {
+        guard FeatureSettings.isClipboardSyncEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
+        guard let msg = try? PeerMessage.clipboardSync(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for clipboardSync")
+            return
+        }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send clipboard sync: \(error.localizedDescription)") }
+        }
+    }
+
+    func sendClipboardSyncToAll(_ payload: ClipboardSyncPayload) {
+        for (peerID, peerConn) in connections where peerConn.state.isConnected {
+            sendClipboardSync(payload, to: peerID)
+        }
+    }
+
+    // MARK: - Message Edit / Delete
+
+    func sendMessageEdit(messageID: String, newText: String, to peerID: String, groupID: String? = nil) {
+        guard FeatureSettings.isChatEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let payload = MessageEditPayload(messageID: messageID, newText: newText, groupID: groupID)
+        guard let msg = try? PeerMessage.messageEdit(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageEdit")
+            return
+        }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send message edit: \(error.localizedDescription)") }
+        }
+
+        chatManager.applyEdit(messageID: messageID, newText: newText, editedAt: Date(), peerID: peerID)
+    }
+
+    func sendMessageDelete(messageID: String, to peerID: String, groupID: String? = nil) {
+        guard FeatureSettings.isChatEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
+
+        let payload = MessageDeletePayload(messageID: messageID, groupID: groupID)
+        guard let msg = try? PeerMessage.messageDelete(payload, senderID: localIdentity.id) else {
+            logger.warning("Failed to create PeerMessage for messageDelete")
+            return
+        }
+        Task {
+            do { try await peerConn.sendMessage(msg) }
+            catch { logger.warning("Failed to send message delete: \(error.localizedDescription)") }
+        }
+
+        chatManager.applyDelete(messageID: messageID, peerID: peerID)
     }
 
     // MARK: - Chat

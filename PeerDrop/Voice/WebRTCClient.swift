@@ -12,7 +12,7 @@ final class WebRTCClient: NSObject {
     var onConnectionStateChange: ((RTCIceConnectionState) -> Void)?
 
     override init() {
-        RTCInitializeSSL()
+        RTCSSLInitializer.initialize()
         let encoderFactory = RTCDefaultVideoEncoderFactory()
         let decoderFactory = RTCDefaultVideoDecoderFactory()
         peerConnectionFactory = RTCPeerConnectionFactory(
@@ -20,10 +20,6 @@ final class WebRTCClient: NSObject {
             decoderFactory: decoderFactory
         )
         super.init()
-    }
-
-    deinit {
-        RTCCleanupSSL()
     }
 
     // MARK: - Setup
