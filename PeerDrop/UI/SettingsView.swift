@@ -11,7 +11,7 @@ struct SettingsView: View {
     @AppStorage("peerDropBLEDiscoveryEnabled") private var bleDiscoveryEnabled = true
     @AppStorage("peerDropRelayEnabled") private var relayEnabled = false
     @AppStorage("peerDropNotificationsEnabled") private var notificationsEnabled = false
-    @AppStorage("peerDropWorkerURL") private var workerURL = "https://peerdrop-signal.workers.dev"
+    @AppStorage("peerDropWorkerURL") private var workerURL = "https://peerdrop-signal.hanfourhuang.workers.dev"
     @State private var showAdvancedRelay = false
     @State private var showNotificationDeniedAlert = false
     @EnvironmentObject var connectionManager: ConnectionManager
