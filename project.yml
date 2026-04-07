@@ -35,8 +35,10 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        PEERDROP_WORKER_API_KEY: "f9ecf9c66fc765696d943ebe97e21dbfccd816c83cec08fe14a4683441a044df"
         CODE_SIGN_ENTITLEMENTS: PeerDrop/App/PeerDrop.entitlements
+    configFiles:
+      Debug: Secrets.xcconfig
+      Release: Secrets.xcconfig
     entitlements:
       path: PeerDrop/App/PeerDrop.entitlements
       properties:

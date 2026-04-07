@@ -86,3 +86,6 @@ Gemfile.lock
 
 # Fastlane screenshot backups
 fastlane/screenshots_framed_backup/
+
+# Secrets
+Secrets.xcconfig

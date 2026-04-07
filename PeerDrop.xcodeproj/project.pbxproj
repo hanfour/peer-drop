@@ -340,6 +340,7 @@
 		6A69B497E85725EA8A5E9C1D /* LaunchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreen.swift; sourceTree = "<group>"; };
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
+		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
@@ -478,6 +479,7 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
+				9EC0E908E1A38EE0458CEC1B /* peer-drop */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
@@ -776,6 +778,15 @@
 				FB09411CC81953144963CB18 /* PeerRowView.swift */,
 			);
 			path = Discovery;
+			sourceTree = "<group>";
+		};
+		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
+			isa = PBXGroup;
+			children = (
+				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop";
+			path = .;
 			sourceTree = "<group>";
 		};
 		A29F6E76ECC1DF4E1D976EFA /* Settings */ = {
@@ -1401,6 +1412,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1415,7 +1427,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				PEERDROP_WORKER_API_KEY = f9ecf9c66fc765696d943ebe97e21dbfccd816c83cec08fe14a4683441a044df;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1424,6 +1435,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1438,7 +1450,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				PEERDROP_WORKER_API_KEY = f9ecf9c66fc765696d943ebe97e21dbfccd816c83cec08fe14a4683441a044df;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

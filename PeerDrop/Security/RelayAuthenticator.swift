@@ -33,12 +33,26 @@ enum RelayAuthenticator {
     }
 
     /// Store the certificate fingerprint for a peer after successful authentication.
+    /// Creates the device record if it doesn't already exist (e.g. relay peers).
     @MainActor
     static func storeFingerprint(_ fingerprint: String, for peerID: String, store: DeviceRecordStore) {
         if let index = store.records.firstIndex(where: { $0.id == peerID }) {
             store.records[index].certificateFingerprint = fingerprint
-            store.save()
-            logger.info("Stored certificate fingerprint for peer \(peerID.prefix(8))")
+        } else {
+            var record = DeviceRecord(
+                id: peerID,
+                displayName: peerID,
+                sourceType: "relay",
+                host: nil,
+                port: nil,
+                lastConnected: Date(),
+                connectionCount: 1,
+                connectionHistory: [Date()]
+            )
+            record.certificateFingerprint = fingerprint
+            store.records.append(record)
         }
+        store.save()
+        logger.info("Stored certificate fingerprint for peer \(peerID.prefix(8))")
     }
 }
