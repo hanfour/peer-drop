@@ -1,24 +1,18 @@
 import Foundation
 
 enum PetAction: String, Codable {
-    // Basic
-    case idle
-    case walking
-    case sleeping
-    case evolving
-
+    // Movement
+    case idle, walking, run, jump
+    // Edge
+    case climb, hang, fall, sitEdge
+    // Life
+    case sleeping, eat, yawn, poop, evolving
     // Emotion
-    case wagTail
-    case freeze
-    case hideInShell
-    case zoomies
-
-    // Chat-aware
-    case notifyMessage
-    case climbOnBubble
-    case blockText
-    case bounceBetweenBubbles
-    case tiltHead
-    case stuffCheeks
-    case ignore
+    case happy, scared, angry, love
+    // Interaction
+    case tapReact, pickedUp, thrown, petted
+    // Legacy (kept for migration)
+    case wagTail, freeze, hideInShell, zoomies
+    case notifyMessage, climbOnBubble, blockText, bounceBetweenBubbles
+    case tiltHead, stuffCheeks, ignore
 }

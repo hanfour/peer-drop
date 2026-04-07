@@ -17,13 +17,13 @@ final class PetStateTests: XCTestCase {
     }
 
     func testPetLevelCaseIterable() {
-        XCTAssertEqual(PetLevel.allCases.count, 2)
+        XCTAssertEqual(PetLevel.allCases.count, 3)
     }
 
     // MARK: - PetGenome
 
     func testCanvasSize() {
-        XCTAssertEqual(PetGenome.canvasSize, 32)
+        XCTAssertEqual(PetGenome.canvasSize, 16)
     }
 
     func testGenomeMutation() {
@@ -41,10 +41,10 @@ final class PetStateTests: XCTestCase {
         XCTAssertTrue(changed, "Genome should change after 100 evolution mutations")
     }
 
-    func testGenomeMutationEvolutionAlwaysMutates() {
-        // Evolution trigger should always mutate (100% chance)
+    func testGenomeMutationEvolutionUsuallyMutates() {
+        // Evolution trigger should mutate most of the time (body is fixed, so 3/4 chance)
         var mutationCount = 0
-        for _ in 0..<20 {
+        for _ in 0..<40 {
             var genome = PetGenome.random()
             let original = genome
             genome.mutate(trigger: .evolution)
@@ -52,8 +52,8 @@ final class PetStateTests: XCTestCase {
                 mutationCount += 1
             }
         }
-        // All 20 should mutate (evolution = 100% chance)
-        XCTAssertEqual(mutationCount, 20, "Evolution trigger should always cause mutation")
+        // At least 50% should mutate (statistically ~75%)
+        XCTAssertGreaterThan(mutationCount, 20, "Evolution trigger should usually cause mutation")
     }
 
     func testPersonalityTraitsInRange() {
@@ -129,9 +129,16 @@ final class PetStateTests: XCTestCase {
         XCTAssertEqual(req?.minimumAge, 86400)
     }
 
-    func testEvolutionRequirementForBabyIsNil() {
+    func testEvolutionRequirementForBaby() {
         let req = EvolutionRequirement.for(.baby)
-        XCTAssertNil(req, "Baby evolution should not be defined in MVP")
+        XCTAssertNotNil(req)
+        XCTAssertEqual(req?.targetLevel, .child)
+        XCTAssertEqual(req?.requiredExperience, 500)
+    }
+
+    func testEvolutionRequirementForChildIsNil() {
+        let req = EvolutionRequirement.for(.child)
+        XCTAssertNil(req, "Child evolution not yet implemented")
     }
 
     // MARK: - SocialEntry

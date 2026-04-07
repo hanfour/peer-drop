@@ -6,9 +6,9 @@ final class PetRendererTests: XCTestCase {
     private let renderer = PetRenderer()
 
     private func makeGenome(
-        body: BodyGene = .round,
+        body: BodyGene = .bear,
         eyes: EyeGene = .dot,
-        limbs: LimbGene = .short,
+        limbs: LimbGene? = .short,
         pattern: PatternGene = .none,
         personality: Double = 0.5
     ) -> PetGenome {
@@ -30,8 +30,8 @@ final class PetRendererTests: XCTestCase {
     }
 
     func testDifferentGenomesProduceDifferentPixels() {
-        let genome1 = makeGenome(body: .round, eyes: .dot, limbs: .short)
-        let genome2 = makeGenome(body: .square, eyes: .dizzy, limbs: .long)
+        let genome1 = makeGenome(body: .bear, eyes: .dot, limbs: .short)
+        let genome2 = makeGenome(body: .cat, eyes: .dizzy, limbs: .long)
         let grid1 = renderer.render(genome: genome1, level: .baby, mood: .curious, animationFrame: 0)
         let grid2 = renderer.render(genome: genome2, level: .baby, mood: .curious, animationFrame: 0)
         XCTAssertNotEqual(grid1, grid2)

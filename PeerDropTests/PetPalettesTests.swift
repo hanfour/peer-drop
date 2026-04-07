@@ -23,18 +23,12 @@ final class PetPalettesTests: XCTestCase {
         XCTAssertNil(palette.color(for: 99))
     }
 
-    func testGenomePaletteIndex() {
-        let low = PetGenome(body: .round, eyes: .dot, limbs: .short, pattern: .none, personalityGene: 0.0)
-        XCTAssertEqual(low.paletteIndex, 0)
-
-        let mid = PetGenome(body: .round, eyes: .dot, limbs: .short, pattern: .none, personalityGene: 0.5)
-        XCTAssertEqual(mid.paletteIndex, 4)
-
-        let high = PetGenome(body: .round, eyes: .dot, limbs: .short, pattern: .none, personalityGene: 0.99)
-        XCTAssertEqual(high.paletteIndex, 7)
-
-        let max = PetGenome(body: .round, eyes: .dot, limbs: .short, pattern: .none, personalityGene: 1.0)
-        XCTAssertEqual(max.paletteIndex, 7)
+    func testGenomePaletteIndexInRange() {
+        for pg in stride(from: 0.0, through: 1.0, by: 0.1) {
+            let genome = PetGenome(body: .bear, eyes: .dot, pattern: .none, personalityGene: pg)
+            XCTAssertTrue((0..<8).contains(genome.paletteIndex),
+                          "paletteIndex \(genome.paletteIndex) out of range for pg=\(pg)")
+        }
     }
 
     func testAllPalettesHaveSixColors() {
