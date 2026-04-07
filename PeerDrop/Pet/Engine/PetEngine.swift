@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreGraphics
 
 @MainActor
 class PetEngine: ObservableObject {
@@ -7,8 +8,13 @@ class PetEngine: ObservableObject {
     @Published var currentAction: PetAction = .idle
     @Published var currentDialogue: String?
     @Published private(set) var renderedGrid: PixelGrid = .empty()
+    @Published private(set) var renderedImage: CGImage?
+    @Published var physicsState: PetPhysicsState = PetPhysicsState(
+        position: CGPoint(x: 60, y: 200), velocity: .zero, surface: .ground)
+    @Published var particles: [PetParticle] = []
 
     private let renderer = PetRenderer()
+    private let rendererV2 = PetRendererV2()
     private let animator = PetAnimationController()
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
@@ -57,7 +63,7 @@ class PetEngine: ObservableObject {
         }
 
         checkEvolution()
-        updateRenderedGrid()
+        updateRendering()
     }
 
     func handlePetMeeting(partnerGreeting: PetGreeting) {
@@ -75,10 +81,23 @@ class PetEngine: ObservableObject {
         pet.genome.personalityTraits.reaction(to: event)
     }
 
+    // MARK: - Particles
+
+    func spawnParticle(_ type: ParticleType, at offset: CGPoint = .zero) {
+        let pos = CGPoint(x: physicsState.position.x + offset.x,
+                          y: physicsState.position.y + offset.y - 40)
+        let particle = PetParticle(type: type, position: pos,
+                                    velocity: CGVector(dx: CGFloat.random(in: -20...20), dy: -30),
+                                    lifetime: 1.5)
+        particles.append(particle)
+        // Clean expired particles
+        particles.removeAll { $0.isExpired }
+    }
+
     // MARK: - Chat-aware behavior
     private func triggerChatBehavior() {
         let now = Date()
-        guard now.timeIntervalSince(lastBehaviorDate) > 30 else { return } // 30s cooldown
+        guard now.timeIntervalSince(lastBehaviorDate) > 30 else { return }
         lastBehaviorDate = now
         let traits = pet.genome.personalityTraits
         currentAction = traits.reaction(to: .chatActive)
@@ -104,19 +123,28 @@ class PetEngine: ObservableObject {
         pet.level = level
         currentAction = .evolving
         pet.genome.mutate(trigger: .evolution)
-        updateRenderedGrid()
+        updateRendering()
     }
 
     // MARK: - Rendering
-    private func updateRenderedGrid() {
+    private func updateRendering() {
+        // Legacy v1 renderer (for PixelView backward compat)
         renderedGrid = renderer.render(genome: pet.genome, level: pet.level,
                                         mood: pet.mood, animationFrame: animator.currentFrame)
+
+        // New v2 renderer
+        let scale = 8 // 16 * 8 = 128px display
+        renderedImage = rendererV2.render(
+            genome: pet.genome, level: pet.level, mood: pet.mood,
+            action: currentAction, frame: animator.currentFrame,
+            palette: palette, scale: scale,
+            facingRight: physicsState.facingRight)
     }
 
     private func setupAnimationObserver() {
         animator.startAnimation()
         animator.$currentFrame
-            .sink { [weak self] _ in self?.updateRenderedGrid() }
+            .sink { [weak self] _ in self?.updateRendering() }
             .store(in: &cancellables)
     }
 }
