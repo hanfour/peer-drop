@@ -36,6 +36,7 @@ struct FloatingPetView: View {
     private func startWandering() {
         wanderTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             Task { @MainActor in
+                guard engine.pet.level != .egg else { return }
                 guard !isDragging, engine.currentAction == .idle || engine.currentAction == .walking else { return }
                 let screen = UIScreen.main.bounds
                 let margin: CGFloat = 40

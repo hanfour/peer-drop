@@ -37,6 +37,15 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropDataMigrated")
                 }
 
+                // Fix stale worker URL from pre-1.3.0 (was missing subdomain)
+                if !UserDefaults.standard.bool(forKey: "peerDropWorkerURLMigrated") {
+                    let stored = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+                    if stored == "https://peerdrop-signal.workers.dev" {
+                        UserDefaults.standard.removeObject(forKey: "peerDropWorkerURL")
+                    }
+                    UserDefaults.standard.set(true, forKey: "peerDropWorkerURLMigrated")
+                }
+
                 // Load pet (mock for screenshots, saved for normal)
                 if ScreenshotModeProvider.shared.isActive {
                     petEngine.pet = ScreenshotModeProvider.shared.mockPetState

@@ -17,7 +17,7 @@ class PetEngine: ObservableObject {
     private var lastBehaviorDate = Date.distantPast
 
     var palette: ColorPalette {
-        PetPalettes.palette(for: pet.genome)
+        pet.level == .egg ? PetPalettes.egg : PetPalettes.palette(for: pet.genome)
     }
 
     var evolutionProgress: Double {

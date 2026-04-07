@@ -97,6 +97,16 @@ enum PetPalettes {
         ),
     ]
 
+    /// White egg palette — all eggs share this regardless of genome.
+    static let egg = ColorPalette(
+        outline:   Color(red: 0x8B/255, green: 0x7E/255, blue: 0x6A/255), // warm brown shell outline
+        primary:   Color(red: 0xFA/255, green: 0xF8/255, blue: 0xF0/255), // off-white shell
+        secondary: Color(red: 0xF0/255, green: 0xEC/255, blue: 0xE0/255), // slightly darker white
+        highlight: Color(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255), // pure white shine
+        accent:    Color(red: 0xA0/255, green: 0x98/255, blue: 0x88/255), // gray-brown cracks
+        pattern:   Color(red: 0xC8/255, green: 0xC0/255, blue: 0xB0/255)  // light tan pattern
+    )
+
     static func palette(for genome: PetGenome) -> ColorPalette {
         all[genome.paletteIndex]
     }
