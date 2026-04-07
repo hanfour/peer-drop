@@ -12,6 +12,7 @@ class PetEngine: ObservableObject {
     @Published var physicsState: PetPhysicsState = PetPhysicsState(
         position: CGPoint(x: 60, y: 200), velocity: .zero, surface: .ground)
     @Published var particles: [PetParticle] = []
+    @Published var poopState = PoopState()
 
     private let renderer = PetRenderer()
     private let rendererV2 = PetRendererV2()
@@ -92,6 +93,21 @@ class PetEngine: ObservableObject {
         particles.append(particle)
         // Clean expired particles
         particles.removeAll { $0.isExpired }
+    }
+
+    // MARK: - Poop
+
+    func dropPoop() {
+        let poopPos = CGPoint(x: physicsState.position.x,
+                               y: physicsState.position.y + 20)
+        poopState.drop(at: poopPos)
+        spawnParticle(.poop)
+    }
+
+    func cleanPoop(id: UUID) {
+        if poopState.clean(id: id) {
+            spawnParticle(.star)
+        }
     }
 
     // MARK: - Chat-aware behavior

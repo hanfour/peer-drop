@@ -9,6 +9,14 @@ struct FloatingPetView: View {
 
     var body: some View {
         ZStack {
+            // Poops on screen
+            ForEach(engine.poopState.poops) { poop in
+                Text("\u{1F4A9}")
+                    .font(.system(size: 20))
+                    .position(poop.position)
+                    .onTapGesture { engine.cleanPoop(id: poop.id) }
+            }
+
             // Particles
             ForEach(engine.particles) { particle in
                 PetParticleView(particle: particle)
