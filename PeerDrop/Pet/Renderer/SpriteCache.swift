@@ -8,6 +8,7 @@ final class SpriteCache {
         let action: PetAction
         let frame: Int
         let paletteIndex: Int
+        let scale: Int
     }
 
     private let maxEntries: Int
