@@ -118,19 +118,16 @@ struct PetGenome: Codable, Equatable {
         let shouldMutate = trigger == .evolution || Double.random(in: 0...1) < 0.3
         guard shouldMutate else { return }
 
-        let field = Int.random(in: 0..<4)
+        // Body is fixed after hatch — only eyes, pattern, personality can mutate
+        let field = Int.random(in: 0..<3)
         switch field {
         case 0:
-            // Body is fixed after hatch — skip mutation
             let others = EyeGene.allCases.filter { $0 != eyes }
             if let pick = others.randomElement() { eyes = pick }
         case 1:
-            let others = EyeGene.allCases.filter { $0 != eyes }
-            if let pick = others.randomElement() { eyes = pick }
-        case 2:
             let others = PatternGene.allCases.filter { $0 != pattern }
             if let pick = others.randomElement() { pattern = pick }
-        case 3:
+        case 2:
             personalityGene = Double.random(in: 0...1)
         default:
             break

@@ -1,28 +1,29 @@
 import XCTest
 @testable import PeerDrop
 
+@MainActor
 final class SpriteCacheTests: XCTestCase {
 
     func testCacheStoreAndRetrieve() {
         let cache = SpriteCache(maxEntries: 10)
         let img = TestSpriteHelper.make(width: 16, height: 16, fillIndex: 1)
-        let key = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0)
+        let key = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0, facingRight: true, mood: .curious)
         cache.set(img, for: key)
         XCTAssertNotNil(cache.get(key))
     }
 
     func testCacheMissReturnsNil() {
         let cache = SpriteCache(maxEntries: 10)
-        let key = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0)
+        let key = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0, facingRight: true, mood: .curious)
         XCTAssertNil(cache.get(key))
     }
 
     func testCacheEvictsOldEntries() {
         let cache = SpriteCache(maxEntries: 2)
         let img = TestSpriteHelper.make(width: 16, height: 16, fillIndex: 1)
-        let k1 = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0)
-        let k2 = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 1, paletteIndex: 0)
-        let k3 = SpriteCache.Key(body: .cat, stage: .baby, action: .walking, frame: 0, paletteIndex: 0)
+        let k1 = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0, facingRight: true, mood: .curious)
+        let k2 = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 1, paletteIndex: 0, facingRight: true, mood: .curious)
+        let k3 = SpriteCache.Key(body: .cat, stage: .baby, action: .walking, frame: 0, paletteIndex: 0, facingRight: true, mood: .curious)
         cache.set(img, for: k1)
         cache.set(img, for: k2)
         cache.set(img, for: k3)
@@ -34,7 +35,7 @@ final class SpriteCacheTests: XCTestCase {
     func testClearRemovesAll() {
         let cache = SpriteCache(maxEntries: 10)
         let img = TestSpriteHelper.make(width: 16, height: 16, fillIndex: 1)
-        let key = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0)
+        let key = SpriteCache.Key(body: .cat, stage: .baby, action: .idle, frame: 0, paletteIndex: 0, facingRight: true, mood: .curious)
         cache.set(img, for: key)
         cache.clear()
         XCTAssertNil(cache.get(key))

@@ -1,5 +1,6 @@
 import CoreGraphics
 
+@MainActor
 class PetRendererV2 {
 
     static let shared = PetRendererV2()
@@ -11,7 +12,8 @@ class PetRendererV2 {
 
         let cacheKey = SpriteCache.Key(body: genome.body, stage: level,
                                         action: action, frame: frame,
-                                        paletteIndex: genome.paletteIndex)
+                                        paletteIndex: genome.paletteIndex,
+                                        facingRight: facingRight, mood: mood)
 
         if let cached = cache.get(cacheKey) { return cached }
 

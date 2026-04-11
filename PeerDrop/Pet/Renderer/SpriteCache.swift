@@ -1,5 +1,6 @@
 import CoreGraphics
 
+@MainActor
 final class SpriteCache {
 
     struct Key: Hashable {
@@ -8,10 +9,13 @@ final class SpriteCache {
         let action: PetAction
         let frame: Int
         let paletteIndex: Int
+        let facingRight: Bool
+        let mood: PetMood
     }
 
     private let maxEntries: Int
     private var cache = [Key: CGImage]()
+    // O(n) access order — acceptable at 200 entries
     private var accessOrder = [Key]()
 
     init(maxEntries: Int = 200) {
