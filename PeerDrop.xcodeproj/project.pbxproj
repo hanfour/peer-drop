@@ -55,6 +55,8 @@
 		29F116297B31EBBCFAB62E3A /* TextMessagePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5A1838BC61752B0CC5210B /* TextMessagePayload.swift */; };
 		2B11B8027606E7A2F6423CCC /* DocumentPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC7F344C93ACB56C79EE3AE /* DocumentPickerView.swift */; };
 		2DE9670AF758F4F8752C9709 /* FrogSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75B994B2C20C496C8C7CC828 /* FrogSpriteDataTests.swift */; };
+		2E70E1011E0A12A9AE18E618 /* PetActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E80BF242E333D7D9042575E /* PetActivityAttributes.swift */; };
+		302E20A9AA48155F8AC10B82 /* PetActivityManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE2480F4283AC6F131BD23A8 /* PetActivityManagerTests.swift */; };
 		313D171E903E165B5BC87B12 /* MessageReceiptPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7705F837CE0206F184A116 /* MessageReceiptPayload.swift */; };
 		3246BD8F401F20D5D4978804 /* BearSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 477A41E6E1A1B021CA84D102 /* BearSpriteDataTests.swift */; };
 		3403A25FBE9065753255202C /* ConnectedTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EB2DE318C4EE011A85C7A5A /* ConnectedTab.swift */; };
@@ -84,6 +86,7 @@
 		43F565E58D2B64A13208EC39 /* EggSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679DBEB5DFF96E4BD98994CA /* EggSpriteData.swift */; };
 		442F5D1CE27D94FAEF3599AF /* PetRendererV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95C1A1B66AFC36BF4F93B71 /* PetRendererV2.swift */; };
 		4700A5799483DE1A0208A038 /* TwoDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DC79A8D29D6B05BC7B689B /* TwoDeviceTests.swift */; };
+		48F7251A47EA7A5CFCBB7FF0 /* PetSnapshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 707C3B175646BDCF72AEA51C /* PetSnapshotRendererTests.swift */; };
 		49D809D111FD49A18CB4EC6A /* PetSpriteTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4FEB1D28AF98AE21136D4C3 /* PetSpriteTemplates.swift */; };
 		4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */; };
 		4B9B72143D9C9EDD4C17A2EA /* PetBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6842DD7730A244B26924472 /* PetBubbleView.swift */; };
@@ -100,9 +103,11 @@
 		57D71CDA3778DBF7A5CA2AE5 /* RelayAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */; };
 		5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */; };
 		5869553DAA2A2C0975800025 /* DisconnectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D98B7E882918091D8A90224 /* DisconnectSheet.swift */; };
+		5B4DA49C23269F1504696BE2 /* IslandPose.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD4B029BD32A25CBD2809E57 /* IslandPose.swift */; };
 		5D59113DCD6E53DE9974640F /* TransferHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC682C14084D950A4869B2CE /* TransferHistoryView.swift */; };
 		5E80D5077A36825757B36CDA /* ChatIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E26A2A79E586A8C4C682EB /* ChatIntegrationTests.swift */; };
 		5F05578BC3709EF7DCA99577 /* SlimeSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB87A392E4530E49CD216CB /* SlimeSpriteData.swift */; };
+		606F4D3A864E978123E274F9 /* SharedPetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED3725529064EC164D81F20 /* SharedPetState.swift */; };
 		61C5755BCACA92C8D909B00B /* GroupEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */; };
 		62EE3D9CDBDADC0A2D8DC24B /* FileTransferSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD1B2B945FCDC84E81364EED /* FileTransferSession.swift */; };
 		6309076E3D2F3BB15C6C675B /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EF1CBD311D71DDF863068E4 /* ChatMessage.swift */; };
@@ -110,6 +115,7 @@
 		63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */; };
 		6691C0DC05645F5A6BB7DEC1 /* MediaPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */; };
 		6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */; };
+		691B5B8EFB4FD71AB62598A2 /* PetSnapshotRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33879AB0C9B537D534F9E4A /* PetSnapshotRenderer.swift */; };
 		6A8837F44D5DC1F207C3948F /* TEST_SPEC.md in Resources */ = {isa = PBXBuildFile; fileRef = 5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */; };
 		6B6410C32DB1D18AB98E29CD /* PetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F26B22168C306363EA07DE /* PetEngine.swift */; };
 		6BC209FDB9F4AA0CED375FA9 /* NWConnection+Async.swift in Sources */ = {isa = PBXBuildFile; fileRef = 515ABAB80F2FAFFA147E539E /* NWConnection+Async.swift */; };
@@ -179,6 +185,7 @@
 		A523E3D891FD690DFE7F9F63 /* MessageReceiptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94BD192C79B059E535261B80 /* MessageReceiptTests.swift */; };
 		A57846A4BAFDA2C46FCC2868 /* SpriteCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DB85D447B8686E729752D02 /* SpriteCache.swift */; };
 		A6B1CB07120DD34B949937E7 /* GuestPetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA02F82C01BC5DE57FF9CF2E /* GuestPetView.swift */; };
+		A6DCC6C547E2C0EACDF819E9 /* PetActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B735C5A49866A45A34253C6B /* PetActivityManager.swift */; };
 		A74847A67B418445595E82AF /* URL+Zip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4140F87FED34F546E01E5EDC /* URL+Zip.swift */; };
 		A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */; };
 		A94523D3B3E9B9DF528E7358 /* DiscoveryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67AD588AE5B03D2A0DE399F /* DiscoveryServiceTests.swift */; };
@@ -271,6 +278,7 @@
 		FBE541E91C5A872CE1B3029F /* DragonSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093CB8D661315EF3FEAC6C7A /* DragonSpriteDataTests.swift */; };
 		FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D3096AC5F3A6FEA67284EC /* SDPSignaling.swift */; };
 		FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */; };
+		FF96565D0CE33F0793FF2076 /* SharedPetStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6E0DA3644FE00ADAF76026 /* SharedPetStateTests.swift */; };
 		FFAED0C0D33E4E57C00B905B /* TransferMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */; };
 		FFD47E1B4FF52D6A95F0ABA4 /* SnapshotTestsDark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70A4736E257B8A642683317 /* SnapshotTestsDark.swift */; };
 /* End PBXBuildFile section */
@@ -388,6 +396,7 @@
 		552A2319622F9E4E38BBE4AB /* BirdSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BirdSpriteData.swift; sourceTree = "<group>"; };
 		55B012CC64A47A86BB25EBD9 /* PetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetState.swift; sourceTree = "<group>"; };
 		5767B6A73DE0E5BA62C8BCC1 /* PetPalettesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPalettesTests.swift; sourceTree = "<group>"; };
+		5A6E0DA3644FE00ADAF76026 /* SharedPetStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPetStateTests.swift; sourceTree = "<group>"; };
 		5AD6EF89412AB6F6D21874B2 /* ConnectionQRView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionQRView.swift; sourceTree = "<group>"; };
 		5BE45F7EE204F6F3E38ACB4A /* ReconnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectTests.swift; sourceTree = "<group>"; };
 		5D4717B3021E2DAD82772B39 /* PetLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLevel.swift; sourceTree = "<group>"; };
@@ -414,6 +423,7 @@
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
 		6E06927E83F57264F730DDE2 /* PoopState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoopState.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
+		707C3B175646BDCF72AEA51C /* PetSnapshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotRendererTests.swift; sourceTree = "<group>"; };
 		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
@@ -427,6 +437,7 @@
 		78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerAvatar.swift; sourceTree = "<group>"; };
 		79C51124583A29DC436159DD /* OctopusSpriteDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OctopusSpriteDataTests.swift; sourceTree = "<group>"; };
 		7BE30BAD21DDB022E0E0F577 /* PixelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelView.swift; sourceTree = "<group>"; };
+		7E80BF242E333D7D9042575E /* PetActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetActivityAttributes.swift; sourceTree = "<group>"; };
 		7EB2DE318C4EE011A85C7A5A /* ConnectedTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectedTab.swift; sourceTree = "<group>"; };
 		7ECC605BD759FF63C543E56B /* PetAnimationControllerV2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetAnimationControllerV2Tests.swift; sourceTree = "<group>"; };
 		8028C21C80DCFB5B48F3A7EB /* PINVerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PINVerificationView.swift; sourceTree = "<group>"; };
@@ -487,6 +498,7 @@
 		B67AD588AE5B03D2A0DE399F /* DiscoveryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryServiceTests.swift; sourceTree = "<group>"; };
 		B6E1809532A651DA46008F31 /* PeerGridItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerGridItemView.swift; sourceTree = "<group>"; };
 		B6F5C32BB0A6648236791F0B /* ProtocolVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolVersion.swift; sourceTree = "<group>"; };
+		B735C5A49866A45A34253C6B /* PetActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetActivityManager.swift; sourceTree = "<group>"; };
 		B9B620D00284A700C480C5E5 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		BA137F066528B6AB98E71424 /* ReactionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPickerView.swift; sourceTree = "<group>"; };
 		BB785F2E159A543F61378FB2 /* AcceptConnectionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptConnectionHelper.swift; sourceTree = "<group>"; };
@@ -519,6 +531,7 @@
 		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutConsentTests.swift; sourceTree = "<group>"; };
+		D33879AB0C9B537D534F9E4A /* PetSnapshotRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotRenderer.swift; sourceTree = "<group>"; };
 		D429FE1BFE72E640119F3568 /* ChatDataEncryptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDataEncryptor.swift; sourceTree = "<group>"; };
 		D4653158AF5095EAE1B940AA /* PixelGridTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelGridTests.swift; sourceTree = "<group>"; };
 		D4D28254D09D4993B28316CD /* FileTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransfer.swift; sourceTree = "<group>"; };
@@ -530,8 +543,10 @@
 		DAB5476BBC66A9EA04119567 /* ChatManagerGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatManagerGroupTests.swift; sourceTree = "<group>"; };
 		DC117A4A467AED1322168E15 /* FileTransferE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferE2ETests.swift; sourceTree = "<group>"; };
 		DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComprehensiveVerificationTests.swift; sourceTree = "<group>"; };
+		DD4B029BD32A25CBD2809E57 /* IslandPose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandPose.swift; sourceTree = "<group>"; };
 		DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupReadReceiptView.swift; sourceTree = "<group>"; };
 		DE0DC6FCDFB08A5E2B4BCB09 /* PaletteSwapRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteSwapRenderer.swift; sourceTree = "<group>"; };
+		DE2480F4283AC6F131BD23A8 /* PetActivityManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetActivityManagerTests.swift; sourceTree = "<group>"; };
 		E037612CE594D0990C235B8F /* PetDialogEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetDialogEngineTests.swift; sourceTree = "<group>"; };
 		E29EC77ADD9F60FE69C40C0D /* SpriteSheetLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteSheetLoader.swift; sourceTree = "<group>"; };
 		E4FEB1D28AF98AE21136D4C3 /* PetSpriteTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSpriteTemplates.swift; sourceTree = "<group>"; };
@@ -547,6 +562,7 @@
 		ED5A1838BC61752B0CC5210B /* TextMessagePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextMessagePayload.swift; sourceTree = "<group>"; };
 		ED61426A4AA5BA587AA09CE9 /* DeviceRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecord.swift; sourceTree = "<group>"; };
 		EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullFeatureVerificationTests.swift; sourceTree = "<group>"; };
+		EED3725529064EC164D81F20 /* SharedPetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPetState.swift; sourceTree = "<group>"; };
 		F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PeerDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1547C59857B7BD88CF8516D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -686,6 +702,7 @@
 				46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */,
 				FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */,
 				9213B13A8B9B9DF21664EA58 /* PerformanceTests.swift */,
+				DE2480F4283AC6F131BD23A8 /* PetActivityManagerTests.swift */,
 				7ECC605BD759FF63C543E56B /* PetAnimationControllerV2Tests.swift */,
 				982C0858F44441D64C0F6487 /* PetBehaviorControllerTests.swift */,
 				E037612CE594D0990C235B8F /* PetDialogEngineTests.swift */,
@@ -699,6 +716,7 @@
 				F556C00DB66D5D59DFABE97D /* PetPhysicsEngineTests.swift */,
 				971DA144894C9606FF063610 /* PetRendererTests.swift */,
 				B338F5E319B87708D60DCA19 /* PetRendererV2Tests.swift */,
+				707C3B175646BDCF72AEA51C /* PetSnapshotRendererTests.swift */,
 				35C973C678BBCA30464FCE38 /* PetSocialEngineTests.swift */,
 				35CD43629D6CFC83BBC25854 /* PetSpriteTemplatesTests.swift */,
 				61EB348480EABE1C3471F157 /* PetStateTests.swift */,
@@ -709,6 +727,7 @@
 				5BE45F7EE204F6F3E38ACB4A /* ReconnectTests.swift */,
 				6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */,
 				0D66F32C1146402F70397940 /* RetryPolicyTests.swift */,
+				5A6E0DA3644FE00ADAF76026 /* SharedPetStateTests.swift */,
 				1A98C447090CA6B5E431F8CF /* SlimeSpriteDataTests.swift */,
 				3A4BD6EB7D09BF1ACA6B8381 /* SpriteCacheTests.swift */,
 				6C858E8695A54E3D0474B8BC /* SpriteCompositorTests.swift */,
@@ -927,6 +946,17 @@
 			path = Chat;
 			sourceTree = "<group>";
 		};
+		98245FEC976C4453E2733CAA /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				DD4B029BD32A25CBD2809E57 /* IslandPose.swift */,
+				7E80BF242E333D7D9042575E /* PetActivityAttributes.swift */,
+				D33879AB0C9B537D534F9E4A /* PetSnapshotRenderer.swift */,
+				EED3725529064EC164D81F20 /* SharedPetState.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		9E38D04C95D6ED7C23584D56 /* Discovery */ = {
 			isa = PBXGroup;
 			children = (
@@ -1056,6 +1086,7 @@
 			isa = PBXGroup;
 			children = (
 				CDEABE1FBBD6399C9F432A9E /* InteractionTracker.swift */,
+				B735C5A49866A45A34253C6B /* PetActivityManager.swift */,
 				875CC6A80A6C3A38571013C5 /* PetBehaviorController.swift */,
 				D1154746BAA9972114FA8C15 /* PetDialogEngine.swift */,
 				C2F26B22168C306363EA07DE /* PetEngine.swift */,
@@ -1073,6 +1104,7 @@
 				C2F45780F9B22C536173D55C /* Persistence */,
 				C36AE333BD0F060C3B9AE83A /* Protocol */,
 				94344407A8D0B89C53B65555 /* Renderer */,
+				98245FEC976C4453E2733CAA /* Shared */,
 				54E6B53B167E1939B4B8C07C /* Sprites */,
 				C2D5D4CA3F56CFDA1A634E33 /* UI */,
 			);
@@ -1331,6 +1363,7 @@
 				FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */,
 				1EA6328B53F8E3CB67E0D401 /* PeerTransportTests.swift in Sources */,
 				C23703D3233423E7B97BF640 /* PerformanceTests.swift in Sources */,
+				302E20A9AA48155F8AC10B82 /* PetActivityManagerTests.swift in Sources */,
 				1564C99F8CC926774BE6932D /* PetAnimationControllerV2Tests.swift in Sources */,
 				E88F3F87E73BC8FEE5B7A971 /* PetBehaviorControllerTests.swift in Sources */,
 				36004B2F86E64694C952C3DA /* PetDialogEngineTests.swift in Sources */,
@@ -1344,6 +1377,7 @@
 				E2DB5EF89F53057350404EC9 /* PetPhysicsEngineTests.swift in Sources */,
 				CF763C13606256D189889024 /* PetRendererTests.swift in Sources */,
 				949E25207C5599D8E1FB2E70 /* PetRendererV2Tests.swift in Sources */,
+				48F7251A47EA7A5CFCBB7FF0 /* PetSnapshotRendererTests.swift in Sources */,
 				285C6DC2F8C8E3F6A6C21FB4 /* PetSocialEngineTests.swift in Sources */,
 				544C2A4844B91D4E0BE883A6 /* PetSpriteTemplatesTests.swift in Sources */,
 				1BE01D465977D52EA82E85C3 /* PetStateTests.swift in Sources */,
@@ -1354,6 +1388,7 @@
 				8685EB1F6658650B6B97A528 /* ReconnectTests.swift in Sources */,
 				57D71CDA3778DBF7A5CA2AE5 /* RelayAuthenticatorTests.swift in Sources */,
 				899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */,
+				FF96565D0CE33F0793FF2076 /* SharedPetStateTests.swift in Sources */,
 				C1BB9FCDE5745E9A4F258094 /* SlimeSpriteDataTests.swift in Sources */,
 				1DBAD86759194AC3B39CB6EE /* SpriteCacheTests.swift in Sources */,
 				87BA8CAA57B997254D5000FA /* SpriteCompositorTests.swift in Sources */,
@@ -1440,6 +1475,7 @@
 				912EDC4A9509498C5AD65FD4 /* ImageCache.swift in Sources */,
 				3595C3CCDE703AE5A32D38F7 /* InteractionTracker.swift in Sources */,
 				36FA607C123E15E115270D78 /* InteractionType.swift in Sources */,
+				5B4DA49C23269F1504696BE2 /* IslandPose.swift in Sources */,
 				208295A89E6A1DA82C9D7856 /* LaunchScreen.swift in Sources */,
 				202AEE36D66263D6678979B4 /* LibraryTab.swift in Sources */,
 				C8610709388D003A0C81EB85 /* ManualConnectView.swift in Sources */,
@@ -1468,6 +1504,8 @@
 				DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */,
 				086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */,
 				7BE6739E622B19394DCAC5CA /* PetAction.swift in Sources */,
+				2E70E1011E0A12A9AE18E618 /* PetActivityAttributes.swift in Sources */,
+				A6DCC6C547E2C0EACDF819E9 /* PetActivityManager.swift in Sources */,
 				D54BEBA94D64DC3E79B1E64D /* PetAnimationController.swift in Sources */,
 				7BE5ACE56563DF928E9DDC13 /* PetBehaviorController.swift in Sources */,
 				4B9B72143D9C9EDD4C17A2EA /* PetBubbleView.swift in Sources */,
@@ -1488,6 +1526,7 @@
 				6D8962255F2AB22A38A33899 /* PetRenderer.swift in Sources */,
 				442F5D1CE27D94FAEF3599AF /* PetRendererV2.swift in Sources */,
 				129DB963A1C4849488D78A41 /* PetSecretChatRow.swift in Sources */,
+				691B5B8EFB4FD71AB62598A2 /* PetSnapshotRenderer.swift in Sources */,
 				6DD18FF9C851745D3AEE7691 /* PetSocialEngine.swift in Sources */,
 				49D809D111FD49A18CB4EC6A /* PetSpriteTemplates.swift in Sources */,
 				FA6FFF85CFED0891C8F20564 /* PetState.swift in Sources */,
@@ -1505,6 +1544,7 @@
 				FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */,
 				4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */,
 				EC38263A97EFDFA52ACC9377 /* SettingsView.swift in Sources */,
+				606F4D3A864E978123E274F9 /* SharedPetState.swift in Sources */,
 				5F05578BC3709EF7DCA99577 /* SlimeSpriteData.swift in Sources */,
 				8E6B351D5F26FEE0DBB4612F /* SocialEntry.swift in Sources */,
 				A57846A4BAFDA2C46FCC2868 /* SpriteCache.swift in Sources */,

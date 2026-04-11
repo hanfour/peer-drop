@@ -45,6 +45,8 @@ targets:
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.hanfour.peerdrop
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.hanfour.peerdrop
+        com.apple.security.application-groups:
+          - group.com.hanfour.peerdrop
     info:
       path: PeerDrop/App/Info.plist
       properties:
