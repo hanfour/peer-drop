@@ -1479,9 +1479,17 @@ final class ConnectionManager: ObservableObject {
         // Force state to .requesting via valid path, handling any current state
         forceTransitionToRequesting()
 
+        // Join WebSocket immediately — we already have the room token from createRoom.
+        // Use AsyncStream to safely bridge the onPeerJoined callback; it buffers the
+        // event if the joiner connects before the offer is ready.
+        let peerJoinedStream = AsyncStream<Void> { continuation in
+            signaling.onPeerJoined = { continuation.yield(()) }
+        }
+        signaling.joinRoom(code: roomCode, token: roomToken)
+
         Task {
             do {
-                // Get ICE/TURN credentials (fallback to STUN if TURN unavailable)
+                // Fetch ICE/TURN credentials in parallel with WebSocket join
                 let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
 
                 // Set up DataChannelClient
@@ -1497,36 +1505,10 @@ final class ConnectionManager: ObservableObject {
                     throw DataChannelError.notInitialized
                 }
 
-                // Join room WebSocket (with auth token)
-                signaling.joinRoom(code: roomCode, token: roomToken)
+                // Pre-create the offer to start ICE gathering early.
+                let offer = try await client.createOffer()
 
-                // Wait for peer to join, then create and send offer
-                signaling.onPeerJoined = { [weak self] in
-                    guard let self, self.connectionGeneration == generation else { return }
-                    Task {
-                        do {
-                            let offer = try await client.createOffer()
-                            signaling.sendSDP(offer.sdp, type: "offer")
-                        } catch {
-                            logger.error("Failed to create offer: \(error.localizedDescription)")
-                        }
-                    }
-                }
-
-                // Handle answer
-                signaling.onSDPAnswer = { [weak self] sdp in
-                    guard let self, self.connectionGeneration == generation else { return }
-                    Task {
-                        do {
-                            let answer = RTCSessionDescription(type: .answer, sdp: sdp)
-                            try await client.setRemoteSDP(answer)
-                        } catch {
-                            logger.error("Failed to set remote SDP: \(error.localizedDescription)")
-                        }
-                    }
-                }
-
-                // Exchange ICE candidates
+                // Exchange ICE candidates (must be set before sending offer)
                 client.onICECandidate = { [weak signaling] candidate in
                     signaling?.sendICECandidate(
                         sdp: candidate.sdp,
@@ -1539,6 +1521,24 @@ final class ConnectionManager: ObservableObject {
                     Task {
                         let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
                         try? await client.addICECandidate(candidate)
+                    }
+                }
+
+                // Wait for peer to join (returns immediately if already buffered)
+                for await _ in peerJoinedStream { break }
+                guard self.connectionGeneration == generation else { return }
+                signaling.sendSDP(offer.sdp, type: "offer")
+
+                // Handle answer
+                signaling.onSDPAnswer = { [weak self] sdp in
+                    guard let self, self.connectionGeneration == generation else { return }
+                    Task {
+                        do {
+                            let answer = RTCSessionDescription(type: .answer, sdp: sdp)
+                            try await client.setRemoteSDP(answer)
+                        } catch {
+                            logger.error("Failed to set remote SDP: \(error.localizedDescription)")
+                        }
                     }
                 }
 
