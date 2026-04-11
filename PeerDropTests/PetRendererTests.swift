@@ -6,13 +6,12 @@ final class PetRendererTests: XCTestCase {
     private let renderer = PetRenderer()
 
     private func makeGenome(
-        body: BodyGene = .round,
+        body: BodyGene = .bear,
         eyes: EyeGene = .dot,
-        limbs: LimbGene = .short,
         pattern: PatternGene = .none,
         personality: Double = 0.5
     ) -> PetGenome {
-        PetGenome(body: body, eyes: eyes, limbs: limbs, pattern: pattern, personalityGene: personality)
+        PetGenome(body: body, eyes: eyes, pattern: pattern, personalityGene: personality)
     }
 
     func testRenderEggProducesPixels() {
@@ -30,8 +29,8 @@ final class PetRendererTests: XCTestCase {
     }
 
     func testDifferentGenomesProduceDifferentPixels() {
-        let genome1 = makeGenome(body: .round, eyes: .dot, limbs: .short)
-        let genome2 = makeGenome(body: .square, eyes: .dizzy, limbs: .long)
+        let genome1 = makeGenome(body: .bear, eyes: .dot)
+        let genome2 = makeGenome(body: .cat, eyes: .dizzy)
         let grid1 = renderer.render(genome: genome1, level: .baby, mood: .curious, animationFrame: 0)
         let grid2 = renderer.render(genome: genome2, level: .baby, mood: .curious, animationFrame: 0)
         XCTAssertNotEqual(grid1, grid2)
@@ -68,11 +67,11 @@ final class PetRendererTests: XCTestCase {
     }
 
     func testAllLimbTypesRender() {
-        for limb in LimbGene.allCases {
-            let genome = makeGenome(limbs: limb)
-            let grid = renderer.render(genome: genome, level: .baby, mood: .curious, animationFrame: 0)
-            XCTAssertTrue(grid.activePixelCount > 0)
-        }
+        // Limbs are deprecated in v2; verify genome with legacy limbs still renders
+        var genome = makeGenome()
+        genome.limbs = .short
+        let grid = renderer.render(genome: genome, level: .baby, mood: .curious, animationFrame: 0)
+        XCTAssertTrue(grid.activePixelCount > 0)
     }
 
     func testGridSizeIs32() {

@@ -4,7 +4,7 @@ import XCTest
 final class PetPayloadTests: XCTestCase {
 
     private func makeGenome() -> PetGenome {
-        PetGenome(body: .round, eyes: .dot, limbs: .short, pattern: .none, personalityGene: 0.5)
+        PetGenome(body: .bear, eyes: .dot, pattern: .none, personalityGene: 0.5)
     }
 
     // MARK: - PetGreeting Codable

@@ -308,9 +308,8 @@ final class ScreenshotModeProvider {
             ("Mochi", "麻糬", "麻薯", "もち", "모찌")
 
         let genome = PetGenome(
-            body: .round,
+            body: .bear,
             eyes: .dot,
-            limbs: .short,
             pattern: .none,
             personalityGene: 0.4
         )
