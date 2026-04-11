@@ -12,6 +12,7 @@ class PetEngine: ObservableObject {
     @Published var physicsState: PetPhysicsState = PetPhysicsState(
         position: CGPoint(x: 60, y: 200), velocity: .zero, surface: .ground)
     @Published var particles: [PetParticle] = []
+    @Published var poopState = PoopState()
 
     private let renderer = PetRenderer()
     private let rendererV2 = PetRendererV2()
@@ -81,6 +82,27 @@ class PetEngine: ObservableObject {
         pet.genome.personalityTraits.reaction(to: event)
     }
 
+    // MARK: - Poop & Stroke
+
+    func cleanPoop(id: UUID) {
+        guard poopState.clean(id: id) else { return }
+        pet.experience += 1
+        particles.append(PetParticle(type: .star, position: physicsState.position,
+                                      velocity: CGVector(dx: 0, dy: -20), lifetime: 0.8))
+        checkEvolution()
+    }
+
+    func handlePetStroke() {
+        pet.experience += 3
+        currentAction = .petted
+        for _ in 0..<3 {
+            let offset = CGVector(dx: Double.random(in: -20...20), dy: Double.random(in: -40...(-10)))
+            particles.append(PetParticle(type: .heart, position: physicsState.position,
+                                          velocity: offset, lifetime: 1.0))
+        }
+        checkEvolution()
+    }
+
     // MARK: - Chat-aware behavior
     private func triggerChatBehavior() {
         let now = Date()
@@ -110,6 +132,12 @@ class PetEngine: ObservableObject {
         pet.level = level
         currentAction = .evolving
         pet.genome.mutate(trigger: .evolution)
+        // Spawn 5 star particles
+        for _ in 0..<5 {
+            let vel = CGVector(dx: Double.random(in: -30...30), dy: Double.random(in: -50...(-10)))
+            particles.append(PetParticle(type: .star, position: physicsState.position,
+                                          velocity: vel, lifetime: 1.2))
+        }
         updateRenderedGrid()
     }
 

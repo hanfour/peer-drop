@@ -69,16 +69,10 @@ class PetRendererV2 {
     }
 
     private func spriteData(for body: BodyGene, stage: PetLevel, action: PetAction) -> [[[UInt8]]]? {
-        switch body {
-        case .cat: return CatSpriteData.baby[action]
-        default: return CatSpriteData.baby[action] // fallback to cat
-        }
+        SpriteDataRegistry.sprites(for: body, stage: stage)?[action]
     }
 
     private func bodyMeta(for body: BodyGene) -> BodyMeta {
-        switch body {
-        case .cat: return CatSpriteData.meta
-        default: return CatSpriteData.meta // fallback
-        }
+        SpriteDataRegistry.meta(for: body)
     }
 }
