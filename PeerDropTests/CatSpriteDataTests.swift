@@ -54,4 +54,24 @@ final class CatSpriteDataTests: XCTestCase {
             }
         }
     }
+
+    func testCatChildHasAllActions() {
+        let required: [PetAction] = [.idle, .walking, .run, .jump, .climb, .hang, .fall, .sitEdge,
+                                      .sleeping, .eat, .yawn, .poop, .happy, .scared, .angry,
+                                      .love, .tapReact, .pickedUp, .thrown, .petted]
+        for action in required {
+            XCTAssertNotNil(CatSpriteData.child[action], "Missing cat child sprite for \(action)")
+        }
+    }
+
+    func testCatChildFramesAre16x16() {
+        for (action, frames) in CatSpriteData.child {
+            for (i, frame) in frames.enumerated() {
+                XCTAssertEqual(frame.count, 16, "child \(action) frame \(i) rows")
+                for (row, pixels) in frame.enumerated() {
+                    XCTAssertEqual(pixels.count, 16, "child \(action) frame \(i) row \(row) cols")
+                }
+            }
+        }
+    }
 }
