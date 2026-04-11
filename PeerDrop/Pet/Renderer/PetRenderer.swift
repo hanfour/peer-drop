@@ -6,7 +6,7 @@ class PetRenderer {
         switch level {
         case .egg:
             return renderEgg(genome: genome, frame: animationFrame)
-        case .baby:
+        case .baby, .child:
             return renderBaby(genome: genome, mood: mood, frame: animationFrame)
         }
     }
@@ -69,7 +69,7 @@ class PetRenderer {
         grid.stamp(template: eyeTemplate, at: (eyeX, eyeY))
 
         // 3. Limbs
-        if let limbTemplate = PetSpriteTemplates.limbs(for: genome.limbs, frame: frame) {
+        if let limbs = genome.limbs, let limbTemplate = PetSpriteTemplates.limbs(for: limbs, frame: frame) {
             let leftX = bodyX + bodyTemplate.limbLeftAnchor.x + limbTemplate.leftOffset.x
             let leftY = bodyY + bodyTemplate.limbLeftAnchor.y + limbTemplate.leftOffset.y
             grid.stamp(template: limbTemplate.left, at: (leftX, leftY))

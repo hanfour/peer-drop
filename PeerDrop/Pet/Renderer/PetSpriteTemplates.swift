@@ -64,9 +64,12 @@ enum PetSpriteTemplates {
     static func body(for gene: BodyGene) -> [BodyTemplate] {
         let t: BodyTemplate
         switch gene {
-        case .round: t = bodyRound
-        case .square: t = bodySquare
-        case .oval: t = bodyOval
+        case .bear, .dog, .frog, .octopus:
+            t = bodyRound
+        case .cat, .rabbit, .dragon:
+            t = bodySquare
+        case .slime, .bird, .ghost:
+            t = bodyOval
         }
         return [t, t]
     }

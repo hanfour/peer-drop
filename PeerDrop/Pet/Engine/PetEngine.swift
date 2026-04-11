@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreGraphics
 
 @MainActor
 class PetEngine: ObservableObject {
@@ -7,9 +8,14 @@ class PetEngine: ObservableObject {
     @Published var currentAction: PetAction = .idle
     @Published var currentDialogue: String?
     @Published private(set) var renderedGrid: PixelGrid = .empty()
+    @Published private(set) var renderedImage: CGImage?
+    @Published var physicsState: PetPhysicsState = PetPhysicsState(
+        position: CGPoint(x: 60, y: 200), velocity: .zero, surface: .ground)
+    @Published var particles: [PetParticle] = []
 
     private let renderer = PetRenderer()
-    private let animator = PetAnimationController()
+    private let rendererV2 = PetRendererV2()
+    let animator = PetAnimationController()
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
     private let socialEngine = PetSocialEngine()
@@ -108,9 +114,19 @@ class PetEngine: ObservableObject {
     }
 
     // MARK: - Rendering
+    func updateRenderedImage() {
+        let scale = 8
+        let pal: ColorPalette = pet.level == .egg ? PetPalettes.egg : PetPalettes.palette(for: pet.genome)
+        renderedImage = rendererV2.render(
+            genome: pet.genome, level: pet.level, action: currentAction, mood: pet.mood,
+            frame: animator.currentFrame, palette: pal, scale: scale,
+            facingRight: physicsState.facingRight)
+    }
+
     private func updateRenderedGrid() {
         renderedGrid = renderer.render(genome: pet.genome, level: pet.level,
                                         mood: pet.mood, animationFrame: animator.currentFrame)
+        updateRenderedImage()
     }
 
     private func setupAnimationObserver() {
