@@ -90,6 +90,7 @@ class PetEngine: ObservableObject {
         particles.append(PetParticle(type: .star, position: physicsState.position,
                                       velocity: CGVector(dx: 0, dy: -20), lifetime: 0.8))
         checkEvolution()
+        updateRenderedImage()
     }
 
     func handlePetStroke() {
@@ -101,6 +102,7 @@ class PetEngine: ObservableObject {
                                           velocity: offset, lifetime: 1.0))
         }
         checkEvolution()
+        updateRenderedImage()
     }
 
     // MARK: - Chat-aware behavior
@@ -131,7 +133,10 @@ class PetEngine: ObservableObject {
     private func evolve(to level: PetLevel) {
         pet.level = level
         currentAction = .evolving
-        pet.genome.mutate(trigger: .evolution)
+        // 10% mutation chance on baby→child evolution
+        if level == .child && Double.random(in: 0...1) < 0.1 {
+            pet.genome.mutate(trigger: .evolution)
+        }
         // Spawn 5 star particles
         for _ in 0..<5 {
             let vel = CGVector(dx: Double.random(in: -30...30), dy: Double.random(in: -50...(-10)))

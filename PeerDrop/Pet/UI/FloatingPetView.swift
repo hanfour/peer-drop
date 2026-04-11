@@ -79,6 +79,7 @@ struct FloatingPetView: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30)
                     .onEnded { value in
+                        guard !isDragging else { return }
                         let hVel = abs(value.velocity.width)
                         let vVel = abs(value.velocity.height)
                         if hVel > vVel && hVel > 200 {
