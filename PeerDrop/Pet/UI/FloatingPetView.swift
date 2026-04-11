@@ -2,57 +2,160 @@ import SwiftUI
 
 struct FloatingPetView: View {
     @ObservedObject var engine: PetEngine
-    @State private var position = CGPoint(x: 60, y: 200)
     @State private var isDragging = false
     @State private var showInteractionPanel = false
-    @State private var wanderTimer: Timer?
+    @State private var dragStartPosition: CGPoint = .zero
+    @State private var dragStartTime: Date = .init()
+    @State private var lastDragPosition: CGPoint = .zero
+    @State private var physicsTimer: Timer?
+    @State private var behaviorTimer: Timer?
+    @State private var behaviorElapsed: TimeInterval = 0
+
+    private let displaySize: CGFloat = 128
 
     var body: some View {
         ZStack {
-            PixelView(grid: engine.renderedGrid, palette: engine.palette, displaySize: 128)
-                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-            if let dialogue = engine.currentDialogue {
-                PetBubbleView(text: dialogue)
-                    .offset(y: -72)
-                    .transition(.scale.combined(with: .opacity))
+            // Particles behind pet
+            ForEach(engine.particles) { particle in
+                PetParticleView(particle: particle)
+            }
+
+            ZStack {
+                SpriteImageView(image: engine.renderedImage, displaySize: displaySize)
+                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+
+                if let dialogue = engine.currentDialogue {
+                    PetBubbleView(text: dialogue)
+                        .offset(y: -72)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .position(engine.physicsState.position)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if !isDragging {
+                            isDragging = true
+                            dragStartPosition = engine.physicsState.position
+                            dragStartTime = Date()
+                            engine.currentAction = .pickedUp
+                        }
+                        lastDragPosition = engine.physicsState.position
+                        engine.physicsState.position = value.location
+                        engine.physicsState.surface = .airborne
+                        engine.physicsState.velocity = .zero
+                    }
+                    .onEnded { value in
+                        isDragging = false
+                        let dt = max(0.016, Date().timeIntervalSince(dragStartTime))
+                        let vx = (value.location.x - dragStartPosition.x) / dt * 0.1
+                        let vy = (value.location.y - dragStartPosition.y) / dt * 0.1
+                        let throwVelocity = CGVector(dx: clamp(vx, -600, 600),
+                                                     dy: clamp(vy, -600, 600))
+                        PetPhysicsEngine.applyThrow(&engine.physicsState, velocity: throwVelocity)
+                        engine.currentAction = .thrown
+                        engine.handleInteraction(.tap)
+                        behaviorElapsed = 0
+                    }
+            )
+            .onTapGesture {
+                engine.handleInteraction(.tap)
+                engine.currentAction = .tapReact
+                behaviorElapsed = 0
+            }
+            .onLongPressGesture {
+                showInteractionPanel = true
             }
         }
-        .position(position)
-        .gesture(DragGesture()
-            .onChanged { value in isDragging = true; position = value.location }
-            .onEnded { _ in isDragging = false; engine.handleInteraction(.tap) })
-        .onTapGesture { engine.handleInteraction(.tap) }
-        .onLongPressGesture { showInteractionPanel = true }
         .sheet(isPresented: $showInteractionPanel) {
             PetInteractionView(engine: engine)
         }
         .accessibilityIdentifier("floating-pet")
         .accessibilityLabel("Pet")
-        .onAppear { startWandering() }
-        .onDisappear { wanderTimer?.invalidate() }
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: position)
+        .onAppear {
+            startPhysicsLoop()
+            startBehaviorLoop()
+        }
+        .onDisappear {
+            physicsTimer?.invalidate()
+            behaviorTimer?.invalidate()
+        }
     }
 
-    private func startWandering() {
-        wanderTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+    // MARK: - Physics Loop
+
+    private func startPhysicsLoop() {
+        let surfaces = screenSurfaces()
+        physicsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
             Task { @MainActor in
-                guard engine.pet.level != .egg else { return }
-                guard !isDragging, engine.currentAction == .idle || engine.currentAction == .walking else { return }
-                let screen = UIScreen.main.bounds
-                let margin: CGFloat = 40
-                let edge = Int.random(in: 0...3)
-                let target: CGPoint
-                switch edge {
-                case 0: target = CGPoint(x: .random(in: margin...(screen.width - margin)), y: margin + 50)
-                case 1: target = CGPoint(x: .random(in: margin...(screen.width - margin)), y: screen.height - margin - 50)
-                case 2: target = CGPoint(x: margin, y: .random(in: 100...(screen.height - 100)))
-                default: target = CGPoint(x: screen.width - margin, y: .random(in: 100...(screen.height - 100)))
+                guard !isDragging else { return }
+                let dt: CGFloat = 1.0 / 60.0
+
+                switch engine.currentAction {
+                case .walking:
+                    let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
+                    PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                               speed: 60, dt: dt, surfaces: surfaces)
+                case .climb:
+                    PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
+                                                dt: dt, surfaces: surfaces)
+                case .thrown, .fall:
+                    PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces)
+                    if engine.physicsState.surface != .airborne {
+                        engine.currentAction = .idle
+                        behaviorElapsed = 0
+                    }
+                default:
+                    break
                 }
-                withAnimation(.linear(duration: 3.0)) { position = target }
-                engine.currentAction = .walking
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                engine.currentAction = .idle
+
+                // Remove expired particles
+                engine.particles.removeAll { $0.isExpired }
             }
         }
+    }
+
+    // MARK: - Behavior Loop
+
+    private func startBehaviorLoop() {
+        behaviorTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            Task { @MainActor in
+                guard !isDragging else { return }
+                behaviorElapsed += 1.0
+
+                let nextAction = PetBehaviorController.nextBehavior(
+                    current: engine.currentAction,
+                    physics: engine.physicsState,
+                    level: engine.pet.level,
+                    elapsed: behaviorElapsed)
+
+                if nextAction != engine.currentAction {
+                    engine.currentAction = nextAction
+                    behaviorElapsed = 0
+
+                    // Flip direction randomly when starting to walk
+                    if nextAction == .walking {
+                        engine.physicsState.facingRight = Bool.random()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func screenSurfaces() -> ScreenSurfaces {
+        let screen = UIScreen.main.bounds
+        return ScreenSurfaces(
+            ground: screen.height - 80,
+            ceiling: 60,
+            leftWall: 20,
+            rightWall: screen.width - 20,
+            dynamicIslandRect: CGRect(x: screen.width / 2 - 62, y: 0, width: 124, height: 37)
+        )
+    }
+
+    private func clamp(_ value: CGFloat, _ minVal: CGFloat, _ maxVal: CGFloat) -> CGFloat {
+        min(max(value, minVal), maxVal)
     }
 }
