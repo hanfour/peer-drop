@@ -15,6 +15,16 @@ struct FloatingPetView: View {
 
     var body: some View {
         ZStack {
+            // Poops
+            ForEach(engine.poopState.poops) { poop in
+                Text("💩")
+                    .font(.system(size: 20))
+                    .position(poop.position)
+                    .onTapGesture {
+                        engine.cleanPoop(id: poop.id)
+                    }
+            }
+
             // Particles behind pet
             ForEach(engine.particles) { particle in
                 PetParticleView(particle: particle)
@@ -66,6 +76,16 @@ struct FloatingPetView: View {
             .onLongPressGesture {
                 showInteractionPanel = true
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 30)
+                    .onEnded { value in
+                        let hVel = abs(value.velocity.width)
+                        let vVel = abs(value.velocity.height)
+                        if hVel > vVel && hVel > 200 {
+                            engine.handlePetStroke()
+                        }
+                    }
+            )
         }
         .sheet(isPresented: $showInteractionPanel) {
             PetInteractionView(engine: engine)
