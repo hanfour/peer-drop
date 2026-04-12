@@ -1,7 +1,10 @@
 import Foundation
 import Combine
+import os.log
 
 final class TrustedContactStore: ObservableObject {
+
+    private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TrustedContactStore")
 
     @Published private(set) var contacts: [TrustedContact] = []
 
@@ -46,6 +49,10 @@ final class TrustedContactStore: ObservableObject {
         contacts.first { $0.matchesKey(publicKey) }
     }
 
+    func find(byDeviceId deviceId: String) -> TrustedContact? {
+        contacts.first { $0.deviceId == deviceId }
+    }
+
     // MARK: - Trust Management
 
     func updateTrustLevel(for id: UUID, to level: TrustLevel) {
@@ -70,11 +77,13 @@ final class TrustedContactStore: ObservableObject {
         return !contact.matchesKey(newPublicKey)
     }
 
-    func updatePublicKey(for id: UUID, newKey: Data) {
+    func updatePublicKey(for id: UUID, newKey: Data, trustLevel: TrustLevel = .unknown) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         contacts[index].identityPublicKey = newKey
-        contacts[index].trustLevel = .unknown
-        contacts[index].lastVerified = nil
+        contacts[index].trustLevel = trustLevel
+        if trustLevel != .verified {
+            contacts[index].lastVerified = nil
+        }
         scheduleSave()
     }
 
@@ -112,7 +121,7 @@ final class TrustedContactStore: ObservableObject {
             let data = try JSONEncoder().encode(contacts)
             try encryptor.encryptAndWrite(data, to: storageURL)
         } catch {
-            // Silently fail — next save will retry
+            Self.logger.error("Failed to save trusted contacts: \(error.localizedDescription)")
         }
     }
 

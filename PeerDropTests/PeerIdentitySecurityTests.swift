@@ -21,4 +21,13 @@ final class PeerIdentitySecurityTests: XCTestCase {
         let pk2 = PeerIdentity.current.identityPublicKey
         XCTAssertEqual(pk1, pk2)
     }
+
+    func testPeerIdentityPublicKeySurvivesCodable() throws {
+        let identity = PeerIdentity.current
+        let data = try JSONEncoder().encode(identity)
+        let decoded = try JSONDecoder().decode(PeerIdentity.self, from: data)
+        // Stored property survives serialization — critical for wire transmission
+        XCTAssertEqual(decoded.identityPublicKey, identity.identityPublicKey)
+        XCTAssertEqual(decoded.identityFingerprint, identity.identityFingerprint)
+    }
 }

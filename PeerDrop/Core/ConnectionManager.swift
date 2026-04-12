@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import CryptoKit
 import SwiftUI
 import UIKit
 import os
@@ -2972,12 +2973,19 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Validate public key is a valid 32-byte Curve25519 point
+        guard peerPublicKey.count == 32,
+              let _ = try? CryptoKit.Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPublicKey) else {
+            logger.warning("Invalid public key from \(peerIdentity.displayName)")
+            return
+        }
+
         if let existingContact = trustedContactStore.find(byPublicKey: peerPublicKey) {
             // Known contact, key matches — trust level unchanged
             logger.info("Peer \(peerIdentity.displayName) recognized as trusted contact: \(existingContact.trustLevel.rawValue)")
-        } else if let contactByName = trustedContactStore.contacts.first(where: { $0.displayName == peerIdentity.displayName }) {
-            // Name matches but key is different — KEY CHANGE WARNING
-            let oldFingerprint = contactByName.keyFingerprint
+        } else if let contactByDeviceId = trustedContactStore.find(byDeviceId: peerIdentity.id) {
+            // Same device ID but different key — KEY CHANGE WARNING
+            let oldFingerprint = contactByDeviceId.keyFingerprint
             let newContact = TrustedContact(
                 displayName: peerIdentity.displayName,
                 identityPublicKey: peerPublicKey,
@@ -2985,10 +2993,10 @@ final class ConnectionManager: ObservableObject {
             )
             let newFingerprint = newContact.keyFingerprint
 
-            logger.warning("KEY CHANGE detected for \(peerIdentity.displayName)!")
+            logger.warning("KEY CHANGE detected for \(peerIdentity.displayName) (device: \(peerIdentity.id))!")
             pendingKeyChangeAlert = KeyChangeAlertInfo(
                 contactName: peerIdentity.displayName,
-                contactId: contactByName.id,
+                contactId: contactByDeviceId.id,
                 oldFingerprint: oldFingerprint,
                 newFingerprint: newFingerprint,
                 newPublicKey: peerPublicKey
@@ -2996,6 +3004,7 @@ final class ConnectionManager: ObservableObject {
         } else {
             // Unknown peer — add as unknown trust level
             let newContact = TrustedContact(
+                deviceId: peerIdentity.id,
                 displayName: peerIdentity.displayName,
                 identityPublicKey: peerPublicKey,
                 trustLevel: .unknown
@@ -3012,17 +3021,17 @@ final class ConnectionManager: ObservableObject {
         pendingKeyChangeAlert = nil
     }
 
-    /// User chose to accept the new key
+    /// User chose to accept the new key (sets trust to .linked — user actively accepted)
     func handleKeyChangeAccept() {
         guard let alert = pendingKeyChangeAlert else { return }
-        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey)
+        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .linked)
         pendingKeyChangeAlert = nil
     }
 
-    /// User chose to verify later
+    /// User chose to verify later (stays at .unknown until face-to-face verification)
     func handleKeyChangeVerifyLater() {
         guard let alert = pendingKeyChangeAlert else { return }
-        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey)
+        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .unknown)
         pendingKeyChangeAlert = nil
     }
 }

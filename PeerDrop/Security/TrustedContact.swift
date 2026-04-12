@@ -3,6 +3,7 @@ import CryptoKit
 
 struct TrustedContact: Codable, Identifiable {
     let id: UUID
+    var deviceId: String?                    // Stable peer device ID (PeerIdentity.id)
     var displayName: String
     var identityPublicKey: Data              // Curve25519 public key (32 bytes)
     var trustLevel: TrustLevel
@@ -10,10 +11,12 @@ struct TrustedContact: Codable, Identifiable {
     var lastVerified: Date?
     var mailboxId: String?                   // Future: remote mailbox ID
     var userId: String?                      // Future: account user ID
+    var petSnapshot: Data?                   // Future: peer's pet snapshot
     var isBlocked: Bool
 
     init(
         id: UUID = UUID(),
+        deviceId: String? = nil,
         displayName: String,
         identityPublicKey: Data,
         trustLevel: TrustLevel,
@@ -21,9 +24,11 @@ struct TrustedContact: Codable, Identifiable {
         lastVerified: Date? = nil,
         mailboxId: String? = nil,
         userId: String? = nil,
+        petSnapshot: Data? = nil,
         isBlocked: Bool = false
     ) {
         self.id = id
+        self.deviceId = deviceId
         self.displayName = displayName
         self.identityPublicKey = identityPublicKey
         self.trustLevel = trustLevel
@@ -31,6 +36,7 @@ struct TrustedContact: Codable, Identifiable {
         self.lastVerified = lastVerified
         self.mailboxId = mailboxId
         self.userId = userId
+        self.petSnapshot = petSnapshot
         self.isBlocked = isBlocked
     }
 
