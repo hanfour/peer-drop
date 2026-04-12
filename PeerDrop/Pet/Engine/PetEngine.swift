@@ -20,6 +20,13 @@ class PetEngine: ObservableObject {
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
     private let socialEngine = PetSocialEngine()
+    private let sharedState = SharedPetState()
+    private let activityManager: Any? = {
+        if #available(iOS 16.2, *) {
+            return PetActivityManager()
+        }
+        return nil
+    }()
     private var cancellables = Set<AnyCancellable>()
     private var lastBehaviorDate = Date.distantPast
 
@@ -65,6 +72,7 @@ class PetEngine: ObservableObject {
 
         checkEvolution()
         updateRenderedGrid()
+        syncSharedState()
     }
 
     func handlePetMeeting(partnerGreeting: PetGreeting) {
@@ -91,6 +99,7 @@ class PetEngine: ObservableObject {
                                       velocity: CGVector(dx: 0, dy: -20), lifetime: 0.8))
         checkEvolution()
         updateRenderedImage()
+        syncSharedState()
     }
 
     func handlePetStroke() {
@@ -103,6 +112,7 @@ class PetEngine: ObservableObject {
         }
         checkEvolution()
         updateRenderedImage()
+        syncSharedState()
     }
 
     // MARK: - Chat-aware behavior
@@ -167,6 +177,47 @@ class PetEngine: ObservableObject {
         animator.$currentFrame
             .sink { [weak self] _ in self?.updateRenderedGrid() }
             .store(in: &cancellables)
+    }
+
+    // MARK: - Shared State & Live Activity
+
+    func syncSharedState() {
+        let snapshot = PetSnapshot(
+            name: pet.name,
+            bodyType: pet.genome.body,
+            eyeType: pet.genome.eyes,
+            patternType: pet.genome.pattern,
+            level: pet.level,
+            mood: pet.mood,
+            paletteIndex: pet.genome.paletteIndex,
+            experience: pet.experience,
+            maxExperience: EvolutionRequirement.for(pet.level)?.requiredExperience ?? 999
+        )
+        sharedState.write(snapshot)
+        if #available(iOS 16.2, *) {
+            (activityManager as? PetActivityManager)?.updateActivity(snapshot: snapshot)
+        }
+    }
+
+    func startLiveActivity() {
+        guard #available(iOS 16.2, *) else { return }
+        let snapshot = PetSnapshot(
+            name: pet.name,
+            bodyType: pet.genome.body,
+            eyeType: pet.genome.eyes,
+            patternType: pet.genome.pattern,
+            level: pet.level,
+            mood: pet.mood,
+            paletteIndex: pet.genome.paletteIndex,
+            experience: pet.experience,
+            maxExperience: EvolutionRequirement.for(pet.level)?.requiredExperience ?? 999
+        )
+        (activityManager as? PetActivityManager)?.startActivity(snapshot: snapshot)
+    }
+
+    func endLiveActivity() {
+        guard #available(iOS 16.2, *) else { return }
+        (activityManager as? PetActivityManager)?.endActivity()
     }
 }
 
