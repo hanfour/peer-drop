@@ -1,15 +1,22 @@
 import Foundation
 import CryptoKit
+import os.log
 
 /// Manages a persistent Curve25519 device identity key pair.
 /// Private keys are stored in the iOS Keychain and never leave the device.
+///
+/// Note: Uses software Keychain, not Secure Enclave, because SE only supports P-256.
+/// Curve25519 is chosen for Signal Protocol compatibility in Phase 2.
+/// Uses AfterFirstUnlockThisDeviceOnly to support background BLE connections.
 final class IdentityKeyManager {
 
     static let shared = IdentityKeyManager()
 
+    private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "IdentityKeyManager")
     private let keychainService = "com.peerdrop.identity"
     private let agreementKeyAccount = "curve25519-agreement"
     private let signingKeyAccount = "ed25519-signing"
+    // NSLock is non-reentrant — do not call publicKey/fingerprint from within lock-holding code paths
     private let lock = NSLock()
     private var cachedAgreementKey: Curve25519.KeyAgreement.PrivateKey?
     private var cachedSigningKey: Curve25519.Signing.PrivateKey?
@@ -22,6 +29,7 @@ final class IdentityKeyManager {
         agreementPrivateKey.publicKey
     }
 
+    /// Human-readable fingerprint: "A1B2 C3D4 E5F6 G7H8 I9J0" (80 bits, truncated SHA-256)
     var fingerprint: String {
         let hash = SHA256.hash(data: publicKey.rawRepresentation)
         let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
@@ -118,10 +126,13 @@ final class IdentityKeyManager {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status != errSecSuccess {
+            Self.logger.error("Keychain write failed for \(account): OSStatus \(status)")
+        }
     }
 
     private func loadFromKeychain(account: String) -> Data? {
