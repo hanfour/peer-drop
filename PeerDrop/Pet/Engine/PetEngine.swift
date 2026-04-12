@@ -1,20 +1,20 @@
 import Foundation
 import Combine
 import CoreGraphics
+import UIKit
 
 @MainActor
 class PetEngine: ObservableObject {
     @Published var pet: PetState
     @Published var currentAction: PetAction = .idle
     @Published var currentDialogue: String?
-    @Published private(set) var renderedGrid: PixelGrid = .empty()
     @Published private(set) var renderedImage: CGImage?
     @Published var physicsState: PetPhysicsState = PetPhysicsState(
         position: CGPoint(x: 60, y: 200), velocity: .zero, surface: .ground)
     @Published var particles: [PetParticle] = []
     @Published var poopState = PoopState()
+    @Published var showEvolutionFlash = false
 
-    private let renderer = PetRenderer()
     private let rendererV2 = PetRendererV2()
     let animator = PetAnimationController()
     private let tracker = InteractionTracker()
@@ -71,7 +71,7 @@ class PetEngine: ObservableObject {
         }
 
         checkEvolution()
-        updateRenderedGrid()
+        updateRenderedImage()
         syncSharedState()
     }
 
@@ -153,7 +153,15 @@ class PetEngine: ObservableObject {
             particles.append(PetParticle(type: .star, position: physicsState.position,
                                           velocity: vel, lifetime: 1.2))
         }
-        updateRenderedGrid()
+        updateRenderedImage()
+
+        showEvolutionFlash = true
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+        Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            showEvolutionFlash = false
+        }
     }
 
     // MARK: - Rendering
@@ -166,16 +174,10 @@ class PetEngine: ObservableObject {
             facingRight: physicsState.facingRight)
     }
 
-    private func updateRenderedGrid() {
-        renderedGrid = renderer.render(genome: pet.genome, level: pet.level,
-                                        mood: pet.mood, animationFrame: animator.currentFrame)
-        updateRenderedImage()
-    }
-
     private func setupAnimationObserver() {
         animator.startAnimation()
         animator.$currentFrame
-            .sink { [weak self] _ in self?.updateRenderedGrid() }
+            .sink { [weak self] _ in self?.updateRenderedImage() }
             .store(in: &cancellables)
     }
 
@@ -245,5 +247,19 @@ extension PersonalityTraits {
         default:
             return .idle
         }
+    }
+}
+
+// MARK: - Time-of-Day Behavior
+
+enum PetTimeOfDayBehavior {
+    static func suggestedMood(at date: Date = Date(), lastInteraction: Date) -> PetMood? {
+        let hour = Calendar.current.component(.hour, from: date)
+        let isNight = hour >= 22 || hour < 6
+        let recentlyInteracted = date.timeIntervalSince(lastInteraction) < 1800
+        if isNight && !recentlyInteracted {
+            return .sleepy
+        }
+        return nil
     }
 }

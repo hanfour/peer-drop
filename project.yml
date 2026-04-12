@@ -131,6 +131,12 @@ targets:
         group: Shared
       - path: PeerDrop/Pet/Model/InteractionType.swift
         group: Shared
+    info:
+      path: PeerDropWidget/Info.plist
+      properties:
+        CFBundleDisplayName: PeerDrop Widget
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop.widget
@@ -138,10 +144,6 @@ targets:
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "2.0.1"
         CURRENT_PROJECT_VERSION: "1"
-        GENERATE_INFOPLIST_FILE: "YES"
-        INFOPLIST_KEY_CFBundleDisplayName: PeerDrop Widget
-        INFOPLIST_KEY_NSHumanReadableCopyright: ""
-        INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         CODE_SIGN_ENTITLEMENTS: PeerDropWidget/PeerDropWidget.entitlements
     entitlements:
       path: PeerDropWidget/PeerDropWidget.entitlements

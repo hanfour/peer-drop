@@ -87,6 +87,12 @@ struct FloatingPetView: View {
                         }
                     }
             )
+            if engine.showEvolutionFlash {
+                Color.white
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         }
         .sheet(isPresented: $showInteractionPanel) {
             PetInteractionView(engine: engine)
@@ -143,6 +149,11 @@ struct FloatingPetView: View {
             Task { @MainActor in
                 guard !isDragging else { return }
                 behaviorElapsed += 1.0
+
+                if let forcedMood = PetTimeOfDayBehavior.suggestedMood(
+                    lastInteraction: engine.pet.lastInteraction) {
+                    engine.pet.mood = forcedMood
+                }
 
                 let nextAction = PetBehaviorController.nextBehavior(
                     current: engine.currentAction,
