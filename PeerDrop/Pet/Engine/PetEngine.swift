@@ -14,6 +14,15 @@ class PetEngine: ObservableObject {
     @Published var particles: [PetParticle] = []
     @Published var poopState = PoopState()
     @Published var showEvolutionFlash = false
+    @Published var showNamingDialog = false
+
+    struct DroppedFood {
+        let type: FoodType
+        let position: CGPoint
+    }
+
+    @Published var foodTarget: DroppedFood?
+    private let feedCooldown: TimeInterval = 1800
 
     private let rendererV2 = PetRendererV2()
     let animator = PetAnimationController()
@@ -95,6 +104,10 @@ class PetEngine: ObservableObject {
     func cleanPoop(id: UUID) {
         guard poopState.clean(id: id) else { return }
         pet.experience += 1
+        pet.stats.poopsCleaned += 1
+        if Double.random(in: 0...1) < 0.1 {
+            pet.foodInventory.add(.fish, count: 1)
+        }
         particles.append(PetParticle(type: .star, position: physicsState.position,
                                       velocity: CGVector(dx: 0, dy: -20), lifetime: 0.8))
         checkEvolution()
@@ -113,6 +126,50 @@ class PetEngine: ObservableObject {
         checkEvolution()
         updateRenderedImage()
         syncSharedState()
+    }
+
+    // MARK: - Feeding
+
+    func dropFood(_ type: FoodType, at position: CGPoint) {
+        if let lastFed = pet.lastFedAt, Date().timeIntervalSince(lastFed) < feedCooldown { return }
+        guard pet.foodInventory.consume(type) else { return }
+        foodTarget = DroppedFood(type: type, position: position)
+    }
+
+    func consumeFood() {
+        guard let food = foodTarget else { return }
+        foodTarget = nil
+        pet.experience += food.type.xp
+        if let mood = food.type.moodEffect { pet.mood = mood }
+        pet.lastFedAt = Date()
+        pet.lifeState = .digesting
+        let delay = TimeInterval.random(in: food.type.digestMinSeconds...food.type.digestMaxSeconds)
+        pet.digestEndTime = Date().addingTimeInterval(delay)
+        pet.stats.foodsEaten += 1
+        currentAction = .eat
+        checkEvolution()
+        syncSharedState()
+        updateRenderedImage()
+    }
+
+    // MARK: - Digestion
+
+    func checkDigestion() {
+        guard pet.lifeState == .digesting,
+              let end = pet.digestEndTime, Date() >= end else { return }
+        pet.lifeState = .pooping
+        currentAction = .poop
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            finishPooping()
+        }
+    }
+
+    func finishPooping() {
+        poopState.drop(at: physicsState.position)
+        pet.lifeState = .idle
+        currentAction = .idle
+        pet.digestEndTime = nil
     }
 
     // MARK: - Chat-aware behavior
@@ -142,6 +199,9 @@ class PetEngine: ObservableObject {
 
     private func evolve(to level: PetLevel) {
         pet.level = level
+        if level == .baby && (pet.name == nil || pet.name?.isEmpty == true) {
+            showNamingDialog = true
+        }
         currentAction = .evolving
         // 10% mutation chance on baby→child evolution
         if level == .child && Double.random(in: 0...1) < 0.1 {

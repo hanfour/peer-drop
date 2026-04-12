@@ -10,11 +10,19 @@ struct FloatingPetView: View {
     @State private var physicsTimer: Timer?
     @State private var behaviorTimer: Timer?
     @State private var behaviorElapsed: TimeInterval = 0
+    @State private var namingText = ""
 
     private let displaySize: CGFloat = 128
 
     var body: some View {
         ZStack {
+            // Dropped food
+            if let food = engine.foodTarget {
+                Text(food.type.emoji)
+                    .font(.system(size: 24))
+                    .position(food.position)
+            }
+
             // Poops
             ForEach(engine.poopState.poops) { poop in
                 Text("💩")
@@ -98,6 +106,20 @@ struct FloatingPetView: View {
         .sheet(isPresented: $showInteractionPanel) {
             PetInteractionView(engine: engine)
         }
+        .dropDestination(for: String.self) { items, location in
+            guard let raw = items.first, let foodType = FoodType(rawValue: raw) else { return false }
+            engine.dropFood(foodType, at: location)
+            return true
+        }
+        .alert("幫寵物取個名字吧！", isPresented: $engine.showNamingDialog) {
+            TextField("名字", text: $namingText)
+            Button("確定") {
+                let trimmed = namingText.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { engine.pet.name = trimmed }
+            }
+        } message: {
+            Text("你的寵物剛孵化了！")
+        }
         .accessibilityIdentifier("floating-pet")
         .accessibilityLabel("Pet")
         .onAppear {
@@ -119,11 +141,32 @@ struct FloatingPetView: View {
                 guard !isDragging else { return }
                 let dt: CGFloat = 1.0 / 60.0
 
+                // Chase food target
+                if let food = engine.foodTarget {
+                    let dx = food.position.x - engine.physicsState.position.x
+                    let dy = food.position.y - engine.physicsState.position.y
+                    let dist = hypot(dx, dy)
+                    if dist < 8 {
+                        engine.consumeFood()
+                    } else {
+                        let direction: PetPhysicsEngine.HorizontalDirection = dx > 0 ? .right : .left
+                        PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                                   speed: 120, dt: dt, surfaces: surfaces)
+                    }
+                }
+
                 switch engine.currentAction {
                 case .walking:
                     let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
                     PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
                                                speed: 60, dt: dt, surfaces: surfaces)
+                case .run:
+                    // run is handled by food chase above; if no food, walk normally
+                    if engine.foodTarget == nil {
+                        let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
+                        PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                                   speed: 100, dt: dt, surfaces: surfaces)
+                    }
                 case .climb:
                     PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
                                                 dt: dt, surfaces: surfaces)
@@ -156,11 +199,14 @@ struct FloatingPetView: View {
                     engine.pet.mood = forcedMood
                 }
 
+                engine.checkDigestion()
+
                 let nextAction = PetBehaviorController.nextBehavior(
                     current: engine.currentAction,
                     physics: engine.physicsState,
                     level: engine.pet.level,
-                    elapsed: behaviorElapsed)
+                    elapsed: behaviorElapsed,
+                    foodTarget: engine.foodTarget?.position)
 
                 if nextAction != engine.currentAction {
                     engine.currentAction = nextAction
