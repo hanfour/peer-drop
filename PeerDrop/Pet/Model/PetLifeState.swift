@@ -1,6 +1,10 @@
 import Foundation
 
 enum PetLifeState: String, Codable, CaseIterable {
+    case idle
+    case eating
+    case digesting
+    case pooping
     case sleeping
     case waking
     case active
