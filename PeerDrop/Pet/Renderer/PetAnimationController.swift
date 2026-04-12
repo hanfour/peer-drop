@@ -1,21 +1,31 @@
+// PeerDrop/Pet/Renderer/PetAnimationController.swift
 import Foundation
 
 @MainActor
 class PetAnimationController: ObservableObject {
     @Published var currentFrame: Int = 0
-    let frameRate: TimeInterval = 0.5 // 2 FPS
 
+    let frameRate: TimeInterval = 1.0 / 6.0  // 6 FPS
+    private(set) var totalFrames: Int = 2
+    private var currentAction: PetAction = .idle
     private var timer: Timer?
-    private var frameCount: Int = 2
 
-    func startAnimation(frameCount: Int = 2) {
-        stopAnimation()
-        self.frameCount = frameCount
+    func setAction(_ action: PetAction, frameCount: Int) {
+        guard action != currentAction || frameCount != totalFrames else { return }
+        currentAction = action
+        totalFrames = max(1, frameCount)
         currentFrame = 0
+    }
+
+    func advanceFrame() {
+        currentFrame = (currentFrame + 1) % totalFrames
+    }
+
+    func startAnimation() {
+        timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: frameRate, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.currentFrame = (self.currentFrame + 1) % self.frameCount
+                self?.advanceFrame()
             }
         }
     }
@@ -23,9 +33,5 @@ class PetAnimationController: ObservableObject {
     func stopAnimation() {
         timer?.invalidate()
         timer = nil
-    }
-
-    deinit {
-        timer?.invalidate()
     }
 }

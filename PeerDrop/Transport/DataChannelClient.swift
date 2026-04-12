@@ -286,6 +286,12 @@ extension DataChannelClient: RTCPeerConnectionDelegate {
         dataChannel.delegate = self
         self.dataChannel = dataChannel
         onRemoteDataChannel?(dataChannel)
+        // If the channel is already open when we set the delegate, the
+        // dataChannelDidChangeState callback won't fire for the .open
+        // transition. Trigger it manually so the joiner side doesn't hang.
+        if dataChannel.readyState == .open {
+            onDataChannelOpen?()
+        }
     }
 }
 
