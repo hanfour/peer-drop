@@ -5,6 +5,16 @@ struct PetSecretChatRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
+                if let genome = entry.partnerGenome,
+                   let image = PetSnapshotRenderer.render(
+                       body: genome.body, level: .baby, mood: .happy,
+                       eyes: genome.eyes, pattern: genome.pattern,
+                       paletteIndex: genome.paletteIndex, scale: 4) {
+                    Image(decorative: image, scale: 1.0)
+                        .interpolation(.none)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                }
                 Text("與 \(entry.partnerName ?? "???")").font(.caption).fontWeight(.medium)
                 Spacer()
                 Text(entry.date, style: .relative).font(.caption2).foregroundStyle(.secondary)

@@ -8,4 +8,12 @@ enum PetLevel: Int, Codable, Comparable, CaseIterable {
     static func < (lhs: PetLevel, rhs: PetLevel) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
+
+    var displayName: String {
+        switch self {
+        case .egg: return "蛋"
+        case .baby: return "幼年"
+        case .child: return "成長"
+        }
+    }
 }

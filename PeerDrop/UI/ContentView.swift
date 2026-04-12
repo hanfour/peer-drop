@@ -13,6 +13,7 @@ struct TabBarOnlyModifier: ViewModifier {
 
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
+    @EnvironmentObject var petEngine: PetEngine
     @State private var selectedTab = 0
     @State private var errorMessage: String?
     @State private var showError = false
@@ -54,6 +55,15 @@ struct ContentView: View {
             .tag(2)
             .accessibilityLabel("Library")
             .accessibilityHint("View saved devices and groups")
+
+            NavigationStack {
+                PetTabView()
+                    .environmentObject(petEngine)
+            }
+            .tabItem {
+                Label("Pet", systemImage: "pawprint.fill")
+            }
+            .tag(3)
         }
         .modifier(TabBarOnlyModifier())  // Force tab bar on iPad
         .sheet(item: $connectionManager.pendingIncomingRequest) { request in
