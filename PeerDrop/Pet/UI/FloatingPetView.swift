@@ -213,7 +213,8 @@ struct FloatingPetView: View {
                     physics: engine.physicsState,
                     level: engine.pet.level,
                     elapsed: behaviorElapsed,
-                    foodTarget: engine.foodTarget?.position)
+                    foodTarget: engine.foodTarget?.position,
+                    traits: engine.pet.genome.personalityTraits)
 
                 if nextAction != engine.currentAction {
                     engine.currentAction = nextAction

@@ -181,9 +181,10 @@ class PetEngine: ObservableObject {
               let end = pet.digestEndTime, Date() >= end else { return }
         pet.lifeState = .pooping
         currentAction = .poop
-        Task {
+        Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            finishPooping()
+            guard let self, self.pet.lifeState == .pooping else { return }
+            self.finishPooping()
         }
     }
 
