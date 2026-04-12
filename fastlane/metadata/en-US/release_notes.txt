@@ -1,7 +1,29 @@
-PeerDrop 2.0.1 — Bug Fixes
+PeerDrop 2.1.0 — Pet Evolution Overhaul
 
-- Pet egg now displays in white with crack patterns (no longer colored)
-- Pet egg stays in place — only hatched pets wander the screen
-- Fixed relay connection failure when upgrading from older versions
-- Improved relay reconnection: known peers can now skip PIN verification
-- Security improvements
+New Pet System
+- 10 pet body types: Cat, Dog, Rabbit, Bird, Frog, Bear, Dragon, Octopus, Ghost, Slime
+- Baby and Child evolution stages with 20 animated actions each
+- 16×16 pixel art sprites with 8 color palettes
+
+Physical Interactions
+- Pets walk, climb walls, and hang from the ceiling
+- Drag and throw your pet with gravity and bounce physics
+- Pet stroke gesture for hearts and XP
+
+Food System
+- Item inventory: Rice Ball, Fish, Apple
+- Drag food onto screen — your pet chases and eats it!
+- Daily login food refresh, earn food from peer connections
+
+Evolution & Growth
+- Accumulate XP + time to evolve to the next stage
+- Haptic feedback and flash effects on evolution
+- Name your pet when it hatches
+
+Dynamic Island & Widgets
+- Live Activity on Dynamic Island shows pet status
+- Home Screen and Lock Screen widgets
+
+Connection Fix
+- Fixed relay joiner not receiving PIN verification
+- Optimized relay connection speed
