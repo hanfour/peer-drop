@@ -20,6 +20,19 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
 
     private static let localIDKey = "peerDropLocalIdentityID"
 
+    /// Alias for `local()` — returns the current device's identity.
+    static var current: PeerIdentity { local() }
+
+    /// Curve25519 public key for E2E encryption (32 bytes, persistent)
+    var identityPublicKey: Data? {
+        IdentityKeyManager.shared.publicKey.rawRepresentation
+    }
+
+    /// Human-readable fingerprint of the identity public key
+    var identityFingerprint: String? {
+        IdentityKeyManager.shared.fingerprint
+    }
+
     static func local(certificateFingerprint: String? = nil) -> PeerIdentity {
         let name = UserDefaults.standard.string(forKey: "peerDropDisplayName") ?? UIDevice.current.name
 
