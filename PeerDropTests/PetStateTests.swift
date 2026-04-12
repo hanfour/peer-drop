@@ -17,13 +17,13 @@ final class PetStateTests: XCTestCase {
     }
 
     func testPetLevelCaseIterable() {
-        XCTAssertEqual(PetLevel.allCases.count, 2)
+        XCTAssertEqual(PetLevel.allCases.count, 3)
     }
 
     // MARK: - PetGenome
 
     func testCanvasSize() {
-        XCTAssertEqual(PetGenome.canvasSize, 32)
+        XCTAssertEqual(PetGenome.canvasSize, 16)
     }
 
     func testGenomeMutation() {
@@ -129,9 +129,11 @@ final class PetStateTests: XCTestCase {
         XCTAssertEqual(req?.minimumAge, 86400)
     }
 
-    func testEvolutionRequirementForBabyIsNil() {
+    func testEvolutionRequirementForBaby() {
         let req = EvolutionRequirement.for(.baby)
-        XCTAssertNil(req, "Baby evolution should not be defined in MVP")
+        XCTAssertNotNil(req)
+        XCTAssertEqual(req?.targetLevel, .child)
+        XCTAssertEqual(req?.requiredExperience, 500)
     }
 
     // MARK: - SocialEntry

@@ -25,6 +25,7 @@ targets:
       - PeerDrop
     dependencies:
       - package: WebRTC
+      - target: PeerDropWidget
     settings:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
@@ -45,6 +46,8 @@ targets:
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.hanfour.peerdrop
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.hanfour.peerdrop
+        com.apple.security.application-groups:
+          - group.com.hanfour.peerdrop
     info:
       path: PeerDrop/App/Info.plist
       properties:
@@ -66,6 +69,7 @@ targets:
         PeerDropWorkerAPIKey: "$(PEERDROP_WORKER_API_KEY)"
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        NSSupportsLiveActivities: true
         UIBackgroundModes:
           - voip
           - bluetooth-central
@@ -99,6 +103,53 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.uitests
         GENERATE_INFOPLIST_FILE: "YES"
+
+  PeerDropWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PeerDropWidget
+      - path: PeerDrop/Pet/Shared
+        group: Shared
+      - path: PeerDrop/Pet/Renderer/PaletteSwapRenderer.swift
+        group: Shared
+      - path: PeerDrop/Pet/Renderer/SpriteCompositor.swift
+        group: Shared
+      - path: PeerDrop/Pet/Renderer/PetPalettes.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites
+        group: Shared
+      - path: PeerDrop/Pet/Model/PetGenome.swift
+        group: Shared
+      - path: PeerDrop/Pet/Model/PetLevel.swift
+        group: Shared
+      - path: PeerDrop/Pet/Model/PetAction.swift
+        group: Shared
+      - path: PeerDrop/Pet/Model/PetMood.swift
+        group: Shared
+      - path: PeerDrop/Pet/Model/PetSurface.swift
+        group: Shared
+      - path: PeerDrop/Pet/Model/InteractionType.swift
+        group: Shared
+    info:
+      path: PeerDropWidget/Info.plist
+      properties:
+        CFBundleDisplayName: PeerDrop Widget
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop.widget
+        DEVELOPMENT_TEAM: UK48R5KWLV
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_ENTITLEMENTS: PeerDropWidget/PeerDropWidget.entitlements
+    entitlements:
+      path: PeerDropWidget/PeerDropWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.hanfour.peerdrop
 
 schemes:
   PeerDrop:

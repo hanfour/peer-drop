@@ -1,25 +1,32 @@
 import Foundation
 import Combine
 import CoreGraphics
+import UIKit
 
 @MainActor
 class PetEngine: ObservableObject {
     @Published var pet: PetState
     @Published var currentAction: PetAction = .idle
     @Published var currentDialogue: String?
-    @Published private(set) var renderedGrid: PixelGrid = .empty()
     @Published private(set) var renderedImage: CGImage?
     @Published var physicsState: PetPhysicsState = PetPhysicsState(
         position: CGPoint(x: 60, y: 200), velocity: .zero, surface: .ground)
     @Published var particles: [PetParticle] = []
     @Published var poopState = PoopState()
+    @Published var showEvolutionFlash = false
 
-    private let renderer = PetRenderer()
     private let rendererV2 = PetRendererV2()
     let animator = PetAnimationController()
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
     private let socialEngine = PetSocialEngine()
+    private let sharedState = SharedPetState()
+    private let activityManager: Any? = {
+        if #available(iOS 16.2, *) {
+            return PetActivityManager()
+        }
+        return nil
+    }()
     private var cancellables = Set<AnyCancellable>()
     private var lastBehaviorDate = Date.distantPast
 
@@ -64,7 +71,8 @@ class PetEngine: ObservableObject {
         }
 
         checkEvolution()
-        updateRenderedGrid()
+        updateRenderedImage()
+        syncSharedState()
     }
 
     func handlePetMeeting(partnerGreeting: PetGreeting) {
@@ -91,6 +99,7 @@ class PetEngine: ObservableObject {
                                       velocity: CGVector(dx: 0, dy: -20), lifetime: 0.8))
         checkEvolution()
         updateRenderedImage()
+        syncSharedState()
     }
 
     func handlePetStroke() {
@@ -103,6 +112,7 @@ class PetEngine: ObservableObject {
         }
         checkEvolution()
         updateRenderedImage()
+        syncSharedState()
     }
 
     // MARK: - Chat-aware behavior
@@ -143,7 +153,15 @@ class PetEngine: ObservableObject {
             particles.append(PetParticle(type: .star, position: physicsState.position,
                                           velocity: vel, lifetime: 1.2))
         }
-        updateRenderedGrid()
+        updateRenderedImage()
+
+        showEvolutionFlash = true
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+        Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            showEvolutionFlash = false
+        }
     }
 
     // MARK: - Rendering
@@ -156,17 +174,52 @@ class PetEngine: ObservableObject {
             facingRight: physicsState.facingRight)
     }
 
-    private func updateRenderedGrid() {
-        renderedGrid = renderer.render(genome: pet.genome, level: pet.level,
-                                        mood: pet.mood, animationFrame: animator.currentFrame)
-        updateRenderedImage()
-    }
-
     private func setupAnimationObserver() {
         animator.startAnimation()
         animator.$currentFrame
-            .sink { [weak self] _ in self?.updateRenderedGrid() }
+            .sink { [weak self] _ in self?.updateRenderedImage() }
             .store(in: &cancellables)
+    }
+
+    // MARK: - Shared State & Live Activity
+
+    func syncSharedState() {
+        let snapshot = PetSnapshot(
+            name: pet.name,
+            bodyType: pet.genome.body,
+            eyeType: pet.genome.eyes,
+            patternType: pet.genome.pattern,
+            level: pet.level,
+            mood: pet.mood,
+            paletteIndex: pet.genome.paletteIndex,
+            experience: pet.experience,
+            maxExperience: EvolutionRequirement.for(pet.level)?.requiredExperience ?? 999
+        )
+        sharedState.write(snapshot)
+        if #available(iOS 16.2, *) {
+            (activityManager as? PetActivityManager)?.updateActivity(snapshot: snapshot)
+        }
+    }
+
+    func startLiveActivity() {
+        guard #available(iOS 16.2, *) else { return }
+        let snapshot = PetSnapshot(
+            name: pet.name,
+            bodyType: pet.genome.body,
+            eyeType: pet.genome.eyes,
+            patternType: pet.genome.pattern,
+            level: pet.level,
+            mood: pet.mood,
+            paletteIndex: pet.genome.paletteIndex,
+            experience: pet.experience,
+            maxExperience: EvolutionRequirement.for(pet.level)?.requiredExperience ?? 999
+        )
+        (activityManager as? PetActivityManager)?.startActivity(snapshot: snapshot)
+    }
+
+    func endLiveActivity() {
+        guard #available(iOS 16.2, *) else { return }
+        (activityManager as? PetActivityManager)?.endActivity()
     }
 }
 
@@ -194,5 +247,19 @@ extension PersonalityTraits {
         default:
             return .idle
         }
+    }
+}
+
+// MARK: - Time-of-Day Behavior
+
+enum PetTimeOfDayBehavior {
+    static func suggestedMood(at date: Date = Date(), lastInteraction: Date) -> PetMood? {
+        let hour = Calendar.current.component(.hour, from: date)
+        let isNight = hour >= 22 || hour < 6
+        let recentlyInteracted = date.timeIntervalSince(lastInteraction) < 1800
+        if isNight && !recentlyInteracted {
+            return .sleepy
+        }
+        return nil
     }
 }

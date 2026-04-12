@@ -74,9 +74,16 @@ struct PeerDropApp: App {
         }
         .onChange(of: scenePhase) { newPhase in
             connectionManager.handleScenePhaseChange(newPhase)
-            if newPhase == .background {
+            switch newPhase {
+            case .background:
                 try? PetStore().save(petEngine.pet)
                 try? PetCloudSync().syncFullState(petEngine.pet)
+                petEngine.syncSharedState()
+                petEngine.startLiveActivity()
+            case .active:
+                petEngine.endLiveActivity()
+            default:
+                break
             }
         }
     }

@@ -18,12 +18,31 @@ final class SpriteCache {
     // O(n) access order — acceptable at 200 entries
     private var accessOrder = [Key]()
 
+    #if DEBUG
+    private var hits = 0
+    private var misses = 0
+    #endif
+
     init(maxEntries: Int = 200) {
         self.maxEntries = maxEntries
     }
 
     func get(_ key: Key) -> CGImage? {
-        guard let image = cache[key] else { return nil }
+        guard let image = cache[key] else {
+            #if DEBUG
+            misses += 1
+            if (hits + misses) % 100 == 0 {
+                print("[SpriteCache] hits: \(hits), misses: \(misses), rate: \(hits * 100 / max(hits + misses, 1))%")
+            }
+            #endif
+            return nil
+        }
+        #if DEBUG
+        hits += 1
+        if (hits + misses) % 100 == 0 {
+            print("[SpriteCache] hits: \(hits), misses: \(misses), rate: \(hits * 100 / max(hits + misses, 1))%")
+        }
+        #endif
         if let idx = accessOrder.firstIndex(of: key) {
             accessOrder.remove(at: idx)
             accessOrder.append(key)
