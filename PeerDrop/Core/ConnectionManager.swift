@@ -70,6 +70,16 @@ struct RelayPINRequest: Identifiable {
     let remoteFingerprint: String
 }
 
+/// Info for displaying a key change alert
+struct KeyChangeAlertInfo: Identifiable {
+    let id = UUID()
+    let contactName: String
+    let contactId: UUID
+    let oldFingerprint: String
+    let newFingerprint: String
+    let newPublicKey: Data
+}
+
 /// Central state machine that orchestrates discovery, connections, transfers, and calls.
 @MainActor
 final class ConnectionManager: ObservableObject {
@@ -94,6 +104,8 @@ final class ConnectionManager: ObservableObject {
     @Published var pendingRelayJoinCode: String?
     /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
     @Published var shouldShowRelayConnect = false
+    /// Pending key change alert for a contact whose key has changed
+    @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
 
     var onPeerConnectedForPet: ((String) -> Void)?
     var onPeerDisconnectedForPet: ((String) -> Void)?
@@ -182,6 +194,7 @@ final class ConnectionManager: ObservableObject {
     let chatManager = ChatManager()
     let groupStore = DeviceGroupStore()
     let clipboardSyncManager = ClipboardSyncManager()
+    let trustedContactStore = TrustedContactStore()
 
     // MARK: - Typing Indicator State
 
@@ -1220,6 +1233,7 @@ final class ConnectionManager: ObservableObject {
 
                 let peerIdentity = try JSONDecoder().decode(PeerIdentity.self, from: payload)
                 logger.info("Peer identity received: \(peerIdentity.displayName)")
+                checkPeerTrust(peerIdentity: peerIdentity)
 
                 // Check if already connected to this peer
                 if connections[peerIdentity.id]?.state.isConnected == true {
@@ -2946,6 +2960,70 @@ final class ConnectionManager: ObservableObject {
             return
         }
         UserDefaults.standard.set(data, forKey: Self.transferHistoryKey)
+    }
+
+    // MARK: - Trust Verification
+
+    /// Check a peer's identity against the trusted contact store.
+    /// Called after receiving a peer's hello message during connection setup.
+    func checkPeerTrust(peerIdentity: PeerIdentity) {
+        guard let peerPublicKey = peerIdentity.identityPublicKey else {
+            logger.info("Peer \(peerIdentity.displayName) has no identity public key (legacy client)")
+            return
+        }
+
+        if let existingContact = trustedContactStore.find(byPublicKey: peerPublicKey) {
+            // Known contact, key matches — trust level unchanged
+            logger.info("Peer \(peerIdentity.displayName) recognized as trusted contact: \(existingContact.trustLevel.rawValue)")
+        } else if let contactByName = trustedContactStore.contacts.first(where: { $0.displayName == peerIdentity.displayName }) {
+            // Name matches but key is different — KEY CHANGE WARNING
+            let oldFingerprint = contactByName.keyFingerprint
+            let newContact = TrustedContact(
+                displayName: peerIdentity.displayName,
+                identityPublicKey: peerPublicKey,
+                trustLevel: .unknown
+            )
+            let newFingerprint = newContact.keyFingerprint
+
+            logger.warning("KEY CHANGE detected for \(peerIdentity.displayName)!")
+            pendingKeyChangeAlert = KeyChangeAlertInfo(
+                contactName: peerIdentity.displayName,
+                contactId: contactByName.id,
+                oldFingerprint: oldFingerprint,
+                newFingerprint: newFingerprint,
+                newPublicKey: peerPublicKey
+            )
+        } else {
+            // Unknown peer — add as unknown trust level
+            let newContact = TrustedContact(
+                displayName: peerIdentity.displayName,
+                identityPublicKey: peerPublicKey,
+                trustLevel: .unknown
+            )
+            trustedContactStore.add(newContact)
+            logger.info("New contact added: \(peerIdentity.displayName) (unknown trust)")
+        }
+    }
+
+    /// User chose to block the contact whose key changed
+    func handleKeyChangeBlock() {
+        guard let alert = pendingKeyChangeAlert else { return }
+        trustedContactStore.setBlocked(alert.contactId, blocked: true)
+        pendingKeyChangeAlert = nil
+    }
+
+    /// User chose to accept the new key
+    func handleKeyChangeAccept() {
+        guard let alert = pendingKeyChangeAlert else { return }
+        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey)
+        pendingKeyChangeAlert = nil
+    }
+
+    /// User chose to verify later
+    func handleKeyChangeVerifyLater() {
+        guard let alert = pendingKeyChangeAlert else { return }
+        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey)
+        pendingKeyChangeAlert = nil
     }
 }
 
