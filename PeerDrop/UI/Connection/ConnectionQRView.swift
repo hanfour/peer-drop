@@ -21,6 +21,10 @@ struct ConnectionQRView: View {
     @State private var isCreatingRelay = false
     @State private var relayError: String?
     @State private var copied = false
+    @State private var showVerification = false
+    @State private var verificationPeerName = ""
+    @State private var verificationSafetyNumber = ""
+    @State private var verificationPublicKey: Data?
 
     var body: some View {
         NavigationStack {
@@ -114,6 +118,14 @@ struct ConnectionQRView: View {
             addresses = Self.availableAddresses()
             await createRelayRoom()
         }
+        .sheet(isPresented: $showVerification) {
+            VerificationView(
+                peerName: verificationPeerName,
+                safetyNumber: verificationSafetyNumber,
+                onConfirm: { showVerification = false },
+                onCancel: { showVerification = false }
+            )
+        }
     }
 
     // MARK: - Smart Deep Link
@@ -139,10 +151,21 @@ struct ConnectionQRView: View {
         }
         params.append("name=\(name)")
 
-        // Need at least one connection method besides name
-        guard params.count >= 2 else {
-            // If only name param, nothing useful
-            return params.count == 1 ? nil : nil
+        // Add identity public key for trust verification
+        let pkBase64 = IdentityKeyManager.shared.publicKey.rawRepresentation.base64EncodedString()
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if !pkBase64.isEmpty {
+            params.append("pk=\(pkBase64)")
+        }
+        if let fp = IdentityKeyManager.shared.fingerprint
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            params.append("fp=\(fp)")
+        }
+
+        // Need at least one connection method besides name/pk/fp
+        let connectionParams = params.filter { !$0.hasPrefix("name=") && !$0.hasPrefix("pk=") && !$0.hasPrefix("fp=") }
+        guard !connectionParams.isEmpty else {
+            return nil
         }
 
         return "peerdrop://smart?\(params.joined(separator: "&"))"
