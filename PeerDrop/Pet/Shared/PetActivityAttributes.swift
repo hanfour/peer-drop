@@ -1,9 +1,12 @@
 import ActivityKit
 
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct PetActivityAttributes: ActivityAttributes {
     let petName: String
     let bodyType: BodyGene
+    let eyeType: EyeGene
+    let patternType: PatternGene
+    let paletteIndex: Int
 
     struct ContentState: Codable, Hashable {
         let pose: IslandPose

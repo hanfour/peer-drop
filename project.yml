@@ -135,6 +135,8 @@ targets:
       path: PeerDropWidget/Info.plist
       properties:
         CFBundleDisplayName: PeerDrop Widget
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

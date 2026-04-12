@@ -28,6 +28,7 @@ struct FloatingPetView: View {
             // Particles behind pet
             ForEach(engine.particles) { particle in
                 PetParticleView(particle: particle)
+                    .position(particle.position)
             }
 
             ZStack {

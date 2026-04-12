@@ -7,7 +7,8 @@ enum BodyGene: String, Codable, CaseIterable {
 
     /// Map legacy values from v1 genome saves
     init(from decoder: Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
         switch raw {
         case "round": self = .bear
         case "square": self = .cat
@@ -15,7 +16,7 @@ enum BodyGene: String, Codable, CaseIterable {
         default:
             guard let value = BodyGene(rawValue: raw) else {
                 throw DecodingError.dataCorruptedError(
-                    in: try decoder.singleValueContainer(),
+                    in: container,
                     debugDescription: "Unknown BodyGene: \(raw)")
             }
             self = value

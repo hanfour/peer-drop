@@ -9,7 +9,10 @@ struct PetLiveActivity: Widget {
             // Lock Screen / Banner
             HStack(spacing: 12) {
                 petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood, scale: 4)
+                          mood: context.state.mood,
+                          eyes: context.attributes.eyeType,
+                          pattern: context.attributes.patternType,
+                          paletteIndex: context.attributes.paletteIndex, scale: 4)
                     .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.attributes.petName).font(.headline)
@@ -24,7 +27,10 @@ struct PetLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     petSprite(body: context.attributes.bodyType, level: context.state.level,
-                              mood: context.state.mood, scale: 4)
+                              mood: context.state.mood,
+                              eyes: context.attributes.eyeType,
+                              pattern: context.attributes.patternType,
+                              paletteIndex: context.attributes.paletteIndex, scale: 4)
                         .frame(width: 48, height: 48)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -42,23 +48,31 @@ struct PetLiveActivity: Widget {
                 }
             } compactLeading: {
                 petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood, scale: 2)
+                          mood: context.state.mood,
+                          eyes: context.attributes.eyeType,
+                          pattern: context.attributes.patternType,
+                          paletteIndex: context.attributes.paletteIndex, scale: 2)
                     .frame(width: 24, height: 24)
             } compactTrailing: {
                 Text(moodEmoji(context.state.mood)).font(.caption)
             } minimal: {
                 petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood, scale: 2)
+                          mood: context.state.mood,
+                          eyes: context.attributes.eyeType,
+                          pattern: context.attributes.patternType,
+                          paletteIndex: context.attributes.paletteIndex, scale: 2)
                     .frame(width: 24, height: 24)
             }
         }
     }
 
     @ViewBuilder
-    private func petSprite(body: BodyGene, level: PetLevel, mood: PetMood, scale: Int) -> some View {
+    private func petSprite(body: BodyGene, level: PetLevel, mood: PetMood,
+                           eyes: EyeGene, pattern: PatternGene, paletteIndex: Int,
+                           scale: Int) -> some View {
         if let image = PetSnapshotRenderer.render(
             body: body, level: level, mood: mood,
-            eyes: .dot, pattern: .none, paletteIndex: 0, scale: scale) {
+            eyes: eyes, pattern: pattern, paletteIndex: paletteIndex, scale: scale) {
             Image(decorative: image, scale: 1.0)
                 .interpolation(.none).resizable().aspectRatio(contentMode: .fit)
         } else {

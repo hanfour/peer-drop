@@ -26,8 +26,11 @@ class SharedPetState {
     }
 
     func write(_ snapshot: PetSnapshot) {
-        if let data = try? JSONEncoder().encode(snapshot) {
+        do {
+            let data = try JSONEncoder().encode(snapshot)
             defaults.set(data, forKey: Self.key)
+        } catch {
+            assertionFailure("Failed to encode PetSnapshot: \(error)")
         }
     }
 

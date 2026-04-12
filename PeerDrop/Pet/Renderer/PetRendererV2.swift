@@ -3,7 +3,6 @@ import CoreGraphics
 @MainActor
 class PetRendererV2 {
 
-    static let shared = PetRendererV2()
     private let cache = SpriteCache(maxEntries: 200)
 
     func render(genome: PetGenome, level: PetLevel, action: PetAction = .idle, mood: PetMood,

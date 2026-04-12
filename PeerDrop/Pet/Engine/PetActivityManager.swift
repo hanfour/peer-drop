@@ -27,7 +27,10 @@ class PetActivityManager {
         }
         let attributes = PetActivityAttributes(
             petName: snapshot.name ?? "Pet",
-            bodyType: snapshot.bodyType)
+            bodyType: snapshot.bodyType,
+            eyeType: snapshot.eyeType,
+            patternType: snapshot.patternType,
+            paletteIndex: snapshot.paletteIndex)
         let state = Self.contentState(from: snapshot)
         do {
             currentActivity = try Activity.request(
