@@ -30,6 +30,7 @@ final class PetSocialEngine {
         return SocialEntry(
             partnerPetID: partnerGreeting.petID,
             partnerName: partnerGreeting.name,
+            partnerGenome: partnerGreeting.genome,
             interaction: .chat,
             dialogue: dialogue,
             isRevealed: false

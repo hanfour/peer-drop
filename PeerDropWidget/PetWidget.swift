@@ -63,7 +63,7 @@ struct PetWidgetSmallView: View {
             VStack {
                 Image(systemName: "pawprint.fill")
                     .font(.largeTitle)
-                Text("No Pet Yet")
+                Text("pet_widget_no_pet")
                     .font(.caption)
             }
             .widgetBackground()
@@ -102,8 +102,8 @@ struct PetWidget: Widget {
                 PetWidgetSmallView(entry: entry).padding()
             }
         }
-        .configurationDisplayName("Pet")
-        .description("See your pet at a glance.")
+        .configurationDisplayName(Text("pet_widget_name"))
+        .description(Text("pet_widget_description"))
         .supportedFamilies([.systemSmall, .accessoryCircular])
     }
 }

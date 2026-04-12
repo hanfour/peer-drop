@@ -61,11 +61,27 @@ class PetEngine: ObservableObject {
         setupAnimationObserver()
     }
 
+    // MARK: - Daily Login & Rewards
+
+    func checkDailyLogin() {
+        let cal = Calendar.current
+        if let lastLogin = pet.lastLoginDate, cal.isDateInToday(lastLogin) { return }
+        pet.foodInventory.applyDailyRefresh()
+        pet.lastLoginDate = Date()
+    }
+
+    func onPeerConnected() {
+        let randomFood = FoodType.allCases.randomElement()!
+        pet.foodInventory.add(randomFood, count: 1)
+        pet.stats.petsMet += 1
+    }
+
     func handleInteraction(_ type: InteractionType) {
         tracker.record(type)
         pet.experience += type.experienceValue
         pet.mood = tracker.calculateMood(hasSocialRecently: hasSocialRecently)
         pet.lastInteraction = Date()
+        pet.stats.totalInteractions += 1
 
         // Gene mutation (5% chance)
         if Double.random(in: 0...1) < 0.05 {
@@ -88,6 +104,12 @@ class PetEngine: ObservableObject {
         let entry = socialEngine.onPetMeeting(myPet: pet, partnerGreeting: partnerGreeting)
         pet.socialLog.append(entry)
         handleInteraction(.petMeeting)
+        currentAction = .love
+        for _ in 0..<3 {
+            let offset = CGVector(dx: Double.random(in: -20...20), dy: Double.random(in: -30...(-10)))
+            particles.append(PetParticle(type: .heart, position: physicsState.position,
+                                          velocity: offset, lifetime: 1.0))
+        }
     }
 
     func handleChatMessage() {

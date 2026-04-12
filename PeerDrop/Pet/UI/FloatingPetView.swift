@@ -7,7 +7,7 @@ struct FloatingPetView: View {
     @State private var dragStartPosition: CGPoint = .zero
     @State private var dragStartTime: Date = .init()
     @State private var lastDragPosition: CGPoint = .zero
-    @State private var physicsTimer: Timer?
+    @State private var displayLink: CADisplayLink?
     @State private var behaviorTimer: Timer?
     @State private var behaviorElapsed: TimeInterval = 0
     @State private var namingText = ""
@@ -127,7 +127,7 @@ struct FloatingPetView: View {
             startBehaviorLoop()
         }
         .onDisappear {
-            physicsTimer?.invalidate()
+            displayLink?.invalidate()
             behaviorTimer?.invalidate()
         }
     }
@@ -135,55 +135,62 @@ struct FloatingPetView: View {
     // MARK: - Physics Loop
 
     private func startPhysicsLoop() {
-        let surfaces = screenSurfaces()
-        physicsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+        let target = DisplayLinkTarget { [weak engine] dt in
+            guard let engine else { return }
             Task { @MainActor in
-                guard !isDragging else { return }
-                let dt: CGFloat = 1.0 / 60.0
-
-                // Chase food target
-                if let food = engine.foodTarget {
-                    let dx = food.position.x - engine.physicsState.position.x
-                    let dy = food.position.y - engine.physicsState.position.y
-                    let dist = hypot(dx, dy)
-                    if dist < 8 {
-                        engine.consumeFood()
-                    } else {
-                        let direction: PetPhysicsEngine.HorizontalDirection = dx > 0 ? .right : .left
-                        PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                                   speed: 120, dt: dt, surfaces: surfaces)
-                    }
-                }
-
-                switch engine.currentAction {
-                case .walking:
-                    let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
-                    PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                               speed: 60, dt: dt, surfaces: surfaces)
-                case .run:
-                    // run is handled by food chase above; if no food, walk normally
-                    if engine.foodTarget == nil {
-                        let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
-                        PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                                   speed: 100, dt: dt, surfaces: surfaces)
-                    }
-                case .climb:
-                    PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
-                                                dt: dt, surfaces: surfaces)
-                case .thrown, .fall:
-                    PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces)
-                    if engine.physicsState.surface != .airborne {
-                        engine.currentAction = .idle
-                        behaviorElapsed = 0
-                    }
-                default:
-                    break
-                }
-
-                // Remove expired particles
-                engine.particles.removeAll { $0.isExpired }
+                self.physicsStep(dt: CGFloat(dt))
             }
         }
+        let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private func physicsStep(dt: CGFloat) {
+        guard !isDragging else { return }
+        let surfaces = screenSurfaces()
+
+        // Chase food target
+        if let food = engine.foodTarget {
+            let dx = food.position.x - engine.physicsState.position.x
+            let dy = food.position.y - engine.physicsState.position.y
+            let dist = hypot(dx, dy)
+            if dist < 8 {
+                engine.consumeFood()
+            } else {
+                let direction: PetPhysicsEngine.HorizontalDirection = dx > 0 ? .right : .left
+                PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                           speed: 120, dt: dt, surfaces: surfaces)
+            }
+        }
+
+        switch engine.currentAction {
+        case .walking:
+            let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
+            PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                       speed: 60, dt: dt, surfaces: surfaces)
+        case .run:
+            if engine.foodTarget == nil {
+                let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
+                PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                           speed: 100, dt: dt, surfaces: surfaces)
+            }
+        case .climb:
+            PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
+                                        dt: dt, surfaces: surfaces)
+        case .thrown, .fall:
+            PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces)
+            if engine.physicsState.surface != .airborne {
+                engine.currentAction = .idle
+                behaviorElapsed = 0
+            }
+        default:
+            break
+        }
+
+        // Remove expired particles
+        engine.particles.removeAll { $0.isExpired }
     }
 
     // MARK: - Behavior Loop
@@ -236,5 +243,16 @@ struct FloatingPetView: View {
 
     private func clamp(_ value: CGFloat, _ minVal: CGFloat, _ maxVal: CGFloat) -> CGFloat {
         min(max(value, minVal), maxVal)
+    }
+}
+
+// MARK: - CADisplayLink Target
+
+private class DisplayLinkTarget {
+    let update: (TimeInterval) -> Void
+    init(update: @escaping (TimeInterval) -> Void) { self.update = update }
+    @objc func tick(_ link: CADisplayLink) {
+        let dt = link.targetTimestamp - link.timestamp
+        update(max(dt, 1.0 / 120.0))
     }
 }
