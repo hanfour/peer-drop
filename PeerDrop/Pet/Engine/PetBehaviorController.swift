@@ -4,12 +4,20 @@ import Foundation
 enum PetBehaviorController {
 
     static func nextBehavior(current: PetAction, physics: PetPhysicsState,
-                             level: PetLevel, elapsed: TimeInterval) -> PetAction {
+                             level: PetLevel, elapsed: TimeInterval,
+                             foodTarget: CGPoint? = nil,
+                             traits: PersonalityTraits? = nil) -> PetAction {
         guard level != .egg else { return .idle }
+
+        if let target = foodTarget, physics.surface == .ground {
+            let dist = hypot(physics.position.x - target.x, physics.position.y - target.y)
+            if dist > 8 { return .run }
+        }
 
         switch (current, physics.surface) {
         case (.idle, .ground):
-            if elapsed > 5 { return Bool.random() ? .walking : .idle }
+            let idleThreshold: TimeInterval = (traits?.energy ?? 0.5) > 0.7 ? 2.5 : 5.0
+            if elapsed > idleThreshold { return Bool.random() ? .walking : .idle }
             return .idle
 
         case (.walking, .ground):
@@ -17,7 +25,8 @@ enum PetBehaviorController {
             return .walking
 
         case (.walking, .leftWall), (.walking, .rightWall):
-            return Bool.random() ? .climb : .walking
+            let climbChance = (traits?.mischief ?? 0.5) > 0.7 ? 0.75 : 0.5
+            return Double.random(in: 0...1) < climbChance ? .climb : .walking
 
         case (.climb, .leftWall), (.climb, .rightWall):
             if elapsed > 3 { return Bool.random() ? .fall : .hang }

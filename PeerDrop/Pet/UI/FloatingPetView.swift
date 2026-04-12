@@ -7,14 +7,22 @@ struct FloatingPetView: View {
     @State private var dragStartPosition: CGPoint = .zero
     @State private var dragStartTime: Date = .init()
     @State private var lastDragPosition: CGPoint = .zero
-    @State private var physicsTimer: Timer?
+    @State private var displayLink: CADisplayLink?
     @State private var behaviorTimer: Timer?
     @State private var behaviorElapsed: TimeInterval = 0
+    @State private var namingText = ""
 
     private let displaySize: CGFloat = 128
 
     var body: some View {
         ZStack {
+            // Dropped food
+            if let food = engine.foodTarget {
+                Text(food.type.emoji)
+                    .font(.system(size: 24))
+                    .position(food.position)
+            }
+
             // Poops
             ForEach(engine.poopState.poops) { poop in
                 Text("💩")
@@ -98,6 +106,20 @@ struct FloatingPetView: View {
         .sheet(isPresented: $showInteractionPanel) {
             PetInteractionView(engine: engine)
         }
+        .dropDestination(for: String.self) { items, location in
+            guard let raw = items.first, let foodType = FoodType(rawValue: raw) else { return false }
+            engine.dropFood(foodType, at: location)
+            return true
+        }
+        .alert("幫寵物取個名字吧！", isPresented: $engine.showNamingDialog) {
+            TextField("名字", text: $namingText)
+            Button("確定") {
+                let trimmed = namingText.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { engine.pet.name = trimmed }
+            }
+        } message: {
+            Text("你的寵物剛孵化了！")
+        }
         .accessibilityIdentifier("floating-pet")
         .accessibilityLabel("Pet")
         .onAppear {
@@ -105,7 +127,7 @@ struct FloatingPetView: View {
             startBehaviorLoop()
         }
         .onDisappear {
-            physicsTimer?.invalidate()
+            displayLink?.invalidate()
             behaviorTimer?.invalidate()
         }
     }
@@ -113,34 +135,62 @@ struct FloatingPetView: View {
     // MARK: - Physics Loop
 
     private func startPhysicsLoop() {
-        let surfaces = screenSurfaces()
-        physicsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+        let target = DisplayLinkTarget { [weak engine] dt in
+            guard let engine else { return }
             Task { @MainActor in
-                guard !isDragging else { return }
-                let dt: CGFloat = 1.0 / 60.0
-
-                switch engine.currentAction {
-                case .walking:
-                    let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
-                    PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                               speed: 60, dt: dt, surfaces: surfaces)
-                case .climb:
-                    PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
-                                                dt: dt, surfaces: surfaces)
-                case .thrown, .fall:
-                    PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces)
-                    if engine.physicsState.surface != .airborne {
-                        engine.currentAction = .idle
-                        behaviorElapsed = 0
-                    }
-                default:
-                    break
-                }
-
-                // Remove expired particles
-                engine.particles.removeAll { $0.isExpired }
+                self.physicsStep(dt: CGFloat(dt))
             }
         }
+        let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private func physicsStep(dt: CGFloat) {
+        guard !isDragging else { return }
+        let surfaces = screenSurfaces()
+
+        // Chase food target
+        if let food = engine.foodTarget {
+            let dx = food.position.x - engine.physicsState.position.x
+            let dy = food.position.y - engine.physicsState.position.y
+            let dist = hypot(dx, dy)
+            if dist < 8 {
+                engine.consumeFood()
+            } else {
+                let direction: PetPhysicsEngine.HorizontalDirection = dx > 0 ? .right : .left
+                PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                           speed: 120, dt: dt, surfaces: surfaces)
+            }
+        }
+
+        switch engine.currentAction {
+        case .walking:
+            let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
+            PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                       speed: 60, dt: dt, surfaces: surfaces)
+        case .run:
+            if engine.foodTarget == nil {
+                let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
+                PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                           speed: 100, dt: dt, surfaces: surfaces)
+            }
+        case .climb:
+            PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
+                                        dt: dt, surfaces: surfaces)
+        case .thrown, .fall:
+            PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces)
+            if engine.physicsState.surface != .airborne {
+                engine.currentAction = .idle
+                behaviorElapsed = 0
+            }
+        default:
+            break
+        }
+
+        // Remove expired particles
+        engine.particles.removeAll { $0.isExpired }
     }
 
     // MARK: - Behavior Loop
@@ -156,11 +206,15 @@ struct FloatingPetView: View {
                     engine.pet.mood = forcedMood
                 }
 
+                engine.checkDigestion()
+
                 let nextAction = PetBehaviorController.nextBehavior(
                     current: engine.currentAction,
                     physics: engine.physicsState,
                     level: engine.pet.level,
-                    elapsed: behaviorElapsed)
+                    elapsed: behaviorElapsed,
+                    foodTarget: engine.foodTarget?.position,
+                    traits: engine.pet.genome.personalityTraits)
 
                 if nextAction != engine.currentAction {
                     engine.currentAction = nextAction
@@ -190,5 +244,16 @@ struct FloatingPetView: View {
 
     private func clamp(_ value: CGFloat, _ minVal: CGFloat, _ maxVal: CGFloat) -> CGFloat {
         min(max(value, minVal), maxVal)
+    }
+}
+
+// MARK: - CADisplayLink Target
+
+private class DisplayLinkTarget {
+    let update: (TimeInterval) -> Void
+    init(update: @escaping (TimeInterval) -> Void) { self.update = update }
+    @objc func tick(_ link: CADisplayLink) {
+        let dt = link.targetTimestamp - link.timestamp
+        update(max(dt, 1.0 / 120.0))
     }
 }
