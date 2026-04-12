@@ -3,9 +3,41 @@ import Foundation
 // MARK: - Gene Enums
 
 enum BodyGene: String, Codable, CaseIterable {
-    case round
-    case square
-    case oval
+    case cat, dog, rabbit, bird, frog, bear, dragon, octopus, ghost, slime
+
+    /// Map legacy values from v1 genome saves
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "round": self = .bear
+        case "square": self = .cat
+        case "oval": self = .slime
+        default:
+            guard let value = BodyGene(rawValue: raw) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Unknown BodyGene: \(raw)")
+            }
+            self = value
+        }
+    }
+
+    /// Determine body type from personality gene at hatch
+    static func from(personalityGene pg: Double) -> BodyGene {
+        switch pg {
+        case ..<0.14: return .cat
+        case ..<0.28: return .dog
+        case ..<0.40: return .rabbit
+        case ..<0.52: return .bird
+        case ..<0.62: return .frog
+        case ..<0.72: return .bear
+        case ..<0.80: return .dragon
+        case ..<0.87: return .octopus
+        case ..<0.93: return .ghost
+        default:      return .slime
+        }
+    }
 }
 
 enum EyeGene: String, Codable, CaseIterable {
@@ -54,22 +86,22 @@ struct PersonalityTraits: Codable, Equatable {
 // MARK: - PetGenome
 
 struct PetGenome: Codable, Equatable {
-    static let canvasSize = 32
+    static let canvasSize = 16
 
     var paletteIndex: Int {
-        min(Int(personalityGene * 8), 7)
+        let hash = (personalityGene * 137).truncatingRemainder(dividingBy: 1.0)
+        return min(Int(hash * 8), 7)
     }
 
     var body: BodyGene
     var eyes: EyeGene
-    var limbs: LimbGene
+    var limbs: LimbGene?  // deprecated, kept for migration
     var pattern: PatternGene
     /// Master personality seed, 0.0~1.0
     var personalityGene: Double
 
     /// Derives five personality traits from the single personality gene seed.
     var personalityTraits: PersonalityTraits {
-        // Use deterministic derivation from the seed
         let seed = personalityGene
         var traits = PersonalityTraits(
             independence: fmod(seed * 7.3 + 0.1, 1.0),
@@ -87,35 +119,30 @@ struct PetGenome: Codable, Equatable {
         let shouldMutate = trigger == .evolution || Double.random(in: 0...1) < 0.3
         guard shouldMutate else { return }
 
-        let field = Int.random(in: 0..<5)
+        // Body is fixed after hatch — only eyes, pattern, personality can mutate
+        let field = Int.random(in: 0..<3)
         switch field {
         case 0:
-            let others = BodyGene.allCases.filter { $0 != body }
-            if let pick = others.randomElement() { body = pick }
-        case 1:
             let others = EyeGene.allCases.filter { $0 != eyes }
             if let pick = others.randomElement() { eyes = pick }
-        case 2:
-            let others = LimbGene.allCases.filter { $0 != limbs }
-            if let pick = others.randomElement() { limbs = pick }
-        case 3:
+        case 1:
             let others = PatternGene.allCases.filter { $0 != pattern }
             if let pick = others.randomElement() { pattern = pick }
-        case 4:
+        case 2:
             personalityGene = Double.random(in: 0...1)
         default:
             break
         }
     }
 
-    /// Creates a genome with random genes.
+    /// Creates a genome with random genes using personality gene to determine body.
     static func random() -> PetGenome {
-        PetGenome(
-            body: BodyGene.allCases.randomElement()!,
+        let pg = Double.random(in: 0...1)
+        return PetGenome(
+            body: BodyGene.from(personalityGene: pg),
             eyes: EyeGene.allCases.randomElement()!,
-            limbs: LimbGene.allCases.randomElement()!,
             pattern: PatternGene.allCases.randomElement()!,
-            personalityGene: Double.random(in: 0...1)
+            personalityGene: pg
         )
     }
 }

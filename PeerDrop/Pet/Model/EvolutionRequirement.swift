@@ -18,7 +18,14 @@ struct EvolutionRequirement {
                 minimumAge: 86400 // 24 hours
             )
         case .baby:
-            // Not yet implemented in MVP
+            return EvolutionRequirement(
+                targetLevel: .child,
+                requiredExperience: 500,
+                socialBonus: 1.5,
+                minimumAge: 259200 // 3 days
+            )
+        case .child:
+            // Not yet implemented
             return nil
         }
     }

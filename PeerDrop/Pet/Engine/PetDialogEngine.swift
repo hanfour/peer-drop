@@ -25,7 +25,7 @@ final class PetDialogEngine {
         switch level {
         case .egg:
             return nil
-        case .baby:
+        case .baby, .child:
             guard let pool = babyTemplates[mood], !pool.isEmpty else { return nil }
             return pool.randomElement()
         }
@@ -64,7 +64,7 @@ final class PetDialogEngine {
         switch level {
         case .egg:
             return eggSounds.randomElement() ?? "..."
-        case .baby:
+        case .baby, .child:
             return babyTemplates[mood]?.randomElement() ?? "..."
         }
     }
