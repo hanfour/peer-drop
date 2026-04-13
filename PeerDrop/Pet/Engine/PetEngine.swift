@@ -76,11 +76,38 @@ class PetEngine: ObservableObject {
         pet.stats.petsMet += 1
     }
 
+    /// Minimum seconds between XP-granting taps. Non-tap interactions are not throttled.
+    private static let tapCooldown: TimeInterval = 3.0
+    /// Max tap XP per day to prevent grinding
+    private static let maxDailyTapXP: Int = 50
+    private var lastTapDate: Date?
+
     func handleInteraction(_ type: InteractionType) {
+        let now = Date()
+
+        // Throttle taps: cooldown + daily cap
+        if type == .tap {
+            if let last = lastTapDate, now.timeIntervalSince(last) < Self.tapCooldown {
+                // Cooldown active — still animate/mood but no XP
+                pet.mood = tracker.calculateMood(hasSocialRecently: hasSocialRecently)
+                pet.lastInteraction = now
+                updateRenderedImage()
+                return
+            }
+            let todayTapXP = tracker.tapXPToday
+            if todayTapXP >= Self.maxDailyTapXP {
+                pet.mood = tracker.calculateMood(hasSocialRecently: hasSocialRecently)
+                pet.lastInteraction = now
+                updateRenderedImage()
+                return
+            }
+            lastTapDate = now
+        }
+
         tracker.record(type)
         pet.experience += type.experienceValue
         pet.mood = tracker.calculateMood(hasSocialRecently: hasSocialRecently)
-        pet.lastInteraction = Date()
+        pet.lastInteraction = now
         pet.stats.totalInteractions += 1
 
         // Gene mutation (5% chance)

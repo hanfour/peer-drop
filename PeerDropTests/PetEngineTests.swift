@@ -31,9 +31,15 @@ final class PetEngineTests: XCTestCase {
     }
 
     func testHandleInteractionUpdatesMood() {
-        // 5 taps within one hour should yield .happy
+        // A single tap within 10 min should yield .curious
+        engine.handleInteraction(.tap)
+        XCTAssertEqual(engine.pet.mood, .curious)
+    }
+
+    func testMoodBecomesHappyWithManyInteractions() {
+        // Use non-tap interactions (no cooldown) to get 5+ in 10 min → .happy
         for _ in 0..<6 {
-            engine.handleInteraction(.tap)
+            engine.handleInteraction(.peerConnected)
         }
         XCTAssertEqual(engine.pet.mood, .happy)
     }

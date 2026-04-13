@@ -23,10 +23,12 @@ final class WorkerSignalingTests: XCTestCase {
     }
 
     func testWorkerSignalingErrorDescriptions() {
-        XCTAssertNotNil(WorkerSignalingError.roomCreationFailed.errorDescription)
+        XCTAssertNotNil(WorkerSignalingError.roomCreationFailed().errorDescription)
         XCTAssertNotNil(WorkerSignalingError.roomNotFound.errorDescription)
-        XCTAssertNotNil(WorkerSignalingError.iceCredentialsFailed.errorDescription)
+        XCTAssertNotNil(WorkerSignalingError.iceCredentialsFailed().errorDescription)
         XCTAssertNotNil(WorkerSignalingError.noTURNCredentials.errorDescription)
         XCTAssertNotNil(WorkerSignalingError.webSocketError.errorDescription)
+        // Test with status code details
+        XCTAssertTrue(WorkerSignalingError.iceCredentialsFailed(statusCode: 401, body: "Unauthorized").errorDescription!.contains("401"))
     }
 }
