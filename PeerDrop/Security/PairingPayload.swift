@@ -90,3 +90,52 @@ struct PairingPayload {
         case missingFields
     }
 }
+
+// MARK: - Remote Invite Payload
+
+struct InvitePayload: Codable {
+    let mailboxId: String
+    let identityKeyFingerprint: String
+    let displayName: String
+    let expiry: Date
+
+    func toURL() -> URL? {
+        var components = URLComponents()
+        components.scheme = "peerdrop"
+        components.host = "invite"
+        components.queryItems = [
+            URLQueryItem(name: "mbx", value: mailboxId),
+            URLQueryItem(name: "fp", value: identityKeyFingerprint),
+            URLQueryItem(name: "name", value: displayName),
+            URLQueryItem(name: "exp", value: String(Int(expiry.timeIntervalSince1970)))
+        ]
+        return components.url
+    }
+
+    init(mailboxId: String, identityKeyFingerprint: String, displayName: String, expiry: Date) {
+        self.mailboxId = mailboxId
+        self.identityKeyFingerprint = identityKeyFingerprint
+        self.displayName = displayName
+        self.expiry = expiry
+    }
+
+    init(from url: URL) throws {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme == "peerdrop",
+              components.host == "invite",
+              let items = components.queryItems else {
+            throw PairingPayload.PairingError.invalidURL
+        }
+        let dict = Dictionary(uniqueKeysWithValues: items.compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+        guard let mbx = dict["mbx"], let fp = dict["fp"], let name = dict["name"],
+              let expStr = dict["exp"], let expTs = TimeInterval(expStr) else {
+            throw PairingPayload.PairingError.missingFields
+        }
+        self.mailboxId = mbx
+        self.identityKeyFingerprint = fp
+        self.displayName = name
+        self.expiry = Date(timeIntervalSince1970: expTs)
+    }
+}

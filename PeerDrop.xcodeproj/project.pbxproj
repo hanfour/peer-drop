@@ -101,6 +101,7 @@
 		401FC8122FEB4D13F9C4A025 /* RelayAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371D9C8BCBFCD1265F54D339 /* RelayAuthenticator.swift */; };
 		402668C766BED0AC8C7E4529 /* E2EIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613B66E2077223EA0560E336 /* E2EIntegrationTests.swift */; };
 		4133DCC23F3984CC9048905E /* PetFeedingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB79B8FB4BA9C025C703233 /* PetFeedingTests.swift */; };
+		417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
 		4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21815A246EC26999D8D31534 /* VoiceCallManager.swift */; };
 		43F565E58D2B64A13208EC39 /* EggSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679DBEB5DFF96E4BD98994CA /* EggSpriteData.swift */; };
 		442F5D1CE27D94FAEF3599AF /* PetRendererV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95C1A1B66AFC36BF4F93B71 /* PetRendererV2.swift */; };
@@ -489,6 +490,7 @@
 		4EA9862E96770E9E7C4DC4E2 /* PeerConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionState.swift; sourceTree = "<group>"; };
 		4EF1CBD311D71DDF863068E4 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		4FA61FA1584A3CF475D12AF1 /* PetPersonalityBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPersonalityBehaviorTests.swift; sourceTree = "<group>"; };
+		4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteView.swift; sourceTree = "<group>"; };
 		50393228F69F31F111E2B37B /* VoiceCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallView.swift; sourceTree = "<group>"; };
 		505238DF5946BC1E6E39B70B /* NearbyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyTab.swift; sourceTree = "<group>"; };
 		5109FA0E4C4ED974F8FDDFE5 /* ConsentFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentFlowUITests.swift; sourceTree = "<group>"; };
@@ -1040,6 +1042,7 @@
 			isa = PBXGroup;
 			children = (
 				5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */,
+				4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */,
 				1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */,
 				0D4DE23F4DC70DE5619071BA /* TrustBadgeView.swift */,
 				9B335967E2F46FE4D5037176 /* VerificationView.swift */,
@@ -1856,6 +1859,7 @@
 				EE3FDCDE1B20A0027BC311E5 /* ReactionPickerView.swift in Sources */,
 				401FC8122FEB4D13F9C4A025 /* RelayAuthenticator.swift in Sources */,
 				85804F312615EC7ECE8E13E2 /* RelayConnectView.swift in Sources */,
+				417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */,
 				C9DC96C0189F59682746A8D3 /* RemoteSessionManager.swift in Sources */,
 				FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */,
 				4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */,

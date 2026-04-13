@@ -197,6 +197,12 @@ final class ConnectionManager: ObservableObject {
     let clipboardSyncManager = ClipboardSyncManager()
     let trustedContactStore = TrustedContactStore()
 
+    // MARK: - Remote Communication (Phase 2)
+
+    let preKeyStore = PreKeyStore()
+    private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
+    private(set) lazy var remoteSessionManager = RemoteSessionManager(preKeyStore: preKeyStore)
+
     // MARK: - Typing Indicator State
 
     private var typingDebounceTask: Task<Void, Never>?
@@ -225,6 +231,11 @@ final class ConnectionManager: ObservableObject {
             self?.sendClipboardSyncToAll(payload)
         }
         clipboardSyncManager.startMonitoring()
+
+        // Wire remote mailbox message handler
+        mailboxManager.onMessageReceived = { [weak self] message in
+            self?.handleRemoteMessage(message)
+        }
 
         // Screenshot mode: automatically start discovery and set up mock connection
         if ScreenshotModeProvider.shared.isActive {
@@ -812,6 +823,13 @@ final class ConnectionManager: ObservableObject {
         lastConnectedPeer != nil
     }
 
+    // MARK: - Remote Message Handling
+
+    private func handleRemoteMessage(_ message: MailboxMessage) {
+        // TODO: Decode envelope, find contact, decrypt via remoteSessionManager, route to ChatManager
+        logger.info("Received remote message: \(message.id)")
+    }
+
     // MARK: - App Lifecycle
 
     func handleScenePhaseChange(_ phase: ScenePhase) {
@@ -819,6 +837,8 @@ final class ConnectionManager: ObservableObject {
         case .active:
             endBackgroundTask()
             discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
+            mailboxManager.startPolling()
+            Task { await mailboxManager.uploadPreKeysIfNeeded() }
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
@@ -842,6 +862,8 @@ final class ConnectionManager: ObservableObject {
             deviceStore.saveImmediately()
             chatManager.flushAllPendingPersists()
             trustedContactStore.flushPendingSave()
+            preKeyStore.flush()
+            mailboxManager.stopPolling()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
