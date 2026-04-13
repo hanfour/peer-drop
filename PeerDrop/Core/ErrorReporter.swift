@@ -36,7 +36,6 @@ enum ErrorReporter {
             "buildNumber": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?",
             "device": UIDevice.current.model,
             "systemVersion": UIDevice.current.systemVersion,
-            "deviceName": UIDevice.current.name,
         ]
         for (k, v) in extras { body[k] = v }
 

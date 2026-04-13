@@ -841,6 +841,7 @@ final class ConnectionManager: ObservableObject {
             // Flush pending writes before entering background
             deviceStore.saveImmediately()
             chatManager.flushAllPendingPersists()
+            trustedContactStore.flushPendingSave()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
