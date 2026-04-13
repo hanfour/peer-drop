@@ -69,12 +69,12 @@ final class WorkerSignaling: NSObject {
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw WorkerSignalingError.roomCreationFailed
+            throw WorkerSignalingError.roomCreationFailed()
         }
         guard httpResponse.statusCode == 201 else {
             let body = String(data: data, encoding: .utf8) ?? "no body"
             logger.error("Room creation failed: HTTP \(httpResponse.statusCode), body: \(body)")
-            throw WorkerSignalingError.roomCreationFailed
+            throw WorkerSignalingError.roomCreationFailed(statusCode: httpResponse.statusCode, body: body)
         }
 
         struct RoomResponse: Decodable {
@@ -120,12 +120,12 @@ final class WorkerSignaling: NSObject {
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw WorkerSignalingError.iceCredentialsFailed
+            throw WorkerSignalingError.iceCredentialsFailed()
         }
         guard httpResponse.statusCode == 200 else {
             let body = String(data: data, encoding: .utf8) ?? "no body"
             logger.error("ICE request failed: HTTP \(httpResponse.statusCode), body: \(body), url: \(url.absoluteString)")
-            throw WorkerSignalingError.iceCredentialsFailed
+            throw WorkerSignalingError.iceCredentialsFailed(statusCode: httpResponse.statusCode, body: body)
         }
 
         struct ICEResponse: Decodable {
@@ -262,17 +262,21 @@ final class WorkerSignaling: NSObject {
 // MARK: - Errors
 
 enum WorkerSignalingError: LocalizedError {
-    case roomCreationFailed
+    case roomCreationFailed(statusCode: Int = 0, body: String = "")
     case roomNotFound
-    case iceCredentialsFailed
+    case iceCredentialsFailed(statusCode: Int = 0, body: String = "")
     case noTURNCredentials
     case webSocketError
 
     var errorDescription: String? {
         switch self {
-        case .roomCreationFailed: return "Failed to create signaling room"
+        case .roomCreationFailed(let code, let body):
+            if code > 0 { return "Room creation failed: HTTP \(code) \(body)" }
+            return "Failed to create signaling room"
         case .roomNotFound: return "Room not found or expired"
-        case .iceCredentialsFailed: return "Failed to get ICE credentials"
+        case .iceCredentialsFailed(let code, let body):
+            if code > 0 { return "ICE failed: HTTP \(code) \(body)" }
+            return "Failed to get ICE credentials"
         case .noTURNCredentials: return "No TURN credentials available"
         case .webSocketError: return "WebSocket connection error"
         }

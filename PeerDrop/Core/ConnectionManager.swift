@@ -1613,19 +1613,21 @@ final class ConnectionManager: ObservableObject {
 
         // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
         var iceResult: WorkerSignaling.ICEResult?
+        var iceError: String?
         do {
             iceResult = try await signaling.requestICECredentials(roomCode: roomCode)
             logger.info("ICE credentials received for room \(roomCode), token: \(iceResult?.roomToken != nil ? "present" : "nil")")
         } catch {
-            logger.error("ICE credentials request failed for room \(roomCode): \(error.localizedDescription)")
-            // Continue without TURN — will use STUN fallback, but need token for WebSocket auth
+            iceError = error.localizedDescription
+            logger.error("ICE credentials request failed for room \(roomCode): \(iceError ?? "unknown")")
         }
 
         // If ICE request failed, we have no room token — WebSocket auth will fail.
-        // Try fetching room token from ICE response; if nil, the WebSocket join will be rejected.
         guard iceResult?.roomToken != nil else {
-            logger.error("No room token available for room \(roomCode) — cannot authenticate WebSocket")
-            transition(to: .failed(reason: String(localized: "Failed to connect to relay server")))
+            let detail = iceError ?? "No room token received"
+            logger.error("No room token for room \(roomCode): \(detail)")
+            // DEBUG: Show detailed error so remote developers can diagnose without Xcode console
+            transition(to: .failed(reason: "Relay failed: \(detail) (room: \(roomCode))"))
             return
         }
 
