@@ -12,10 +12,10 @@ struct SignedPreKey {
     let signature: Data                  // Ed25519 signature of publicKey
     let timestamp: Date
 
-    static func generate(id: UInt32, signingKey: IdentityKeyManager) -> SignedPreKey {
+    static func generate(id: UInt32, signingKey: IdentityKeyManager) throws -> SignedPreKey {
         let keyPair = Curve25519.KeyAgreement.PrivateKey()
         let pubKeyData = keyPair.publicKey.rawRepresentation
-        let signature = try! signingKey.sign(pubKeyData)
+        let signature = try signingKey.sign(pubKeyData)
         return SignedPreKey(
             id: id,
             publicKey: pubKeyData,

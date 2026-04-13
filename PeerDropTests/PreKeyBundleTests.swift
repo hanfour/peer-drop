@@ -4,8 +4,8 @@ import CryptoKit
 
 final class PreKeyBundleTests: XCTestCase {
 
-    func testSignedPreKeyGeneration() {
-        let signedPreKey = SignedPreKey.generate(
+    func testSignedPreKeyGeneration() throws {
+        let signedPreKey = try SignedPreKey.generate(
             id: 1,
             signingKey: IdentityKeyManager.shared
         )
@@ -14,8 +14,8 @@ final class PreKeyBundleTests: XCTestCase {
         XCTAssertFalse(signedPreKey.signature.isEmpty)
     }
 
-    func testSignedPreKeyVerification() {
-        let signedPreKey = SignedPreKey.generate(
+    func testSignedPreKeyVerification() throws {
+        let signedPreKey = try SignedPreKey.generate(
             id: 1,
             signingKey: IdentityKeyManager.shared
         )
@@ -25,8 +25,8 @@ final class PreKeyBundleTests: XCTestCase {
         XCTAssertTrue(isValid)
     }
 
-    func testSignedPreKeyRejectsWrongSigner() {
-        let signedPreKey = SignedPreKey.generate(
+    func testSignedPreKeyRejectsWrongSigner() throws {
+        let signedPreKey = try SignedPreKey.generate(
             id: 1,
             signingKey: IdentityKeyManager.shared
         )
@@ -45,7 +45,7 @@ final class PreKeyBundleTests: XCTestCase {
     }
 
     func testPreKeyBundleCodable() throws {
-        let signedPreKey = SignedPreKey.generate(id: 1, signingKey: IdentityKeyManager.shared)
+        let signedPreKey = try SignedPreKey.generate(id: 1, signingKey: IdentityKeyManager.shared)
         let oneTimeKeys = OneTimePreKey.generateBatch(startId: 0, count: 3)
 
         let bundle = PreKeyBundle(
@@ -65,7 +65,7 @@ final class PreKeyBundleTests: XCTestCase {
     }
 
     func testPreKeyBundleWithoutOneTimeKeys() throws {
-        let signedPreKey = SignedPreKey.generate(id: 1, signingKey: IdentityKeyManager.shared)
+        let signedPreKey = try SignedPreKey.generate(id: 1, signingKey: IdentityKeyManager.shared)
         let bundle = PreKeyBundle(
             identityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
             signingKey: IdentityKeyManager.shared.signingPublicKey.rawRepresentation,

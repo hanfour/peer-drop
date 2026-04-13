@@ -37,15 +37,26 @@ final class PreKeyStoreTests: XCTestCase {
         XCTAssertNil(consumed)
     }
 
-    func testReplenishOneTimePreKeys() {
-        // Consume all keys
-        for i in 0..<UInt32(PreKeyStore.initialOneTimePreKeyCount) {
-            _ = try? store.consumeOneTimePreKey(id: i)
+    func testAutoReplenishAfterConsume() throws {
+        // Consume keys until we cross the replenish threshold
+        let threshold = PreKeyStore.replenishThreshold
+        let initial = PreKeyStore.initialOneTimePreKeyCount
+        for i in 0..<UInt32(initial - threshold) {
+            _ = try store.consumeOneTimePreKey(id: i)
         }
-        XCTAssertEqual(store.availableOneTimePreKeyCount, 0)
+        // Should still be at threshold (not yet triggered)
+        XCTAssertEqual(store.availableOneTimePreKeyCount, threshold)
 
+        // Consuming one more drops below threshold → auto-replenish fires
+        let triggerKey = try store.consumeOneTimePreKey(id: UInt32(initial - threshold))
+        XCTAssertNotNil(triggerKey)
+        XCTAssertGreaterThanOrEqual(store.availableOneTimePreKeyCount, initial - 1)
+    }
+
+    func testExplicitReplenishWhenAlreadyFull() {
+        let before = store.availableOneTimePreKeyCount
         store.replenishOneTimePreKeysIfNeeded()
-        XCTAssertGreaterThan(store.availableOneTimePreKeyCount, 0)
+        XCTAssertEqual(store.availableOneTimePreKeyCount, before)
     }
 
     func testGeneratePreKeyBundle() {

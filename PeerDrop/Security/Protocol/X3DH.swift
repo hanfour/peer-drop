@@ -6,21 +6,9 @@ import CryptoKit
 /// Reference: https://signal.org/docs/specifications/x3dh/
 enum X3DH {
 
-    struct KeyAgreementResult: Equatable {
+    struct KeyAgreementResult {
         let rootKey: SymmetricKey       // For initializing the Double Ratchet root chain
         let chainKey: SymmetricKey      // For initializing the Double Ratchet sending chain
-
-        static func == (lhs: KeyAgreementResult, rhs: KeyAgreementResult) -> Bool {
-            lhs.rootKey.withUnsafeBytes { lhsRoot in
-                rhs.rootKey.withUnsafeBytes { rhsRoot in
-                    lhs.chainKey.withUnsafeBytes { lhsChain in
-                        rhs.chainKey.withUnsafeBytes { rhsChain in
-                            Data(lhsRoot) == Data(rhsRoot) && Data(lhsChain) == Data(rhsChain)
-                        }
-                    }
-                }
-            }
-        }
     }
 
     /// Alice (initiator) computes the shared secret using Bob's pre-key bundle.
@@ -77,7 +65,11 @@ enum X3DH {
     // MARK: - Private
 
     private static func deriveKeys(from secrets: [SharedSecret]) -> KeyAgreementResult {
-        // Concatenate all DH outputs
+        // ⚠️ NON-STANDARD: CryptoKit SharedSecret does not expose raw bytes.
+        // We extract each DH output via a no-op HKDF (empty salt/info), then feed
+        // the concatenation into a second HKDF. This produces a deterministic result
+        // but is NOT wire-compatible with libsignal or other Signal Protocol implementations.
+        // This is acceptable because PeerDrop only communicates with itself.
         var ikm = Data()
         for secret in secrets {
             let key = secret.hkdfDerivedSymmetricKey(

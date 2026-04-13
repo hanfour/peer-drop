@@ -14,20 +14,31 @@ final class PreKeyStore {
 
     private let storageKey: String
     private let encryptor = ChatDataEncryptor.shared
+    private let lock = NSLock()
 
-    private(set) var currentSignedPreKey: SignedPreKey
+    private var _currentSignedPreKey: SignedPreKey
     private var previousSignedPreKeys: [SignedPreKey] = []
     private var oneTimePreKeys: [UInt32: OneTimePreKey] = [:]
     private var nextOneTimePreKeyId: UInt32 = 0
     private var nextSignedPreKeyId: UInt32 = 1
 
-    var availableOneTimePreKeyCount: Int { oneTimePreKeys.count }
+    var currentSignedPreKey: SignedPreKey {
+        lock.lock()
+        defer { lock.unlock() }
+        return _currentSignedPreKey
+    }
+
+    var availableOneTimePreKeyCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return oneTimePreKeys.count
+    }
 
     init(storageKey: String = "prekey-store") {
         self.storageKey = storageKey
 
         if let state = Self.loadState(storageKey: storageKey, encryptor: ChatDataEncryptor.shared) {
-            self.currentSignedPreKey = state.currentSignedPreKey.toSignedPreKey()
+            self._currentSignedPreKey = state.currentSignedPreKey.toSignedPreKey()
             self.previousSignedPreKeys = state.previousSignedPreKeys.map { $0.toSignedPreKey() }
             self.oneTimePreKeys = Dictionary(uniqueKeysWithValues:
                 state.oneTimePreKeys.map { ($0.id, $0.toOneTimePreKey()) }
@@ -35,7 +46,8 @@ final class PreKeyStore {
             self.nextOneTimePreKeyId = state.nextOneTimePreKeyId
             self.nextSignedPreKeyId = state.nextSignedPreKeyId
         } else {
-            self.currentSignedPreKey = SignedPreKey.generate(id: 0, signingKey: IdentityKeyManager.shared)
+            // try! is acceptable here: init failure = unrecoverable (Keychain broken)
+            self._currentSignedPreKey = try! SignedPreKey.generate(id: 0, signingKey: IdentityKeyManager.shared)
             let initialKeys = OneTimePreKey.generateBatch(startId: 0, count: Self.initialOneTimePreKeyCount)
             self.oneTimePreKeys = Dictionary(uniqueKeysWithValues: initialKeys.map { ($0.id, $0) })
             self.nextOneTimePreKeyId = UInt32(Self.initialOneTimePreKeyCount)
@@ -47,10 +59,12 @@ final class PreKeyStore {
     // MARK: - Pre-Key Bundle Generation
 
     func generatePreKeyBundle() -> PreKeyBundle {
-        PreKeyBundle(
+        lock.lock()
+        defer { lock.unlock() }
+        return PreKeyBundle(
             identityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
             signingKey: IdentityKeyManager.shared.signingPublicKey.rawRepresentation,
-            signedPreKey: currentSignedPreKey.asPublic(),
+            signedPreKey: _currentSignedPreKey.asPublic(),
             oneTimePreKeys: oneTimePreKeys.values.map { $0.asPublic() }.sorted { $0.id < $1.id }
         )
     }
@@ -58,12 +72,21 @@ final class PreKeyStore {
     // MARK: - One-Time Pre-Key Management
 
     func consumeOneTimePreKey(id: UInt32) throws -> OneTimePreKey? {
+        lock.lock()
+        defer { lock.unlock() }
         guard let key = oneTimePreKeys.removeValue(forKey: id) else { return nil }
         scheduleSave()
+        replenishOneTimePreKeysLocked()
         return key
     }
 
     func replenishOneTimePreKeysIfNeeded() {
+        lock.lock()
+        defer { lock.unlock() }
+        replenishOneTimePreKeysLocked()
+    }
+
+    private func replenishOneTimePreKeysLocked() {
         guard oneTimePreKeys.count < Self.replenishThreshold else { return }
         let deficit = Self.initialOneTimePreKeyCount - oneTimePreKeys.count
         let newKeys = OneTimePreKey.generateBatch(startId: nextOneTimePreKeyId, count: deficit)
@@ -78,22 +101,32 @@ final class PreKeyStore {
     // MARK: - Signed Pre-Key Rotation
 
     func rotateSignedPreKeyIfNeeded(forceRotate: Bool = false) {
-        let age = Date().timeIntervalSince(currentSignedPreKey.timestamp)
+        lock.lock()
+        defer { lock.unlock() }
+        let age = Date().timeIntervalSince(_currentSignedPreKey.timestamp)
         guard forceRotate || age > Self.signedPreKeyRotationInterval else { return }
 
-        previousSignedPreKeys.append(currentSignedPreKey)
+        // Generate new key BEFORE mutating state, so failure leaves state consistent
+        guard let newKey = try? SignedPreKey.generate(id: nextSignedPreKeyId, signingKey: IdentityKeyManager.shared) else {
+            Self.logger.error("Failed to generate new signed pre-key during rotation")
+            return
+        }
+
+        previousSignedPreKeys.append(_currentSignedPreKey)
         if previousSignedPreKeys.count > 3 {
             previousSignedPreKeys.removeFirst(previousSignedPreKeys.count - 3)
         }
 
-        currentSignedPreKey = SignedPreKey.generate(id: nextSignedPreKeyId, signingKey: IdentityKeyManager.shared)
+        _currentSignedPreKey = newKey
         nextSignedPreKeyId += 1
         scheduleSave()
-        Self.logger.info("Rotated signed pre-key to id \(self.currentSignedPreKey.id)")
+        Self.logger.info("Rotated signed pre-key to id \(self._currentSignedPreKey.id)")
     }
 
     func signedPreKey(for id: UInt32) throws -> SignedPreKey? {
-        if currentSignedPreKey.id == id { return currentSignedPreKey }
+        lock.lock()
+        defer { lock.unlock() }
+        if _currentSignedPreKey.id == id { return _currentSignedPreKey }
         return previousSignedPreKeys.first { $0.id == id }
     }
 
@@ -154,13 +187,16 @@ final class PreKeyStore {
     }
 
     private func save() {
+        lock.lock()
         let state = PersistedState(
-            currentSignedPreKey: PersistedSignedPreKey(from: currentSignedPreKey),
+            currentSignedPreKey: PersistedSignedPreKey(from: _currentSignedPreKey),
             previousSignedPreKeys: previousSignedPreKeys.map { PersistedSignedPreKey(from: $0) },
             oneTimePreKeys: oneTimePreKeys.values.map { PersistedOneTimePreKey(from: $0) },
             nextOneTimePreKeyId: nextOneTimePreKeyId,
             nextSignedPreKeyId: nextSignedPreKeyId
         )
+        lock.unlock()
+
         do {
             let data = try JSONEncoder().encode(state)
             let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -188,8 +224,11 @@ final class PreKeyStore {
     }
 
     func deleteAll() {
+        lock.lock()
         oneTimePreKeys.removeAll()
         previousSignedPreKeys.removeAll()
+        lock.unlock()
+
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Security", isDirectory: true)
         let url = dir.appendingPathComponent("\(storageKey).enc")

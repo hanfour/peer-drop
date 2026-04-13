@@ -2,6 +2,21 @@ import XCTest
 import CryptoKit
 @testable import PeerDrop
 
+// Test-only: non-constant-time comparison acceptable for unit tests
+extension X3DH.KeyAgreementResult: Equatable {
+    public static func == (lhs: X3DH.KeyAgreementResult, rhs: X3DH.KeyAgreementResult) -> Bool {
+        lhs.rootKey.withUnsafeBytes { lRoot in
+            rhs.rootKey.withUnsafeBytes { rRoot in
+                lhs.chainKey.withUnsafeBytes { lChain in
+                    rhs.chainKey.withUnsafeBytes { rChain in
+                        Data(lRoot) == Data(rRoot) && Data(lChain) == Data(rChain)
+                    }
+                }
+            }
+        }
+    }
+}
+
 final class X3DHTests: XCTestCase {
 
     func testInitiatorAndResponderDeriveTheSameKey() throws {
