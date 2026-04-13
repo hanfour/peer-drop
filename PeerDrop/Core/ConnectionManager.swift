@@ -414,6 +414,19 @@ final class ConnectionManager: ObservableObject {
         state = newState
         triggerHaptic(for: newState)
 
+        // Auto-report connection failures for remote debugging
+        if case .failed(let reason) = newState {
+            ErrorReporter.report(
+                error: reason,
+                context: "ConnectionManager.transition",
+                extras: [
+                    "fromState": String(describing: oldState),
+                    "focusedPeer": focusedPeerID ?? "none",
+                    "connectionCount": "\(connections.count)",
+                ]
+            )
+        }
+
         // Heartbeat management (legacy single-connection mode)
         switch newState {
         case .connected:
