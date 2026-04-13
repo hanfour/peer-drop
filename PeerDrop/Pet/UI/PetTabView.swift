@@ -24,7 +24,7 @@ struct PetTabView: View {
                     }
                 }
 
-                // EXP progress bar
+                // EXP progress bar + evolution status
                 VStack(alignment: .leading, spacing: 4) {
                     ProgressView(value: engine.evolutionProgress) {
                         HStack {
@@ -35,6 +35,18 @@ struct PetTabView: View {
                         }
                     }
                     .tint(.green)
+
+                    // Show age requirement hint when XP is met but age isn't
+                    if let req = EvolutionRequirement.for(engine.pet.level) {
+                        let xpMet = engine.pet.experience >= req.requiredExperience
+                        let ageMet = Date().timeIntervalSince(engine.pet.birthDate) >= req.minimumAge
+                        if xpMet && !ageMet {
+                            let remainingHours = Int(ceil((req.minimumAge - Date().timeIntervalSince(engine.pet.birthDate)) / 3600))
+                            Text(String(localized: "EXP is ready! Evolution in ~\(remainingHours)h"))
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+                    }
                 }
             }
 

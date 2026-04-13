@@ -55,17 +55,23 @@ final class InteractionTrackerTests: XCTestCase {
         XCTAssertEqual(mood, .happy)
     }
 
-    func testCalculateMoodSleepy() {
-        // No interactions and no social → .sleepy
+    func testCalculateMoodLonelyWithNoActivity() {
+        // No interactions and no social → .lonely
         let mood = tracker.calculateMood(hasSocialRecently: false)
+        XCTAssertEqual(mood, .lonely)
+    }
+
+    func testCalculateMoodSleepyWithSocial() {
+        // No interactions but has social → .sleepy
+        let mood = tracker.calculateMood(hasSocialRecently: true)
         XCTAssertEqual(mood, .sleepy)
     }
 
-    func testCalculateMoodCuriousWithPeer() {
-        // A single peerConnected in last hour → .curious
+    func testCalculateMoodExcitedWithPeer() {
+        // A peerConnected in last hour → .excited
         tracker.record(.peerConnected)
         let mood = tracker.calculateMood(hasSocialRecently: false)
-        XCTAssertEqual(mood, .curious)
+        XCTAssertEqual(mood, .excited)
     }
 
     func testCalculateMoodCuriousWithActivity() {
@@ -75,9 +81,8 @@ final class InteractionTrackerTests: XCTestCase {
         XCTAssertEqual(mood, .curious)
     }
 
-    func testCalculateMoodSleepyWithSocial() {
-        // No interactions but hasSocialRecently — falls through to .sleepy via last branch
-        // (recentCount == 0 && hasSocialRecently skips the sleepy check, but no other condition matches)
+    func testCalculateMoodDefaultSleepyWithSocial() {
+        // No interactions but hasSocialRecently — falls through to .sleepy
         let mood = tracker.calculateMood(hasSocialRecently: true)
         XCTAssertEqual(mood, .sleepy)
     }

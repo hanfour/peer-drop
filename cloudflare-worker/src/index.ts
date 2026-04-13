@@ -253,6 +253,49 @@ export default {
       }
     }
 
+    // POST /debug/report — receive error report from app
+    if (path === "/debug/report" && request.method === "POST") {
+      try {
+        const body = await request.json() as Record<string, unknown>;
+        const reportId = `report:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+        const report = {
+          ...body,
+          ip: clientIP,
+          timestamp: new Date().toISOString(),
+          userAgent: request.headers.get("User-Agent") || "unknown",
+        };
+        await env.ROOMS.put(reportId, JSON.stringify(report), { expirationTtl: 86400 * 7 }); // 7 days
+        return new Response(JSON.stringify({ ok: true, id: reportId }), {
+          status: 201,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch {
+        return new Response(JSON.stringify({ error: "Invalid report" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // GET /debug/reports — fetch recent error reports (requires API key)
+    if (path === "/debug/reports" && request.method === "GET") {
+      if (!env.API_KEY || request.headers.get("X-API-Key") !== env.API_KEY) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const list = await env.ROOMS.list({ prefix: "report:" });
+      const reports = [];
+      for (const key of list.keys) {
+        const data = await env.ROOMS.get(key.name);
+        if (data) reports.push({ id: key.name, ...JSON.parse(data) });
+      }
+      reports.sort((a: any, b: any) => b.timestamp?.localeCompare(a.timestamp || "") || 0);
+      return new Response(JSON.stringify(reports, null, 2), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };

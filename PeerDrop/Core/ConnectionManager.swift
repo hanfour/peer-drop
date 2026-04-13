@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import CryptoKit
 import SwiftUI
 import UIKit
 import os
@@ -70,6 +71,16 @@ struct RelayPINRequest: Identifiable {
     let remoteFingerprint: String
 }
 
+/// Info for displaying a key change alert
+struct KeyChangeAlertInfo: Identifiable {
+    let id = UUID()
+    let contactName: String
+    let contactId: UUID
+    let oldFingerprint: String
+    let newFingerprint: String
+    let newPublicKey: Data
+}
+
 /// Central state machine that orchestrates discovery, connections, transfers, and calls.
 @MainActor
 final class ConnectionManager: ObservableObject {
@@ -94,6 +105,8 @@ final class ConnectionManager: ObservableObject {
     @Published var pendingRelayJoinCode: String?
     /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
     @Published var shouldShowRelayConnect = false
+    /// Pending key change alert for a contact whose key has changed
+    @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
 
     var onPeerConnectedForPet: ((String) -> Void)?
     var onPeerDisconnectedForPet: ((String) -> Void)?
@@ -182,6 +195,7 @@ final class ConnectionManager: ObservableObject {
     let chatManager = ChatManager()
     let groupStore = DeviceGroupStore()
     let clipboardSyncManager = ClipboardSyncManager()
+    let trustedContactStore = TrustedContactStore()
 
     // MARK: - Typing Indicator State
 
@@ -399,6 +413,19 @@ final class ConnectionManager: ObservableObject {
         logger.info("State: \(String(describing: oldState)) → \(String(describing: newState))")
         state = newState
         triggerHaptic(for: newState)
+
+        // Auto-report connection failures for remote debugging
+        if case .failed(let reason) = newState {
+            ErrorReporter.report(
+                error: reason,
+                context: "ConnectionManager.transition",
+                extras: [
+                    "fromState": String(describing: oldState),
+                    "focusedPeer": focusedPeerID ?? "none",
+                    "connectionCount": "\(connections.count)",
+                ]
+            )
+        }
 
         // Heartbeat management (legacy single-connection mode)
         switch newState {
@@ -814,6 +841,7 @@ final class ConnectionManager: ObservableObject {
             // Flush pending writes before entering background
             deviceStore.saveImmediately()
             chatManager.flushAllPendingPersists()
+            trustedContactStore.flushPendingSave()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
@@ -1220,6 +1248,7 @@ final class ConnectionManager: ObservableObject {
 
                 let peerIdentity = try JSONDecoder().decode(PeerIdentity.self, from: payload)
                 logger.info("Peer identity received: \(peerIdentity.displayName)")
+                checkPeerTrust(peerIdentity: peerIdentity)
 
                 // Check if already connected to this peer
                 if connections[peerIdentity.id]?.state.isConnected == true {
@@ -1597,7 +1626,24 @@ final class ConnectionManager: ObservableObject {
         forceTransitionToRequesting()
 
         // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
-        let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
+        var iceResult: WorkerSignaling.ICEResult?
+        var iceError: String?
+        do {
+            iceResult = try await signaling.requestICECredentials(roomCode: roomCode)
+            logger.info("ICE credentials received for room \(roomCode), token: \(iceResult?.roomToken != nil ? "present" : "nil")")
+        } catch {
+            iceError = error.localizedDescription
+            logger.error("ICE credentials request failed for room \(roomCode): \(iceError ?? "unknown")")
+        }
+
+        // If ICE request failed, we have no room token — WebSocket auth will fail.
+        guard iceResult?.roomToken != nil else {
+            let detail = iceError ?? "No room token received"
+            logger.error("No room token for room \(roomCode): \(detail)")
+            // DEBUG: Show detailed error so remote developers can diagnose without Xcode console
+            transition(to: .failed(reason: "Relay failed: \(detail) (room: \(roomCode))"))
+            return
+        }
 
         let client = DataChannelClient()
         let iceServers: [RTCIceServer]
@@ -2946,6 +2992,78 @@ final class ConnectionManager: ObservableObject {
             return
         }
         UserDefaults.standard.set(data, forKey: Self.transferHistoryKey)
+    }
+
+    // MARK: - Trust Verification
+
+    /// Check a peer's identity against the trusted contact store.
+    /// Called after receiving a peer's hello message during connection setup.
+    func checkPeerTrust(peerIdentity: PeerIdentity) {
+        guard let peerPublicKey = peerIdentity.identityPublicKey else {
+            logger.info("Peer \(peerIdentity.displayName) has no identity public key (legacy client)")
+            return
+        }
+
+        // Validate public key is a valid 32-byte Curve25519 point
+        guard peerPublicKey.count == 32,
+              let _ = try? CryptoKit.Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPublicKey) else {
+            logger.warning("Invalid public key from \(peerIdentity.displayName)")
+            return
+        }
+
+        if let existingContact = trustedContactStore.find(byPublicKey: peerPublicKey) {
+            // Known contact, key matches — trust level unchanged
+            logger.info("Peer \(peerIdentity.displayName) recognized as trusted contact: \(existingContact.trustLevel.rawValue)")
+        } else if let contactByDeviceId = trustedContactStore.find(byDeviceId: peerIdentity.id) {
+            // Same device ID but different key — KEY CHANGE WARNING
+            let oldFingerprint = contactByDeviceId.keyFingerprint
+            let newContact = TrustedContact(
+                displayName: peerIdentity.displayName,
+                identityPublicKey: peerPublicKey,
+                trustLevel: .unknown
+            )
+            let newFingerprint = newContact.keyFingerprint
+
+            logger.warning("KEY CHANGE detected for \(peerIdentity.displayName) (device: \(peerIdentity.id))!")
+            pendingKeyChangeAlert = KeyChangeAlertInfo(
+                contactName: peerIdentity.displayName,
+                contactId: contactByDeviceId.id,
+                oldFingerprint: oldFingerprint,
+                newFingerprint: newFingerprint,
+                newPublicKey: peerPublicKey
+            )
+        } else {
+            // Unknown peer — add as unknown trust level
+            let newContact = TrustedContact(
+                deviceId: peerIdentity.id,
+                displayName: peerIdentity.displayName,
+                identityPublicKey: peerPublicKey,
+                trustLevel: .unknown
+            )
+            trustedContactStore.add(newContact)
+            logger.info("New contact added: \(peerIdentity.displayName) (unknown trust)")
+        }
+    }
+
+    /// User chose to block the contact whose key changed
+    func handleKeyChangeBlock() {
+        guard let alert = pendingKeyChangeAlert else { return }
+        trustedContactStore.setBlocked(alert.contactId, blocked: true)
+        pendingKeyChangeAlert = nil
+    }
+
+    /// User chose to accept the new key (sets trust to .linked — user actively accepted)
+    func handleKeyChangeAccept() {
+        guard let alert = pendingKeyChangeAlert else { return }
+        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .linked)
+        pendingKeyChangeAlert = nil
+    }
+
+    /// User chose to verify later (stays at .unknown until face-to-face verification)
+    func handleKeyChangeVerifyLater() {
+        guard let alert = pendingKeyChangeAlert else { return }
+        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .unknown)
+        pendingKeyChangeAlert = nil
     }
 }
 
