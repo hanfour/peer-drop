@@ -1612,7 +1612,22 @@ final class ConnectionManager: ObservableObject {
         forceTransitionToRequesting()
 
         // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
-        let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
+        var iceResult: WorkerSignaling.ICEResult?
+        do {
+            iceResult = try await signaling.requestICECredentials(roomCode: roomCode)
+            logger.info("ICE credentials received for room \(roomCode), token: \(iceResult?.roomToken != nil ? "present" : "nil")")
+        } catch {
+            logger.error("ICE credentials request failed for room \(roomCode): \(error.localizedDescription)")
+            // Continue without TURN — will use STUN fallback, but need token for WebSocket auth
+        }
+
+        // If ICE request failed, we have no room token — WebSocket auth will fail.
+        // Try fetching room token from ICE response; if nil, the WebSocket join will be rejected.
+        guard iceResult?.roomToken != nil else {
+            logger.error("No room token available for room \(roomCode) — cannot authenticate WebSocket")
+            transition(to: .failed(reason: String(localized: "Failed to connect to relay server")))
+            return
+        }
 
         let client = DataChannelClient()
         let iceServers: [RTCIceServer]

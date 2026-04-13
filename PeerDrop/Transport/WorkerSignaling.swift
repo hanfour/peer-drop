@@ -68,8 +68,12 @@ final class WorkerSignaling: NSObject {
 
         let (data, response) = try await session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 201 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WorkerSignalingError.roomCreationFailed
+        }
+        guard httpResponse.statusCode == 201 else {
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logger.error("Room creation failed: HTTP \(httpResponse.statusCode), body: \(body)")
             throw WorkerSignalingError.roomCreationFailed
         }
 
@@ -115,8 +119,12 @@ final class WorkerSignaling: NSObject {
 
         let (data, response) = try await session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WorkerSignalingError.iceCredentialsFailed
+        }
+        guard httpResponse.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logger.error("ICE request failed: HTTP \(httpResponse.statusCode), body: \(body), url: \(url.absoluteString)")
             throw WorkerSignalingError.iceCredentialsFailed
         }
 
