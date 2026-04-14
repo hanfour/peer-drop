@@ -53,6 +53,10 @@ final class TrustedContactStore: ObservableObject {
         contacts.first { $0.deviceId == deviceId }
     }
 
+    func find(byMailboxId mailboxId: String) -> TrustedContact? {
+        contacts.first { $0.mailboxId == mailboxId }
+    }
+
     // MARK: - Trust Management
 
     func updateTrustLevel(for id: UUID, to level: TrustLevel) {
