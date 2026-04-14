@@ -832,38 +832,58 @@ final class ConnectionManager: ObservableObject {
         }
 
         do {
-            // Decode the envelope to determine sender
             let envelope = try JSONDecoder().decode(RemoteMessageEnvelope.self, from: ciphertextData)
 
-            // Find the contact by their public key
-            guard let contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey) else {
-                logger.warning("Remote message from unknown sender — discarding")
-                return
-            }
+            // Find contact by public key, or by mailbox ID
+            var contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey)
+                ?? trustedContactStore.find(byMailboxId: envelope.senderMailboxId)
 
-            if contact.isBlocked {
+            if let c = contact, c.isBlocked {
                 logger.debug("Remote message from blocked contact — discarding")
                 return
             }
 
-            // If no session exists, establish one as responder (first message from this peer)
-            if !remoteSessionManager.hasSession(for: contact.id.uuidString) {
+            // First message from unknown sender: create trusted contact
+            if contact == nil && envelope.isInitialMessage {
+                let newContact = TrustedContact(
+                    displayName: envelope.senderDisplayName ?? "Remote Peer",
+                    identityPublicKey: envelope.senderIdentityKey,
+                    trustLevel: .linked,
+                    mailboxId: envelope.senderMailboxId
+                )
+                trustedContactStore.add(newContact)
+                contact = newContact
+                logger.info("Created new remote contact: \(newContact.displayName)")
+            }
+
+            guard let contact else {
+                logger.warning("Remote message from unknown sender with no X3DH — discarding")
+                return
+            }
+
+            // Ensure mailboxId is set on contact
+            if contact.mailboxId == nil {
+                trustedContactStore.updateMailboxId(for: contact.id, mailboxId: envelope.senderMailboxId)
+            }
+
+            // Establish session if needed (responder side)
+            if !remoteSessionManager.hasSession(for: contact.id.uuidString),
+               let ephKey = envelope.ephemeralKey,
+               let spkId = envelope.usedSignedPreKeyId {
                 _ = try remoteSessionManager.respondToSession(
                     contactId: contact.id.uuidString,
                     theirIdentityKey: envelope.senderIdentityKey,
-                    theirEphemeralKey: envelope.ephemeralKey,
-                    usedSignedPreKeyId: envelope.usedSignedPreKeyId,
+                    theirEphemeralKey: ephKey,
+                    usedSignedPreKeyId: spkId,
                     usedOneTimePreKeyId: envelope.usedOneTimePreKeyId
                 )
             }
 
-            // Decrypt the ratchet message
             let plaintext = try remoteSessionManager.decrypt(
                 message: envelope.ratchetMessage,
                 from: contact.id.uuidString
             )
 
-            // Route to ChatManager as incoming message
             if let text = String(data: plaintext, encoding: .utf8) {
                 chatManager.saveIncoming(
                     text: text,

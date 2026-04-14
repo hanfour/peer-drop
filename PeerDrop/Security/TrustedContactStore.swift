@@ -74,6 +74,12 @@ final class TrustedContactStore: ObservableObject {
         scheduleSave()
     }
 
+    func updateMailboxId(for id: UUID, mailboxId: String) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        contacts[index].mailboxId = mailboxId
+        scheduleSave()
+    }
+
     // MARK: - Key Change Detection
 
     func detectKeyChange(contactId: UUID, newPublicKey: Data) -> Bool {
