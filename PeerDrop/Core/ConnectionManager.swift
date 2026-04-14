@@ -896,6 +896,42 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
+        guard let mailboxId = contact.mailboxId else { return }
+
+        let plaintext = text.data(using: .utf8)!
+        let encrypted = try remoteSessionManager.encrypt(data: plaintext, for: contact.id.uuidString)
+
+        let envelope = RemoteMessageEnvelope(
+            senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
+            senderMailboxId: self.mailboxManager.mailboxId ?? "",
+            senderDisplayName: nil,
+            ephemeralKey: nil,
+            usedSignedPreKeyId: nil,
+            usedOneTimePreKeyId: nil,
+            ratchetMessage: encrypted
+        )
+
+        let envelopeData = try JSONEncoder().encode(envelope)
+        let challenge = UUID().uuidString
+        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+            throw MailboxError.invalidResponse
+        }
+
+        try await MailboxClient().sendMessage(
+            to: mailboxId,
+            ciphertext: envelopeData,
+            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
+        )
+
+        // Save as outgoing message in chat history
+        chatManager.saveOutgoing(
+            text: text,
+            peerID: contact.id.uuidString,
+            peerName: contact.displayName
+        )
+    }
+
     // MARK: - Accept Remote Invite
 
     func acceptRemoteInvite(_ invite: InvitePayload) async throws {

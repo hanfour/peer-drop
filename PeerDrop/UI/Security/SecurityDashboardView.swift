@@ -2,6 +2,12 @@ import SwiftUI
 
 struct SecurityDashboardView: View {
     @ObservedObject var contactStore: TrustedContactStore
+    @EnvironmentObject var connectionManager: ConnectionManager
+
+    @State private var messageContact: TrustedContact?
+    @State private var messageText = ""
+    @State private var isSending = false
+    @State private var sendError: String?
 
     var body: some View {
         List {
@@ -42,6 +48,16 @@ struct SecurityDashboardView: View {
                         HStack {
                             Text(contact.displayName)
                             Spacer()
+                            if contact.mailboxId != nil {
+                                Button {
+                                    messageContact = contact
+                                } label: {
+                                    Label(String(localized: "Message"), systemImage: "message.fill")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.blue)
+                            }
                             TrustBadgeView(trustLevel: contact.trustLevel)
                         }
                     }
@@ -64,6 +80,42 @@ struct SecurityDashboardView: View {
             }
         }
         .navigationTitle(String(localized: "Security"))
+        .sheet(item: $messageContact) { contact in
+            NavigationView {
+                VStack(spacing: 16) {
+                    Text(String(localized: "Send to \(contact.displayName)"))
+                        .font(.headline)
+
+                    TextField(String(localized: "Message"), text: $messageText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...6)
+
+                    if let error = sendError {
+                        Text(error).foregroundStyle(.red).font(.caption)
+                    }
+
+                    Spacer()
+                }
+                .padding()
+                .navigationTitle(String(localized: "Remote Message"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(String(localized: "Cancel")) {
+                            messageContact = nil
+                            messageText = ""
+                            sendError = nil
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(String(localized: "Send")) {
+                            sendMessage(to: contact)
+                        }
+                        .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                    }
+                }
+            }
+        }
     }
 
     private var verifiedCount: Int {
@@ -120,6 +172,21 @@ struct SecurityDashboardView: View {
                 .foregroundStyle(isGood ? .green : .orange)
             Text(label)
                 .font(.subheadline)
+        }
+    }
+
+    private func sendMessage(to contact: TrustedContact) {
+        isSending = true
+        sendError = nil
+        Task {
+            do {
+                try await connectionManager.sendRemoteMessage(text: messageText, to: contact)
+                messageContact = nil
+                messageText = ""
+            } catch {
+                sendError = error.localizedDescription
+            }
+            isSending = false
         }
     }
 }
