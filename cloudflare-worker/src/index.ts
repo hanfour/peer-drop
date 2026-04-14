@@ -14,6 +14,7 @@ export interface Env {
   ROOMS: KVNamespace;
   V2_STORE: KVNamespace;
   SIGNALING_ROOM: DurableObjectNamespace;
+  PREKEY_STORE: DurableObjectNamespace;
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
@@ -309,13 +310,10 @@ export default {
         return jsonResponse({ error: "Missing mailboxId or preKeyBundle" }, 400);
       }
 
-      // Rate limit: 10 req/min per IP for registration
-      const regKey = `v2-reg:${clientIP}`;
-      const regCount = parseInt(await env.V2_STORE.get(regKey) || "0");
-      if (regCount >= 10) {
-        return jsonResponse({ error: "Too many registrations" }, 429);
+      // Rate limit registration using in-memory limiter (no IP persisted to KV)
+      if (isRateLimited(clientIP)) {
+        return jsonResponse({ error: "Too many requests" }, 429);
       }
-      await env.V2_STORE.put(regKey, String(regCount + 1), { expirationTtl: 60 });
 
       // Generate mailbox token if first registration
       const existingMeta = await env.V2_STORE.get(`meta:${body.mailboxId}`);
@@ -343,35 +341,17 @@ export default {
       return jsonResponse({ ok: true, token }, 201);
     }
 
-    // GET /v2/keys/:mailboxId — Retrieve target's pre-key bundle (consumes one OTP key)
+    // GET /v2/keys/:mailboxId — Retrieve target's pre-key bundle (consumes one OTP key atomically via DO)
     const keysMatch = path.match(/^\/v2\/keys\/([a-z0-9]+)$/);
     if (keysMatch && request.method === "GET") {
       const mailboxId = keysMatch[1];
-      const raw = await env.V2_STORE.get(`keys:${mailboxId}`);
-      if (!raw) {
-        return jsonResponse({ error: "Key bundle not found" }, 404);
-      }
 
-      const bundle = JSON.parse(raw) as {
-        identityKey: string; signingKey: string;
-        signedPreKey: unknown; oneTimePreKeys?: unknown[];
-      };
-
-      // Consume one one-time pre-key atomically
-      let consumedOTPK: unknown | undefined;
-      if (bundle.oneTimePreKeys && bundle.oneTimePreKeys.length > 0) {
-        consumedOTPK = bundle.oneTimePreKeys.shift();
-        await env.V2_STORE.put(`keys:${mailboxId}`, JSON.stringify(bundle), {
-          expirationTtl: 30 * 86400,
-        });
-      }
-
-      return jsonResponse({
-        identityKey: bundle.identityKey,
-        signingKey: bundle.signingKey,
-        signedPreKey: bundle.signedPreKey,
-        oneTimePreKey: consumedOTPK ?? null,
-      });
+      // Delegate to PreKeyStore Durable Object for atomic OTP key consumption
+      const doId = env.PREKEY_STORE.idFromName(mailboxId);
+      const stub = env.PREKEY_STORE.get(doId);
+      return stub.fetch(new Request(`https://internal/consume?mailboxId=${mailboxId}`, {
+        headers: request.headers,
+      }));
     }
 
     // POST /v2/messages/:mailboxId — Deliver encrypted message to target
@@ -642,5 +622,57 @@ export class SignalingRoom {
         } catch { /* ignore */ }
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Durable Object: PreKeyStore
+//
+// Provides atomic OTP key consumption. Each mailbox ID maps to one DO instance,
+// ensuring only one request at a time can consume an OTP key.
+// ---------------------------------------------------------------------------
+
+export class PreKeyStore {
+  private state: DurableObjectState;
+  private env: Env;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const mailboxId = url.searchParams.get("mailboxId");
+    if (!mailboxId) {
+      return jsonResponse({ error: "Missing mailboxId" }, 400);
+    }
+
+    // Read bundle from KV
+    const raw = await this.env.V2_STORE.get(`keys:${mailboxId}`);
+    if (!raw) {
+      return jsonResponse({ error: "Key bundle not found" }, 404);
+    }
+
+    const bundle = JSON.parse(raw) as {
+      identityKey: string; signingKey: string;
+      signedPreKey: unknown; oneTimePreKeys?: unknown[];
+    };
+
+    // Atomically consume one OTP key (DO guarantees single-threaded execution)
+    let consumedOTPK: unknown | undefined;
+    if (bundle.oneTimePreKeys && bundle.oneTimePreKeys.length > 0) {
+      consumedOTPK = bundle.oneTimePreKeys.shift();
+      await this.env.V2_STORE.put(`keys:${mailboxId}`, JSON.stringify(bundle), {
+        expirationTtl: 30 * 86400,
+      });
+    }
+
+    return jsonResponse({
+      identityKey: bundle.identityKey,
+      signingKey: bundle.signingKey,
+      signedPreKey: bundle.signedPreKey,
+      oneTimePreKey: consumedOTPK ?? null,
+    });
   }
 }

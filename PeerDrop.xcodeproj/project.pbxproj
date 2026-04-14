@@ -334,6 +334,7 @@
 		F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C82AECE1F936949B5184F8 /* OnboardingView.swift */; };
 		F5CCE99629FF1B1F7BE70261 /* SessionKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190A50E1CBA99B173EC8B908 /* SessionKeyManagerTests.swift */; };
 		F5FE0CEBBA381F42A64981E8 /* PetSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65ADAF51BA3374DFEA836F17 /* PetSurface.swift */; };
+		F6FB04C0F328317D1CDDCD1A /* RemoteMessageEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4C89F246265B6840B709C2 /* RemoteMessageEnvelope.swift */; };
 		F78818B22557E1555A5F8443 /* SpriteCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC33A6107EBDCD17F2E1472B /* SpriteCompositor.swift */; };
 		F88078421D8D8E7B81882101 /* InteractionType.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02B75A4974AB0C59CB9A7CD /* InteractionType.swift */; };
 		F906D35D0D3CD0586BC5B046 /* BonjourDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 834914784D4C95CFABAA0C27 /* BonjourDiscovery.swift */; };
@@ -629,6 +630,7 @@
 		B9B620D00284A700C480C5E5 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		BA07F3586A1F9F14F8BDF179 /* PreKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStore.swift; sourceTree = "<group>"; };
 		BA137F066528B6AB98E71424 /* ReactionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPickerView.swift; sourceTree = "<group>"; };
+		BB4C89F246265B6840B709C2 /* RemoteMessageEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMessageEnvelope.swift; sourceTree = "<group>"; };
 		BB785F2E159A543F61378FB2 /* AcceptConnectionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptConnectionHelper.swift; sourceTree = "<group>"; };
 		BCEB8F58DD3A17AE0E87862A /* RabbitSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RabbitSpriteData.swift; sourceTree = "<group>"; };
 		BD44DD0CD9A7014B98365F3B /* SessionKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
@@ -1070,6 +1072,7 @@
 				D27C1CF30674B0A0E504D127 /* PreKeyBundle.swift */,
 				BA07F3586A1F9F14F8BDF179 /* PreKeyStore.swift */,
 				49CC7711FB8161DA60ECFE19 /* ProofOfWork.swift */,
+				BB4C89F246265B6840B709C2 /* RemoteMessageEnvelope.swift */,
 				520FD39E4A8B15C29F54EDB0 /* RemoteSessionManager.swift */,
 				890AB588E53BE90A7823A9ED /* X3DH.swift */,
 			);
@@ -1860,6 +1863,7 @@
 				401FC8122FEB4D13F9C4A025 /* RelayAuthenticator.swift in Sources */,
 				85804F312615EC7ECE8E13E2 /* RelayConnectView.swift in Sources */,
 				417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */,
+				F6FB04C0F328317D1CDDCD1A /* RemoteMessageEnvelope.swift in Sources */,
 				C9DC96C0189F59682746A8D3 /* RemoteSessionManager.swift in Sources */,
 				FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */,
 				4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */,
