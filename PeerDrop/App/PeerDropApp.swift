@@ -8,6 +8,8 @@ struct PeerDropApp: App {
     @StateObject private var petEngine = PetEngine()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
+    @State private var pendingInvite: InvitePayload?
+    @State private var showInviteAccept = false
 
     var body: some Scene {
         WindowGroup {
@@ -71,6 +73,17 @@ struct PeerDropApp: App {
             .onOpenURL { url in
                 handleDeepLink(url)
             }
+            .sheet(isPresented: $showInviteAccept) {
+                if let invite = pendingInvite {
+                    InviteAcceptView(
+                        invite: invite,
+                        connectionManager: connectionManager
+                    ) {
+                        showInviteAccept = false
+                        pendingInvite = nil
+                    }
+                }
+            }
         }
         .onChange(of: scenePhase) { newPhase in
             connectionManager.handleScenePhaseChange(newPhase)
@@ -106,6 +119,15 @@ struct PeerDropApp: App {
         case "smart":
             // peerdrop://smart?ts=IP:PORT&local=IP:PORT&relay=CODE&name=NAME
             handleSmartDeepLink(url)
+        case "invite":
+            do {
+                let invite = try InvitePayload(from: url)
+                guard invite.expiry > Date() else { return }
+                pendingInvite = invite
+                showInviteAccept = true
+            } catch {
+                // Invalid invite URL
+            }
         default:
             break
         }

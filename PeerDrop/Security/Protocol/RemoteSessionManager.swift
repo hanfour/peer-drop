@@ -19,12 +19,20 @@ final class RemoteSessionManager: ObservableObject {
         loadAllSessions()
     }
 
+    /// Result of initiating an X3DH session, including metadata needed for the initial message envelope.
+    struct InitiateResult {
+        let session: DoubleRatchetSession
+        let ephemeralPublicKey: Data        // Sender's ephemeral key (for receiver to complete X3DH)
+        let usedSignedPreKeyId: UInt32      // Which signed pre-key was used
+        let usedOneTimePreKeyId: UInt32?    // Which OTP key was consumed (if any)
+    }
+
     // MARK: - Initiate Session (Alice side)
 
     func initiateSession(
         contactId: String,
         peerMailboxId: String
-    ) async throws -> DoubleRatchetSession {
+    ) async throws -> InitiateResult {
         let bundle = try await mailboxClient.fetchPreKeyBundle(mailboxId: peerMailboxId)
 
         // Validate signed pre-key signature
@@ -58,7 +66,12 @@ final class RemoteSessionManager: ObservableObject {
         sessions[contactId] = session
         saveSession(for: contactId)
         Self.logger.info("Remote session initiated with contact \(contactId)")
-        return session
+        return InitiateResult(
+            session: session,
+            ephemeralPublicKey: ephemeralKey.publicKey.rawRepresentation,
+            usedSignedPreKeyId: bundle.signedPreKey.id,
+            usedOneTimePreKeyId: bundle.oneTimePreKey?.id
+        )
     }
 
     // MARK: - Respond to Session (Bob side)

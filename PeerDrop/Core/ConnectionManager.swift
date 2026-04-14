@@ -896,6 +896,59 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    // MARK: - Accept Remote Invite
+
+    func acceptRemoteInvite(_ invite: InvitePayload) async throws {
+        // 1. Ensure our mailbox is registered
+        try await mailboxManager.registerIfNeeded()
+
+        // 2. Fetch peer's pre-key bundle to get their identity key
+        let bundle = try await MailboxClient().fetchPreKeyBundle(mailboxId: invite.mailboxId)
+
+        // 3. Create trusted contact
+        let contact = TrustedContact(
+            displayName: invite.displayName,
+            identityPublicKey: bundle.identityKey,
+            trustLevel: .linked,
+            mailboxId: invite.mailboxId
+        )
+        trustedContactStore.add(contact)
+
+        // 4. Initiate X3DH session (keyed by contact UUID)
+        // Note: this fetches the bundle again internally — second fetch is harmless,
+        // OTP keys are replenished and the design handles exhaustion gracefully.
+        let result = try await remoteSessionManager.initiateSession(
+            contactId: contact.id.uuidString,
+            peerMailboxId: invite.mailboxId
+        )
+
+        // 5. Send initial encrypted greeting
+        let greeting = "Connected via invite link".data(using: .utf8)!
+        let encrypted = try remoteSessionManager.encrypt(data: greeting, for: contact.id.uuidString)
+
+        let envelope = RemoteMessageEnvelope(
+            senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
+            senderMailboxId: mailboxManager.mailboxId ?? "",
+            senderDisplayName: PeerIdentity.local().displayName,
+            ephemeralKey: result.ephemeralPublicKey,
+            usedSignedPreKeyId: result.usedSignedPreKeyId,
+            usedOneTimePreKeyId: result.usedOneTimePreKeyId,
+            ratchetMessage: encrypted
+        )
+
+        let envelopeData = try JSONEncoder().encode(envelope)
+        let challenge = UUID().uuidString
+        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+            throw MailboxError.invalidResponse
+        }
+
+        try await MailboxClient().sendMessage(
+            to: invite.mailboxId,
+            ciphertext: envelopeData,
+            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
+        )
+    }
+
     // MARK: - App Lifecycle
 
     func handleScenePhaseChange(_ phase: ScenePhase) {
