@@ -53,6 +53,10 @@ final class TrustedContactStore: ObservableObject {
         contacts.first { $0.deviceId == deviceId }
     }
 
+    func find(byMailboxId mailboxId: String) -> TrustedContact? {
+        contacts.first { $0.mailboxId == mailboxId }
+    }
+
     // MARK: - Trust Management
 
     func updateTrustLevel(for id: UUID, to level: TrustLevel) {
@@ -67,6 +71,12 @@ final class TrustedContactStore: ObservableObject {
     func setBlocked(_ id: UUID, blocked: Bool) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         contacts[index].isBlocked = blocked
+        scheduleSave()
+    }
+
+    func updateMailboxId(for id: UUID, mailboxId: String) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        contacts[index].mailboxId = mailboxId
         scheduleSave()
     }
 

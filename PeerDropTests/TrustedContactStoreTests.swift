@@ -123,6 +123,26 @@ final class TrustedContactStoreTests: XCTestCase {
         XCTAssertEqual(store.nonBlocked.first?.displayName, "B")
     }
 
+    func testFindByMailboxId() {
+        let store = TrustedContactStore(storageKey: "test-mailbox-lookup-\(UUID().uuidString)")
+        let contact = TrustedContact(
+            displayName: "Remote Peer",
+            identityPublicKey: Data(repeating: 0xAA, count: 32),
+            trustLevel: .linked,
+            mailboxId: "abc123mailbox"
+        )
+        store.add(contact)
+
+        let found = store.find(byMailboxId: "abc123mailbox")
+        XCTAssertNotNil(found)
+        XCTAssertEqual(found?.displayName, "Remote Peer")
+
+        let notFound = store.find(byMailboxId: "nonexistent")
+        XCTAssertNil(notFound)
+
+        store.removeAll()
+    }
+
     func testPersistenceRoundTrip() {
         let key = "test-persist-\(UUID().uuidString)"
         let store1 = TrustedContactStore(storageKey: key)

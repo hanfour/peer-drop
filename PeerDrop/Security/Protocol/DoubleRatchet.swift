@@ -11,7 +11,7 @@ struct RatchetMessage: Codable {
 
 /// Double Ratchet session providing per-message forward secrecy.
 /// Reference: https://signal.org/docs/specifications/doubleratchet/
-class DoubleRatchetSession {
+class DoubleRatchetSession: Codable {
 
     // DH Ratchet state
     private var myRatchetKey: Curve25519.KeyAgreement.PrivateKey
@@ -31,7 +31,7 @@ class DoubleRatchetSession {
     private var skippedKeys: [SkippedKeyIndex: SymmetricKey] = [:]
     private static let maxSkip: UInt32 = 200
 
-    private struct SkippedKeyIndex: Hashable {
+    private struct SkippedKeyIndex: Hashable, Codable {
         let ratchetKey: Data
         let counter: UInt32
     }
@@ -39,6 +39,77 @@ class DoubleRatchetSession {
     private init(rootKey: SymmetricKey, myRatchetKey: Curve25519.KeyAgreement.PrivateKey) {
         self.rootKey = rootKey
         self.myRatchetKey = myRatchetKey
+    }
+
+    // MARK: - Codable
+
+    private enum CodingKeys: String, CodingKey {
+        case myRatchetKey, theirRatchetKey, rootKey
+        case sendChainKey, receiveChainKey
+        case sendCounter, receiveCounter, previousSendCounter
+        case skippedKeys
+    }
+
+    /// Helper struct for serializing the `[SkippedKeyIndex: SymmetricKey]` dictionary
+    /// since `SkippedKeyIndex` cannot serve as a JSON dictionary key directly.
+    private struct SkippedKeyEntry: Codable {
+        let ratchetKey: Data
+        let counter: UInt32
+        let messageKey: Data
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(myRatchetKey.rawRepresentation, forKey: .myRatchetKey)
+        try container.encodeIfPresent(theirRatchetKey?.rawRepresentation, forKey: .theirRatchetKey)
+        try container.encode(rootKey.withUnsafeBytes { Data($0) }, forKey: .rootKey)
+        try container.encodeIfPresent(sendChainKey.map { $0.withUnsafeBytes { Data($0) } }, forKey: .sendChainKey)
+        try container.encodeIfPresent(receiveChainKey.map { $0.withUnsafeBytes { Data($0) } }, forKey: .receiveChainKey)
+        try container.encode(sendCounter, forKey: .sendCounter)
+        try container.encode(receiveCounter, forKey: .receiveCounter)
+        try container.encode(previousSendCounter, forKey: .previousSendCounter)
+
+        let entries = skippedKeys.map { (index, key) in
+            SkippedKeyEntry(
+                ratchetKey: index.ratchetKey,
+                counter: index.counter,
+                messageKey: key.withUnsafeBytes { Data($0) }
+            )
+        }
+        try container.encode(entries, forKey: .skippedKeys)
+    }
+
+    required convenience init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        let rootKeyData = try container.decode(Data.self, forKey: .rootKey)
+        let myRatchetKeyData = try container.decode(Data.self, forKey: .myRatchetKey)
+
+        self.init(
+            rootKey: SymmetricKey(data: rootKeyData),
+            myRatchetKey: try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: myRatchetKeyData)
+        )
+
+        if let theirData = try container.decodeIfPresent(Data.self, forKey: .theirRatchetKey) {
+            self.theirRatchetKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: theirData)
+        }
+        if let sendData = try container.decodeIfPresent(Data.self, forKey: .sendChainKey) {
+            self.sendChainKey = SymmetricKey(data: sendData)
+        }
+        if let recvData = try container.decodeIfPresent(Data.self, forKey: .receiveChainKey) {
+            self.receiveChainKey = SymmetricKey(data: recvData)
+        }
+
+        self.sendCounter = try container.decode(UInt32.self, forKey: .sendCounter)
+        self.receiveCounter = try container.decode(UInt32.self, forKey: .receiveCounter)
+        self.previousSendCounter = try container.decode(UInt32.self, forKey: .previousSendCounter)
+
+        let entries = try container.decode([SkippedKeyEntry].self, forKey: .skippedKeys)
+        for entry in entries {
+            let index = SkippedKeyIndex(ratchetKey: entry.ratchetKey, counter: entry.counter)
+            self.skippedKeys[index] = SymmetricKey(data: entry.messageKey)
+        }
     }
 
     // MARK: - Initialization

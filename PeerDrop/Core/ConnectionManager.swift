@@ -832,38 +832,58 @@ final class ConnectionManager: ObservableObject {
         }
 
         do {
-            // Decode the envelope to determine sender
             let envelope = try JSONDecoder().decode(RemoteMessageEnvelope.self, from: ciphertextData)
 
-            // Find the contact by their public key
-            guard let contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey) else {
-                logger.warning("Remote message from unknown sender — discarding")
-                return
-            }
+            // Find contact by public key, or by mailbox ID
+            var contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey)
+                ?? trustedContactStore.find(byMailboxId: envelope.senderMailboxId)
 
-            if contact.isBlocked {
+            if let c = contact, c.isBlocked {
                 logger.debug("Remote message from blocked contact — discarding")
                 return
             }
 
-            // If no session exists, establish one as responder (first message from this peer)
-            if !remoteSessionManager.hasSession(for: contact.id.uuidString) {
+            // First message from unknown sender: create trusted contact
+            if contact == nil && envelope.isInitialMessage {
+                let newContact = TrustedContact(
+                    displayName: envelope.senderDisplayName ?? "Remote Peer",
+                    identityPublicKey: envelope.senderIdentityKey,
+                    trustLevel: .linked,
+                    mailboxId: envelope.senderMailboxId
+                )
+                trustedContactStore.add(newContact)
+                contact = newContact
+                logger.info("Created new remote contact: \(newContact.displayName)")
+            }
+
+            guard let contact else {
+                logger.warning("Remote message from unknown sender with no X3DH — discarding")
+                return
+            }
+
+            // Ensure mailboxId is set on contact
+            if contact.mailboxId == nil {
+                trustedContactStore.updateMailboxId(for: contact.id, mailboxId: envelope.senderMailboxId)
+            }
+
+            // Establish session if needed (responder side)
+            if !remoteSessionManager.hasSession(for: contact.id.uuidString),
+               let ephKey = envelope.ephemeralKey,
+               let spkId = envelope.usedSignedPreKeyId {
                 _ = try remoteSessionManager.respondToSession(
                     contactId: contact.id.uuidString,
                     theirIdentityKey: envelope.senderIdentityKey,
-                    theirEphemeralKey: envelope.ephemeralKey,
-                    usedSignedPreKeyId: envelope.usedSignedPreKeyId,
+                    theirEphemeralKey: ephKey,
+                    usedSignedPreKeyId: spkId,
                     usedOneTimePreKeyId: envelope.usedOneTimePreKeyId
                 )
             }
 
-            // Decrypt the ratchet message
             let plaintext = try remoteSessionManager.decrypt(
                 message: envelope.ratchetMessage,
                 from: contact.id.uuidString
             )
 
-            // Route to ChatManager as incoming message
             if let text = String(data: plaintext, encoding: .utf8) {
                 chatManager.saveIncoming(
                     text: text,
@@ -873,6 +893,130 @@ final class ConnectionManager: ObservableObject {
             }
         } catch {
             logger.error("Failed to process remote message: \(error.localizedDescription)")
+        }
+    }
+
+    func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
+        guard let peerMailboxId = contact.mailboxId else {
+            throw MailboxError.httpError(0) // Contact has no mailbox — cannot send
+        }
+
+        // Ensure our own mailbox is registered so the recipient can reply
+        try await mailboxManager.registerIfNeeded()
+        guard let myMailboxId = mailboxManager.mailboxId else {
+            throw RemoteInviteError.mailboxNotRegistered
+        }
+
+        guard let plaintext = text.data(using: .utf8) else { return }
+        let encrypted = try remoteSessionManager.encrypt(data: plaintext, for: contact.id.uuidString)
+
+        let envelope = RemoteMessageEnvelope(
+            senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
+            senderMailboxId: myMailboxId,
+            senderDisplayName: nil,
+            ephemeralKey: nil,
+            usedSignedPreKeyId: nil,
+            usedOneTimePreKeyId: nil,
+            ratchetMessage: encrypted
+        )
+
+        let envelopeData = try JSONEncoder().encode(envelope)
+        let challenge = UUID().uuidString
+        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+            throw MailboxError.invalidResponse
+        }
+
+        try await MailboxClient().sendMessage(
+            to: peerMailboxId,
+            ciphertext: envelopeData,
+            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
+        )
+
+        // Save as outgoing message in chat history
+        chatManager.saveOutgoing(
+            text: text,
+            peerID: contact.id.uuidString,
+            peerName: contact.displayName
+        )
+    }
+
+    // MARK: - Accept Remote Invite
+
+    func acceptRemoteInvite(_ invite: InvitePayload) async throws {
+        // 1. Dedup — if already accepted this invite, skip
+        if let existing = trustedContactStore.find(byMailboxId: invite.mailboxId) {
+            logger.info("Invite already accepted for mailbox \(invite.mailboxId), contact: \(existing.displayName)")
+            return
+        }
+
+        // 2. Ensure our mailbox is registered
+        try await mailboxManager.registerIfNeeded()
+        guard let myMailboxId = mailboxManager.mailboxId else {
+            throw RemoteInviteError.mailboxNotRegistered
+        }
+
+        // 3. Fetch peer's pre-key bundle
+        let bundle = try await MailboxClient().fetchPreKeyBundle(mailboxId: invite.mailboxId)
+
+        // 4. TOFU: verify fetched identity key matches the fingerprint from the invite
+        let fetchedContact = TrustedContact(
+            displayName: invite.displayName,
+            identityPublicKey: bundle.identityKey,
+            trustLevel: .linked,
+            mailboxId: invite.mailboxId
+        )
+        guard fetchedContact.keyFingerprint == invite.identityKeyFingerprint else {
+            logger.error("TOFU verification failed: invite fingerprint \(invite.identityKeyFingerprint) != bundle fingerprint \(fetchedContact.keyFingerprint)")
+            throw RemoteInviteError.fingerprintMismatch
+        }
+
+        // 5. Add trusted contact
+        trustedContactStore.add(fetchedContact)
+
+        // 6. Initiate X3DH session
+        let result = try await remoteSessionManager.initiateSession(
+            contactId: fetchedContact.id.uuidString,
+            peerMailboxId: invite.mailboxId
+        )
+
+        // 7. Send initial encrypted greeting
+        let greeting = String(localized: "Connected via invite link").data(using: .utf8)!
+        let encrypted = try remoteSessionManager.encrypt(data: greeting, for: fetchedContact.id.uuidString)
+
+        let envelope = RemoteMessageEnvelope(
+            senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
+            senderMailboxId: myMailboxId,
+            senderDisplayName: PeerIdentity.local().displayName,
+            ephemeralKey: result.ephemeralPublicKey,
+            usedSignedPreKeyId: result.usedSignedPreKeyId,
+            usedOneTimePreKeyId: result.usedOneTimePreKeyId,
+            ratchetMessage: encrypted
+        )
+
+        let envelopeData = try JSONEncoder().encode(envelope)
+        let challenge = UUID().uuidString
+        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+            throw MailboxError.invalidResponse
+        }
+
+        try await MailboxClient().sendMessage(
+            to: invite.mailboxId,
+            ciphertext: envelopeData,
+            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
+        )
+    }
+
+    enum RemoteInviteError: LocalizedError {
+        case fingerprintMismatch
+        case mailboxNotRegistered
+
+        var errorDescription: String? {
+            switch self {
+            case .fingerprintMismatch:
+                return String(localized: "Security verification failed: the peer's identity key does not match the invite. The connection may have been tampered with.")
+            case .mailboxNotRegistered:
+                return String(localized: "Could not register mailbox. Please try again.")
+            }
         }
     }
 
