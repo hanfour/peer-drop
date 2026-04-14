@@ -897,14 +897,22 @@ final class ConnectionManager: ObservableObject {
     }
 
     func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
-        guard let mailboxId = contact.mailboxId else { return }
+        guard let peerMailboxId = contact.mailboxId else {
+            throw MailboxError.httpError(0) // Contact has no mailbox — cannot send
+        }
 
-        let plaintext = text.data(using: .utf8)!
+        // Ensure our own mailbox is registered so the recipient can reply
+        try await mailboxManager.registerIfNeeded()
+        guard let myMailboxId = mailboxManager.mailboxId else {
+            throw RemoteInviteError.mailboxNotRegistered
+        }
+
+        guard let plaintext = text.data(using: .utf8) else { return }
         let encrypted = try remoteSessionManager.encrypt(data: plaintext, for: contact.id.uuidString)
 
         let envelope = RemoteMessageEnvelope(
             senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
-            senderMailboxId: self.mailboxManager.mailboxId ?? "",
+            senderMailboxId: myMailboxId,
             senderDisplayName: nil,
             ephemeralKey: nil,
             usedSignedPreKeyId: nil,
@@ -919,7 +927,7 @@ final class ConnectionManager: ObservableObject {
         }
 
         try await MailboxClient().sendMessage(
-            to: mailboxId,
+            to: peerMailboxId,
             ciphertext: envelopeData,
             pow: ProofOfWorkToken(challenge: challenge, proof: pow)
         )
@@ -935,36 +943,49 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Accept Remote Invite
 
     func acceptRemoteInvite(_ invite: InvitePayload) async throws {
-        // 1. Ensure our mailbox is registered
-        try await mailboxManager.registerIfNeeded()
+        // 1. Dedup — if already accepted this invite, skip
+        if let existing = trustedContactStore.find(byMailboxId: invite.mailboxId) {
+            logger.info("Invite already accepted for mailbox \(invite.mailboxId), contact: \(existing.displayName)")
+            return
+        }
 
-        // 2. Fetch peer's pre-key bundle to get their identity key
+        // 2. Ensure our mailbox is registered
+        try await mailboxManager.registerIfNeeded()
+        guard let myMailboxId = mailboxManager.mailboxId else {
+            throw RemoteInviteError.mailboxNotRegistered
+        }
+
+        // 3. Fetch peer's pre-key bundle
         let bundle = try await MailboxClient().fetchPreKeyBundle(mailboxId: invite.mailboxId)
 
-        // 3. Create trusted contact
-        let contact = TrustedContact(
+        // 4. TOFU: verify fetched identity key matches the fingerprint from the invite
+        let fetchedContact = TrustedContact(
             displayName: invite.displayName,
             identityPublicKey: bundle.identityKey,
             trustLevel: .linked,
             mailboxId: invite.mailboxId
         )
-        trustedContactStore.add(contact)
+        guard fetchedContact.keyFingerprint == invite.identityKeyFingerprint else {
+            logger.error("TOFU verification failed: invite fingerprint \(invite.identityKeyFingerprint) != bundle fingerprint \(fetchedContact.keyFingerprint)")
+            throw RemoteInviteError.fingerprintMismatch
+        }
 
-        // 4. Initiate X3DH session (keyed by contact UUID)
-        // Note: this fetches the bundle again internally — second fetch is harmless,
-        // OTP keys are replenished and the design handles exhaustion gracefully.
+        // 5. Add trusted contact
+        trustedContactStore.add(fetchedContact)
+
+        // 6. Initiate X3DH session
         let result = try await remoteSessionManager.initiateSession(
-            contactId: contact.id.uuidString,
+            contactId: fetchedContact.id.uuidString,
             peerMailboxId: invite.mailboxId
         )
 
-        // 5. Send initial encrypted greeting
-        let greeting = "Connected via invite link".data(using: .utf8)!
-        let encrypted = try remoteSessionManager.encrypt(data: greeting, for: contact.id.uuidString)
+        // 7. Send initial encrypted greeting
+        let greeting = String(localized: "Connected via invite link").data(using: .utf8)!
+        let encrypted = try remoteSessionManager.encrypt(data: greeting, for: fetchedContact.id.uuidString)
 
         let envelope = RemoteMessageEnvelope(
             senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
-            senderMailboxId: mailboxManager.mailboxId ?? "",
+            senderMailboxId: myMailboxId,
             senderDisplayName: PeerIdentity.local().displayName,
             ephemeralKey: result.ephemeralPublicKey,
             usedSignedPreKeyId: result.usedSignedPreKeyId,
@@ -983,6 +1004,20 @@ final class ConnectionManager: ObservableObject {
             ciphertext: envelopeData,
             pow: ProofOfWorkToken(challenge: challenge, proof: pow)
         )
+    }
+
+    enum RemoteInviteError: LocalizedError {
+        case fingerprintMismatch
+        case mailboxNotRegistered
+
+        var errorDescription: String? {
+            switch self {
+            case .fingerprintMismatch:
+                return String(localized: "Security verification failed: the peer's identity key does not match the invite. The connection may have been tampered with.")
+            case .mailboxNotRegistered:
+                return String(localized: "Could not register mailbox. Please try again.")
+            }
+        }
     }
 
     // MARK: - App Lifecycle
