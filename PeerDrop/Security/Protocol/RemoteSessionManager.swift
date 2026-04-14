@@ -16,6 +16,7 @@ final class RemoteSessionManager: ObservableObject {
     init(preKeyStore: PreKeyStore = PreKeyStore(), mailboxClient: MailboxClient = MailboxClient()) {
         self.preKeyStore = preKeyStore
         self.mailboxClient = mailboxClient
+        loadAllSessions()
     }
 
     // MARK: - Initiate Session (Alice side)
@@ -55,6 +56,7 @@ final class RemoteSessionManager: ObservableObject {
         )
 
         sessions[contactId] = session
+        saveSession(for: contactId)
         Self.logger.info("Remote session initiated with contact \(contactId)")
         return session
     }
@@ -97,6 +99,7 @@ final class RemoteSessionManager: ObservableObject {
         )
 
         sessions[contactId] = session
+        saveSession(for: contactId)
         Self.logger.info("Remote session established as responder for contact \(contactId)")
         return session
     }
@@ -107,18 +110,73 @@ final class RemoteSessionManager: ObservableObject {
         guard let session = sessions[contactId] else {
             throw RemoteSessionError.noSession
         }
-        return try session.encrypt(data)
+        let result = try session.encrypt(data)
+        saveSession(for: contactId)
+        return result
     }
 
     func decrypt(message: RatchetMessage, from contactId: String) throws -> Data {
         guard let session = sessions[contactId] else {
             throw RemoteSessionError.noSession
         }
-        return try session.decrypt(message)
+        let result = try session.decrypt(message)
+        saveSession(for: contactId)
+        return result
     }
 
     func hasSession(for contactId: String) -> Bool {
         sessions[contactId] != nil
+    }
+
+    // MARK: - Session Persistence
+
+    private static let sessionsDirectory: URL = {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Security/sessions", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    private let encryptor = ChatDataEncryptor.shared
+
+    func saveSession(for contactId: String) {
+        guard let session = sessions[contactId] else { return }
+        do {
+            let data = try JSONEncoder().encode(session)
+            let url = Self.sessionsDirectory.appendingPathComponent("\(contactId).enc")
+            try encryptor.encryptAndWrite(data, to: url)
+        } catch {
+            Self.logger.error("Failed to save session for \(contactId): \(error.localizedDescription)")
+        }
+    }
+
+    func loadAllSessions() {
+        let dir = Self.sessionsDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "enc" {
+            let contactId = file.deletingPathExtension().lastPathComponent
+            do {
+                let data = try encryptor.readAndDecrypt(from: file)
+                let session = try JSONDecoder().decode(DoubleRatchetSession.self, from: data)
+                sessions[contactId] = session
+                Self.logger.info("Loaded session for \(contactId)")
+            } catch {
+                Self.logger.error("Failed to load session \(contactId): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func deleteSession(for contactId: String) {
+        sessions.removeValue(forKey: contactId)
+        let url = Self.sessionsDirectory.appendingPathComponent("\(contactId).enc")
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func migrateSessionKey(from oldKey: String, to newKey: String) {
+        guard let session = sessions.removeValue(forKey: oldKey) else { return }
+        sessions[newKey] = session
+        deleteSession(for: oldKey)
+        saveSession(for: newKey)
     }
 
     enum RemoteSessionError: Error {
