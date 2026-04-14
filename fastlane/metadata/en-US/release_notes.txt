@@ -1,29 +1,20 @@
-PeerDrop 2.1.0 — Pet Evolution Overhaul
+PeerDrop 3.0 — End-to-End Encrypted Communication + Full Pet Evolution
 
-New Pet System
-- 10 pet body types: Cat, Dog, Rabbit, Bird, Frog, Bear, Dragon, Octopus, Ghost, Slime
-- Baby and Child evolution stages with 20 animated actions each
-- 16×16 pixel art sprites with 8 color palettes
+End-to-End Encrypted Remote Communication
+- Double Ratchet encryption protocol for secure cross-network messaging
+- Trusted contact management: invite, accept, verify
+- Encrypted sessions persist automatically across app restarts
+- Security dashboard: view all encrypted connection statuses
 
-Physical Interactions
-- Pets walk, climb walls, and hang from the ceiling
-- Drag and throw your pet with gravity and bounce physics
-- Pet stroke gesture for hearts and XP
-
-Food System
-- Item inventory: Rice Ball, Fish, Apple
-- Drag food onto screen — your pet chases and eats it!
+Complete Pet System
+- 10 pet body types × 2 stages × 20 animated actions
+- Dedicated Pet tab: full profile, genes, personality, stats
+- Food inventory: drag to feed, pet chases food
+- Feed → digest → poop full lifecycle
+- Personality-driven behavior: energy affects activity, mischief affects climbing
+- Dynamic Island + Home Screen / Lock Screen widgets
 - Daily login food refresh, earn food from peer connections
 
-Evolution & Growth
-- Accumulate XP + time to evolve to the next stage
-- Haptic feedback and flash effects on evolution
-- Name your pet when it hatches
-
-Dynamic Island & Widgets
-- Live Activity on Dynamic Island shows pet status
-- Home Screen and Lock Screen widgets
-
-Connection Fix
-- Fixed relay joiner not receiving PIN verification
+Connection Improvements
 - Optimized relay connection speed
+- Fixed joiner not receiving PIN verification

@@ -94,4 +94,17 @@ final class PetSnapshotTests: XCTestCase {
             snapshot("15_PetInteractionPanel_Fallback")
         }
     }
+
+    /// 16: Pet Tab — full profile view
+    func test16_PetTab() {
+        sleep(2)
+        let tabBar = app.tabBars.firstMatch
+        if tabBar.exists {
+            // Pet tab is the 4th tab (index 3)
+            let petTab = tabBar.buttons.element(boundBy: 3)
+            if petTab.exists { petTab.tap() }
+        }
+        sleep(2)
+        snapshot("16_PetTab")
+    }
 }

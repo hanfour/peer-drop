@@ -76,4 +76,15 @@ final class PetSnapshotTestsDark: XCTestCase {
             snapshot("15_PetInteractionPanel_Dark_Fallback")
         }
     }
+
+    func test16_PetTab_Dark() {
+        sleep(2)
+        let tabBar = app.tabBars.firstMatch
+        if tabBar.exists {
+            let petTab = tabBar.buttons.element(boundBy: 3)
+            if petTab.exists { petTab.tap() }
+        }
+        sleep(2)
+        snapshot("16_PetTab_Dark")
+    }
 }
