@@ -78,6 +78,11 @@ final class IdentityKeyManager {
         cachedSigningKey = nil
     }
 
+    /// Expose agreement private key for X3DH key agreement. Only used within Security layer.
+    func agreementPrivateKeyForX3DH() -> Curve25519.KeyAgreement.PrivateKey {
+        agreementPrivateKey
+    }
+
     // MARK: - Private Key Access
 
     private var agreementPrivateKey: Curve25519.KeyAgreement.PrivateKey {

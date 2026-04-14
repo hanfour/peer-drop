@@ -10,10 +10,22 @@ compatibility_date = "2024-01-01"
 binding = "ROOMS"
 id = "376d9f22d4c743bfb1509b814087192c"
 
+[[kv_namespaces]]
+binding = "V2_STORE"
+id = "9968f53e396f441da9e9fa419285ed68"
+
 [[durable_objects.bindings]]
 name = "SIGNALING_ROOM"
 class_name = "SignalingRoom"
 
+[[durable_objects.bindings]]
+name = "PREKEY_STORE"
+class_name = "PreKeyStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalingRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["PreKeyStore"]

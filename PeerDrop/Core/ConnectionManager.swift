@@ -197,6 +197,12 @@ final class ConnectionManager: ObservableObject {
     let clipboardSyncManager = ClipboardSyncManager()
     let trustedContactStore = TrustedContactStore()
 
+    // MARK: - Remote Communication (Phase 2)
+
+    let preKeyStore = PreKeyStore()
+    private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
+    private(set) lazy var remoteSessionManager = RemoteSessionManager(preKeyStore: preKeyStore)
+
     // MARK: - Typing Indicator State
 
     private var typingDebounceTask: Task<Void, Never>?
@@ -225,6 +231,11 @@ final class ConnectionManager: ObservableObject {
             self?.sendClipboardSyncToAll(payload)
         }
         clipboardSyncManager.startMonitoring()
+
+        // Wire remote mailbox message handler
+        mailboxManager.onMessageReceived = { [weak self] message in
+            self?.handleRemoteMessage(message)
+        }
 
         // Screenshot mode: automatically start discovery and set up mock connection
         if ScreenshotModeProvider.shared.isActive {
@@ -812,6 +823,59 @@ final class ConnectionManager: ObservableObject {
         lastConnectedPeer != nil
     }
 
+    // MARK: - Remote Message Handling
+
+    private func handleRemoteMessage(_ message: MailboxMessage) {
+        guard let ciphertextData = Data(base64Encoded: message.ciphertext) else {
+            logger.error("Remote message has invalid base64 ciphertext")
+            return
+        }
+
+        do {
+            // Decode the envelope to determine sender
+            let envelope = try JSONDecoder().decode(RemoteMessageEnvelope.self, from: ciphertextData)
+
+            // Find the contact by their public key
+            guard let contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey) else {
+                logger.warning("Remote message from unknown sender — discarding")
+                return
+            }
+
+            if contact.isBlocked {
+                logger.debug("Remote message from blocked contact — discarding")
+                return
+            }
+
+            // If no session exists, establish one as responder (first message from this peer)
+            if !remoteSessionManager.hasSession(for: contact.id.uuidString) {
+                _ = try remoteSessionManager.respondToSession(
+                    contactId: contact.id.uuidString,
+                    theirIdentityKey: envelope.senderIdentityKey,
+                    theirEphemeralKey: envelope.ephemeralKey,
+                    usedSignedPreKeyId: envelope.usedSignedPreKeyId,
+                    usedOneTimePreKeyId: envelope.usedOneTimePreKeyId
+                )
+            }
+
+            // Decrypt the ratchet message
+            let plaintext = try remoteSessionManager.decrypt(
+                message: envelope.ratchetMessage,
+                from: contact.id.uuidString
+            )
+
+            // Route to ChatManager as incoming message
+            if let text = String(data: plaintext, encoding: .utf8) {
+                chatManager.saveIncoming(
+                    text: text,
+                    peerID: contact.id.uuidString,
+                    peerName: contact.displayName
+                )
+            }
+        } catch {
+            logger.error("Failed to process remote message: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - App Lifecycle
 
     func handleScenePhaseChange(_ phase: ScenePhase) {
@@ -819,6 +883,8 @@ final class ConnectionManager: ObservableObject {
         case .active:
             endBackgroundTask()
             discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
+            mailboxManager.startPolling()
+            Task { await mailboxManager.uploadPreKeysIfNeeded() }
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
@@ -842,6 +908,8 @@ final class ConnectionManager: ObservableObject {
             deviceStore.saveImmediately()
             chatManager.flushAllPendingPersists()
             trustedContactStore.flushPendingSave()
+            preKeyStore.flush()
+            mailboxManager.stopPolling()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:

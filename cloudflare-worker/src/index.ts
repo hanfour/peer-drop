@@ -12,7 +12,9 @@
 
 export interface Env {
   ROOMS: KVNamespace;
+  V2_STORE: KVNamespace;
   SIGNALING_ROOM: DurableObjectNamespace;
+  PREKEY_STORE: DurableObjectNamespace;
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
@@ -70,8 +72,8 @@ function cleanupRateLimits() {
 // CORS headers shared across all responses
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-API-Key, X-Mailbox-Id, X-Mailbox-Token",
 };
 
 export default {
@@ -296,9 +298,246 @@ export default {
       });
     }
 
+    // ===================================================================
+    // v2 API: Pre-Key Server & Anonymous Mailbox
+    // Zero-knowledge relay — no logging of content, IPs, or relationships
+    // ===================================================================
+
+    // POST /v2/keys/register — Upload device's public key bundle
+    if (path === "/v2/keys/register" && request.method === "POST") {
+      const body = await request.json() as { mailboxId?: string; preKeyBundle?: unknown; token?: string };
+      if (!body.mailboxId || !body.preKeyBundle) {
+        return jsonResponse({ error: "Missing mailboxId or preKeyBundle" }, 400);
+      }
+
+      // Rate limit registration using in-memory limiter (no IP persisted to KV)
+      if (isRateLimited(clientIP)) {
+        return jsonResponse({ error: "Too many requests" }, 429);
+      }
+
+      // Generate mailbox token if first registration
+      const existingMeta = await env.V2_STORE.get(`meta:${body.mailboxId}`);
+      let token: string;
+      if (existingMeta) {
+        const meta = JSON.parse(existingMeta) as { token: string };
+        // Verify token if re-registering
+        if (body.token && body.token !== meta.token) {
+          return jsonResponse({ error: "Invalid token" }, 403);
+        }
+        token = meta.token;
+      } else {
+        const tokenBytes = new Uint8Array(32);
+        crypto.getRandomValues(tokenBytes);
+        token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+      }
+
+      await env.V2_STORE.put(`keys:${body.mailboxId}`, JSON.stringify(body.preKeyBundle), {
+        expirationTtl: 30 * 86400, // 30 days
+      });
+      await env.V2_STORE.put(`meta:${body.mailboxId}`, JSON.stringify({ token, created: Date.now() }), {
+        expirationTtl: 30 * 86400,
+      });
+
+      return jsonResponse({ ok: true, token }, 201);
+    }
+
+    // GET /v2/keys/:mailboxId — Retrieve target's pre-key bundle (consumes one OTP key atomically via DO)
+    const keysMatch = path.match(/^\/v2\/keys\/([a-z0-9]+)$/);
+    if (keysMatch && request.method === "GET") {
+      const mailboxId = keysMatch[1];
+
+      // Delegate to PreKeyStore Durable Object for atomic OTP key consumption
+      const doId = env.PREKEY_STORE.idFromName(mailboxId);
+      const stub = env.PREKEY_STORE.get(doId);
+      return stub.fetch(new Request(`https://internal/consume?mailboxId=${mailboxId}`, {
+        headers: request.headers,
+      }));
+    }
+
+    // POST /v2/messages/:mailboxId — Deliver encrypted message to target
+    const msgDeliverMatch = path.match(/^\/v2\/messages\/([a-z0-9]+)$/);
+    if (msgDeliverMatch && request.method === "POST") {
+      const mailboxId = msgDeliverMatch[1];
+      const body = await request.json() as {
+        ciphertext?: string;
+        pow?: { challenge: string; proof: number };
+      };
+
+      if (!body.ciphertext || !body.pow) {
+        return jsonResponse({ error: "Missing ciphertext or pow" }, 400);
+      }
+
+      // Verify PoW
+      if (!(await verifyPoW(body.pow.challenge, body.pow.proof, 16))) {
+        return jsonResponse({ error: "Invalid proof of work" }, 403);
+      }
+
+      // Rate limit: 200 messages/day per mailbox
+      const dailyKey = `msg-count:${mailboxId}:${new Date().toISOString().slice(0, 10)}`;
+      const dailyCount = parseInt(await env.V2_STORE.get(dailyKey) || "0");
+      if (dailyCount >= 200) {
+        return jsonResponse({ error: "Daily message limit reached" }, 429);
+      }
+      await env.V2_STORE.put(dailyKey, String(dailyCount + 1), { expirationTtl: 86400 });
+
+      // Store message
+      const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      await env.V2_STORE.put(`msg:${mailboxId}:${msgId}`, JSON.stringify({
+        id: msgId,
+        ciphertext: body.ciphertext,
+        timestamp: new Date().toISOString(),
+      }), { expirationTtl: 7 * 86400 }); // 7 days TTL
+
+      return jsonResponse({ ok: true, id: msgId }, 201);
+    }
+
+    // GET /v2/messages — Pull pending messages for own mailbox
+    if (path === "/v2/messages" && request.method === "GET") {
+      const mailboxId = request.headers.get("X-Mailbox-Id");
+      const token = request.headers.get("X-Mailbox-Token");
+      if (!mailboxId || !token) {
+        return jsonResponse({ error: "Missing mailbox credentials" }, 401);
+      }
+
+      // Verify token
+      const meta = await env.V2_STORE.get(`meta:${mailboxId}`);
+      if (!meta) {
+        return jsonResponse({ error: "Mailbox not found" }, 404);
+      }
+      const metaObj = JSON.parse(meta) as { token: string };
+      if (metaObj.token !== token) {
+        return jsonResponse({ error: "Invalid token" }, 403);
+      }
+
+      // List and return all pending messages
+      const list = await env.V2_STORE.list({ prefix: `msg:${mailboxId}:` });
+      const messages = [];
+      for (const key of list.keys) {
+        const data = await env.V2_STORE.get(key.name);
+        if (data) messages.push(JSON.parse(data));
+      }
+
+      // Delete after successful retrieval
+      for (const key of list.keys) {
+        await env.V2_STORE.delete(key.name);
+      }
+
+      return jsonResponse(messages);
+    }
+
+    // POST /v2/mailbox/rotate — Rotate mailbox ID
+    if (path === "/v2/mailbox/rotate" && request.method === "POST") {
+      const oldMailboxId = request.headers.get("X-Mailbox-Id");
+      const oldToken = request.headers.get("X-Mailbox-Token");
+      if (!oldMailboxId || !oldToken) {
+        return jsonResponse({ error: "Missing mailbox credentials" }, 401);
+      }
+
+      const meta = await env.V2_STORE.get(`meta:${oldMailboxId}`);
+      if (!meta) {
+        return jsonResponse({ error: "Mailbox not found" }, 404);
+      }
+      const metaObj = JSON.parse(meta) as { token: string };
+      if (metaObj.token !== oldToken) {
+        return jsonResponse({ error: "Invalid token" }, 403);
+      }
+
+      // Generate new mailbox ID and token
+      const newIdBytes = new Uint8Array(12);
+      crypto.getRandomValues(newIdBytes);
+      const newMailboxId = Array.from(newIdBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+      const newTokenBytes = new Uint8Array(32);
+      crypto.getRandomValues(newTokenBytes);
+      const newToken = Array.from(newTokenBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+
+      // Migrate keys
+      const keys = await env.V2_STORE.get(`keys:${oldMailboxId}`);
+      if (keys) {
+        await env.V2_STORE.put(`keys:${newMailboxId}`, keys, { expirationTtl: 30 * 86400 });
+      }
+      await env.V2_STORE.put(`meta:${newMailboxId}`, JSON.stringify({ token: newToken, created: Date.now() }), {
+        expirationTtl: 30 * 86400,
+      });
+
+      // Migrate pending messages
+      const msgList = await env.V2_STORE.list({ prefix: `msg:${oldMailboxId}:` });
+      for (const key of msgList.keys) {
+        const data = await env.V2_STORE.get(key.name);
+        if (data) {
+          const newKey = key.name.replace(`msg:${oldMailboxId}:`, `msg:${newMailboxId}:`);
+          await env.V2_STORE.put(newKey, data, { expirationTtl: 7 * 86400 });
+        }
+        await env.V2_STORE.delete(key.name);
+      }
+
+      // Clean up old mailbox
+      await env.V2_STORE.delete(`keys:${oldMailboxId}`);
+      await env.V2_STORE.delete(`meta:${oldMailboxId}`);
+
+      return jsonResponse({ newMailboxId, newToken });
+    }
+
+    // DELETE /v2/keys — Revoke all keys (device lost)
+    if (path === "/v2/keys" && request.method === "DELETE") {
+      const mailboxId = request.headers.get("X-Mailbox-Id");
+      const token = request.headers.get("X-Mailbox-Token");
+      if (!mailboxId || !token) {
+        return jsonResponse({ error: "Missing mailbox credentials" }, 401);
+      }
+
+      const meta = await env.V2_STORE.get(`meta:${mailboxId}`);
+      if (!meta) {
+        return jsonResponse({ error: "Mailbox not found" }, 404);
+      }
+      const metaObj = JSON.parse(meta) as { token: string };
+      if (metaObj.token !== token) {
+        return jsonResponse({ error: "Invalid token" }, 403);
+      }
+
+      // Delete everything
+      await env.V2_STORE.delete(`keys:${mailboxId}`);
+      await env.V2_STORE.delete(`meta:${mailboxId}`);
+      const msgList = await env.V2_STORE.list({ prefix: `msg:${mailboxId}:` });
+      for (const key of msgList.keys) {
+        await env.V2_STORE.delete(key.name);
+      }
+
+      return jsonResponse({ ok: true });
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
+
+// Helper: JSON response with CORS
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// Proof-of-Work verification (matches client-side SHA256 hashcash)
+async function verifyPoW(challenge: string, proof: number, difficulty: number): Promise<boolean> {
+  const data = new TextEncoder().encode(challenge);
+  const proofBytes = new ArrayBuffer(8);
+  new DataView(proofBytes).setBigUint64(0, BigInt(proof), false); // big-endian
+  const combined = new Uint8Array(data.length + 8);
+  combined.set(data, 0);
+  combined.set(new Uint8Array(proofBytes), data.length);
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", combined));
+  let zeroBits = 0;
+  for (const byte of hash) {
+    if (byte === 0) {
+      zeroBits += 8;
+    } else {
+      zeroBits += Math.clz32(byte) - 24; // clz32 counts 32-bit leading zeros
+      break;
+    }
+    if (zeroBits >= difficulty) return true;
+  }
+  return zeroBits >= difficulty;
+}
 
 // ---------------------------------------------------------------------------
 // Durable Object: SignalingRoom
@@ -383,5 +622,57 @@ export class SignalingRoom {
         } catch { /* ignore */ }
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Durable Object: PreKeyStore
+//
+// Provides atomic OTP key consumption. Each mailbox ID maps to one DO instance,
+// ensuring only one request at a time can consume an OTP key.
+// ---------------------------------------------------------------------------
+
+export class PreKeyStore {
+  private state: DurableObjectState;
+  private env: Env;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const mailboxId = url.searchParams.get("mailboxId");
+    if (!mailboxId) {
+      return jsonResponse({ error: "Missing mailboxId" }, 400);
+    }
+
+    // Read bundle from KV
+    const raw = await this.env.V2_STORE.get(`keys:${mailboxId}`);
+    if (!raw) {
+      return jsonResponse({ error: "Key bundle not found" }, 404);
+    }
+
+    const bundle = JSON.parse(raw) as {
+      identityKey: string; signingKey: string;
+      signedPreKey: unknown; oneTimePreKeys?: unknown[];
+    };
+
+    // Atomically consume one OTP key (DO guarantees single-threaded execution)
+    let consumedOTPK: unknown | undefined;
+    if (bundle.oneTimePreKeys && bundle.oneTimePreKeys.length > 0) {
+      consumedOTPK = bundle.oneTimePreKeys.shift();
+      await this.env.V2_STORE.put(`keys:${mailboxId}`, JSON.stringify(bundle), {
+        expirationTtl: 30 * 86400,
+      });
+    }
+
+    return jsonResponse({
+      identityKey: bundle.identityKey,
+      signingKey: bundle.signingKey,
+      signedPreKey: bundle.signedPreKey,
+      oneTimePreKey: consumedOTPK ?? null,
+    });
   }
 }
