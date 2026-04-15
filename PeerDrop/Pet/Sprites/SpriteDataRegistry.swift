@@ -25,7 +25,25 @@ enum SpriteDataRegistry {
     }
 
     static func frameCount(for body: BodyGene, stage: PetLevel, action: PetAction) -> Int {
-        sprites(for: body, stage: stage)?[action]?.count ?? 2
+        if let sprites = sprites(for: body, stage: stage),
+           let frames = sprites[action] {
+            return frames.count
+        }
+        // Fallback: use idle frames for unimplemented species actions
+        if let sprites = sprites(for: body, stage: stage),
+           let idleFrames = sprites[.idle] {
+            return idleFrames.count
+        }
+        return 1
+    }
+
+    /// Returns the action to use for rendering — falls back to .idle if no sprite exists
+    static func resolvedAction(for body: BodyGene, stage: PetLevel, action: PetAction) -> PetAction {
+        if let sprites = sprites(for: body, stage: stage),
+           sprites[action] != nil {
+            return action
+        }
+        return .idle
     }
 
     private static func babySprites(for body: BodyGene) -> [PetAction: [[[UInt8]]]] {
