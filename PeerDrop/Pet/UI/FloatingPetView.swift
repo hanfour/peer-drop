@@ -136,7 +136,7 @@ struct FloatingPetView: View {
 
     private func startPhysicsLoop() {
         let target = DisplayLinkTarget { [weak engine] dt in
-            guard let engine else { return }
+            guard engine != nil else { return }
             Task { @MainActor in
                 self.physicsStep(dt: CGFloat(dt))
             }
@@ -150,6 +150,7 @@ struct FloatingPetView: View {
     private func physicsStep(dt: CGFloat) {
         guard !isDragging else { return }
         let surfaces = screenSurfaces()
+        let profile = engine.behaviorProvider.profile
 
         // Chase food target
         if let food = engine.foodTarget {
@@ -161,33 +162,74 @@ struct FloatingPetView: View {
             } else {
                 let direction: PetPhysicsEngine.HorizontalDirection = dx > 0 ? .right : .left
                 PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                           speed: 120, dt: dt, surfaces: surfaces)
+                                           speed: profile.baseSpeed * 1.5, dt: dt, surfaces: surfaces)
             }
         }
 
         switch engine.currentAction {
         case .walking:
             let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
-            PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                       speed: 60, dt: dt, surfaces: surfaces)
+            switch profile.movementStyle {
+            case .walk, .slither:
+                PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
+                                           speed: profile.baseSpeed, dt: dt, surfaces: surfaces)
+            case .hop:
+                if engine.physicsState.surface == .ground {
+                    PetPhysicsEngine.applyHop(&engine.physicsState, direction: direction,
+                                              speed: profile.baseSpeed)
+                }
+            case .fly:
+                let flyDir = CGVector(dx: direction == .right ? 1 : -1,
+                                      dy: CGFloat.random(in: -0.3...0.3))
+                PetPhysicsEngine.applyFly(&engine.physicsState, direction: flyDir,
+                                          speed: profile.baseSpeed, dt: dt, surfaces: surfaces)
+            case .float:
+                let floatDir = CGVector(dx: direction == .right ? 1 : -1,
+                                        dy: CGFloat.random(in: -0.3...0.3))
+                PetPhysicsEngine.applyFloat(&engine.physicsState, direction: floatDir,
+                                            speed: profile.baseSpeed, dt: dt)
+            case .bounce:
+                if engine.physicsState.surface == .ground {
+                    PetPhysicsEngine.applyBounce(&engine.physicsState)
+                }
+            }
+
         case .run:
             if engine.foodTarget == nil {
                 let direction: PetPhysicsEngine.HorizontalDirection = engine.physicsState.facingRight ? .right : .left
                 PetPhysicsEngine.applyWalk(&engine.physicsState, direction: direction,
-                                           speed: 100, dt: dt, surfaces: surfaces)
+                                           speed: profile.baseSpeed * 1.3, dt: dt, surfaces: surfaces)
             }
+
         case .climb:
-            PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40,
-                                        dt: dt, surfaces: surfaces)
+            PetPhysicsEngine.applyClimb(&engine.physicsState, speed: 40, dt: dt, surfaces: surfaces)
+
         case .thrown, .fall:
-            PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces)
+            PetPhysicsEngine.update(&engine.physicsState, dt: dt, surfaces: surfaces, profile: profile)
             if engine.physicsState.surface != .airborne {
                 engine.currentAction = .idle
                 behaviorElapsed = 0
             }
+
+        // Flying-specific actions
+        case .glide, .dive, .hover:
+            let flyDir = CGVector(dx: engine.physicsState.facingRight ? 1 : -1,
+                                  dy: engine.currentAction == .dive ? 0.5 : -0.2)
+            PetPhysicsEngine.applyFly(&engine.physicsState, direction: flyDir,
+                                      speed: profile.baseSpeed, dt: dt, surfaces: surfaces)
+
+        // Floating-specific actions (ghost)
+        case .phaseThrough:
+            let floatDir = CGVector(dx: engine.physicsState.facingRight ? 1 : -1, dy: 0)
+            PetPhysicsEngine.applyFloat(&engine.physicsState, direction: floatDir,
+                                        speed: profile.baseSpeed, dt: dt)
+
         default:
             break
         }
+
+        // Let provider do custom physics modifications
+        engine.behaviorProvider.modifyPhysics(&engine.physicsState, deltaTime: dt, surfaces: surfaces)
 
         // Remove expired particles
         engine.particles.removeAll { $0.isExpired }
@@ -208,7 +250,7 @@ struct FloatingPetView: View {
 
                 engine.checkDigestion()
 
-                let nextAction = PetBehaviorController.nextBehavior(
+                let nextAction = engine.behaviorProvider.nextBehavior(
                     current: engine.currentAction,
                     physics: engine.physicsState,
                     level: engine.pet.level,
