@@ -1,20 +1,13 @@
-PeerDrop 3.0 — End-to-End Encrypted Communication + Full Pet Evolution
+PeerDrop 3.1.0
 
-End-to-End Encrypted Remote Communication
-- Double Ratchet encryption protocol for secure cross-network messaging
-- Trusted contact management: invite, accept, verify
-- Encrypted sessions persist automatically across app restarts
-- Security dashboard: view all encrypted connection statuses
+Species-Specific Behaviors
+- Each pet species has unique physics and behavior patterns
+- Cats scratch and stretch, dogs dig and wag, rabbits hop and burrow
+- Birds and dragons fly, ghosts float through walls, slimes bounce and melt
+- Pets spontaneously leave and return with species-specific animations
+- Pets interact with chat messages (cats jump on bubbles, dogs sniff, ghosts pass through)
 
-Complete Pet System
-- 10 pet body types × 2 stages × 20 animated actions
-- Dedicated Pet tab: full profile, genes, personality, stats
-- Food inventory: drag to feed, pet chases food
-- Feed → digest → poop full lifecycle
-- Personality-driven behavior: energy affects activity, mischief affects climbing
-- Dynamic Island + Home Screen / Lock Screen widgets
-- Daily login food refresh, earn food from peer connections
-
-Connection Improvements
-- Optimized relay connection speed
-- Fixed joiner not receiving PIN verification
+Relay Diagnostics
+- Detailed error reporting at every relay connection failure point
+- "Send Error Report" button in connection error alerts
+- Error reports include full diagnostic context for remote debugging
