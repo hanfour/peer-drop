@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct SlimeBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .bouncing, gravity: 600,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: false,
             baseSpeed: 40, movementStyle: .bounce,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.split, .melt, .absorb, .wallStick],
             exitStyle: .meltDown, enterStyle: .reformUp)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

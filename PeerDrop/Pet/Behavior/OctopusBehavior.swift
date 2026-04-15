@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct OctopusBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .crawling, gravity: 400,
             canClimbWalls: true, canHangCeiling: true, canPassThroughWalls: false,
             baseSpeed: 50, movementStyle: .slither,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.inkSquirt, .tentacleReach, .camouflage, .wallSuction],
             exitStyle: .inkVanish, enterStyle: .inkAppear)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct BirdBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .flying, gravity: 0,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: false,
             baseSpeed: 90, movementStyle: .fly,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.perch, .peck, .preen, .dive, .glide],
             exitStyle: .flyOff, enterStyle: .flyIn)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

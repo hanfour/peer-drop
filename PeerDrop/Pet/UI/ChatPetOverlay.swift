@@ -80,6 +80,7 @@ struct ChatPetOverlay: View {
     }
 
     private func startUpdateTimer() {
+        updateTimer?.invalidate()
         updateTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
             Task { @MainActor in
                 updateChatBehavior()

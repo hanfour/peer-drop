@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct GhostBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .floating, gravity: 0,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: true,
             baseSpeed: 55, movementStyle: .float,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.phaseThrough, .flicker, .spook, .vanish],
             exitStyle: .fadeOut, enterStyle: .fadeIn)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

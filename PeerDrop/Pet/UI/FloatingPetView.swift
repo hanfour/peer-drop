@@ -17,6 +17,7 @@ struct FloatingPetView: View {
     @State private var exitScale: CGFloat = 1.0   // current scale during exit/enter
     @State private var exitOpacity: CGFloat = 1.0 // current opacity during exit/enter
     @State private var idleSinceDate: Date?       // tracks how long pet has been idle
+    @State private var returnTask: Task<Void, Never>?
 
     private let displaySize: CGFloat = 128
 
@@ -150,6 +151,7 @@ struct FloatingPetView: View {
         .onDisappear {
             displayLink?.invalidate()
             behaviorTimer?.invalidate()
+            returnTask?.cancel()
         }
     }
 
@@ -351,7 +353,10 @@ struct FloatingPetView: View {
 
             // Schedule return after 15-45 seconds
             let returnDelay = TimeInterval.random(in: 15...45)
-            DispatchQueue.main.asyncAfter(deadline: .now() + returnDelay) {
+            returnTask?.cancel()
+            returnTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(returnDelay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
                 triggerEnter()
             }
         }

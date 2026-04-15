@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct DragonBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .flying, gravity: 0,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: false,
             baseSpeed: 100, movementStyle: .fly,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.breathFire, .hover, .wingSpread, .roar],
             exitStyle: .skyAscend, enterStyle: .skyDescend)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

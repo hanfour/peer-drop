@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct FrogBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .bouncing, gravity: 800,
             canClimbWalls: true, canHangCeiling: true, canPassThroughWalls: false,
             baseSpeed: 60, movementStyle: .hop,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.tongueSnap, .croak, .swim, .stickyWall],
             exitStyle: .hopOff, enterStyle: .hopIn)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

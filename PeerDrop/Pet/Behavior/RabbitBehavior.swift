@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct RabbitBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .grounded, gravity: 800,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: false,
             baseSpeed: 75, movementStyle: .hop,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.burrow, .nibble, .alertEars, .binky],
             exitStyle: .digDown, enterStyle: .digUp)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,

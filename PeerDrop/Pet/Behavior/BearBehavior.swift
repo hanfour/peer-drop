@@ -2,15 +2,13 @@ import CoreGraphics
 import Foundation
 
 struct BearBehavior: PetBehaviorProvider {
-    var profile: PetBehaviorProfile {
-        PetBehaviorProfile(
+    let profile = PetBehaviorProfile(
             physicsMode: .grounded, gravity: 800,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: false,
             baseSpeed: 45, movementStyle: .walk,
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.backScratch, .standUp, .pawSlam, .bigYawn],
             exitStyle: .walkOff, enterStyle: .walkIn)
-    }
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
