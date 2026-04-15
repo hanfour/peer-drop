@@ -1,6 +1,6 @@
 import Foundation
 
-enum PetAction: String, Codable {
+enum PetAction: String, Codable, CaseIterable {
     // Movement
     case idle, walking, run, jump
     // Edge
@@ -15,6 +15,29 @@ enum PetAction: String, Codable {
     case wagTail, freeze, hideInShell, zoomies
     case notifyMessage, climbOnBubble, blockText, bounceBetweenBubbles
     case tiltHead, stuffCheeks, ignore
+
+    // MARK: - Species-Specific Actions
+
+    // Cat
+    case scratch, stretch, groom, nap
+    // Dog (wagTail already in Legacy)
+    case dig, fetchToy, scratchWall
+    // Rabbit
+    case burrow, nibble, alertEars, binky
+    // Bird
+    case perch, peck, preen, dive, glide
+    // Frog
+    case tongueSnap, croak, swim, stickyWall
+    // Bear
+    case backScratch, standUp, pawSlam, bigYawn
+    // Dragon
+    case breathFire, hover, wingSpread, roar
+    // Octopus
+    case inkSquirt, tentacleReach, camouflage, wallSuction
+    // Ghost
+    case phaseThrough, flicker, spook, vanish
+    // Slime
+    case split, melt, absorb, wallStick
 
     // Alias for compatibility — old code references .walk
     static var walk: PetAction { .walking }
