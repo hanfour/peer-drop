@@ -87,4 +87,36 @@ final class PetPhysicsEngineTests: XCTestCase {
         let expectedDy = 400.0 / 60.0
         XCTAssertEqual(state.velocity.dy, expectedDy, accuracy: 0.5)
     }
+
+    // MARK: - New movement methods
+
+    func testApplyFly() {
+        var state = PetPhysicsState(position: CGPoint(x: 200, y: 300), velocity: .zero, surface: .airborne)
+        let surfaces = ScreenSurfaces.test()
+        PetPhysicsEngine.applyFly(&state, direction: CGVector(dx: 1, dy: -0.5), speed: 90, dt: 1.0 / 60.0, surfaces: surfaces)
+        XCTAssertGreaterThan(state.position.x, 200)
+        XCTAssertLessThan(state.position.y, 300)
+    }
+
+    func testApplyFloat() {
+        var state = PetPhysicsState(position: CGPoint(x: 200, y: 300), velocity: .zero, surface: .airborne)
+        PetPhysicsEngine.applyFloat(&state, direction: CGVector(dx: 0.7, dy: 0.3), speed: 55, dt: 1.0 / 60.0)
+        XCTAssertGreaterThan(state.position.x, 200)
+        XCTAssertGreaterThan(state.position.y, 300)
+    }
+
+    func testApplyHop() {
+        var state = PetPhysicsState(position: CGPoint(x: 200, y: 780), velocity: .zero, surface: .ground)
+        PetPhysicsEngine.applyHop(&state, direction: .right, speed: 75, jumpVelocity: -250)
+        XCTAssertEqual(state.surface, .airborne)
+        XCTAssertLessThan(state.velocity.dy, 0)
+        XCTAssertGreaterThan(state.velocity.dx, 0)
+    }
+
+    func testApplyBounce() {
+        var state = PetPhysicsState(position: CGPoint(x: 200, y: 780), velocity: .zero, surface: .ground)
+        PetPhysicsEngine.applyBounce(&state, jumpVelocity: -200)
+        XCTAssertEqual(state.surface, .airborne)
+        XCTAssertLessThan(state.velocity.dy, 0)
+    }
 }

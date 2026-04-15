@@ -80,5 +80,44 @@ enum PetPhysicsEngine {
         state.surface = .airborne
     }
 
+    /// Flying — free directional movement, no gravity, clamped to screen
+    static func applyFly(_ state: inout PetPhysicsState, direction: CGVector,
+                         speed: CGFloat, dt: CGFloat, surfaces: ScreenSurfaces) {
+        let len = hypot(direction.dx, direction.dy)
+        guard len > 0 else { return }
+        let nx = direction.dx / len
+        let ny = direction.dy / len
+        state.position.x += nx * speed * dt
+        state.position.y += ny * speed * dt
+        state.facingRight = nx >= 0
+        state.position.x = max(surfaces.leftWall, min(state.position.x, surfaces.rightWall - petSize))
+        state.position.y = max(surfaces.ceiling, min(state.position.y, surfaces.ground))
+    }
+
+    /// Floating — free directional, ignores all surfaces
+    static func applyFloat(_ state: inout PetPhysicsState, direction: CGVector,
+                           speed: CGFloat, dt: CGFloat) {
+        let len = hypot(direction.dx, direction.dy)
+        guard len > 0 else { return }
+        state.position.x += (direction.dx / len) * speed * dt
+        state.position.y += (direction.dy / len) * speed * dt
+        state.facingRight = direction.dx >= 0
+    }
+
+    /// Hop — horizontal jump from ground
+    static func applyHop(_ state: inout PetPhysicsState, direction: HorizontalDirection,
+                         speed: CGFloat, jumpVelocity: CGFloat = -250) {
+        state.velocity.dy = jumpVelocity
+        state.velocity.dx = direction == .right ? speed : -speed
+        state.surface = .airborne
+        state.facingRight = direction == .right
+    }
+
+    /// Bounce — vertical bounce in place
+    static func applyBounce(_ state: inout PetPhysicsState, jumpVelocity: CGFloat = -200) {
+        state.velocity.dy = jumpVelocity
+        state.surface = .airborne
+    }
+
     enum HorizontalDirection { case left, right }
 }
