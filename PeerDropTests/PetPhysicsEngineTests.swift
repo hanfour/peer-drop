@@ -60,4 +60,31 @@ final class PetPhysicsEngineTests: XCTestCase {
         XCTAssertLessThan(state.velocity.dy, 0)
         XCTAssertEqual(state.velocity.dy, -300 * PetPhysicsEngine.bounceRestitution, accuracy: 0.01)
     }
+
+    // MARK: - Profile-aware physics
+
+    func testNoGravityForFlyingMode() {
+        var state = PetPhysicsState(position: CGPoint(x: 100, y: 100), velocity: .zero, surface: .airborne)
+        let surfaces = ScreenSurfaces.test(ground: 800)
+        let birdProfile = PetBehaviorProviderFactory.create(for: .bird).profile
+        PetPhysicsEngine.update(&state, dt: 1.0 / 60.0, surfaces: surfaces, profile: birdProfile)
+        XCTAssertEqual(state.velocity.dy, 0, accuracy: 0.01)
+    }
+
+    func testGhostPassesThroughWalls() {
+        var state = PetPhysicsState(position: CGPoint(x: -10, y: 400), velocity: CGVector(dx: -50, dy: 0), surface: .airborne)
+        let surfaces = ScreenSurfaces.test(leftWall: 0, rightWall: 400)
+        let ghostProfile = PetBehaviorProviderFactory.create(for: .ghost).profile
+        PetPhysicsEngine.update(&state, dt: 1.0 / 60.0, surfaces: surfaces, profile: ghostProfile)
+        XCTAssertLessThan(state.position.x, 0)
+    }
+
+    func testReducedGravityForCrawling() {
+        var state = PetPhysicsState(position: CGPoint(x: 100, y: 100), velocity: .zero, surface: .airborne)
+        let surfaces = ScreenSurfaces.test(ground: 800)
+        let octopusProfile = PetBehaviorProviderFactory.create(for: .octopus).profile
+        PetPhysicsEngine.update(&state, dt: 1.0 / 60.0, surfaces: surfaces, profile: octopusProfile)
+        let expectedDy = 400.0 / 60.0
+        XCTAssertEqual(state.velocity.dy, expectedDy, accuracy: 0.5)
+    }
 }

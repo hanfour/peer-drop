@@ -7,16 +7,24 @@ enum PetPhysicsEngine {
     static let throwDecay: CGFloat = 0.95
     static let petSize: CGFloat = 16
 
-    static func update(_ state: inout PetPhysicsState, dt: CGFloat, surfaces: ScreenSurfaces) {
+    // MARK: - Core Physics
+
+    static func update(_ state: inout PetPhysicsState, dt: CGFloat, surfaces: ScreenSurfaces,
+                       profile: PetBehaviorProfile? = nil) {
         guard state.surface == .airborne else { return }
-        state.velocity.dy += gravity * dt
+        let effectiveGravity = profile?.gravity ?? gravity
+        state.velocity.dy += effectiveGravity * dt
         state.velocity.dx *= throwDecay
         state.position.x += state.velocity.dx * dt
         state.position.y += state.velocity.dy * dt
-        resolveCollision(&state, surfaces: surfaces)
+        let passThroughWalls = profile?.canPassThroughWalls ?? false
+        resolveCollision(&state, surfaces: surfaces, canPassThroughWalls: passThroughWalls)
     }
 
-    static func resolveCollision(_ state: inout PetPhysicsState, surfaces: ScreenSurfaces) {
+    static func resolveCollision(_ state: inout PetPhysicsState, surfaces: ScreenSurfaces,
+                                 canPassThroughWalls: Bool = false) {
+        guard !canPassThroughWalls else { return }
+
         if state.position.y >= surfaces.ground {
             state.position.y = surfaces.ground
             if abs(state.velocity.dy) > 20 {
@@ -42,6 +50,8 @@ enum PetPhysicsEngine {
             state.surface = .rightWall
         }
     }
+
+    // MARK: - Movement Methods
 
     static func applyWalk(_ state: inout PetPhysicsState, direction: HorizontalDirection,
                           speed: CGFloat, dt: CGFloat, surfaces: ScreenSurfaces) {
