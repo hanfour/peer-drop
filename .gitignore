@@ -89,3 +89,4 @@ fastlane/screenshots_framed_backup/
 
 # Secrets
 Secrets.xcconfig
+private_keys/

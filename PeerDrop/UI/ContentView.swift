@@ -98,7 +98,9 @@ struct ContentView: View {
                         extras: ["focusedPeer": connectionManager.focusedPeerID ?? "none"]
                     )
                 }
-                showReportSentToast = true
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    showReportSentToast = true
+                }
                 connectionManager.transition(to: .discovering)
                 connectionManager.restartDiscovery()
                 selectedTab = 0

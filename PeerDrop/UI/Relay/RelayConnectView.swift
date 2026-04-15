@@ -10,6 +10,7 @@ struct RelayConnectView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var didAutoJoin = false
+    @State private var showReportSentToast = false
     @FocusState private var isCodeFieldFocused: Bool
 
     enum RelayMode {
@@ -20,6 +21,7 @@ struct RelayConnectView: View {
 
     var body: some View {
         NavigationStack {
+            ZStack(alignment: .top) {
             Group {
                 switch mode {
                 case .choose:
@@ -29,6 +31,14 @@ struct RelayConnectView: View {
                 case .join:
                     joinRoomView
                 }
+            }
+
+            if showReportSentToast {
+                StatusToastView("Error Report Sent", icon: "checkmark.circle.fill", iconColor: .green)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 8)
+                    .zIndex(2)
+            }
             }
             .navigationTitle("Relay Connect")
             .navigationBarTitleDisplayMode(.inline)
@@ -51,6 +61,12 @@ struct RelayConnectView: View {
                             context: "user-reported.relay",
                             extras: ["roomCode": roomCode]
                         )
+                    }
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        showReportSentToast = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation { showReportSentToast = false }
                     }
                     errorMessage = nil
                     roomCode = ""

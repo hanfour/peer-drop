@@ -1779,6 +1779,10 @@ final class ConnectionManager: ObservableObject {
                             try await client.setRemoteSDP(answer)
                         } catch {
                             logger.error("Failed to set remote SDP: \(error.localizedDescription)")
+                            ErrorReporter.report(
+                                error: error.localizedDescription,
+                                context: "relay.creator.sdpAnswer",
+                                extras: ["roomCode": roomCode, "step": "setRemoteSDP"])
                         }
                     }
                 }
@@ -1922,6 +1926,10 @@ final class ConnectionManager: ObservableObject {
                     signaling.sendSDP(answer.sdp, type: "answer")
                 } catch {
                     logger.error("Failed to handle offer: \(error.localizedDescription)")
+                    ErrorReporter.report(
+                        error: error.localizedDescription,
+                        context: "relay.joiner.sdpOffer",
+                        extras: ["roomCode": roomCode, "step": "handleOffer"])
                 }
             }
         }
