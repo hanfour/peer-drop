@@ -6,12 +6,20 @@ import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatView")
 
+struct MessageFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: CGRect] = [:]
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
 struct ChatView: View {
     @ObservedObject var chatManager: ChatManager
     let peerID: String
     let peerName: String
     var onBack: (() -> Void)?
     @EnvironmentObject var connectionManager: ConnectionManager
+    @EnvironmentObject var petEngine: PetEngine
 
     @State private var messageText = ""
     @State private var showAttachmentMenu = false
@@ -23,6 +31,7 @@ struct ChatView: View {
     @State private var showMicPermissionAlert = false
     @State private var showSearch = false
     @State private var scrollToMessageID: String?
+    @State private var messageFrames: [Int: CGRect] = [:]
     @StateObject private var voiceRecorder = VoiceRecorder()
 
     /// Check if this specific peer is connected (multi-connection aware).
@@ -87,7 +96,7 @@ struct ChatView: View {
                             .frame(maxWidth: .infinity)
                         }
 
-                        ForEach(chatManager.messages) { message in
+                        ForEach(Array(chatManager.messages.enumerated()), id: \.element.id) { index, message in
                             ChatBubbleView(
                                 message: message,
                                 chatManager: chatManager,
@@ -114,6 +123,14 @@ struct ChatView: View {
                                 }
                             )
                             .id(message.id)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: MessageFramePreferenceKey.self,
+                                        value: [index: geo.frame(in: .named("chatScroll"))]
+                                    )
+                                }
+                            )
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button {
                                     replyingToMessage = message
@@ -126,6 +143,16 @@ struct ChatView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 12)
+                }
+                .coordinateSpace(name: "chatScroll")
+                .onPreferenceChange(MessageFramePreferenceKey.self) { frames in
+                    messageFrames = frames
+                }
+                .overlay {
+                    ChatPetOverlay(
+                        engine: petEngine,
+                        messageFrames: Array(messageFrames.keys.sorted().compactMap { messageFrames[$0] })
+                    )
                 }
                 .onChange(of: chatManager.messages.count) { _ in
                     if let last = chatManager.messages.last {
