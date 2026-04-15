@@ -122,6 +122,34 @@ final class PetEngineTests: XCTestCase {
 
     // MARK: - Evolution Progress
 
+    // MARK: - Behavior Provider
+
+    func testEngineHasBehaviorProvider() {
+        let engine = PetEngine()
+        XCTAssertNotNil(engine.behaviorProvider)
+    }
+
+    func testEngineProviderMatchesBody() {
+        var genome = PetGenome.random()
+        genome.body = .bird
+        var pet = PetState.newEgg()
+        pet.genome = genome
+        let engine = PetEngine(pet: pet)
+        XCTAssertEqual(engine.behaviorProvider.profile.physicsMode, .flying)
+    }
+
+    func testEngineProviderGhostFloats() {
+        var genome = PetGenome.random()
+        genome.body = .ghost
+        var pet = PetState.newEgg()
+        pet.genome = genome
+        let engine = PetEngine(pet: pet)
+        XCTAssertEqual(engine.behaviorProvider.profile.physicsMode, .floating)
+        XCTAssertTrue(engine.behaviorProvider.profile.canPassThroughWalls)
+    }
+
+    // MARK: - Evolution Progress
+
     func testEvolutionProgress() {
         // Fresh egg with 0 XP
         engine.pet.experience = 0

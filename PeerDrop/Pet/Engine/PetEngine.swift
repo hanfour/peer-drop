@@ -29,6 +29,7 @@ class PetEngine: ObservableObject {
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
     private let socialEngine = PetSocialEngine()
+    private(set) var behaviorProvider: any PetBehaviorProvider
     private let sharedState = SharedPetState()
     private let activityManager: Any? = {
         if #available(iOS 16.2, *) {
@@ -58,6 +59,7 @@ class PetEngine: ObservableObject {
 
     init(pet: PetState = .newEgg()) {
         self.pet = pet
+        self.behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
         setupAnimationObserver()
     }
 
