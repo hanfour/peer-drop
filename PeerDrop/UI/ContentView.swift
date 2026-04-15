@@ -21,6 +21,7 @@ struct ContentView: View {
     @State private var receivedFileURL: URL?
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
+    @State private var showReportSentToast = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -89,6 +90,19 @@ struct ContentView: View {
                     connectionManager.reconnect()
                 }
             }
+            Button("Send Error Report") {
+                if let error = errorMessage {
+                    ErrorReporter.report(
+                        error: error,
+                        context: "user-reported",
+                        extras: ["focusedPeer": connectionManager.focusedPeerID ?? "none"]
+                    )
+                }
+                showReportSentToast = true
+                connectionManager.transition(to: .discovering)
+                connectionManager.restartDiscovery()
+                selectedTab = 0
+            }
             Button("Back to Discovery", role: .cancel) {
                 connectionManager.transition(to: .discovering)
                 connectionManager.restartDiscovery()
@@ -149,6 +163,24 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .padding(.top, 8)
                     .zIndex(2)
+            }
+
+            // Report sent toast
+            if showReportSentToast {
+                StatusToastView("Error Report Sent", icon: "checkmark.circle.fill", iconColor: .green)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 8)
+                    .zIndex(2)
+            }
+        }
+        .onChange(of: showReportSentToast) { newValue in
+            if newValue {
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        showReportSentToast = false
+                    }
+                }
             }
         }
     }

@@ -37,13 +37,24 @@ struct RelayConnectView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Error", isPresented: .init(
+            .alert("Connection Error", isPresented: .init(
                 get: { errorMessage != nil },
                 set: { if !$0 {
                     errorMessage = nil
                     roomCode = ""
                 } }
             )) {
+                Button("Send Error Report") {
+                    if let error = errorMessage {
+                        ErrorReporter.report(
+                            error: error,
+                            context: "user-reported.relay",
+                            extras: ["roomCode": roomCode]
+                        )
+                    }
+                    errorMessage = nil
+                    roomCode = ""
+                }
                 Button("OK", role: .cancel) {}
             } message: {
                 if let error = errorMessage {
