@@ -1779,6 +1779,10 @@ final class ConnectionManager: ObservableObject {
                             try await client.setRemoteSDP(answer)
                         } catch {
                             logger.error("Failed to set remote SDP: \(error.localizedDescription)")
+                            ErrorReporter.report(
+                                error: error.localizedDescription,
+                                context: "relay.creator.sdpAnswer",
+                                extras: ["roomCode": roomCode, "step": "setRemoteSDP"])
                         }
                     }
                 }
@@ -1786,6 +1790,17 @@ final class ConnectionManager: ObservableObject {
                 // Handle signaling errors
                 signaling.onError = { [weak self] error in
                     guard let self, self.connectionGeneration == generation else { return }
+                    let nsError = error as NSError
+                    ErrorReporter.report(
+                        error: nsError.localizedDescription,
+                        context: "relay.creator.webSocket",
+                        extras: [
+                            "roomCode": roomCode,
+                            "errorDomain": nsError.domain,
+                            "errorCode": "\(nsError.code)",
+                            "step": "webSocketSignaling",
+                        ]
+                    )
                     Task { @MainActor in
                         self.transition(to: .failed(reason: error.localizedDescription))
                     }
@@ -1802,6 +1817,11 @@ final class ConnectionManager: ObservableObject {
                             signaling?.disconnect()
                             self.completeRelayConnection(transport: transport, roomCode: roomCode)
                         case .failed(let error):
+                            ErrorReporter.report(
+                                error: error.localizedDescription,
+                                context: "relay.creator.dataChannel",
+                                extras: ["roomCode": roomCode, "step": "dataChannelTransport"]
+                            )
                             self.transition(to: .failed(reason: error.localizedDescription))
                         case .cancelled:
                             break
@@ -1816,12 +1836,27 @@ final class ConnectionManager: ObservableObject {
                     try? await Task.sleep(nanoseconds: 30_000_000_000)
                     guard let self, self.connectionGeneration == generation else { return }
                     if case .requesting = self.state {
+                        ErrorReporter.report(
+                            error: "Relay connection timed out",
+                            context: "relay.creator.timeout",
+                            extras: ["roomCode": roomCode, "step": "negotiationTimeout"]
+                        )
                         self.transition(to: .failed(reason: "Relay connection timed out"))
                     }
                 }
 
             } catch {
                 guard connectionGeneration == generation else { return }
+                ErrorReporter.report(
+                    error: error.localizedDescription,
+                    context: "relay.creator.setup",
+                    extras: [
+                        "roomCode": roomCode,
+                        "errorDomain": (error as NSError).domain,
+                        "errorCode": "\((error as NSError).code)",
+                        "step": "creatorSetup",
+                    ]
+                )
                 transition(to: .failed(reason: error.localizedDescription))
             }
         }
@@ -1839,20 +1874,30 @@ final class ConnectionManager: ObservableObject {
 
         // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
         var iceResult: WorkerSignaling.ICEResult?
-        var iceError: String?
+        var iceError: Error?
         do {
             iceResult = try await signaling.requestICECredentials(roomCode: roomCode)
             logger.info("ICE credentials received for room \(roomCode), token: \(iceResult?.roomToken != nil ? "present" : "nil")")
         } catch {
-            iceError = error.localizedDescription
-            logger.error("ICE credentials request failed for room \(roomCode): \(iceError ?? "unknown")")
+            iceError = error
+            let nsError = error as NSError
+            logger.error("ICE credentials request failed for room \(roomCode): domain=\(nsError.domain) code=\(nsError.code) \(nsError.localizedDescription)")
+            ErrorReporter.report(
+                error: nsError.localizedDescription,
+                context: "relay.joiner.iceRequest",
+                extras: [
+                    "roomCode": roomCode,
+                    "errorDomain": nsError.domain,
+                    "errorCode": "\(nsError.code)",
+                    "step": "requestICECredentials",
+                ]
+            )
         }
 
         // If ICE request failed, we have no room token — WebSocket auth will fail.
         guard iceResult?.roomToken != nil else {
-            let detail = iceError ?? "No room token received"
+            let detail = iceError?.localizedDescription ?? "No room token received"
             logger.error("No room token for room \(roomCode): \(detail)")
-            // DEBUG: Show detailed error so remote developers can diagnose without Xcode console
             transition(to: .failed(reason: "Relay failed: \(detail) (room: \(roomCode))"))
             return
         }
@@ -1881,6 +1926,10 @@ final class ConnectionManager: ObservableObject {
                     signaling.sendSDP(answer.sdp, type: "answer")
                 } catch {
                     logger.error("Failed to handle offer: \(error.localizedDescription)")
+                    ErrorReporter.report(
+                        error: error.localizedDescription,
+                        context: "relay.joiner.sdpOffer",
+                        extras: ["roomCode": roomCode, "step": "handleOffer"])
                 }
             }
         }
@@ -1904,6 +1953,17 @@ final class ConnectionManager: ObservableObject {
         // Handle signaling errors
         signaling.onError = { [weak self] error in
             guard let self, self.connectionGeneration == generation else { return }
+            let nsError = error as NSError
+            ErrorReporter.report(
+                error: nsError.localizedDescription,
+                context: "relay.joiner.webSocket",
+                extras: [
+                    "roomCode": roomCode,
+                    "errorDomain": nsError.domain,
+                    "errorCode": "\(nsError.code)",
+                    "step": "webSocketSignaling",
+                ]
+            )
             Task { @MainActor in
                 self.transition(to: .failed(reason: error.localizedDescription))
             }
@@ -1920,6 +1980,11 @@ final class ConnectionManager: ObservableObject {
                     signaling?.disconnect()
                     self.completeRelayConnection(transport: transport, roomCode: roomCode)
                 case .failed(let error):
+                    ErrorReporter.report(
+                        error: error.localizedDescription,
+                        context: "relay.joiner.dataChannel",
+                        extras: ["roomCode": roomCode, "step": "dataChannelTransport"]
+                    )
                     self.transition(to: .failed(reason: error.localizedDescription))
                 case .cancelled:
                     break
@@ -1934,6 +1999,11 @@ final class ConnectionManager: ObservableObject {
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             guard let self, self.connectionGeneration == generation else { return }
             if case .requesting = self.state {
+                ErrorReporter.report(
+                    error: "Relay connection timed out",
+                    context: "relay.joiner.timeout",
+                    extras: ["roomCode": roomCode, "step": "negotiationTimeout"]
+                )
                 self.transition(to: .failed(reason: "Relay connection timed out"))
             }
         }
