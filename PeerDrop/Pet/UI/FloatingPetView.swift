@@ -11,6 +11,12 @@ struct FloatingPetView: View {
     @State private var behaviorTimer: Timer?
     @State private var behaviorElapsed: TimeInterval = 0
     @State private var namingText = ""
+    @State private var isAbsent = false           // pet has left the screen
+    @State private var isExiting = false          // currently playing exit animation
+    @State private var isEntering = false         // currently playing enter animation
+    @State private var exitScale: CGFloat = 1.0   // current scale during exit/enter
+    @State private var exitOpacity: CGFloat = 1.0 // current opacity during exit/enter
+    @State private var idleSinceDate: Date?       // tracks how long pet has been idle
 
     private let displaySize: CGFloat = 128
 
@@ -49,10 +55,13 @@ struct FloatingPetView: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
+            .scaleEffect(exitScale)
+            .opacity(exitOpacity)
             .position(engine.physicsState.position)
             .gesture(
                 DragGesture()
                     .onChanged { value in
+                        guard !isAbsent && !isExiting && !isEntering else { return }
                         if !isDragging {
                             isDragging = true
                             dragStartPosition = engine.physicsState.position
@@ -65,6 +74,7 @@ struct FloatingPetView: View {
                         engine.physicsState.velocity = .zero
                     }
                     .onEnded { value in
+                        guard !isAbsent && !isExiting && !isEntering else { return }
                         isDragging = false
                         let dt = max(0.016, Date().timeIntervalSince(dragStartTime))
                         let vx = (value.location.x - dragStartPosition.x) / dt * 0.1
@@ -78,9 +88,11 @@ struct FloatingPetView: View {
                     }
             )
             .onTapGesture {
+                guard !isAbsent && !isExiting && !isEntering else { return }
                 engine.handleInteraction(.tap)
                 engine.currentAction = .tapReact
                 behaviorElapsed = 0
+                idleSinceDate = nil
             }
             .onLongPressGesture {
                 showInteractionPanel = true
@@ -96,6 +108,15 @@ struct FloatingPetView: View {
                         }
                     }
             )
+            if isAbsent {
+                Text("\(engine.pet.name ?? "寵物") 出去散步了")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .position(x: UIScreen.main.bounds.width / 2, y: UIScreen.main.bounds.height - 100)
+            }
             if engine.showEvolutionFlash {
                 Color.white
                     .ignoresSafeArea()
@@ -149,6 +170,8 @@ struct FloatingPetView: View {
 
     private func physicsStep(dt: CGFloat) {
         guard !isDragging else { return }
+        guard !isAbsent else { return }
+        guard !isExiting && !isEntering else { return }  // animation handles movement
         let surfaces = screenSurfaces()
         let profile = engine.behaviorProvider.profile
 
@@ -241,7 +264,27 @@ struct FloatingPetView: View {
         behaviorTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             Task { @MainActor in
                 guard !isDragging else { return }
+                guard !isAbsent && !isExiting && !isEntering else { return }
                 behaviorElapsed += 1.0
+
+                // Track idle time for exit trigger
+                if engine.currentAction == .idle {
+                    if idleSinceDate == nil {
+                        idleSinceDate = Date()
+                    }
+                    // Trigger exit after 30-60s of idle (influenced by independence)
+                    if let since = idleSinceDate {
+                        let independence = engine.pet.genome.personalityTraits.independence
+                        let exitThreshold: TimeInterval = 60 - (independence * 30) // 30-60s
+                        if Date().timeIntervalSince(since) > exitThreshold {
+                            triggerExit()
+                            idleSinceDate = nil
+                            return
+                        }
+                    }
+                } else {
+                    idleSinceDate = nil
+                }
 
                 if let forcedMood = PetTimeOfDayBehavior.suggestedMood(
                     lastInteraction: engine.pet.lastInteraction) {
@@ -286,6 +329,84 @@ struct FloatingPetView: View {
 
     private func clamp(_ value: CGFloat, _ minVal: CGFloat, _ maxVal: CGFloat) -> CGFloat {
         min(max(value, minVal), maxVal)
+    }
+
+    // MARK: - Exit/Enter Animation
+
+    private func triggerExit() {
+        guard !isExiting && !isAbsent && !isEntering else { return }
+        isExiting = true
+
+        let screen = UIScreen.main.bounds
+        let sequence = engine.behaviorProvider.exitSequence(
+            from: engine.physicsState.position,
+            screenBounds: screen)
+
+        playAnimationSequence(sequence.steps, index: 0) {
+            // Animation complete — pet is now absent
+            isExiting = false
+            isAbsent = true
+            exitScale = 1.0
+            exitOpacity = 1.0
+
+            // Schedule return after 15-45 seconds
+            let returnDelay = TimeInterval.random(in: 15...45)
+            DispatchQueue.main.asyncAfter(deadline: .now() + returnDelay) {
+                triggerEnter()
+            }
+        }
+    }
+
+    private func triggerEnter() {
+        guard isAbsent else { return }
+        isAbsent = false
+        isEntering = true
+
+        let screen = UIScreen.main.bounds
+        let sequence = engine.behaviorProvider.enterSequence(screenBounds: screen)
+
+        // Set initial state for enter animation
+        exitScale = sequence.steps.first?.scaleDelta.map { 1.0 + $0 } ?? 1.0
+        exitOpacity = 0.0
+
+        // Position pet at a reasonable entry point
+        let entryX = Bool.random() ? screen.width * 0.2 : screen.width * 0.8
+        engine.physicsState.position = CGPoint(x: entryX, y: screen.height - 80)
+
+        playAnimationSequence(sequence.steps, index: 0) {
+            isEntering = false
+            exitScale = 1.0
+            exitOpacity = 1.0
+            behaviorElapsed = 0
+            idleSinceDate = nil
+        }
+    }
+
+    private func playAnimationSequence(_ steps: [PetAnimationStep], index: Int, completion: @escaping () -> Void) {
+        guard index < steps.count else {
+            completion()
+            return
+        }
+
+        let step = steps[index]
+        engine.currentAction = step.action
+
+        withAnimation(.easeInOut(duration: step.duration)) {
+            if let scale = step.scaleDelta {
+                exitScale += scale
+            }
+            if let opacity = step.opacityDelta {
+                exitOpacity += opacity
+            }
+            if let posDelta = step.positionDelta {
+                engine.physicsState.position.x += posDelta.x
+                engine.physicsState.position.y += posDelta.y
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + step.duration) {
+            playAnimationSequence(steps, index: index + 1, completion: completion)
+        }
     }
 }
 

@@ -282,6 +282,7 @@
 		C9B70AA2CD7DC0FEBB1D3ECE /* MessageReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */; };
 		C9DC96C0189F59682746A8D3 /* RemoteSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 520FD39E4A8B15C29F54EDB0 /* RemoteSessionManager.swift */; };
 		CA5D8EB04D2EF450A33FA695 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2601334C35CC97A1F3CA9542 /* VoiceRecorder.swift */; };
+		CA763E76568A505F360C3E49 /* PetExitEnterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D37733046B3A4253B355C2FF /* PetExitEnterTests.swift */; };
 		CAC27B1F838C28AE0141FFB7 /* OctopusBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671EC022E432116248F2CF53 /* OctopusBehavior.swift */; };
 		CB0C459E73D5AD9D092F8DB5 /* PetAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730E0E75BCD93850A7CF4D6 /* PetAction.swift */; };
 		CB106AF82E824F38BCAC40AF /* PeerConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B26FB4E84C8AA044641DEE4 /* PeerConnection.swift */; };
@@ -703,6 +704,7 @@
 		D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutConsentTests.swift; sourceTree = "<group>"; };
 		D33879AB0C9B537D534F9E4A /* PetSnapshotRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotRenderer.swift; sourceTree = "<group>"; };
+		D37733046B3A4253B355C2FF /* PetExitEnterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetExitEnterTests.swift; sourceTree = "<group>"; };
 		D429FE1BFE72E640119F3568 /* ChatDataEncryptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDataEncryptor.swift; sourceTree = "<group>"; };
 		D4D28254D09D4993B28316CD /* FileTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransfer.swift; sourceTree = "<group>"; };
 		D5127DFBBAEA1F80571513DC /* BirdSpriteDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BirdSpriteDataTests.swift; sourceTree = "<group>"; };
@@ -908,6 +910,7 @@
 				A12A0B61F49069404490210C /* PetEngineTests.swift */,
 				A112FD6C8C57D72B9F88F322 /* PetEvolutionEffectTests.swift */,
 				D76246879247CD18F2ABD6E1 /* PetEvolutionTests.swift */,
+				D37733046B3A4253B355C2FF /* PetExitEnterTests.swift */,
 				8FB79B8FB4BA9C025C703233 /* PetFeedingTests.swift */,
 				CF1FCA555536FE365419168B /* PetGenomeV2Tests.swift */,
 				D06AC783121D682F8E46DA1D /* PetIntegrationTests.swift */,
@@ -1696,6 +1699,7 @@
 				B4A78C6334D5B4511CBC767B /* PetEngineTests.swift in Sources */,
 				AA05CB249AEDB7308164CB5E /* PetEvolutionEffectTests.swift in Sources */,
 				F4F4293A5A8616CB1AE18CF7 /* PetEvolutionTests.swift in Sources */,
+				CA763E76568A505F360C3E49 /* PetExitEnterTests.swift in Sources */,
 				4133DCC23F3984CC9048905E /* PetFeedingTests.swift in Sources */,
 				992800DD86566FCA0284C1FA /* PetGenomeV2Tests.swift in Sources */,
 				CD6EA11772868CF69BA5286F /* PetIntegrationTests.swift in Sources */,
