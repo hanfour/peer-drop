@@ -155,6 +155,15 @@ export default {
       const code = wsMatch[1];
       const roomData = await env.ROOMS.get(code);
       if (!roomData) {
+        // Diagnostic: log WS upgrade failures (7-day TTL)
+        const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+        await env.ROOMS.put(logKey, JSON.stringify({
+          reason: "room_not_found",
+          code,
+          ip: clientIP,
+          ua: request.headers.get("User-Agent") || "",
+          timestamp: new Date().toISOString(),
+        }), { expirationTtl: 7 * 86400 });
         return new Response(JSON.stringify({ error: "Room not found" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -165,6 +174,16 @@ export default {
       const roomInfo = JSON.parse(roomData) as { token?: string };
       const providedToken = url.searchParams.get("token");
       if (!providedToken || providedToken !== roomInfo.token) {
+        const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+        await env.ROOMS.put(logKey, JSON.stringify({
+          reason: "invalid_token",
+          code,
+          providedToken: providedToken ? `${providedToken.slice(0, 4)}...${providedToken.slice(-4)}` : null,
+          expectedTokenHash: roomInfo.token ? `${roomInfo.token.slice(0, 4)}...${roomInfo.token.slice(-4)}` : null,
+          ip: clientIP,
+          ua: request.headers.get("User-Agent") || "",
+          timestamp: new Date().toISOString(),
+        }), { expirationTtl: 7 * 86400 });
         return new Response(JSON.stringify({ error: "Invalid room token" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
