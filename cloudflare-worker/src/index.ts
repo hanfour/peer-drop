@@ -23,7 +23,7 @@ export interface Env {
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
-const ROOM_TTL_SECONDS = 300; // 5 minutes
+const ROOM_TTL_SECONDS = 600; // 10 minutes
 const TURN_TTL_SECONDS = 900; // 15 minutes
 
 // Rate limiting: max requests per IP within the window
