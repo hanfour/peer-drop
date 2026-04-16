@@ -525,6 +525,17 @@ export default {
       return jsonResponse({ ok: true });
     }
 
+    // GET /v2/inbox/:deviceId — WebSocket upgrade for real-time invite inbox
+    const inboxMatch = path.match(/^\/v2\/inbox\/([a-zA-Z0-9-]{8,64})$/);
+    if (inboxMatch && request.headers.get("Upgrade") === "websocket") {
+      const deviceId = inboxMatch[1];
+      const id = env.DEVICE_INBOX.idFromName(deviceId);
+      const stub = env.DEVICE_INBOX.get(id);
+      const doURL = new URL(request.url);
+      doURL.pathname = "/ws";
+      return stub.fetch(new Request(doURL.toString(), request));
+    }
+
     // POST /v2/device/register — register APNs device token
     if (path === "/v2/device/register" && request.method === "POST") {
       const body = await request.json() as { deviceId?: string; pushToken?: string; platform?: string };
