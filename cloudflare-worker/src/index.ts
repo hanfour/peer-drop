@@ -525,6 +525,23 @@ export default {
       return jsonResponse({ ok: true });
     }
 
+    // POST /v2/device/register — register APNs device token
+    if (path === "/v2/device/register" && request.method === "POST") {
+      const body = await request.json() as { deviceId?: string; pushToken?: string; platform?: string };
+      if (!body.deviceId || !body.pushToken) {
+        return jsonResponse({ error: "Missing deviceId or pushToken" }, 400);
+      }
+      if (!/^[a-zA-Z0-9-]{8,64}$/.test(body.deviceId)) {
+        return jsonResponse({ error: "Invalid deviceId format" }, 400);
+      }
+      await env.V2_STORE.put(`device:${body.deviceId}`, JSON.stringify({
+        pushToken: body.pushToken,
+        platform: body.platform || "ios",
+        updated: Date.now(),
+      }), { expirationTtl: 30 * 86400 });
+      return jsonResponse({ ok: true });
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
