@@ -553,6 +553,49 @@ export default {
       return jsonResponse({ ok: true });
     }
 
+    // POST /v2/invite/:deviceId — deliver relay invite
+    const inviteMatch = path.match(/^\/v2\/invite\/([a-zA-Z0-9-]{8,64})$/);
+    if (inviteMatch && request.method === "POST") {
+      const deviceId = inviteMatch[1];
+      const body = await request.json() as {
+        roomCode?: string;
+        roomToken?: string;
+        senderName?: string;
+        senderId?: string;
+      };
+      if (!body.roomCode || !body.roomToken || !body.senderName) {
+        return jsonResponse({ error: "Missing invite fields" }, 400);
+      }
+
+      const invitePayload = JSON.stringify({
+        type: "relay-invite",
+        roomCode: body.roomCode,
+        roomToken: body.roomToken,
+        senderName: body.senderName,
+        senderId: body.senderId || "",
+        timestamp: Date.now(),
+      });
+
+      // Push via DeviceInbox DO
+      const id = env.DEVICE_INBOX.idFromName(deviceId);
+      const stub = env.DEVICE_INBOX.get(id);
+      const pushURL = new URL(request.url);
+      pushURL.pathname = "/push";
+      const doResp = await stub.fetch(new Request(pushURL.toString(), {
+        method: "POST",
+        body: invitePayload,
+      }));
+      const doResult = await doResp.json() as { delivered: string };
+
+      // If queued, try APNs (stub for now — Phase 3)
+      if (doResult.delivered === "queued") {
+        // TODO Phase 3: send APNs push
+        return jsonResponse({ ok: true, delivered: "queued" });
+      }
+
+      return jsonResponse({ ok: true, delivered: doResult.delivered });
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
