@@ -87,6 +87,33 @@ final class WorkerSignaling: NSObject {
         return RoomInfo(roomCode: roomResponse.roomCode, roomToken: roomResponse.roomToken)
     }
 
+    /// Send a relay invite to the given device. Creator-side only.
+    func sendInvite(
+        toDeviceId deviceId: String,
+        roomCode: String,
+        roomToken: String,
+        senderName: String,
+        senderId: String
+    ) async throws {
+        let url = baseURL.appendingPathComponent("v2/invite/\(deviceId)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: String] = [
+            "roomCode": roomCode,
+            "roomToken": roomToken,
+            "senderName": senderName,
+            "senderId": senderId,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let errBody = String(data: data, encoding: .utf8) ?? ""
+            logger.error("Invite failed: \((response as? HTTPURLResponse)?.statusCode ?? -1) \(errBody)")
+            throw WorkerSignalingError.webSocketError
+        }
+    }
+
     /// Join an existing room via WebSocket for signaling.
     func joinRoom(code: String, token: String? = nil) {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
