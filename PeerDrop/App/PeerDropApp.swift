@@ -27,6 +27,9 @@ struct PeerDropApp: App {
                 }
             }
             .animation(.easeOut(duration: 0.4), value: showLaunch)
+            .task {
+                await PushNotificationManager.shared.requestAuthorizationAndRegister()
+            }
             .onAppear {
                 // Wire CallKit into ConnectionManager
                 if let callKit = appDelegate.callKitManager {
