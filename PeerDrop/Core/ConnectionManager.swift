@@ -2151,6 +2151,12 @@ final class ConnectionManager: ObservableObject {
             do {
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await peerConnection.sendMessage(hello)
+                // Exchange stable device ID so future invites can route directly.
+                let idExchange = try PeerMessage.deviceIdExchange(
+                    deviceId: DeviceIdentity.deviceId,
+                    senderID: localIdentity.id
+                )
+                try await peerConnection.sendMessage(idExchange)
             } catch {
                 logger.error("Relay handshake failed: \(error.localizedDescription)")
                 transition(to: .failed(reason: error.localizedDescription))
@@ -2546,6 +2552,14 @@ final class ConnectionManager: ObservableObject {
             }
             peerConnection.fileTransferSession?.handleResumeAck(payload)
 
+        case .deviceIdExchange:
+            guard let payload = try? message.decodePayload(DeviceIdExchangePayload.self) else {
+                logger.warning("Failed to decode DeviceIdExchangePayload")
+                return
+            }
+            deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
+            logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+
         default:
             break
         }
@@ -2848,6 +2862,10 @@ final class ConnectionManager: ObservableObject {
 
         case .fileResume, .fileResumeAck:
             // File resume only supported in multi-connection path
+            break
+
+        case .deviceIdExchange:
+            // Legacy path — relay peers go through handleMessageForPeer, ignore here.
             break
         }
     }

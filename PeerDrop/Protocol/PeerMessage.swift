@@ -20,6 +20,11 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .hello, payload: data, senderID: identity.id)
     }
 
+    static func deviceIdExchange(deviceId: String, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(DeviceIdExchangePayload(deviceId: deviceId))
+        return PeerMessage(type: .deviceIdExchange, payload: data, senderID: senderID)
+    }
+
     static func connectionRequest(senderID: String) -> PeerMessage {
         PeerMessage(type: .connectionRequest, senderID: senderID)
     }
@@ -172,6 +177,10 @@ struct PeerMessage: Codable {
 
 struct RejectionPayload: Codable {
     let reason: String
+}
+
+struct DeviceIdExchangePayload: Codable {
+    let deviceId: String
 }
 
 enum PeerMessageError: Error {
