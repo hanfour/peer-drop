@@ -10,6 +10,8 @@
  *   POST /room/:code/ice → Generate Cloudflare TURN credentials
  */
 
+import { sendAPNs } from "./apns";
+
 export interface Env {
   ROOMS: KVNamespace;
   V2_STORE: KVNamespace;
@@ -19,6 +21,10 @@ export interface Env {
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
+  APNS_KEY_P8: string;
+  APNS_KEY_ID: string;
+  APNS_TEAM_ID: string;
+  APNS_BUNDLE_ID: string;
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
@@ -587,10 +593,36 @@ export default {
       }));
       const doResult = await doResp.json() as { delivered: string };
 
-      // If queued, try APNs (stub for now — Phase 3)
+      // If queued, try APNs
       if (doResult.delivered === "queued") {
-        // TODO Phase 3: send APNs push
-        return jsonResponse({ ok: true, delivered: "queued" });
+        // Look up APNs token for this device
+        const deviceInfo = await env.V2_STORE.get(`device:${deviceId}`);
+        if (!deviceInfo) {
+          return jsonResponse({ ok: true, delivered: "queued", apns: "no_token" });
+        }
+        const info = JSON.parse(deviceInfo) as { pushToken: string; platform: string };
+        if (info.platform !== "ios" || !env.APNS_KEY_P8) {
+          return jsonResponse({ ok: true, delivered: "queued", apns: "not_configured" });
+        }
+        try {
+          const result = await sendAPNs(info.pushToken, {
+            alert: { title: "PeerDrop", body: `${body.senderName} wants to connect` },
+            sound: "default",
+            customData: {
+              roomCode: body.roomCode,
+              roomToken: body.roomToken,
+              senderId: body.senderId || "",
+            },
+          }, {
+            keyId: env.APNS_KEY_ID,
+            teamId: env.APNS_TEAM_ID,
+            p8Key: env.APNS_KEY_P8,
+            bundleId: env.APNS_BUNDLE_ID || "com.hanfour.peerdrop",
+          });
+          return jsonResponse({ ok: true, delivered: "apns", apnsStatus: result.status });
+        } catch (e) {
+          return jsonResponse({ ok: true, delivered: "queued", apns: "send_failed", error: String(e) });
+        }
       }
 
       return jsonResponse({ ok: true, delivered: doResult.delivered });
