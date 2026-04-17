@@ -14,6 +14,8 @@ struct TabBarOnlyModifier: ViewModifier {
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @EnvironmentObject var petEngine: PetEngine
+    @EnvironmentObject var inboxService: InboxService
+    @ObservedObject private var pushManager = PushNotificationManager.shared
     @State private var selectedTab = 0
     @State private var errorMessage: String?
     @State private var showError = false
@@ -22,6 +24,7 @@ struct ContentView: View {
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
+    @State private var currentInvite: RelayInvite?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -158,6 +161,30 @@ struct ContentView: View {
                 }
             }
         }
+        .onReceive(inboxService.$receivedInvite.compactMap { $0 }) { invite in
+            currentInvite = invite
+            inboxService.receivedInvite = nil
+        }
+        .onReceive(pushManager.$receivedInvite.compactMap { $0 }) { invite in
+            currentInvite = invite
+            pushManager.receivedInvite = nil
+        }
+
+            // Invite banner overlay
+            if let invite = currentInvite {
+                InviteBanner(
+                    invite: invite,
+                    onAccept: {
+                        connectionManager.acceptRelayInvite(invite)
+                        currentInvite = nil
+                    },
+                    onDecline: { currentInvite = nil }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 8)
+                .zIndex(3)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: currentInvite)
+            }
 
             // Status toast overlay
             if showStatusToast, let message = statusToastMessage {

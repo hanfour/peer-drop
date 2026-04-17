@@ -1902,6 +1902,71 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Join room WebSocket (with auth token from ICE response)
+        signaling.joinRoom(code: roomCode, token: iceResult?.roomToken)
+
+        completeJoinerHandshake(
+            roomCode: roomCode,
+            signaling: signaling,
+            iceResult: iceResult,
+            generation: generation
+        )
+    }
+
+    /// Joiner flow for invite-driven connections — uses the roomToken from the invite
+    /// instead of racing ICE→token fetch. This is the fix for NSURLErrorDomain -1011.
+    func startWorkerRelayAsJoinerWithToken(roomCode: String, roomToken: String, signaling: WorkerSignaling) async throws {
+        logger.info("Accepting invite — joining room \(roomCode) with token")
+
+        let generation = UUID()
+        connectionGeneration = generation
+        forceTransitionToRequesting()
+
+        // Open WebSocket FIRST with the invite-provided token (no race).
+        signaling.joinRoom(code: roomCode, token: roomToken)
+
+        // Fetch ICE in parallel; fall back to STUN if fails.
+        let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
+
+        completeJoinerHandshake(
+            roomCode: roomCode,
+            signaling: signaling,
+            iceResult: iceResult,
+            generation: generation
+        )
+    }
+
+    /// Accept a relay invite — creates signaling and joins as the answerer.
+    func acceptRelayInvite(_ invite: RelayInvite) {
+        let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+            .flatMap(URL.init(string:))
+            ?? URL(string: "https://peerdrop-signal.hanfourhuang.workers.dev")!
+        let signaling = WorkerSignaling(baseURL: baseURL)
+        Task {
+            do {
+                try await self.startWorkerRelayAsJoinerWithToken(
+                    roomCode: invite.roomCode,
+                    roomToken: invite.roomToken,
+                    signaling: signaling
+                )
+            } catch {
+                ErrorReporter.report(
+                    error: error.localizedDescription,
+                    context: "invite.accept",
+                    extras: ["roomCode": invite.roomCode, "senderId": invite.senderId]
+                )
+            }
+        }
+    }
+
+    /// Shared handshake setup used by both joiner entry points.
+    /// Pre-condition: caller has already called `signaling.joinRoom(code:token:)`.
+    private func completeJoinerHandshake(
+        roomCode: String,
+        signaling: WorkerSignaling,
+        iceResult: WorkerSignaling.ICEResult?,
+        generation: UUID
+    ) {
         let client = DataChannelClient()
         let iceServers: [RTCIceServer]
         if let creds = iceResult?.credentials {
@@ -1911,9 +1976,6 @@ final class ConnectionManager: ObservableObject {
         }
         client.setup(iceServers: iceServers)
         // Joiner doesn't create data channel — it receives one from the offerer
-
-        // Join room WebSocket (with auth token from ICE response)
-        signaling.joinRoom(code: roomCode, token: iceResult?.roomToken)
 
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
