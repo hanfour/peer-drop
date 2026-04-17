@@ -1,13 +1,12 @@
-PeerDrop 3.1.0
+PeerDrop 3.2.0
 
-Species-Specific Behaviors
-- Each pet species has unique physics and behavior patterns
-- Cats scratch and stretch, dogs dig and wag, rabbits hop and burrow
-- Birds and dragons fly, ghosts float through walls, slimes bounce and melt
-- Pets spontaneously leave and return with species-specific animations
-- Pets interact with chat messages (cats jump on bubbles, dogs sniff, ghosts pass through)
+Relay Auto-Invite
+- Accept relay connection invites from known devices with one tap
+- Foreground banner appears instantly when a device invites you
+- APNs push notifications deliver invites even when the app is backgrounded or locked
+- New "Invite Device" picker on the Relay screen lets creators invite past contacts directly
 
-Relay Diagnostics
-- Detailed error reporting at every relay connection failure point
-- "Send Error Report" button in connection error alerts
-- Error reports include full diagnostic context for remote debugging
+Connection Reliability
+- Fixed rare -1011 WebSocket handshake failures on relay connect
+- WebSocket now retries automatically on transient errors
+- Extended room session timeout from 5 to 10 minutes
