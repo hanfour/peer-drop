@@ -70,4 +70,79 @@ platform :ios do
       force: true
     )
   end
+
+  # -------------------------------------------------------------------------
+  # Release lanes — build archive + upload to App Store Connect.
+  # Uses api_key.json for non-interactive authentication.
+  # -------------------------------------------------------------------------
+
+  desc "Build Release archive (no upload) — useful for inspection"
+  lane :build do
+    build_app(
+      scheme: "PeerDrop",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./fastlane/build",
+      output_name: "PeerDrop.ipa",
+      clean: true,
+      include_bitcode: false,
+      include_symbols: true
+    )
+  end
+
+  desc "Build and upload to TestFlight (no review submission)"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_filepath: "./fastlane/api_key.json"
+    )
+    build_app(
+      scheme: "PeerDrop",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./fastlane/build",
+      output_name: "PeerDrop.ipa",
+      clean: true,
+      include_bitcode: false,
+      include_symbols: true
+    )
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: false,
+      distribute_external: false,
+      notify_external_testers: false,
+      changelog: ENV["PEERDROP_CHANGELOG"] || "Internal build."
+    )
+  end
+
+  desc "Build and submit to App Store review"
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_filepath: "./fastlane/api_key.json"
+    )
+    build_app(
+      scheme: "PeerDrop",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./fastlane/build",
+      output_name: "PeerDrop.ipa",
+      clean: true,
+      include_bitcode: false,
+      include_symbols: true
+    )
+    upload_to_app_store(
+      api_key: api_key,
+      skip_screenshots: true,
+      skip_metadata: true,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: true,
+        export_compliance_is_exempt: true,
+        content_rights_contains_third_party_content: false
+      }
+    )
+  end
 end
