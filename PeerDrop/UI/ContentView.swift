@@ -14,6 +14,8 @@ struct TabBarOnlyModifier: ViewModifier {
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @EnvironmentObject var petEngine: PetEngine
+    @EnvironmentObject var inboxService: InboxService
+    @ObservedObject private var pushManager = PushNotificationManager.shared
     @State private var selectedTab = 0
     @State private var errorMessage: String?
     @State private var showError = false
@@ -22,6 +24,8 @@ struct ContentView: View {
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
+    @State private var currentInvite: RelayInvite?
+    @State private var processedInviteIDs: Set<String> = []
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -158,6 +162,36 @@ struct ContentView: View {
                 }
             }
         }
+        .onReceive(inboxService.$receivedInvite.compactMap { $0 }) { invite in
+            inboxService.receivedInvite = nil
+            guard !processedInviteIDs.contains(invite.id), currentInvite == nil else { return }
+            currentInvite = invite
+        }
+        .onReceive(pushManager.$receivedInvite.compactMap { $0 }) { invite in
+            pushManager.receivedInvite = nil
+            guard !processedInviteIDs.contains(invite.id), currentInvite == nil else { return }
+            currentInvite = invite
+        }
+
+            // Invite banner overlay
+            if let invite = currentInvite {
+                InviteBanner(
+                    invite: invite,
+                    onAccept: {
+                        processedInviteIDs.insert(invite.id)
+                        connectionManager.acceptRelayInvite(invite)
+                        currentInvite = nil
+                    },
+                    onDecline: {
+                        processedInviteIDs.insert(invite.id)
+                        currentInvite = nil
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 8)
+                .zIndex(3)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: currentInvite)
+            }
 
             // Status toast overlay
             if showStatusToast, let message = statusToastMessage {

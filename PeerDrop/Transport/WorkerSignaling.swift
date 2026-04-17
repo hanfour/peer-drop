@@ -13,6 +13,12 @@ final class WorkerSignaling: NSObject {
     private var webSocketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
 
+    // Retry state for NSURLErrorDomain -1011 (bad server response on WS handshake).
+    private var currentRoomCode: String?
+    private var currentRoomToken: String?
+    private var currentRetryCount = 0
+    private let maxRetries = 2
+
     // MARK: - Callbacks
 
     var onSDPOffer: ((String) -> Void)?
@@ -87,8 +93,35 @@ final class WorkerSignaling: NSObject {
         return RoomInfo(roomCode: roomResponse.roomCode, roomToken: roomResponse.roomToken)
     }
 
+    /// Send a relay invite to the given device. Creator-side only.
+    func sendInvite(
+        toDeviceId deviceId: String,
+        roomCode: String,
+        roomToken: String,
+        senderName: String,
+        senderId: String
+    ) async throws {
+        let url = baseURL.appendingPathComponent("v2/invite/\(deviceId)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: String] = [
+            "roomCode": roomCode,
+            "roomToken": roomToken,
+            "senderName": senderName,
+            "senderId": senderId,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let errBody = String(data: data, encoding: .utf8) ?? ""
+            logger.error("Invite failed: \((response as? HTTPURLResponse)?.statusCode ?? -1) \(errBody)")
+            throw WorkerSignalingError.webSocketError
+        }
+    }
+
     /// Join an existing room via WebSocket for signaling.
-    func joinRoom(code: String, token: String? = nil) {
+    func joinRoom(code: String, token: String? = nil, retryCount: Int = 0) {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.scheme = baseURL.scheme == "https" ? "wss" : "ws"
         components.path = "/room/\(code)"
@@ -99,7 +132,10 @@ final class WorkerSignaling: NSObject {
         let wsURL = components.url!
         webSocketTask = session.webSocketTask(with: wsURL)
         webSocketTask?.resume()
-        logger.info("WebSocket connecting to room: \(code)")
+        currentRoomCode = code
+        currentRoomToken = token
+        currentRetryCount = retryCount
+        logger.info("WebSocket connecting to room: \(code) (attempt \(retryCount + 1))")
         startReceiving()
     }
 
@@ -218,10 +254,27 @@ final class WorkerSignaling: NSObject {
                         break
                     }
                 } catch {
-                    if !Task.isCancelled {
-                        logger.error("WebSocket receive error: \(error.localizedDescription)")
-                        self?.onError?(error)
+                    if Task.isCancelled { break }
+                    let nsError = error as NSError
+                    logger.error("WebSocket receive error: \(error.localizedDescription) domain=\(nsError.domain) code=\(nsError.code)")
+
+                    // Retry on -1011 (bad server response) up to maxRetries.
+                    if nsError.domain == NSURLErrorDomain,
+                       nsError.code == -1011,
+                       let strongSelf = self,
+                       strongSelf.currentRetryCount < strongSelf.maxRetries,
+                       let code = strongSelf.currentRoomCode {
+                        let nextAttempt = strongSelf.currentRetryCount + 1
+                        let token = strongSelf.currentRoomToken
+                        logger.info("Retrying WebSocket (attempt \(nextAttempt + 1)/\(strongSelf.maxRetries + 1))")
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        await MainActor.run {
+                            strongSelf.joinRoom(code: code, token: token, retryCount: nextAttempt)
+                        }
+                        return
                     }
+
+                    self?.onError?(error)
                     break
                 }
             }

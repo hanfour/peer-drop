@@ -16,6 +16,7 @@ struct DeviceRecord: Identifiable, Codable, Hashable {
     var connectionCount: Int
     var connectionHistory: [Date] = []
     var certificateFingerprint: String?
+    var peerDeviceId: String?  // UUID of the peer device — used for invite routing
 
     var relativeLastConnected: String {
         let formatter = RelativeDateTimeFormatter()

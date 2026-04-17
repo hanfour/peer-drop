@@ -162,4 +162,16 @@ final class DeviceRecordStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(records) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
+
+    /// Update the peer's stable device identifier after first handshake exchange.
+    func updatePeerDeviceId(for recordId: String, deviceId: String) {
+        guard let index = records.firstIndex(where: { $0.id == recordId }) else { return }
+        records[index].peerDeviceId = deviceId
+        save()
+    }
+
+    /// Snapshot of current records (for device picker / UI lists).
+    func allRecords() -> [DeviceRecord] {
+        records
+    }
 }

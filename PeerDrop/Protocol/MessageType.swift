@@ -55,4 +55,7 @@ enum MessageType: String, Codable {
     // Heartbeat keepalive
     case ping
     case pong
+
+    // Stable device identity (for invite routing)
+    case deviceIdExchange
 }

@@ -6,6 +6,7 @@ struct PeerDropApp: App {
     @StateObject private var connectionManager = ConnectionManager()
     @StateObject private var voicePlayer = VoicePlayer()
     @StateObject private var petEngine = PetEngine()
+    @StateObject private var inboxService = InboxService()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
     @State private var pendingInvite: InvitePayload?
@@ -18,6 +19,7 @@ struct PeerDropApp: App {
                     .environmentObject(connectionManager)
                     .environmentObject(voicePlayer)
                     .environmentObject(petEngine)
+                    .environmentObject(inboxService)
                     .overlay(FloatingPetView(engine: petEngine).allowsHitTesting(true).ignoresSafeArea())
                     .opacity(showLaunch ? 0 : 1)
 
@@ -27,6 +29,9 @@ struct PeerDropApp: App {
                 }
             }
             .animation(.easeOut(duration: 0.4), value: showLaunch)
+            .task {
+                await PushNotificationManager.shared.requestAuthorizationAndRegister()
+            }
             .onAppear {
                 // Wire CallKit into ConnectionManager
                 if let callKit = appDelegate.callKitManager {
@@ -89,11 +94,13 @@ struct PeerDropApp: App {
             connectionManager.handleScenePhaseChange(newPhase)
             switch newPhase {
             case .background:
+                inboxService.disconnect()
                 try? PetStore().save(petEngine.pet)
                 try? PetCloudSync().syncFullState(petEngine.pet)
                 petEngine.syncSharedState()
                 petEngine.startLiveActivity()
             case .active:
+                inboxService.connect()
                 petEngine.endLiveActivity()
             default:
                 break

@@ -10,20 +10,27 @@
  *   POST /room/:code/ice → Generate Cloudflare TURN credentials
  */
 
+import { sendAPNs } from "./apns";
+
 export interface Env {
   ROOMS: KVNamespace;
   V2_STORE: KVNamespace;
   SIGNALING_ROOM: DurableObjectNamespace;
   PREKEY_STORE: DurableObjectNamespace;
+  DEVICE_INBOX: DurableObjectNamespace;
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
+  APNS_KEY_P8: string;
+  APNS_KEY_ID: string;
+  APNS_TEAM_ID: string;
+  APNS_BUNDLE_ID: string;
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
-const ROOM_TTL_SECONDS = 300; // 5 minutes
+const ROOM_TTL_SECONDS = 600; // 10 minutes
 const TURN_TTL_SECONDS = 900; // 15 minutes
 
 // Rate limiting: max requests per IP within the window
@@ -155,6 +162,15 @@ export default {
       const code = wsMatch[1];
       const roomData = await env.ROOMS.get(code);
       if (!roomData) {
+        // Diagnostic: log WS upgrade failures (7-day TTL)
+        const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+        await env.ROOMS.put(logKey, JSON.stringify({
+          reason: "room_not_found",
+          code,
+          ip: clientIP,
+          ua: request.headers.get("User-Agent") || "",
+          timestamp: new Date().toISOString(),
+        }), { expirationTtl: 7 * 86400 });
         return new Response(JSON.stringify({ error: "Room not found" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -165,6 +181,16 @@ export default {
       const roomInfo = JSON.parse(roomData) as { token?: string };
       const providedToken = url.searchParams.get("token");
       if (!providedToken || providedToken !== roomInfo.token) {
+        const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+        await env.ROOMS.put(logKey, JSON.stringify({
+          reason: "invalid_token",
+          code,
+          providedToken: providedToken ? `${providedToken.slice(0, 4)}...${providedToken.slice(-4)}` : null,
+          expectedTokenHash: roomInfo.token ? `${roomInfo.token.slice(0, 4)}...${roomInfo.token.slice(-4)}` : null,
+          ip: clientIP,
+          ua: request.headers.get("User-Agent") || "",
+          timestamp: new Date().toISOString(),
+        }), { expirationTtl: 7 * 86400 });
         return new Response(JSON.stringify({ error: "Invalid room token" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -505,6 +531,103 @@ export default {
       return jsonResponse({ ok: true });
     }
 
+    // GET /v2/inbox/:deviceId — WebSocket upgrade for real-time invite inbox
+    const inboxMatch = path.match(/^\/v2\/inbox\/([a-zA-Z0-9-]{8,64})$/);
+    if (inboxMatch && request.headers.get("Upgrade") === "websocket") {
+      const deviceId = inboxMatch[1];
+      const id = env.DEVICE_INBOX.idFromName(deviceId);
+      const stub = env.DEVICE_INBOX.get(id);
+      const doURL = new URL(request.url);
+      doURL.pathname = "/ws";
+      return stub.fetch(new Request(doURL.toString(), request));
+    }
+
+    // POST /v2/device/register — register APNs device token
+    if (path === "/v2/device/register" && request.method === "POST") {
+      const body = await request.json() as { deviceId?: string; pushToken?: string; platform?: string };
+      if (!body.deviceId || !body.pushToken) {
+        return jsonResponse({ error: "Missing deviceId or pushToken" }, 400);
+      }
+      if (!/^[a-zA-Z0-9-]{8,64}$/.test(body.deviceId)) {
+        return jsonResponse({ error: "Invalid deviceId format" }, 400);
+      }
+      await env.V2_STORE.put(`device:${body.deviceId}`, JSON.stringify({
+        pushToken: body.pushToken,
+        platform: body.platform || "ios",
+        updated: Date.now(),
+      }), { expirationTtl: 30 * 86400 });
+      return jsonResponse({ ok: true });
+    }
+
+    // POST /v2/invite/:deviceId — deliver relay invite
+    const inviteMatch = path.match(/^\/v2\/invite\/([a-zA-Z0-9-]{8,64})$/);
+    if (inviteMatch && request.method === "POST") {
+      const deviceId = inviteMatch[1];
+      const body = await request.json() as {
+        roomCode?: string;
+        roomToken?: string;
+        senderName?: string;
+        senderId?: string;
+      };
+      if (!body.roomCode || !body.roomToken || !body.senderName) {
+        return jsonResponse({ error: "Missing invite fields" }, 400);
+      }
+
+      const invitePayload = JSON.stringify({
+        type: "relay-invite",
+        roomCode: body.roomCode,
+        roomToken: body.roomToken,
+        senderName: body.senderName,
+        senderId: body.senderId || "",
+        timestamp: Date.now(),
+      });
+
+      // Push via DeviceInbox DO
+      const id = env.DEVICE_INBOX.idFromName(deviceId);
+      const stub = env.DEVICE_INBOX.get(id);
+      const pushURL = new URL(request.url);
+      pushURL.pathname = "/push";
+      const doResp = await stub.fetch(new Request(pushURL.toString(), {
+        method: "POST",
+        body: invitePayload,
+      }));
+      const doResult = await doResp.json() as { delivered: string };
+
+      // If queued, try APNs
+      if (doResult.delivered === "queued") {
+        // Look up APNs token for this device
+        const deviceInfo = await env.V2_STORE.get(`device:${deviceId}`);
+        if (!deviceInfo) {
+          return jsonResponse({ ok: true, delivered: "queued", apns: "no_token" });
+        }
+        const info = JSON.parse(deviceInfo) as { pushToken: string; platform: string };
+        if (info.platform !== "ios" || !env.APNS_KEY_P8) {
+          return jsonResponse({ ok: true, delivered: "queued", apns: "not_configured" });
+        }
+        try {
+          const result = await sendAPNs(info.pushToken, {
+            alert: { title: "PeerDrop", body: `${body.senderName} wants to connect` },
+            sound: "default",
+            customData: {
+              roomCode: body.roomCode,
+              roomToken: body.roomToken,
+              senderId: body.senderId || "",
+            },
+          }, {
+            keyId: env.APNS_KEY_ID,
+            teamId: env.APNS_TEAM_ID,
+            p8Key: env.APNS_KEY_P8,
+            bundleId: env.APNS_BUNDLE_ID || "com.hanfour.peerdrop",
+          });
+          return jsonResponse({ ok: true, delivered: "apns", apnsStatus: result.status });
+        } catch (e) {
+          return jsonResponse({ ok: true, delivered: "queued", apns: "send_failed", error: String(e) });
+        }
+      }
+
+      return jsonResponse({ ok: true, delivered: doResult.delivered });
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
@@ -674,5 +797,78 @@ export class PreKeyStore {
       signedPreKey: bundle.signedPreKey,
       oneTimePreKey: consumedOTPK ?? null,
     });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Durable Object: DeviceInbox
+// Each device maps to one DO. Holds the foreground WebSocket for real-time
+// invite delivery. Falls back to APNs + KV queue when WS is absent.
+// ---------------------------------------------------------------------------
+
+export class DeviceInbox {
+  private state: DurableObjectState;
+  private env: Env;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    // GET /ws — upgrade to WebSocket
+    if (url.pathname === "/ws" && request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.state.acceptWebSocket(server);
+
+      // Flush any queued invites
+      const queue = await this.state.storage.list<string>({ prefix: "queue:" });
+      for (const [key, value] of queue) {
+        try {
+          server.send(value);
+        } catch { /* socket already bad, abort */ break; }
+        await this.state.storage.delete(key);
+      }
+
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    // POST /push — deliver invite (from /v2/invite/:deviceId handler)
+    if (url.pathname === "/push" && request.method === "POST") {
+      const payload = await request.text();
+      const sockets = this.state.getWebSockets();
+      if (sockets.length > 0) {
+        let delivered = false;
+        for (const ws of sockets) {
+          try { ws.send(payload); delivered = true; } catch { /* skip */ }
+        }
+        if (delivered) return jsonResponse({ delivered: "websocket" });
+      }
+
+      // No live socket → queue + caller will send APNs
+      const queueKey = `queue:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      await this.state.storage.put(queueKey, payload);
+      // Auto-clean old queue entries (keep last 20)
+      const all = await this.state.storage.list<string>({ prefix: "queue:" });
+      const keys = Array.from(all.keys()).sort();
+      while (keys.length > 20) {
+        const oldest = keys.shift();
+        if (oldest) await this.state.storage.delete(oldest);
+      }
+      return jsonResponse({ delivered: "queued" });
+    }
+
+    return new Response("Not Found", { status: 404 });
+  }
+
+  // Hibernation API
+  webSocketClose(ws: WebSocket) {
+    try { ws.close(); } catch { /* already closed */ }
+  }
+  webSocketError(ws: WebSocket) {
+    try { ws.close(1011, "error"); } catch { /* already closed */ }
   }
 }

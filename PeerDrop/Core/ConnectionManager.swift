@@ -1709,6 +1709,9 @@ final class ConnectionManager: ObservableObject {
     private var pendingRelayPeerConnection: PeerConnection?
     /// Active BLE signaling instance.
     private(set) var bleSignaling: BLESignaling?
+    /// In-progress invite accepts — prevents dual WS+APNs delivery from spawning parallel negotiations.
+    private var inProgressInviteRoomCodes: [String: Date] = [:]
+    private let inviteDedupTTL: TimeInterval = 60
 
     /// Start a relay connection as the room creator (offerer).
     func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
@@ -1902,6 +1905,81 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Join room WebSocket (with auth token from ICE response)
+        signaling.joinRoom(code: roomCode, token: iceResult?.roomToken)
+
+        completeJoinerHandshake(
+            roomCode: roomCode,
+            signaling: signaling,
+            iceResult: iceResult,
+            generation: generation
+        )
+    }
+
+    /// Joiner flow for invite-driven connections — uses the roomToken from the invite
+    /// instead of racing ICE→token fetch. This is the fix for NSURLErrorDomain -1011.
+    func startWorkerRelayAsJoinerWithToken(roomCode: String, roomToken: String, signaling: WorkerSignaling) async throws {
+        logger.info("Accepting invite — joining room \(roomCode) with token")
+
+        let generation = UUID()
+        connectionGeneration = generation
+        forceTransitionToRequesting()
+
+        // Open WebSocket FIRST with the invite-provided token (no race).
+        signaling.joinRoom(code: roomCode, token: roomToken)
+
+        // Fetch ICE in parallel; fall back to STUN if fails.
+        let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
+
+        completeJoinerHandshake(
+            roomCode: roomCode,
+            signaling: signaling,
+            iceResult: iceResult,
+            generation: generation
+        )
+    }
+
+    /// Accept a relay invite — creates signaling and joins as the answerer.
+    /// Dedups concurrent delivery from WebSocket inbox + APNs within a 60s window.
+    func acceptRelayInvite(_ invite: RelayInvite) {
+        let now = Date()
+        inProgressInviteRoomCodes = inProgressInviteRoomCodes.filter { now.timeIntervalSince($0.value) < inviteDedupTTL }
+        guard inProgressInviteRoomCodes[invite.roomCode] == nil else {
+            logger.info("Ignoring duplicate invite accept for room \(invite.roomCode)")
+            return
+        }
+        inProgressInviteRoomCodes[invite.roomCode] = now
+
+        let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+            .flatMap(URL.init(string:))
+            ?? URL(string: "https://peerdrop-signal.hanfourhuang.workers.dev")!
+        let signaling = WorkerSignaling(baseURL: baseURL)
+        Task {
+            do {
+                try await self.startWorkerRelayAsJoinerWithToken(
+                    roomCode: invite.roomCode,
+                    roomToken: invite.roomToken,
+                    signaling: signaling
+                )
+            } catch {
+                await MainActor.run { self.inProgressInviteRoomCodes[invite.roomCode] = nil }
+                ErrorReporter.report(
+                    error: error.localizedDescription,
+                    context: "invite.accept",
+                    extras: ["roomCode": invite.roomCode, "senderId": invite.senderId]
+                )
+            }
+        }
+    }
+
+    /// Shared handshake setup used by both joiner entry points.
+    /// Pre-condition: caller has already called `signaling.joinRoom(code:token:)`.
+    private func completeJoinerHandshake(
+        roomCode: String,
+        signaling: WorkerSignaling,
+        iceResult: WorkerSignaling.ICEResult?,
+        generation: UUID
+    ) {
         let client = DataChannelClient()
         let iceServers: [RTCIceServer]
         if let creds = iceResult?.credentials {
@@ -1911,9 +1989,6 @@ final class ConnectionManager: ObservableObject {
         }
         client.setup(iceServers: iceServers)
         // Joiner doesn't create data channel — it receives one from the offerer
-
-        // Join room WebSocket (with auth token from ICE response)
-        signaling.joinRoom(code: roomCode, token: iceResult?.roomToken)
 
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
@@ -2089,6 +2164,12 @@ final class ConnectionManager: ObservableObject {
             do {
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await peerConnection.sendMessage(hello)
+                // Exchange stable device ID so future invites can route directly.
+                let idExchange = try PeerMessage.deviceIdExchange(
+                    deviceId: DeviceIdentity.deviceId,
+                    senderID: localIdentity.id
+                )
+                try await peerConnection.sendMessage(idExchange)
             } catch {
                 logger.error("Relay handshake failed: \(error.localizedDescription)")
                 transition(to: .failed(reason: error.localizedDescription))
@@ -2484,6 +2565,14 @@ final class ConnectionManager: ObservableObject {
             }
             peerConnection.fileTransferSession?.handleResumeAck(payload)
 
+        case .deviceIdExchange:
+            guard let payload = try? message.decodePayload(DeviceIdExchangePayload.self) else {
+                logger.warning("Failed to decode DeviceIdExchangePayload")
+                return
+            }
+            deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
+            logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+
         default:
             break
         }
@@ -2786,6 +2875,10 @@ final class ConnectionManager: ObservableObject {
 
         case .fileResume, .fileResumeAck:
             // File resume only supported in multi-connection path
+            break
+
+        case .deviceIdExchange:
+            // Legacy path — relay peers go through handleMessageForPeer, ignore here.
             break
         }
     }
