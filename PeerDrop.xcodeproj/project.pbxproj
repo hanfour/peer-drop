@@ -247,6 +247,7 @@
 		AC282EF4C7E2C8E7F1A87ABE /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF554150AAF6288377FCA57C /* UserProfile.swift */; };
 		AC394953E0699D3BC62370F5 /* GroupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420320526B18E15D11A63B4C /* GroupDetailView.swift */; };
 		AD554883FB85D0A83F8480BC /* CatSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8984E7F2FFAC1433EAA8D93F /* CatSpriteDataTests.swift */; };
+		ADC3A11FF7051AFAD8D48337 /* InviteBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */; };
 		AE598409867401DE1F4D1AA1 /* PetPhysicsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A377C32AF8942AE36D4989 /* PetPhysicsEngine.swift */; };
 		AF142241B37E725BDBF7EA56 /* PetSnapshotRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33879AB0C9B537D534F9E4A /* PetSnapshotRenderer.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
@@ -437,6 +438,7 @@
 		093CB8D661315EF3FEAC6C7A /* DragonSpriteDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragonSpriteDataTests.swift; sourceTree = "<group>"; };
 		099E518626BF1EDB713724B8 /* PetSpeciesIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSpeciesIntegrationTests.swift; sourceTree = "<group>"; };
 		09FE9642235E04A824571838 /* NearbyInteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyInteractionManager.swift; sourceTree = "<group>"; };
+		0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteBanner.swift; sourceTree = "<group>"; };
 		0CACE77F48AE3D60B46842BF /* SpriteDataRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteDataRegistry.swift; sourceTree = "<group>"; };
 		0CAFB8158864904095728B39 /* DragonBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragonBehavior.swift; sourceTree = "<group>"; };
 		0CB9C675EFD739621740F9F9 /* DiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryService.swift; sourceTree = "<group>"; };
@@ -1286,6 +1288,7 @@
 		A6F82C1DA88B9764AD577D87 /* Relay */ = {
 			isa = PBXGroup;
 			children = (
+				0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */,
 				8028C21C80DCFB5B48F3A7EB /* PINVerificationView.swift */,
 				292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */,
 			);
@@ -1903,6 +1906,7 @@
 				3595C3CCDE703AE5A32D38F7 /* InteractionTracker.swift in Sources */,
 				36FA607C123E15E115270D78 /* InteractionType.swift in Sources */,
 				C1B15C98CAFFB74D7883071B /* InviteAcceptView.swift in Sources */,
+				ADC3A11FF7051AFAD8D48337 /* InviteBanner.swift in Sources */,
 				5B4DA49C23269F1504696BE2 /* IslandPose.swift in Sources */,
 				D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */,
 				78ADE146102313D4C28AE68C /* KeyExchangeMessage.swift in Sources */,
