@@ -310,6 +310,7 @@
 		D26E7E86AE786FAC829ABAE4 /* PetLifeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C268A0C1963AF7348AA876 /* PetLifeState.swift */; };
 		D2D66422C311F0DAEECE29CF /* ComprehensiveVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */; };
 		D342550DEF6ADE4EEFE92B14 /* MailboxManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC571ACAB71932C18575C55 /* MailboxManager.swift */; };
+		D36260C8EE273FB4B656CFC1 /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74BB6BFC733AA77B47140BE /* DevicePickerView.swift */; };
 		D382B38045C3F4ED6239D259 /* FileTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D28254D09D4993B28316CD /* FileTransfer.swift */; };
 		D3BB7BFB878967377BD1B167 /* BirdBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA9EC0CC7FB157C94672BA8 /* BirdBehavior.swift */; };
 		D40F36CC206D2B409F8A6AB4 /* FoodInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4757C18487DF05A8A2D4F432 /* FoodInventory.swift */; };
@@ -704,6 +705,7 @@
 		C4F993BA6D5384B7F944865C /* MailboxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxClient.swift; sourceTree = "<group>"; };
 		C6842DD7730A244B26924472 /* PetBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetBubbleView.swift; sourceTree = "<group>"; };
 		C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordStoreTests.swift; sourceTree = "<group>"; };
+		C74BB6BFC733AA77B47140BE /* DevicePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePickerView.swift; sourceTree = "<group>"; };
 		C85FF54E4B04D525691B3B6B /* PetSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotTests.swift; sourceTree = "<group>"; };
 		C8D5D787B4A7EA3EBCFA8015 /* ScreenshotModeProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotModeProvider.swift; sourceTree = "<group>"; };
 		C9190D8D82A73DD7F86B2EAA /* ClipboardSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSyncTests.swift; sourceTree = "<group>"; };
@@ -1291,6 +1293,7 @@
 		A6F82C1DA88B9764AD577D87 /* Relay */ = {
 			isa = PBXGroup;
 			children = (
+				C74BB6BFC733AA77B47140BE /* DevicePickerView.swift */,
 				0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */,
 				8028C21C80DCFB5B48F3A7EB /* PINVerificationView.swift */,
 				292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */,
@@ -1868,6 +1871,7 @@
 				AB02B2955669F006F3D1FC9D /* DeviceGroup.swift in Sources */,
 				18A43C643870F03CF49EEE09 /* DeviceGroupStore.swift in Sources */,
 				5979A61B244DDF555E19417F /* DeviceIdentity.swift in Sources */,
+				D36260C8EE273FB4B656CFC1 /* DevicePickerView.swift in Sources */,
 				EF4CFC9180E25C15F1F95713 /* DeviceRecord.swift in Sources */,
 				27A6618B320BC359BCC8078F /* DeviceRecordRow.swift in Sources */,
 				C3C0C03588C1886421B97385 /* DeviceRecordStore.swift in Sources */,

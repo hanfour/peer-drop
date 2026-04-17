@@ -11,6 +11,7 @@ struct RelayConnectView: View {
     @State private var errorMessage: String?
     @State private var didAutoJoin = false
     @State private var showReportSentToast = false
+    @State private var showDevicePicker = false
     @FocusState private var isCodeFieldFocused: Bool
 
     enum RelayMode {
@@ -126,13 +127,21 @@ struct RelayConnectView: View {
 
             VStack(spacing: 16) {
                 Button {
+                    showDevicePicker = true
+                } label: {
+                    Label("Invite Device", systemImage: "person.crop.circle.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
                     mode = .create
                     createRoom()
                 } label: {
                     Label("Create Room", systemImage: "plus.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
 
                 Button {
                     mode = .join
@@ -143,6 +152,9 @@ struct RelayConnectView: View {
                 .buttonStyle(.bordered)
             }
             .padding(.horizontal, 40)
+            .sheet(isPresented: $showDevicePicker) {
+                DevicePickerView().environmentObject(connectionManager)
+            }
 
             Spacer()
         }
