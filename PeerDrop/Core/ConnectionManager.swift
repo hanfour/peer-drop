@@ -1709,6 +1709,9 @@ final class ConnectionManager: ObservableObject {
     private var pendingRelayPeerConnection: PeerConnection?
     /// Active BLE signaling instance.
     private(set) var bleSignaling: BLESignaling?
+    /// In-progress invite accepts — prevents dual WS+APNs delivery from spawning parallel negotiations.
+    private var inProgressInviteRoomCodes: [String: Date] = [:]
+    private let inviteDedupTTL: TimeInterval = 60
 
     /// Start a relay connection as the room creator (offerer).
     func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
@@ -1937,7 +1940,16 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Accept a relay invite — creates signaling and joins as the answerer.
+    /// Dedups concurrent delivery from WebSocket inbox + APNs within a 60s window.
     func acceptRelayInvite(_ invite: RelayInvite) {
+        let now = Date()
+        inProgressInviteRoomCodes = inProgressInviteRoomCodes.filter { now.timeIntervalSince($0.value) < inviteDedupTTL }
+        guard inProgressInviteRoomCodes[invite.roomCode] == nil else {
+            logger.info("Ignoring duplicate invite accept for room \(invite.roomCode)")
+            return
+        }
+        inProgressInviteRoomCodes[invite.roomCode] = now
+
         let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             .flatMap(URL.init(string:))
             ?? URL(string: "https://peerdrop-signal.hanfourhuang.workers.dev")!
@@ -1950,6 +1962,7 @@ final class ConnectionManager: ObservableObject {
                     signaling: signaling
                 )
             } catch {
+                await MainActor.run { self.inProgressInviteRoomCodes[invite.roomCode] = nil }
                 ErrorReporter.report(
                     error: error.localizedDescription,
                     context: "invite.accept",

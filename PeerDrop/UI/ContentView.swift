@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
     @State private var currentInvite: RelayInvite?
+    @State private var processedInviteIDs: Set<String> = []
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -162,12 +163,14 @@ struct ContentView: View {
             }
         }
         .onReceive(inboxService.$receivedInvite.compactMap { $0 }) { invite in
-            currentInvite = invite
             inboxService.receivedInvite = nil
+            guard !processedInviteIDs.contains(invite.id), currentInvite == nil else { return }
+            currentInvite = invite
         }
         .onReceive(pushManager.$receivedInvite.compactMap { $0 }) { invite in
-            currentInvite = invite
             pushManager.receivedInvite = nil
+            guard !processedInviteIDs.contains(invite.id), currentInvite == nil else { return }
+            currentInvite = invite
         }
 
             // Invite banner overlay
@@ -175,10 +178,14 @@ struct ContentView: View {
                 InviteBanner(
                     invite: invite,
                     onAccept: {
+                        processedInviteIDs.insert(invite.id)
                         connectionManager.acceptRelayInvite(invite)
                         currentInvite = nil
                     },
-                    onDecline: { currentInvite = nil }
+                    onDecline: {
+                        processedInviteIDs.insert(invite.id)
+                        currentInvite = nil
+                    }
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .padding(.top, 8)
