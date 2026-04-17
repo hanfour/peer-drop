@@ -74,6 +74,7 @@ targets:
           - voip
           - bluetooth-central
           - bluetooth-peripheral
+          - remote-notification
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
