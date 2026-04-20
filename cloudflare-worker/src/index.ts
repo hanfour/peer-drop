@@ -200,7 +200,20 @@ export default {
       // Forward to Durable Object — same room code always routes to same instance
       const id = env.SIGNALING_ROOM.idFromName(code);
       const stub = env.SIGNALING_ROOM.get(id);
-      return stub.fetch(request);
+      const doResponse = await stub.fetch(request);
+      // If the DO rejected the upgrade (e.g. 409 room full), log it.
+      if (doResponse.status !== 101) {
+        const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+        await env.ROOMS.put(logKey, JSON.stringify({
+          reason: "do_rejected_upgrade",
+          code,
+          doStatus: doResponse.status,
+          ip: clientIP,
+          ua: request.headers.get("User-Agent") || "",
+          timestamp: new Date().toISOString(),
+        }), { expirationTtl: 7 * 86400 });
+      }
+      return doResponse;
     }
 
     // POST /room/:code/ice — generate TURN credentials + return room token
@@ -684,9 +697,24 @@ export class SignalingRoom {
       return new Response("Expected WebSocket", { status: 400 });
     }
 
-    const activeSockets = this.state.getWebSockets();
+    // Filter sockets by readyState — only count OPEN (1) or CONNECTING (0).
+    // This prevents stale CLOSING/CLOSED sockets from blocking legitimate joins.
+    const allSockets = this.state.getWebSockets();
+    const activeSockets = allSockets.filter(ws => ws.readyState === 0 || ws.readyState === 1);
+
+    // Proactively close any stale sockets we've now identified.
+    for (const stale of allSockets) {
+      if (stale.readyState !== 0 && stale.readyState !== 1) {
+        try { stale.close(1000, "stale"); } catch { /* already closed */ }
+      }
+    }
+
     if (activeSockets.length >= MAX_PEERS_PER_ROOM) {
-      return new Response(JSON.stringify({ error: "Room is full" }), {
+      return new Response(JSON.stringify({
+        error: "Room is full",
+        activeSocketCount: activeSockets.length,
+        totalSocketCount: allSockets.length,
+      }), {
         status: 409,
         headers: { "Content-Type": "application/json" },
       });

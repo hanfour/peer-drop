@@ -122,6 +122,16 @@ final class WorkerSignaling: NSObject {
 
     /// Join an existing room via WebSocket for signaling.
     func joinRoom(code: String, token: String? = nil, retryCount: Int = 0) {
+        // Tear down any prior WS before opening a new one — without this, retries
+        // accumulate sockets on the SignalingRoom Durable Object and trigger
+        // 409 "Room is full" on the next attempt (surfaces as -1011 on iOS).
+        receiveTask?.cancel()
+        receiveTask = nil
+        if let oldTask = webSocketTask {
+            oldTask.cancel(with: .goingAway, reason: nil)
+        }
+        webSocketTask = nil
+
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.scheme = baseURL.scheme == "https" ? "wss" : "ws"
         components.path = "/room/\(code)"
