@@ -121,7 +121,15 @@ platform :ios do
       output_name: "PeerDrop.ipa",
       clean: true,
       include_bitcode: false,
-      include_symbols: true
+      include_symbols: true,
+      export_options: {
+        method: "app-store",
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.hanfour.peerdrop" => "com.hanfour.peerdrop AppStore",
+          "com.hanfour.peerdrop.widget" => "com.hanfour.peerdrop.widget AppStore"
+        }
+      }
     )
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
