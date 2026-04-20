@@ -126,16 +126,16 @@ platform :ios do
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
       skip_screenshots: true,
-      skip_metadata: true,
+      skip_metadata: false,
+      metadata_path: "./fastlane/metadata",
       submit_for_review: true,
-      automatic_release: false,
+      automatic_release: true,
       force: true,
       precheck_include_in_app_purchases: false,
       submission_information: {
         add_id_info_uses_idfa: false,
         export_compliance_uses_encryption: true,
-        export_compliance_is_exempt: true,
-        content_rights_contains_third_party_content: false
+        export_compliance_is_exempt: true
       }
     )
   end

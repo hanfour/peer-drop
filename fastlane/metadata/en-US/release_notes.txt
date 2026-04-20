@@ -1,12 +1,5 @@
-PeerDrop 3.2.0
+PeerDrop 3.2.1
 
-Relay Auto-Invite
-- Accept relay connection invites from known devices with one tap
-- Foreground banner appears instantly when a device invites you
-- APNs push notifications deliver invites even when the app is backgrounded or locked
-- New "Invite Device" picker on the Relay screen lets creators invite past contacts directly
-
-Connection Reliability
-- Fixed rare -1011 WebSocket handshake failures on relay connect
-- WebSocket now retries automatically on transient errors
-- Extended room session timeout from 5 to 10 minutes
+Fixes
+- Fixed relay WebSocket connection failures (NSURLErrorDomain -1011) that could leave peers unable to connect after a retry
+- Signaling server now cleans up stale sockets more aggressively, preventing "Room is full" errors
