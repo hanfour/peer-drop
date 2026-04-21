@@ -201,13 +201,19 @@ export default {
       const id = env.SIGNALING_ROOM.idFromName(code);
       const stub = env.SIGNALING_ROOM.get(id);
       const doResponse = await stub.fetch(request);
-      // If the DO rejected the upgrade (e.g. 409 room full), log it.
+      // If the DO rejected the upgrade (e.g. 409 room full), log it with body detail.
       if (doResponse.status !== 101) {
+        // Clone so we can still return the original to the caller.
+        const cloned = doResponse.clone();
+        let bodyText = "";
+        try { bodyText = await cloned.text(); } catch { /* best effort */ }
         const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
         await env.ROOMS.put(logKey, JSON.stringify({
           reason: "do_rejected_upgrade",
           code,
           doStatus: doResponse.status,
+          doBody: bodyText.slice(0, 500),
+          clientId: url.searchParams.get("clientId")?.slice(0, 8) || null,
           ip: clientIP,
           ua: request.headers.get("User-Agent") || "",
           timestamp: new Date().toISOString(),
@@ -697,23 +703,38 @@ export class SignalingRoom {
       return new Response("Expected WebSocket", { status: 400 });
     }
 
-    // Filter sockets by readyState — only count OPEN (1) or CONNECTING (0).
-    // This prevents stale CLOSING/CLOSED sockets from blocking legitimate joins.
-    const allSockets = this.state.getWebSockets();
-    const activeSockets = allSockets.filter(ws => ws.readyState === 0 || ws.readyState === 1);
+    // Client provides a stable clientId per WorkerSignaling instance so we can
+    // deduplicate reconnects from the same client without waiting for the old
+    // socket's close frame to propagate (which causes races that surface as
+    // -1011 on iOS).
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get("clientId") || "";
 
-    // Proactively close any stale sockets we've now identified.
-    for (const stale of allSockets) {
-      if (stale.readyState !== 0 && stale.readyState !== 1) {
-        try { stale.close(1000, "stale"); } catch { /* already closed */ }
+    const allSockets = this.state.getWebSockets();
+
+    // Evict any prior socket from the same client (stale reconnect).
+    let evicted = 0;
+    if (clientId) {
+      for (const ws of allSockets) {
+        const att = ws.deserializeAttachment() as { clientId?: string } | null;
+        if (att?.clientId === clientId) {
+          try { ws.close(1000, "superseded by newer connection"); } catch { /* already closed */ }
+          evicted++;
+        }
       }
     }
+
+    // Re-read after eviction to get the authoritative count.
+    const remaining = this.state.getWebSockets();
+    const activeSockets = remaining.filter(ws => ws.readyState === 0 || ws.readyState === 1);
 
     if (activeSockets.length >= MAX_PEERS_PER_ROOM) {
       return new Response(JSON.stringify({
         error: "Room is full",
         activeSocketCount: activeSockets.length,
-        totalSocketCount: allSockets.length,
+        totalSocketCount: remaining.length,
+        evicted,
+        clientId: clientId ? clientId.slice(0, 8) : null,
       }), {
         status: 409,
         headers: { "Content-Type": "application/json" },
@@ -725,6 +746,9 @@ export class SignalingRoom {
 
     // Accept with Hibernation API — lets the DO hibernate between messages
     this.state.acceptWebSocket(server);
+    if (clientId) {
+      server.serializeAttachment({ clientId, createdAt: Date.now() });
+    }
 
     // Notify existing peer(s) that someone joined
     for (const peer of activeSockets) {

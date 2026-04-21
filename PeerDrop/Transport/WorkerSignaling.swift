@@ -13,6 +13,11 @@ final class WorkerSignaling: NSObject {
     private var webSocketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
 
+    // Stable client ID for this signaling instance — the server uses it to
+    // deduplicate reconnects from the same client and evict stale sockets
+    // without having to wait for close frames to propagate.
+    private let clientId = UUID().uuidString
+
     // Retry state for NSURLErrorDomain -1011 (bad server response on WS handshake).
     private var currentRoomCode: String?
     private var currentRoomToken: String?
@@ -135,9 +140,11 @@ final class WorkerSignaling: NSObject {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.scheme = baseURL.scheme == "https" ? "wss" : "ws"
         components.path = "/room/\(code)"
+        var items: [URLQueryItem] = [URLQueryItem(name: "clientId", value: clientId)]
         if let token {
-            components.queryItems = [URLQueryItem(name: "token", value: token)]
+            items.append(URLQueryItem(name: "token", value: token))
         }
+        components.queryItems = items
 
         let wsURL = components.url!
         webSocketTask = session.webSocketTask(with: wsURL)
@@ -145,7 +152,7 @@ final class WorkerSignaling: NSObject {
         currentRoomCode = code
         currentRoomToken = token
         currentRetryCount = retryCount
-        logger.info("WebSocket connecting to room: \(code) (attempt \(retryCount + 1))")
+        logger.info("WebSocket connecting to room: \(code) (attempt \(retryCount + 1), clientId=\(self.clientId.prefix(8)))")
         startReceiving()
     }
 
