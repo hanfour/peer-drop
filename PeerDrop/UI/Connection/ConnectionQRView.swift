@@ -8,7 +8,7 @@ struct NetworkAddress {
 
     enum AddressType: String {
         case tailscale  // utun interfaces with 100.x.x.x (CGNAT range)
-        case wifi       // en0/en1 interfaces with private IPs
+        case wifi       // en0/en1 with private IPs, or bridgeN (iPhone Personal Hotspot host)
     }
 }
 
@@ -204,6 +204,13 @@ struct ConnectionQRView: View {
     // MARK: - Network Detection
 
     /// Returns all available network addresses, prioritized: Tailscale first, then WiFi.
+    /// Recognised interfaces:
+    ///   * `utun*` with `100.x` → Tailscale (CGNAT 100.64.0.0/10)
+    ///   * `en0` / `en1` → WiFi (standard infrastructure)
+    ///   * `bridge*` → iPhone Personal Hotspot *host* interface (IP is typically
+    ///     172.20.10.1). When this device shares its cellular connection, peers
+    ///     joining the hotspot reach the host via this bridge — without this,
+    ///     the generated QR / deep link would omit the host's local IP.
     static func availableAddresses() -> [NetworkAddress] {
         var addresses: [NetworkAddress] = []
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
@@ -215,6 +222,12 @@ struct ConnectionQRView: View {
             let addrFamily = interface.ifa_addr.pointee.sa_family
             guard addrFamily == UInt8(AF_INET) else { continue }
 
+            // Skip interfaces that are down or loopback.
+            let flags = Int32(interface.ifa_flags)
+            guard (flags & IFF_UP) == IFF_UP,
+                  (flags & IFF_RUNNING) == IFF_RUNNING,
+                  (flags & IFF_LOOPBACK) == 0 else { continue }
+
             let name = String(cString: interface.ifa_name)
             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
@@ -225,8 +238,12 @@ struct ConnectionQRView: View {
             if name.hasPrefix("utun"), ip.hasPrefix("100.") {
                 addresses.append(NetworkAddress(ip: ip, type: .tailscale))
             }
-            // WiFi
+            // Standard WiFi
             else if name == "en0" || name == "en1" {
+                addresses.append(NetworkAddress(ip: ip, type: .wifi))
+            }
+            // iPhone Personal Hotspot host interface (bridge100 in recent iOS)
+            else if name.hasPrefix("bridge") {
                 addresses.append(NetworkAddress(ip: ip, type: .wifi))
             }
         }
