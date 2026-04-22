@@ -106,6 +106,7 @@ struct PeerDropApp: App {
             switch newPhase {
             case .background:
                 inboxService.disconnect()
+                Task { await ConnectionMetrics.shared.flush() }
                 try? PetStore().save(petEngine.pet)
                 try? PetCloudSync().syncFullState(petEngine.pet)
                 petEngine.syncSharedState()
