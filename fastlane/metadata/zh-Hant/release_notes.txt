@@ -1,5 +1,5 @@
-PeerDrop 3.2.1
+PeerDrop 3.2.2
 
 錯誤修正
-- 修正 Relay 連線時 WebSocket 連線失敗 (-1011) 問題，先前在自動重試後仍無法連上
-- 伺服器更積極清理過時的連線，避免出現「房間已滿」錯誤
+- 徹底解決 Relay 的 -1011 WebSocket 錯誤。重新連線時以 client ID 去除重複，重試會清掉自己的舊 socket 而不會累積到「房間已滿」。
+- 分享個人熱點時，QR Code 與 deep link 現在會包含熱點主機 IP（bridge 介面），掃描端可直接走熱點連線，不必走 Relay。

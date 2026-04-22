@@ -1,5 +1,5 @@
-PeerDrop 3.2.1
+PeerDrop 3.2.2
 
 Fixes
-- Fixed relay WebSocket connection failures (NSURLErrorDomain -1011) that could leave peers unable to connect after a retry
-- Signaling server now cleans up stale sockets more aggressively, preventing "Room is full" errors
+- Definitively resolved the relay -1011 WebSocket error. Reconnects now dedup by client ID, so retries evict their own stale socket instead of piling up and triggering "room is full".
+- QR code and deep link now include the device's IP even when it is sharing a Personal Hotspot (bridge interface), so scanners can reach it over the hotspot without falling back to relay.

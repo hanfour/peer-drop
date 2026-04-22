@@ -1,5 +1,5 @@
-PeerDrop 3.2.1
+PeerDrop 3.2.2
 
 错误修复
-- 修复 Relay 连接时 WebSocket 连接失败 (-1011) 问题，先前在自动重试后仍无法连上
-- 服务器更积极清理过时的连接，避免出现「房间已满」错误
+- 彻底解决 Relay 的 -1011 WebSocket 错误。重新连接时以 client ID 去重，重试会清掉自己的旧 socket 而不会累积到「房间已满」。
+- 分享个人热点时，QR Code 与 deep link 现在会包含热点主机 IP（bridge 接口），扫描端可直接走热点连接，不必走 Relay。
