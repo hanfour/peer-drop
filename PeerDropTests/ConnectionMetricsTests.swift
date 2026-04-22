@@ -126,6 +126,26 @@ final class ConnectionMetricsTests: XCTestCase {
         XCTAssertEqual(flushed, 0)
     }
 
+    func test_recordPhaseTime_setsPhase1Ms() async {
+        let m = ConnectionMetrics(flushOnCount: 100)
+        let token = await m.begin(type: .relayWorker, role: .joiner)
+        await m.recordPhaseTime(token, phase: 1, elapsedMs: 5000)
+        await m.recordConnected(token, used: .relay)
+        let last = await m.lastRecordedMetric
+        XCTAssertEqual(last?.iceStats?.phase1ConnectedMs, 5000)
+        XCTAssertNil(last?.iceStats?.phase2ConnectedMs)
+    }
+
+    func test_recordPhaseTime_setsPhase2Ms() async {
+        let m = ConnectionMetrics(flushOnCount: 100)
+        let token = await m.begin(type: .relayWorker, role: .joiner)
+        await m.recordPhaseTime(token, phase: 2, elapsedMs: 12000)
+        await m.recordConnected(token, used: .relay)
+        let last = await m.lastRecordedMetric
+        XCTAssertNil(last?.iceStats?.phase1ConnectedMs)
+        XCTAssertEqual(last?.iceStats?.phase2ConnectedMs, 12000)
+    }
+
     func test_fetchRemoteConfig_withFailingURL_keepsCached() async {
         UserDefaults.standard.set("https://invalid.peerdrop.example", forKey: "peerDropWorkerURL")
         defer { UserDefaults.standard.removeObject(forKey: "peerDropWorkerURL") }

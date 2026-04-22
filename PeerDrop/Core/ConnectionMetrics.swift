@@ -137,6 +137,7 @@ actor ConnectionMetrics {
     }
 
     func recordPhaseTime(_ token: Token, phase: Int, elapsedMs: Int) {
+        guard !token.finalized else { return }
         if phase == 1 {
             token.phase1Ms = elapsedMs
         } else {
