@@ -17,6 +17,7 @@ actor ConnectionMetrics {
     private(set) var lastRecordedMetric: ConnectionMetric?
     private(set) var droppedCount: Int = 0  // overflow + sampling drops
     private var didWarnFlushError: Bool = false
+    private var didWarnConfigFetchError: Bool = false
 
     init(flushOnCount: Int = 50) {
         self.flushThreshold = flushOnCount
@@ -28,6 +29,9 @@ actor ConnectionMetrics {
     }
 
     var pendingCount: Int { buffer.count }
+
+    /// Test-only observation of the current remote config.
+    var currentConfig: RemoteConfig { remoteConfig }
 
     struct RemoteConfig: Codable {
         let sampleRate: Double
@@ -152,7 +156,13 @@ actor ConnectionMetrics {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                logger.debug("metrics config fetch non-200: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                if !didWarnConfigFetchError {
+                    didWarnConfigFetchError = true
+                    logger.warning("First metrics config fetch error: non-200 status \(status). Subsequent errors suppressed to .debug.")
+                } else {
+                    logger.debug("metrics config fetch error: non-200 status \(status)")
+                }
                 return
             }
             let cfg = try JSONDecoder().decode(RemoteConfig.self, from: data)
@@ -162,7 +172,12 @@ actor ConnectionMetrics {
             }
             logger.info("metrics config refreshed: sampleRate=\(cfg.sampleRate) enabled=\(cfg.enabled)")
         } catch {
-            logger.debug("metrics config fetch failed: \(error.localizedDescription)")
+            if !didWarnConfigFetchError {
+                didWarnConfigFetchError = true
+                logger.warning("First metrics config fetch error: \(error.localizedDescription). Subsequent errors suppressed to .debug.")
+            } else {
+                logger.debug("metrics config fetch error: \(error.localizedDescription)")
+            }
             // Keep the cached value — do not reset to default.
         }
     }

@@ -127,24 +127,15 @@ final class ConnectionMetricsTests: XCTestCase {
     }
 
     func test_fetchRemoteConfig_withFailingURL_keepsCached() async {
-        // Point at an unreachable URL so fetch fails, verify cached config survives.
         UserDefaults.standard.set("https://invalid.peerdrop.example", forKey: "peerDropWorkerURL")
         defer { UserDefaults.standard.removeObject(forKey: "peerDropWorkerURL") }
 
         let m = ConnectionMetrics(flushOnCount: 1)
         await m.updateRemoteConfig(.init(sampleRate: 0.5, enabled: true))
-        await m.fetchRemoteConfig() // will fail silently
-        // updateRemoteConfig does NOT cache; fetch didn't complete. remoteConfig still 0.5/true.
-        // We can only observe this via side-effects: begin a token and expect the 0.5 sample path
-        // — but that's stochastic. Instead assert fetch did not wipe to .default by checking
-        // that a disabled-config from a previous test fixture would not leak in.
-        let token = await m.begin(type: .localBonjour, role: .initiator)
-        await m.recordConnected(token, used: .host)
-        // With sampleRate=0.5 there's a 50% chance we observe recordedCount==1 vs ==0.
-        // Either is acceptable — the assertion is that updateRemoteConfig's value survived the
-        // failed fetch (i.e., remoteConfig is NOT reset to .default's rate=1.0 or disabled).
-        let recorded = await m.recordedCount
-        let dropped = await m.droppedCount
-        XCTAssertEqual(recorded + dropped, 1, "one finalize should produce exactly one outcome")
+        await m.fetchRemoteConfig() // must fail silently
+
+        let config = await m.currentConfig
+        XCTAssertEqual(config.sampleRate, 0.5, accuracy: 0.0001, "fetch failure must not wipe prior config")
+        XCTAssertTrue(config.enabled, "fetch failure must not wipe prior config")
     }
 }
