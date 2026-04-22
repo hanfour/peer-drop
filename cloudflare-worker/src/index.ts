@@ -367,6 +367,13 @@ export default {
       return jsonResponse({ ok: true, id: metricId }, 201);
     }
 
+    // GET /config/metrics — remote circuit breaker (public, no auth)
+    if (path === "/config/metrics" && request.method === "GET") {
+      const raw = await env.METRICS.get("config:metrics");
+      const parsed = raw ? JSON.parse(raw) : { sampleRate: 1.0, enabled: true };
+      return jsonResponse(parsed);
+    }
+
     // GET /debug/reports — fetch recent error reports (requires API key)
     if (path === "/debug/reports" && request.method === "GET") {
       if (!env.API_KEY || request.headers.get("X-API-Key") !== env.API_KEY) {
