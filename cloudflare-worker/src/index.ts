@@ -384,34 +384,60 @@ export default {
       const unauth = requireKey(request, env, "ANALYTICS_KEY");
       if (unauth) return unauth;
 
-      const range = url.searchParams.get("range") || "24h";
+      const VALID_RANGES = new Set(["24h", "7d", "30d"]);
+      const range = url.searchParams.get("range") ?? "24h";
+      if (!VALID_RANGES.has(range)) {
+        return jsonResponse({ error: "range must be one of 24h|7d|30d" }, 400);
+      }
       const daysBack = range === "7d" ? 7 : range === "30d" ? 30 : 1;
+      const METRIC_CAP = 5000;
+
       const prefixes: string[] = [];
       for (let i = 0; i < daysBack; i++) {
         const d = new Date(Date.now() - i * 86400_000);
         prefixes.push(`metric:${d.toISOString().slice(0, 10)}:`);
       }
-      // Collect up to 5000 metrics across the window.
+
       const metrics: Record<string, unknown>[] = [];
-      for (const prefix of prefixes) {
-        const list = await env.METRICS.list({ prefix, limit: 1000 });
-        for (const key of list.keys) {
-          if (metrics.length >= 5000) break;
-          const raw = await env.METRICS.get(key.name);
-          if (raw) {
-            try { metrics.push(JSON.parse(raw)); }
-            catch { /* skip corrupt entry */ }
+      let keysScanned = 0;
+      let truncated = false;
+
+      try {
+        outer: for (const prefix of prefixes) {
+          let cursor: string | undefined;
+          while (true) {
+            const list = await env.METRICS.list({ prefix, limit: 1000, cursor });
+            for (const key of list.keys) {
+              if (!key.name.startsWith(prefix)) continue; // defence-in-depth
+              keysScanned++;
+              if (metrics.length >= METRIC_CAP) { truncated = true; break outer; }
+              const raw = await env.METRICS.get(key.name);
+              if (!raw) continue;
+              try { metrics.push(JSON.parse(raw)); }
+              catch { /* skip corrupt entry */ }
+            }
+            if (list.list_complete || !list.cursor) break;
+            cursor = list.cursor;
+            if (metrics.length >= METRIC_CAP) { truncated = true; break outer; }
           }
         }
-        if (metrics.length >= 5000) break;
+      } catch (e) {
+        return jsonResponse({
+          error: "aggregation_failed",
+          detail: String(e).slice(0, 200),
+          partial: metrics.length,
+        }, 503);
       }
 
-      // Aggregate
+      // Aggregate — identical to the pre-fix version.
+      // Response contract: stats.byType[connectionType] = { success, failure, abandoned, p50, p95 }
+      // Keep keys stable — consumed by ops dashboard.
       const byType: Record<string, { success: number; failure: number; abandoned: number; durations: number[] }> = {};
       const candidateUse: Record<string, number> = {};
       const failureReasons: Record<string, number> = {};
       for (const m of metrics) {
-        const t = String(m["connectionType"] ?? "unknown");
+        const tRaw = m["connectionType"];
+        const t = typeof tRaw === "string" && tRaw.length > 0 ? tRaw : "unknown";
         byType[t] ??= { success: 0, failure: 0, abandoned: 0, durations: [] };
         const outcomeField = m["outcome"];
         const outcomeType = typeof outcomeField === "object" && outcomeField !== null
@@ -433,9 +459,12 @@ export default {
           failureReasons[reason] = (failureReasons[reason] ?? 0) + 1;
         }
       }
+
       const stats = {
         range,
         total: metrics.length,
+        keysScanned,
+        truncated,
         byType: Object.fromEntries(Object.entries(byType).map(([k, v]) => {
           const d = v.durations.slice().sort((a, b) => a - b);
           return [k, {
