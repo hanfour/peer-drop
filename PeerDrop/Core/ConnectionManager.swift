@@ -1770,13 +1770,13 @@ final class ConnectionManager: ObservableObject {
 
                 // Set up DataChannelClient
                 let client = DataChannelClient()
-                let iceServers: [RTCIceServer]
+                let creatorConfig: RTCConfiguration
                 if let creds = iceResult?.credentials {
-                    iceServers = ICEConfigurationProvider.iceServers(from: creds)
+                    creatorConfig = ICEConfigurationProvider.configuration(with: creds)
                 } else {
-                    iceServers = ICEConfigurationProvider.stunServers
+                    creatorConfig = ICEConfigurationProvider.defaultConfiguration()
                 }
-                client.setup(iceServers: iceServers)
+                client.setup(with: creatorConfig)
                 guard client.createDataChannel() != nil else {
                     throw DataChannelError.notInitialized
                 }
@@ -2083,13 +2083,20 @@ final class ConnectionManager: ObservableObject {
         metricsToken: ConnectionMetrics.Token
     ) {
         let client = DataChannelClient()
-        let iceServers: [RTCIceServer]
+        let fingerprint = currentNetworkFingerprint()
+        let preferRelay = RelayHintsStore.shared.shouldPreferRelay(fingerprint: fingerprint)
+
+        let config: RTCConfiguration
         if let creds = iceResult?.credentials {
-            iceServers = ICEConfigurationProvider.iceServers(from: creds)
+            config = ICEConfigurationProvider.configuration(with: creds)
         } else {
-            iceServers = ICEConfigurationProvider.stunServers
+            config = ICEConfigurationProvider.defaultConfiguration()
         }
-        client.setup(iceServers: iceServers)
+        if preferRelay {
+            config.iceTransportPolicy = .relay
+            logger.info("RelayHintsStore: preferring relay for fingerprint \(fingerprint)")
+        }
+        client.setup(with: config)
         // Joiner doesn't create data channel — it receives one from the offerer
 
         let handshakeStart = Date()
@@ -2192,6 +2199,12 @@ final class ConnectionManager: ObservableObject {
                         metricsToken,
                         used: .relay
                     )
+                    // Update relay hints for this network
+                    if phase == 1 {
+                        RelayHintsStore.shared.recordPhase1Success(fingerprint: fingerprint)
+                    } else {
+                        RelayHintsStore.shared.recordPhase2Save(fingerprint: fingerprint)
+                    }
                 case .failed(let error):
                     ErrorReporter.report(
                         error: error.localizedDescription,
@@ -3595,6 +3608,31 @@ final class ConnectionManager: ObservableObject {
         guard let alert = pendingKeyChangeAlert else { return }
         trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .unknown)
         pendingKeyChangeAlert = nil
+    }
+
+    // MARK: - Network Fingerprint
+
+    /// Returns a stable fingerprint for the current network based on en0/en1/bridge subnet.
+    private func currentNetworkFingerprint() -> String {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return "unknown" }
+        defer { freeifaddrs(ifaddr) }
+        for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let i = ptr.pointee
+            let name = String(cString: i.ifa_name)
+            guard name == "en0" || name == "en1" || name.hasPrefix("bridge"),
+                  i.ifa_addr.pointee.sa_family == UInt8(AF_INET) else { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            getnameinfo(i.ifa_addr, socklen_t(i.ifa_addr.pointee.sa_len),
+                        &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
+            let ip = String(cString: host)
+            let octets = ip.split(separator: ".")
+            guard octets.count == 4 else { continue }
+            let subnet = "\(octets[0]).\(octets[1]).\(octets[2]).0/24"
+            let gateway = "\(octets[0]).\(octets[1]).\(octets[2]).1"
+            return NetworkFingerprint.fingerprint(subnet: subnet, gateway: gateway)
+        }
+        return "unknown"
     }
 }
 
