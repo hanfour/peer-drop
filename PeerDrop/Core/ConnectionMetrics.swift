@@ -7,11 +7,13 @@ actor ConnectionMetrics {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ConnectionMetrics")
     private var buffer: [ConnectionMetric] = []
     private let flushThreshold: Int
+    private let maxBufferSize = 500
     private var remoteConfig: RemoteConfig = .default
 
     // Test-observable state (read via actor-isolated getters).
-    private(set) var lastFlushedCount: Int = 0
-    private(set) var lastFlushedMetric: ConnectionMetric?
+    private(set) var recordedCount: Int = 0
+    private(set) var lastRecordedMetric: ConnectionMetric?
+    private(set) var droppedCount: Int = 0  // overflow + sampling drops
 
     init(flushOnCount: Int = 50) {
         self.flushThreshold = flushOnCount
@@ -58,6 +60,11 @@ actor ConnectionMetrics {
         fileprivate var phase2Ms: Int?
         fileprivate var ipv6Gathered: Bool = false
         fileprivate var ipv6Connected: Bool = false
+        // NOTE: `finalized` is read non-atomically from deinit (which runs on the
+        // thread dropping the last reference). This is safe provided callers release
+        // their Token reference only from a context that has awaited the finalize
+        // call. If Tokens start being passed across async boundaries without this
+        // discipline, upgrade `finalized` to `OSAllocatedUnfairLock<Bool>` or similar.
         fileprivate var finalized: Bool = false
         // Invoked from deinit with a value-type snapshot — avoids retaining `self`.
         fileprivate var onDeinit: ((TokenSnapshot) -> Void)?
@@ -129,10 +136,17 @@ actor ConnectionMetrics {
 
     private func finalize(snapshot: TokenSnapshot, outcome: ConnectionMetric.Outcome, used: ConnectionMetric.CandidateType?) async {
         // Apply sampling + enabled gate BEFORE buffering.
-        guard remoteConfig.enabled else { return }
-        guard remoteConfig.sampleRate > 0 else { return }
+        guard remoteConfig.enabled else {
+            droppedCount += 1
+            return
+        }
+        guard remoteConfig.sampleRate > 0 else {
+            droppedCount += 1
+            return
+        }
         if remoteConfig.sampleRate < 1.0,
            Double.random(in: 0..<1) >= remoteConfig.sampleRate {
+            droppedCount += 1
             return
         }
 
@@ -164,18 +178,51 @@ actor ConnectionMetrics {
         )
 
         buffer.append(metric)
-        lastFlushedMetric = metric
-        lastFlushedCount += 1
+        if buffer.count > maxBufferSize {
+            let overflow = buffer.count - maxBufferSize
+            buffer.removeFirst(overflow)
+            droppedCount += overflow
+        }
+        lastRecordedMetric = metric
+        recordedCount += 1
         if buffer.count >= flushThreshold {
             await flush()
         }
     }
 
-    /// Stub — Task 2.3 will post the batch to the Worker.
+    /// Post buffered metrics to the Worker, one per request. Drops on any
+    /// non-success status — the design doc's "no queue" policy: an unreliable
+    /// device's telemetry loss is acceptable; a persistent on-device queue is not.
     func flush() async {
         let batch = buffer
         buffer.removeAll(keepingCapacity: true)
         guard !batch.isEmpty else { return }
-        // Placeholder — real implementation lands in Task 2.3.
+
+        let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+            ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
+        guard let url = URL(string: "\(baseURL)/debug/metric") else { return }
+        let apiKey = Bundle.main.object(forInfoDictionaryKey: "PeerDropWorkerAPIKey") as? String
+        guard let apiKey, !apiKey.isEmpty else {
+            logger.debug("Skipping flush: PeerDropWorkerAPIKey not set (e.g. unit-test or config missing)")
+            return
+        }
+        let encoder = ConnectionMetric.makeEncoder()
+
+        for metric in batch {
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+            req.timeoutInterval = 10
+            do {
+                req.httpBody = try encoder.encode(metric)
+                let (_, response) = try await URLSession.shared.data(for: req)
+                if let http = response as? HTTPURLResponse, http.statusCode != 201 {
+                    logger.debug("metric POST non-201: \(http.statusCode)")
+                }
+            } catch {
+                logger.debug("metric POST failed: \(error.localizedDescription)")
+            }
+        }
     }
 }
