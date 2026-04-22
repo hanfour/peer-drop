@@ -283,10 +283,27 @@ export default {
           iceServers: { urls: string[]; username: string; credential: string } | { urls: string[]; username: string; credential: string }[];
         };
 
-        // Cloudflare API returns iceServers as an object; normalize to array for iOS client
-        const iceServers = Array.isArray(turnData.iceServers)
+        // Cloudflare API returns iceServers as an object; normalize to array
+        const rawServers = Array.isArray(turnData.iceServers)
           ? turnData.iceServers
           : [turnData.iceServers];
+
+        // Extract credentials from the first TURN entry (all variants share the same creds)
+        const creds = rawServers[0];
+
+        // Reconstruct iceServers with STUN (no auth) + TURN over UDP, TCP, and TLS
+        const iceServers = [
+          { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
+          {
+            urls: [
+              "turn:turn.cloudflare.com:3478?transport=udp",
+              "turn:turn.cloudflare.com:3478?transport=tcp",
+              "turns:turn.cloudflare.com:5349?transport=tcp",
+            ],
+            username: creds.username,
+            credential: creds.credential,
+          },
+        ];
 
         return new Response(JSON.stringify({ iceServers, roomToken }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
