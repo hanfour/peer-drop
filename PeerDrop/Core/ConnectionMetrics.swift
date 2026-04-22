@@ -136,6 +136,14 @@ actor ConnectionMetrics {
         await finalize(snapshot: token.snapshot(), outcome: .failure(reason: reason), used: nil)
     }
 
+    func recordPhaseTime(_ token: Token, phase: Int, elapsedMs: Int) {
+        if phase == 1 {
+            token.phase1Ms = elapsedMs
+        } else {
+            token.phase2Ms = elapsedMs
+        }
+    }
+
     private func recordAbandoned(_ snapshot: TokenSnapshot) async {
         await finalize(snapshot: snapshot, outcome: .abandoned, used: nil)
     }

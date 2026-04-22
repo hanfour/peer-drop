@@ -2092,6 +2092,9 @@ final class ConnectionManager: ObservableObject {
         client.setup(iceServers: iceServers)
         // Joiner doesn't create data channel — it receives one from the offerer
 
+        let handshakeStart = Date()
+        var phase = 1  // 1 = prefer direct, 2 = accept relay, 3 = give up
+
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
             guard let self, self.connectionGeneration == generation else { return }
@@ -2177,11 +2180,14 @@ final class ConnectionManager: ObservableObject {
             Task { @MainActor in
                 switch state {
                 case .ready:
+                    let elapsedMs = Int(Date().timeIntervalSince(handshakeStart) * 1000)
                     signaling?.disconnect()
                     // DataChannelClient doesn't currently expose the selected
                     // candidate pair — record .relay as a best-effort default
                     // for the relay flow.
                     self.completeRelayConnection(transport: transport, roomCode: roomCode)
+                    // Record which phase connected
+                    await ConnectionMetrics.shared.recordPhaseTime(metricsToken, phase: phase, elapsedMs: elapsedMs)
                     await ConnectionMetrics.shared.recordConnected(
                         metricsToken,
                         used: .relay
@@ -2205,19 +2211,29 @@ final class ConnectionManager: ObservableObject {
             }
         }
 
-        // Timeout if negotiation doesn't complete in 30 seconds
+        // Phase 1 → 2 at 8s: direct connection window expires
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, self.connectionGeneration == generation else { return }
+            if case .requesting = self.state {
+                phase = 2
+                logger.info("Relay handshake phase 1 → 2 (direct not yet succeeded)")
+            }
+        }
+
+        // Phase 3 at 20s: give up
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
             guard let self, self.connectionGeneration == generation else { return }
             if case .requesting = self.state {
                 ErrorReporter.report(
-                    error: "Relay connection timed out",
+                    error: "Relay connection timed out (phase 3)",
                     context: "relay.joiner.timeout",
-                    extras: ["roomCode": roomCode, "step": "negotiationTimeout"]
+                    extras: ["roomCode": roomCode, "step": "phase3Timeout"]
                 )
                 await ConnectionMetrics.shared.recordFailure(
                     metricsToken,
-                    reason: "negotiationTimeout"
+                    reason: "phase3Timeout"
                 )
                 self.transition(to: .failed(reason: "Relay connection timed out"))
             }
