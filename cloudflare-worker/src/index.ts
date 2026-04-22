@@ -334,9 +334,8 @@ export default {
 
     // POST /debug/metric — ingest connection telemetry (API_KEY required)
     if (path === "/debug/metric" && request.method === "POST") {
-      if (!env.API_KEY || request.headers.get("X-API-Key") !== env.API_KEY) {
-        return jsonResponse({ error: "Unauthorized" }, 401);
-      }
+      const unauth = requireKey(request, env, "API_KEY");
+      if (unauth) return unauth;
       // Payload size limit: 4 KB
       const body = await request.text();
       if (body.length > 4 * 1024) {
@@ -378,6 +377,79 @@ export default {
         catch (e) { console.error("Bad config:metrics JSON, serving default:", e); }
       }
       return jsonResponse(parsed);
+    }
+
+    // GET /debug/metrics/stats?range=24h|7d|30d — aggregate metrics (ANALYTICS_KEY required)
+    if (path === "/debug/metrics/stats" && request.method === "GET") {
+      const unauth = requireKey(request, env, "ANALYTICS_KEY");
+      if (unauth) return unauth;
+
+      const range = url.searchParams.get("range") || "24h";
+      const daysBack = range === "7d" ? 7 : range === "30d" ? 30 : 1;
+      const prefixes: string[] = [];
+      for (let i = 0; i < daysBack; i++) {
+        const d = new Date(Date.now() - i * 86400_000);
+        prefixes.push(`metric:${d.toISOString().slice(0, 10)}:`);
+      }
+      // Collect up to 5000 metrics across the window.
+      const metrics: Record<string, unknown>[] = [];
+      for (const prefix of prefixes) {
+        const list = await env.METRICS.list({ prefix, limit: 1000 });
+        for (const key of list.keys) {
+          if (metrics.length >= 5000) break;
+          const raw = await env.METRICS.get(key.name);
+          if (raw) {
+            try { metrics.push(JSON.parse(raw)); }
+            catch { /* skip corrupt entry */ }
+          }
+        }
+        if (metrics.length >= 5000) break;
+      }
+
+      // Aggregate
+      const byType: Record<string, { success: number; failure: number; abandoned: number; durations: number[] }> = {};
+      const candidateUse: Record<string, number> = {};
+      const failureReasons: Record<string, number> = {};
+      for (const m of metrics) {
+        const t = String(m["connectionType"] ?? "unknown");
+        byType[t] ??= { success: 0, failure: 0, abandoned: 0, durations: [] };
+        const outcomeField = m["outcome"];
+        const outcomeType = typeof outcomeField === "object" && outcomeField !== null
+          ? (outcomeField as Record<string, unknown>)["type"]
+          : outcomeField;
+        if (outcomeType === "success") byType[t].success++;
+        else if (outcomeType === "abandoned") byType[t].abandoned++;
+        else byType[t].failure++;
+        if (typeof m["durationMs"] === "number") byType[t].durations.push(m["durationMs"] as number);
+        const iceStats = m["iceStats"];
+        const used = typeof iceStats === "object" && iceStats !== null
+          ? (iceStats as Record<string, unknown>)["candidatesUsed"]
+          : undefined;
+        if (typeof used === "string") candidateUse[used] = (candidateUse[used] ?? 0) + 1;
+        const reason = typeof outcomeField === "object" && outcomeField !== null
+          ? (outcomeField as Record<string, unknown>)["reason"]
+          : null;
+        if (typeof reason === "string" && reason.length > 0) {
+          failureReasons[reason] = (failureReasons[reason] ?? 0) + 1;
+        }
+      }
+      const stats = {
+        range,
+        total: metrics.length,
+        byType: Object.fromEntries(Object.entries(byType).map(([k, v]) => {
+          const d = v.durations.slice().sort((a, b) => a - b);
+          return [k, {
+            success: v.success,
+            failure: v.failure,
+            abandoned: v.abandoned,
+            p50: d.length ? d[Math.floor(d.length * 0.5)] : null,
+            p95: d.length ? d[Math.floor(d.length * 0.95)] : null,
+          }];
+        })),
+        candidateUse,
+        failureReasons,
+      };
+      return jsonResponse(stats);
     }
 
     // GET /debug/reports — fetch recent error reports (requires API key)
@@ -721,6 +793,18 @@ function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Check `X-API-Key` header against the named secret in env.
+ * Returns null if authorized, or a 401 Response to return immediately.
+ */
+function requireKey(request: Request, env: Env, keyName: "API_KEY" | "ANALYTICS_KEY"): Response | null {
+  const expected = env[keyName];
+  if (!expected || request.headers.get("X-API-Key") !== expected) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+  return null;
 }
 
 // Proof-of-Work verification (matches client-side SHA256 hashcash)
