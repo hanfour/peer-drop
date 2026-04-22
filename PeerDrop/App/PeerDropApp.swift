@@ -35,6 +35,13 @@ struct PeerDropApp: App {
             }
             .task {
                 await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                await ConnectionMetrics.shared.fetchRemoteConfig()
+                // Re-fetch every 6 hours while foregrounded.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 6 * 3600 * 1_000_000_000)
+                    if Task.isCancelled { break }
+                    await ConnectionMetrics.shared.fetchRemoteConfig()
+                }
             }
             .onAppear {
                 // Wire CallKit into ConnectionManager

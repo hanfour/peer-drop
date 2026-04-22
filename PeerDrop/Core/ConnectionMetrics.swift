@@ -4,6 +4,8 @@ import os.log
 actor ConnectionMetrics {
     static let shared = ConnectionMetrics()
 
+    private static let configCacheKey = "peerDropMetricsConfig"
+
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ConnectionMetrics")
     private var buffer: [ConnectionMetric] = []
     private let flushThreshold: Int
@@ -18,6 +20,11 @@ actor ConnectionMetrics {
 
     init(flushOnCount: Int = 50) {
         self.flushThreshold = flushOnCount
+        // Load cached config from previous session so cold starts honor the last-known state.
+        if let cached = UserDefaults.standard.data(forKey: Self.configCacheKey),
+           let config = try? JSONDecoder().decode(RemoteConfig.self, from: cached) {
+            self.remoteConfig = config
+        }
     }
 
     var pendingCount: Int { buffer.count }
@@ -131,6 +138,33 @@ actor ConnectionMetrics {
 
     func updateRemoteConfig(_ cfg: RemoteConfig) {
         remoteConfig = cfg
+    }
+
+    /// Fetch the current remote config from the Worker. On success, update the
+    /// in-memory value AND persist to UserDefaults so cold starts after network
+    /// loss still honor the last good state. On failure, keep whatever is cached.
+    func fetchRemoteConfig() async {
+        let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+            ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
+        guard let url = URL(string: "\(baseURL)/config/metrics") else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                logger.debug("metrics config fetch non-200: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                return
+            }
+            let cfg = try JSONDecoder().decode(RemoteConfig.self, from: data)
+            self.remoteConfig = cfg
+            if let encoded = try? JSONEncoder().encode(cfg) {
+                UserDefaults.standard.set(encoded, forKey: Self.configCacheKey)
+            }
+            logger.info("metrics config refreshed: sampleRate=\(cfg.sampleRate) enabled=\(cfg.enabled)")
+        } catch {
+            logger.debug("metrics config fetch failed: \(error.localizedDescription)")
+            // Keep the cached value — do not reset to default.
+        }
     }
 
     // MARK: - Private
