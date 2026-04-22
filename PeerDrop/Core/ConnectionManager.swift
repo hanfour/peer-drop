@@ -3620,10 +3620,11 @@ final class ConnectionManager: ObservableObject {
         for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let i = ptr.pointee
             let name = String(cString: i.ifa_name)
+            guard let addr = i.ifa_addr else { continue }
             guard name == "en0" || name == "en1" || name.hasPrefix("bridge"),
-                  i.ifa_addr.pointee.sa_family == UInt8(AF_INET) else { continue }
+                  addr.pointee.sa_family == UInt8(AF_INET) else { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            getnameinfo(i.ifa_addr, socklen_t(i.ifa_addr.pointee.sa_len),
+            getnameinfo(addr, socklen_t(addr.pointee.sa_len),
                         &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
             let ip = String(cString: host)
             let octets = ip.split(separator: ".")
