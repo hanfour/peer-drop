@@ -14,6 +14,7 @@ actor ConnectionMetrics {
     private(set) var recordedCount: Int = 0
     private(set) var lastRecordedMetric: ConnectionMetric?
     private(set) var droppedCount: Int = 0  // overflow + sampling drops
+    private var didWarnFlushError: Bool = false
 
     init(flushOnCount: Int = 50) {
         self.flushThreshold = flushOnCount
@@ -209,19 +210,29 @@ actor ConnectionMetrics {
         let encoder = ConnectionMetric.makeEncoder()
 
         for metric in batch {
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
-            req.timeoutInterval = 10
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+            request.timeoutInterval = 10
             do {
-                req.httpBody = try encoder.encode(metric)
-                let (_, response) = try await URLSession.shared.data(for: req)
+                request.httpBody = try encoder.encode(metric)
+                let (_, response) = try await URLSession.shared.data(for: request)
                 if let http = response as? HTTPURLResponse, http.statusCode != 201 {
-                    logger.debug("metric POST non-201: \(http.statusCode)")
+                    if !didWarnFlushError {
+                        didWarnFlushError = true
+                        logger.warning("First metric POST non-201: \(http.statusCode). Subsequent errors suppressed to .debug.")
+                    } else {
+                        logger.debug("metric POST non-201: \(http.statusCode)")
+                    }
                 }
             } catch {
-                logger.debug("metric POST failed: \(error.localizedDescription)")
+                if !didWarnFlushError {
+                    didWarnFlushError = true
+                    logger.warning("First metric POST failed: \(error.localizedDescription). Subsequent errors suppressed to .debug.")
+                } else {
+                    logger.debug("metric POST failed: \(error.localizedDescription)")
+                }
             }
         }
     }
