@@ -376,10 +376,19 @@ export default {
       }
       const dateKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const metricId = `metric:${dateKey}:${crypto.randomUUID()}`;
+      // Store aggregation-friendly summary in KV metadata so stats endpoint
+      // can aggregate from list() results without individual get() calls.
+      const summary = {
+        ct: String(parsed["connectionType"] ?? "unknown"),
+        o: String((parsed["outcome"] as any)?.type ?? parsed["outcome"] ?? "unknown"),
+        d: typeof parsed["durationMs"] === "number" ? parsed["durationMs"] : null,
+        cu: (parsed["iceStats"] as any)?.candidatesUsed ?? null,
+        fr: (parsed["outcome"] as any)?.reason ?? null,
+      };
       await env.METRICS.put(metricId, JSON.stringify({
         ...parsed,
         ingestedAt: new Date().toISOString(),
-      }), { expirationTtl: 14 * 86400 });
+      }), { expirationTtl: 14 * 86400, metadata: summary });
       return jsonResponse({ ok: true, id: metricId }, 201);
     }
 
@@ -415,73 +424,83 @@ export default {
         prefixes.push(`metric:${d.toISOString().slice(0, 10)}:`);
       }
 
-      const metrics: Record<string, unknown>[] = [];
+      // Collect metrics from list metadata — no individual gets needed.
+      // Legacy entries without metadata are fetched individually (fallback).
+      type MetaSummary = { ct: string; o: string; d: number | null; cu: string | null; fr: string | null };
+      const entries: MetaSummary[] = [];
       let keysScanned = 0;
       let truncated = false;
+      let legacyFetches = 0;
 
       try {
         outer: for (const prefix of prefixes) {
           let cursor: string | undefined;
-          while (true) {
+          do {
             const list = await env.METRICS.list({ prefix, limit: 1000, cursor });
             for (const key of list.keys) {
               if (!key.name.startsWith(prefix)) continue; // defence-in-depth
               keysScanned++;
-              if (metrics.length >= METRIC_CAP) { truncated = true; break outer; }
-              const raw = await env.METRICS.get(key.name);
-              if (!raw) continue;
-              try { metrics.push(JSON.parse(raw)); }
-              catch { /* skip corrupt entry */ }
+              if (entries.length >= METRIC_CAP) { truncated = true; break outer; }
+              const meta = key.metadata as MetaSummary | null | undefined;
+              if (meta && typeof meta.ct === "string") {
+                entries.push(meta);
+              } else {
+                // Fallback: legacy entry written before metadata was added
+                legacyFetches++;
+                const raw = await env.METRICS.get(key.name);
+                if (!raw) continue;
+                try {
+                  const m = JSON.parse(raw) as Record<string, unknown>;
+                  const outcomeField = m["outcome"];
+                  entries.push({
+                    ct: String(m["connectionType"] ?? "unknown"),
+                    o: String(typeof outcomeField === "object" && outcomeField !== null
+                      ? (outcomeField as any)["type"] ?? "unknown"
+                      : outcomeField ?? "unknown"),
+                    d: typeof m["durationMs"] === "number" ? m["durationMs"] as number : null,
+                    cu: (typeof m["iceStats"] === "object" && m["iceStats"] !== null
+                      ? (m["iceStats"] as any)["candidatesUsed"] : null) ?? null,
+                    fr: (typeof outcomeField === "object" && outcomeField !== null
+                      ? (outcomeField as any)["reason"] : null) ?? null,
+                  });
+                } catch { /* skip corrupt entry */ }
+              }
             }
-            if (list.list_complete || !list.cursor) break;
-            cursor = list.cursor;
-            if (metrics.length >= METRIC_CAP) { truncated = true; break outer; }
-          }
+            cursor = list.list_complete ? undefined : list.cursor;
+            if (entries.length >= METRIC_CAP) { truncated = true; break outer; }
+          } while (cursor);
         }
       } catch (e) {
         return jsonResponse({
           error: "aggregation_failed",
           detail: String(e).slice(0, 200),
-          partial: metrics.length,
+          partial: entries.length,
         }, 503);
       }
 
-      // Aggregate — identical to the pre-fix version.
+      // Aggregate from metadata summaries.
       // Response contract: stats.byType[connectionType] = { success, failure, abandoned, p50, p95 }
       // Keep keys stable — consumed by ops dashboard.
       const byType: Record<string, { success: number; failure: number; abandoned: number; durations: number[] }> = {};
       const candidateUse: Record<string, number> = {};
       const failureReasons: Record<string, number> = {};
-      for (const m of metrics) {
-        const tRaw = m["connectionType"];
-        const t = typeof tRaw === "string" && tRaw.length > 0 ? tRaw : "unknown";
+      for (const m of entries) {
+        const t = m.ct || "unknown";
         byType[t] ??= { success: 0, failure: 0, abandoned: 0, durations: [] };
-        const outcomeField = m["outcome"];
-        const outcomeType = typeof outcomeField === "object" && outcomeField !== null
-          ? (outcomeField as Record<string, unknown>)["type"]
-          : outcomeField;
-        if (outcomeType === "success") byType[t].success++;
-        else if (outcomeType === "abandoned") byType[t].abandoned++;
+        if (m.o === "success") byType[t].success++;
+        else if (m.o === "abandoned") byType[t].abandoned++;
         else byType[t].failure++;
-        if (typeof m["durationMs"] === "number") byType[t].durations.push(m["durationMs"] as number);
-        const iceStats = m["iceStats"];
-        const used = typeof iceStats === "object" && iceStats !== null
-          ? (iceStats as Record<string, unknown>)["candidatesUsed"]
-          : undefined;
-        if (typeof used === "string") candidateUse[used] = (candidateUse[used] ?? 0) + 1;
-        const reason = typeof outcomeField === "object" && outcomeField !== null
-          ? (outcomeField as Record<string, unknown>)["reason"]
-          : null;
-        if (typeof reason === "string" && reason.length > 0) {
-          failureReasons[reason] = (failureReasons[reason] ?? 0) + 1;
-        }
+        if (typeof m.d === "number") byType[t].durations.push(m.d);
+        if (m.cu) candidateUse[m.cu] = (candidateUse[m.cu] ?? 0) + 1;
+        if (m.fr) failureReasons[m.fr] = (failureReasons[m.fr] ?? 0) + 1;
       }
 
       const stats = {
         range,
-        total: metrics.length,
+        total: entries.length,
         keysScanned,
         truncated,
+        legacyFetches,
         byType: Object.fromEntries(Object.entries(byType).map(([k, v]) => {
           const d = v.durations.slice().sort((a, b) => a - b);
           return [k, {
