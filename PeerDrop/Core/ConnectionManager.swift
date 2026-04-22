@@ -1728,8 +1728,15 @@ final class ConnectionManager: ObservableObject {
     ///   `candidate:xxx 1 udp 2113937151 192.168.1.5 54321 typ host` (v4)
     ///   `candidate:xxx 1 udp 2113937151 fe80::1 54321 typ host`      (v6)
     fileprivate static func isIPv6Candidate(sdp: String) -> Bool {
+        // IPv6 literals always contain "::" when zero-compressed, which every
+        // RFC 4291 host does. WebRTC never emits fully-expanded form.
         if sdp.contains("::") { return true }
-        return sdp.components(separatedBy: " ").contains { token in
+        // Fallback: scan tokens AFTER the "candidate:<foundation>" prefix for
+        // an address token that looks v6 (has colons, no dots, length ≥ 3).
+        // `dropFirst()` skips the foundation token which would otherwise
+        // false-positive (e.g. "candidate:842163049").
+        let tokens = sdp.components(separatedBy: " ").dropFirst()
+        return tokens.contains { token in
             token.contains(":") && !token.contains(".") && token.count >= 3
         }
     }
@@ -1869,11 +1876,11 @@ final class ConnectionManager: ObservableObject {
                             // DataChannelClient doesn't currently expose the selected
                             // candidate pair — record .relay as a best-effort default
                             // for the relay flow.
+                            self.completeRelayConnection(transport: transport, roomCode: roomCode)
                             await ConnectionMetrics.shared.recordConnected(
                                 metricsToken,
                                 used: .relay
                             )
-                            self.completeRelayConnection(transport: transport, roomCode: roomCode)
                         case .failed(let error):
                             ErrorReporter.report(
                                 error: error.localizedDescription,
@@ -2174,11 +2181,11 @@ final class ConnectionManager: ObservableObject {
                     // DataChannelClient doesn't currently expose the selected
                     // candidate pair — record .relay as a best-effort default
                     // for the relay flow.
+                    self.completeRelayConnection(transport: transport, roomCode: roomCode)
                     await ConnectionMetrics.shared.recordConnected(
                         metricsToken,
                         used: .relay
                     )
-                    self.completeRelayConnection(transport: transport, roomCode: roomCode)
                 case .failed(let error):
                     ErrorReporter.report(
                         error: error.localizedDescription,
