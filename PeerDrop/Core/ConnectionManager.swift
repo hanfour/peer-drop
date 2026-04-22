@@ -2101,6 +2101,8 @@ final class ConnectionManager: ObservableObject {
 
         let handshakeStart = Date()
         var phase = 1  // 1 = prefer direct, 2 = accept relay, 3 = give up
+        let phase1DeadlineNs: UInt64 = 8_000_000_000   // 8s — direct connection window
+        let phase3TimeoutNs: UInt64 = 20_000_000_000   // 20s — give up entirely
 
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
@@ -2226,7 +2228,7 @@ final class ConnectionManager: ObservableObject {
 
         // Phase 1 → 2 at 8s: direct connection window expires
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            try? await Task.sleep(nanoseconds: phase1DeadlineNs)
             guard let self, self.connectionGeneration == generation else { return }
             if case .requesting = self.state {
                 phase = 2
@@ -2236,7 +2238,7 @@ final class ConnectionManager: ObservableObject {
 
         // Phase 3 at 20s: give up
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            try? await Task.sleep(nanoseconds: phase3TimeoutNs)
             guard let self, self.connectionGeneration == generation else { return }
             if case .requesting = self.state {
                 ErrorReporter.report(
