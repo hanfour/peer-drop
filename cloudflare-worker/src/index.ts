@@ -13,11 +13,15 @@
 import { sendAPNs } from "./apns";
 
 export interface Env {
+  // KV
   ROOMS: KVNamespace;
   V2_STORE: KVNamespace;
+  METRICS: KVNamespace;
+  // Durable Objects
   SIGNALING_ROOM: DurableObjectNamespace;
   PREKEY_STORE: DurableObjectNamespace;
   DEVICE_INBOX: DurableObjectNamespace;
+  // Secrets
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
@@ -25,7 +29,6 @@ export interface Env {
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
-  METRICS: KVNamespace;
   ANALYTICS_KEY: string;
 }
 
@@ -327,6 +330,28 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+    }
+
+    // POST /debug/metric — ingest connection telemetry (API_KEY required)
+    if (path === "/debug/metric" && request.method === "POST") {
+      if (!env.API_KEY || request.headers.get("X-API-Key") !== env.API_KEY) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+      // Payload size limit: 4 KB
+      const body = await request.text();
+      if (body.length > 4 * 1024) {
+        return jsonResponse({ error: "Payload too large", size: body.length }, 413);
+      }
+      let parsed: Record<string, unknown>;
+      try { parsed = JSON.parse(body); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+      const dateKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const metricId = `metric:${dateKey}:${crypto.randomUUID()}`;
+      await env.METRICS.put(metricId, JSON.stringify({
+        ...parsed,
+        ingestedAt: new Date().toISOString(),
+        ip: clientIP,
+      }), { expirationTtl: 14 * 86400 });
+      return jsonResponse({ ok: true, id: metricId }, 201);
     }
 
     // GET /debug/reports — fetch recent error reports (requires API key)

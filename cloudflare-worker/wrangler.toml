@@ -9,6 +9,7 @@ compatibility_date = "2024-01-01"
 # Set APNS_KEY_ID via `wrangler secret put APNS_KEY_ID`
 # Set APNS_TEAM_ID via `wrangler secret put APNS_TEAM_ID`
 # Set APNS_BUNDLE_ID via `wrangler secret put APNS_BUNDLE_ID`
+# Set ANALYTICS_KEY via `wrangler secret put ANALYTICS_KEY`
 
 [[kv_namespaces]]
 binding = "ROOMS"
