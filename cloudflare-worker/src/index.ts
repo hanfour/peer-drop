@@ -367,10 +367,16 @@ export default {
       return jsonResponse({ ok: true, id: metricId }, 201);
     }
 
-    // GET /config/metrics — remote circuit breaker (public, no auth)
+    // GET /config/metrics — remote circuit breaker (public, no auth).
+    // Fail-open: malformed KV JSON falls through to the default so clients
+    // keep polling a usable shape even if an operator botches `wrangler kv put`.
     if (path === "/config/metrics" && request.method === "GET") {
       const raw = await env.METRICS.get("config:metrics");
-      const parsed = raw ? JSON.parse(raw) : { sampleRate: 1.0, enabled: true };
+      let parsed: { sampleRate: number; enabled: boolean } = { sampleRate: 1.0, enabled: true };
+      if (raw) {
+        try { parsed = JSON.parse(raw); }
+        catch (e) { console.error("Bad config:metrics JSON, serving default:", e); }
+      }
       return jsonResponse(parsed);
     }
 
