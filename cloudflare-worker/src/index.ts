@@ -340,16 +340,29 @@ export default {
       // Payload size limit: 4 KB
       const body = await request.text();
       if (body.length > 4 * 1024) {
-        return jsonResponse({ error: "Payload too large", size: body.length }, 413);
+        return jsonResponse({ error: "Payload too large" }, 413);
       }
       let parsed: Record<string, unknown>;
-      try { parsed = JSON.parse(body); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+      try {
+        const raw = JSON.parse(body) as unknown;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          return jsonResponse({ error: "Expected JSON object" }, 400);
+        }
+        parsed = raw as Record<string, unknown>;
+      } catch {
+        return jsonResponse({ error: "Invalid JSON" }, 400);
+      }
+      // Require expected metric fields so leaked API_KEY can't flood KV with arbitrary blobs.
+      if (typeof parsed["connectionType"] !== "string" ||
+          typeof parsed["role"] !== "string" ||
+          typeof parsed["outcome"] !== "object" && typeof parsed["outcome"] !== "string") {
+        return jsonResponse({ error: "Missing required metric fields" }, 400);
+      }
       const dateKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const metricId = `metric:${dateKey}:${crypto.randomUUID()}`;
       await env.METRICS.put(metricId, JSON.stringify({
         ...parsed,
         ingestedAt: new Date().toISOString(),
-        ip: clientIP,
       }), { expirationTtl: 14 * 86400 });
       return jsonResponse({ ok: true, id: metricId }, 201);
     }
