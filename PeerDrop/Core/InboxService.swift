@@ -8,6 +8,10 @@ final class InboxService: NSObject, ObservableObject {
     private var webSocketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private var session: URLSession?
+    private var reconnectAttempt = 0
+    private static let maxReconnectDelay: UInt64 = 30_000_000_000 // 30s
 
     @Published var isConnected: Bool = false
     @Published var receivedInvite: RelayInvite?
@@ -19,29 +23,46 @@ final class InboxService: NSObject, ObservableObject {
 
     func connect() {
         disconnect()
+        reconnectAttempt = 0
+        doConnect()
+    }
+
+    private func doConnect() {
         let base = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
         guard var components = URLComponents(string: base) else { return }
         components.scheme = components.scheme == "https" ? "wss" : "ws"
         components.path = "/v2/inbox/\(deviceId)"
+
+        // Add API key as query param (WS upgrade can't use custom headers in URLSession)
+        let apiKey = UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey")
+            ?? WorkerSignaling.bundledAPIKey
+        if let apiKey {
+            components.queryItems = [URLQueryItem(name: "apiKey", value: apiKey)]
+        }
+
         guard let url = components.url else { return }
 
-        let config = URLSessionConfiguration.default
-        let session = URLSession(configuration: config)
-        let task = session.webSocketTask(with: url)
+        if session == nil {
+            session = URLSession(configuration: .default)
+        }
+        let task = session!.webSocketTask(with: url)
         webSocketTask = task
         task.resume()
-        isConnected = true
-        logger.info("Inbox WS connecting for device: \(self.deviceId.prefix(8))")
+        // isConnected stays false until first successful receive
+        logger.info("Inbox WS connecting for device: \(self.deviceId.prefix(8)) (attempt \(self.reconnectAttempt))")
         startReceive()
         startPing()
     }
 
     func disconnect() {
+        reconnectTask?.cancel(); reconnectTask = nil
         pingTask?.cancel(); pingTask = nil
         receiveTask?.cancel(); receiveTask = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
+        session?.invalidateAndCancel()
+        session = nil
         isConnected = false
     }
 
@@ -70,6 +91,13 @@ final class InboxService: NSObject, ObservableObject {
                 guard let self, let task = await self.webSocketTask else { break }
                 do {
                     let message = try await task.receive()
+                    // First successful receive confirms connection
+                    await MainActor.run {
+                        if !self.isConnected {
+                            self.isConnected = true
+                            self.reconnectAttempt = 0
+                        }
+                    }
                     let text: String?
                     switch message {
                     case .string(let s): text = s
@@ -83,10 +111,28 @@ final class InboxService: NSObject, ObservableObject {
                     await MainActor.run {
                         self.logger.info("Inbox WS closed: \(error.localizedDescription)")
                         self.isConnected = false
+                        self.scheduleReconnect()
                     }
                     break
                 }
             }
+        }
+    }
+
+    private func scheduleReconnect() {
+        reconnectTask?.cancel()
+        let attempt = reconnectAttempt
+        reconnectAttempt += 1
+
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s max
+        let baseDelay: UInt64 = 1_000_000_000
+        let delay = min(baseDelay * (1 << UInt64(min(attempt, 5))), Self.maxReconnectDelay)
+
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.logger.info("Inbox WS reconnecting (attempt \(self.reconnectAttempt))")
+            self.doConnect()
         }
     }
 

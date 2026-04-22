@@ -5,6 +5,11 @@ compatibility_date = "2024-01-01"
 [vars]
 # Set TURN_KEY_ID via `wrangler secret put TURN_KEY_ID`
 # Set TURN_API_TOKEN via `wrangler secret put TURN_API_TOKEN`
+# Set APNS_KEY_P8 via `cat AuthKey.p8 | wrangler secret put APNS_KEY_P8`
+# Set APNS_KEY_ID via `wrangler secret put APNS_KEY_ID`
+# Set APNS_TEAM_ID via `wrangler secret put APNS_TEAM_ID`
+# Set APNS_BUNDLE_ID via `wrangler secret put APNS_BUNDLE_ID`
+# Set ANALYTICS_KEY via `wrangler secret put ANALYTICS_KEY`
 
 [[kv_namespaces]]
 binding = "ROOMS"
@@ -13,6 +18,10 @@ id = "376d9f22d4c743bfb1509b814087192c"
 [[kv_namespaces]]
 binding = "V2_STORE"
 id = "9968f53e396f441da9e9fa419285ed68"
+
+[[kv_namespaces]]
+binding = "METRICS"
+id = "d49e0db6cc5b4dc3b17678937cb11233"
 
 [[durable_objects.bindings]]
 name = "SIGNALING_ROOM"

@@ -1713,6 +1713,34 @@ final class ConnectionManager: ObservableObject {
     private var inProgressInviteRoomCodes: [String: Date] = [:]
     private let inviteDedupTTL: TimeInterval = 60
 
+    /// Parse the ICE candidate `typ` attribute from an SDP candidate line.
+    /// Unknown types fall back to `.prflx` (peer-reflexive) — the safest default
+    /// because prflx has no associated gather-order semantics in the metric.
+    fileprivate static func parseCandidateType(from sdp: String) -> ConnectionMetric.CandidateType {
+        if sdp.contains("typ host") { return .host }
+        if sdp.contains("typ srflx") { return .srflx }
+        if sdp.contains("typ relay") { return .relay }
+        return .prflx
+    }
+
+    /// Heuristic IPv6 detection for an ICE candidate SDP line.
+    /// Candidate lines look like:
+    ///   `candidate:xxx 1 udp 2113937151 192.168.1.5 54321 typ host` (v4)
+    ///   `candidate:xxx 1 udp 2113937151 fe80::1 54321 typ host`      (v6)
+    fileprivate static func isIPv6Candidate(sdp: String) -> Bool {
+        // IPv6 literals always contain "::" when zero-compressed, which every
+        // RFC 4291 host does. WebRTC never emits fully-expanded form.
+        if sdp.contains("::") { return true }
+        // Fallback: scan tokens AFTER the "candidate:<foundation>" prefix for
+        // an address token that looks v6 (has colons, no dots, length ≥ 3).
+        // `dropFirst()` skips the foundation token which would otherwise
+        // false-positive (e.g. "candidate:842163049").
+        let tokens = sdp.components(separatedBy: " ").dropFirst()
+        return tokens.contains { token in
+            token.contains(":") && !token.contains(".") && token.count >= 3
+        }
+    }
+
     /// Start a relay connection as the room creator (offerer).
     func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
         logger.info("Starting relay as creator for room: \(roomCode)")
@@ -1732,19 +1760,23 @@ final class ConnectionManager: ObservableObject {
         signaling.joinRoom(code: roomCode, token: roomToken)
 
         Task {
+            let metricsToken = await ConnectionMetrics.shared.begin(
+                type: .relayWorker,
+                role: .initiator
+            )
             do {
                 // Fetch ICE/TURN credentials in parallel with WebSocket join
                 let iceResult = try? await signaling.requestICECredentials(roomCode: roomCode)
 
                 // Set up DataChannelClient
                 let client = DataChannelClient()
-                let iceServers: [RTCIceServer]
+                let creatorConfig: RTCConfiguration
                 if let creds = iceResult?.credentials {
-                    iceServers = ICEConfigurationProvider.iceServers(from: creds)
+                    creatorConfig = ICEConfigurationProvider.configuration(with: creds)
                 } else {
-                    iceServers = ICEConfigurationProvider.stunServers
+                    creatorConfig = ICEConfigurationProvider.defaultConfiguration()
                 }
-                client.setup(iceServers: iceServers)
+                client.setup(with: creatorConfig)
                 guard client.createDataChannel() != nil else {
                     throw DataChannelError.notInitialized
                 }
@@ -1753,12 +1785,25 @@ final class ConnectionManager: ObservableObject {
                 let offer = try await client.createOffer()
 
                 // Exchange ICE candidates (must be set before sending offer)
+                var iceOrder = 0
                 client.onICECandidate = { [weak signaling] candidate in
                     signaling?.sendICECandidate(
                         sdp: candidate.sdp,
                         sdpMid: candidate.sdpMid,
                         sdpMLineIndex: candidate.sdpMLineIndex
                     )
+                    iceOrder += 1
+                    let order = iceOrder
+                    let candType = ConnectionManager.parseCandidateType(from: candidate.sdp)
+                    let isV6 = ConnectionManager.isIPv6Candidate(sdp: candidate.sdp)
+                    Task {
+                        await ConnectionMetrics.shared.recordICEGather(
+                            metricsToken,
+                            candidate: candType,
+                            order: order,
+                            isIPv6: isV6
+                        )
+                    }
                 }
 
                 signaling.onICECandidate = { sdp, sdpMid, sdpMLineIndex in
@@ -1786,6 +1831,10 @@ final class ConnectionManager: ObservableObject {
                                 error: error.localizedDescription,
                                 context: "relay.creator.sdpAnswer",
                                 extras: ["roomCode": roomCode, "step": "setRemoteSDP"])
+                            await ConnectionMetrics.shared.recordFailure(
+                                metricsToken,
+                                reason: "sdpAnswer: \(error.localizedDescription)"
+                            )
                         }
                     }
                 }
@@ -1804,6 +1853,12 @@ final class ConnectionManager: ObservableObject {
                             "step": "webSocketSignaling",
                         ]
                     )
+                    Task {
+                        await ConnectionMetrics.shared.recordFailure(
+                            metricsToken,
+                            reason: "webSocket: \(nsError.localizedDescription)"
+                        )
+                    }
                     Task { @MainActor in
                         self.transition(to: .failed(reason: error.localizedDescription))
                     }
@@ -1818,12 +1873,23 @@ final class ConnectionManager: ObservableObject {
                         switch state {
                         case .ready:
                             signaling?.disconnect()
+                            // DataChannelClient doesn't currently expose the selected
+                            // candidate pair — record .relay as a best-effort default
+                            // for the relay flow.
                             self.completeRelayConnection(transport: transport, roomCode: roomCode)
+                            await ConnectionMetrics.shared.recordConnected(
+                                metricsToken,
+                                used: .relay
+                            )
                         case .failed(let error):
                             ErrorReporter.report(
                                 error: error.localizedDescription,
                                 context: "relay.creator.dataChannel",
                                 extras: ["roomCode": roomCode, "step": "dataChannelTransport"]
+                            )
+                            await ConnectionMetrics.shared.recordFailure(
+                                metricsToken,
+                                reason: "dataChannel: \(error.localizedDescription)"
                             )
                             self.transition(to: .failed(reason: error.localizedDescription))
                         case .cancelled:
@@ -1844,6 +1910,10 @@ final class ConnectionManager: ObservableObject {
                             context: "relay.creator.timeout",
                             extras: ["roomCode": roomCode, "step": "negotiationTimeout"]
                         )
+                        await ConnectionMetrics.shared.recordFailure(
+                            metricsToken,
+                            reason: "negotiationTimeout"
+                        )
                         self.transition(to: .failed(reason: "Relay connection timed out"))
                     }
                 }
@@ -1860,6 +1930,10 @@ final class ConnectionManager: ObservableObject {
                         "step": "creatorSetup",
                     ]
                 )
+                await ConnectionMetrics.shared.recordFailure(
+                    metricsToken,
+                    reason: "creatorSetup: \(error.localizedDescription)"
+                )
                 transition(to: .failed(reason: error.localizedDescription))
             }
         }
@@ -1874,6 +1948,11 @@ final class ConnectionManager: ObservableObject {
 
         // Force state to .requesting via valid path, handling any current state
         forceTransitionToRequesting()
+
+        let metricsToken = await ConnectionMetrics.shared.begin(
+            type: .relayWorker,
+            role: .joiner
+        )
 
         // Get ICE/TURN credentials + room token (fallback to STUN if TURN unavailable)
         var iceResult: WorkerSignaling.ICEResult?
@@ -1901,6 +1980,10 @@ final class ConnectionManager: ObservableObject {
         guard iceResult?.roomToken != nil else {
             let detail = iceError?.localizedDescription ?? "No room token received"
             logger.error("No room token for room \(roomCode): \(detail)")
+            await ConnectionMetrics.shared.recordFailure(
+                metricsToken,
+                reason: "iceRequest: \(detail)"
+            )
             transition(to: .failed(reason: "Relay failed: \(detail) (room: \(roomCode))"))
             return
         }
@@ -1912,7 +1995,8 @@ final class ConnectionManager: ObservableObject {
             roomCode: roomCode,
             signaling: signaling,
             iceResult: iceResult,
-            generation: generation
+            generation: generation,
+            metricsToken: metricsToken
         )
     }
 
@@ -1925,6 +2009,11 @@ final class ConnectionManager: ObservableObject {
         connectionGeneration = generation
         forceTransitionToRequesting()
 
+        let metricsToken = await ConnectionMetrics.shared.begin(
+            type: .relayWorker,
+            role: .joiner
+        )
+
         // Open WebSocket FIRST with the invite-provided token (no race).
         signaling.joinRoom(code: roomCode, token: roomToken)
 
@@ -1935,13 +2024,22 @@ final class ConnectionManager: ObservableObject {
             roomCode: roomCode,
             signaling: signaling,
             iceResult: iceResult,
-            generation: generation
+            generation: generation,
+            metricsToken: metricsToken
         )
     }
+
+    /// Stores the current invite-accept task so it can be cancelled if superseded.
+    private var activeInviteTask: Task<Void, Never>?
 
     /// Accept a relay invite — creates signaling and joins as the answerer.
     /// Dedups concurrent delivery from WebSocket inbox + APNs within a 60s window.
     func acceptRelayInvite(_ invite: RelayInvite) {
+        guard invite.hasToken else {
+            logger.info("Ignoring invite without token (waiting for inbox WS flush)")
+            return
+        }
+
         let now = Date()
         inProgressInviteRoomCodes = inProgressInviteRoomCodes.filter { now.timeIntervalSince($0.value) < inviteDedupTTL }
         guard inProgressInviteRoomCodes[invite.roomCode] == nil else {
@@ -1950,11 +2048,14 @@ final class ConnectionManager: ObservableObject {
         }
         inProgressInviteRoomCodes[invite.roomCode] = now
 
+        // Cancel any prior in-flight invite negotiation
+        activeInviteTask?.cancel()
+
         let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             .flatMap(URL.init(string:))
             ?? URL(string: "https://peerdrop-signal.hanfourhuang.workers.dev")!
         let signaling = WorkerSignaling(baseURL: baseURL)
-        Task {
+        activeInviteTask = Task {
             do {
                 try await self.startWorkerRelayAsJoinerWithToken(
                     roomCode: invite.roomCode,
@@ -1978,17 +2079,30 @@ final class ConnectionManager: ObservableObject {
         roomCode: String,
         signaling: WorkerSignaling,
         iceResult: WorkerSignaling.ICEResult?,
-        generation: UUID
+        generation: UUID,
+        metricsToken: ConnectionMetrics.Token
     ) {
         let client = DataChannelClient()
-        let iceServers: [RTCIceServer]
+        let fingerprint = currentNetworkFingerprint()
+        let preferRelay = RelayHintsStore.shared.shouldPreferRelay(fingerprint: fingerprint)
+
+        let config: RTCConfiguration
         if let creds = iceResult?.credentials {
-            iceServers = ICEConfigurationProvider.iceServers(from: creds)
+            config = ICEConfigurationProvider.configuration(with: creds)
         } else {
-            iceServers = ICEConfigurationProvider.stunServers
+            config = ICEConfigurationProvider.defaultConfiguration()
         }
-        client.setup(iceServers: iceServers)
+        if preferRelay {
+            config.iceTransportPolicy = .relay
+            logger.info("RelayHintsStore: preferring relay for fingerprint \(fingerprint)")
+        }
+        client.setup(with: config)
         // Joiner doesn't create data channel — it receives one from the offerer
+
+        let handshakeStart = Date()
+        var phase = 1  // 1 = prefer direct, 2 = accept relay, 3 = give up
+        let phase1DeadlineNs: UInt64 = 8_000_000_000   // 8s — direct connection window
+        let phase3TimeoutNs: UInt64 = 20_000_000_000   // 20s — give up entirely
 
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
@@ -2005,17 +2119,34 @@ final class ConnectionManager: ObservableObject {
                         error: error.localizedDescription,
                         context: "relay.joiner.sdpOffer",
                         extras: ["roomCode": roomCode, "step": "handleOffer"])
+                    await ConnectionMetrics.shared.recordFailure(
+                        metricsToken,
+                        reason: "sdpOffer: \(error.localizedDescription)"
+                    )
                 }
             }
         }
 
         // Exchange ICE candidates
+        var iceOrder = 0
         client.onICECandidate = { [weak signaling] candidate in
             signaling?.sendICECandidate(
                 sdp: candidate.sdp,
                 sdpMid: candidate.sdpMid,
                 sdpMLineIndex: candidate.sdpMLineIndex
             )
+            iceOrder += 1
+            let order = iceOrder
+            let candType = ConnectionManager.parseCandidateType(from: candidate.sdp)
+            let isV6 = ConnectionManager.isIPv6Candidate(sdp: candidate.sdp)
+            Task {
+                await ConnectionMetrics.shared.recordICEGather(
+                    metricsToken,
+                    candidate: candType,
+                    order: order,
+                    isIPv6: isV6
+                )
+            }
         }
 
         signaling.onICECandidate = { sdp, sdpMid, sdpMLineIndex in
@@ -2039,6 +2170,12 @@ final class ConnectionManager: ObservableObject {
                     "step": "webSocketSignaling",
                 ]
             )
+            Task {
+                await ConnectionMetrics.shared.recordFailure(
+                    metricsToken,
+                    reason: "webSocket: \(nsError.localizedDescription)"
+                )
+            }
             Task { @MainActor in
                 self.transition(to: .failed(reason: error.localizedDescription))
             }
@@ -2052,13 +2189,33 @@ final class ConnectionManager: ObservableObject {
             Task { @MainActor in
                 switch state {
                 case .ready:
+                    let elapsedMs = Int(Date().timeIntervalSince(handshakeStart) * 1000)
                     signaling?.disconnect()
+                    // DataChannelClient doesn't currently expose the selected
+                    // candidate pair — record .relay as a best-effort default
+                    // for the relay flow.
                     self.completeRelayConnection(transport: transport, roomCode: roomCode)
+                    // Record which phase connected
+                    await ConnectionMetrics.shared.recordPhaseTime(metricsToken, phase: phase, elapsedMs: elapsedMs)
+                    await ConnectionMetrics.shared.recordConnected(
+                        metricsToken,
+                        used: .relay
+                    )
+                    // Update relay hints for this network
+                    if phase == 1 {
+                        RelayHintsStore.shared.recordPhase1Success(fingerprint: fingerprint)
+                    } else {
+                        RelayHintsStore.shared.recordPhase2Save(fingerprint: fingerprint)
+                    }
                 case .failed(let error):
                     ErrorReporter.report(
                         error: error.localizedDescription,
                         context: "relay.joiner.dataChannel",
                         extras: ["roomCode": roomCode, "step": "dataChannelTransport"]
+                    )
+                    await ConnectionMetrics.shared.recordFailure(
+                        metricsToken,
+                        reason: "dataChannel: \(error.localizedDescription)"
                     )
                     self.transition(to: .failed(reason: error.localizedDescription))
                 case .cancelled:
@@ -2069,15 +2226,29 @@ final class ConnectionManager: ObservableObject {
             }
         }
 
-        // Timeout if negotiation doesn't complete in 30 seconds
+        // Phase 1 → 2 at 8s: direct connection window expires
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            try? await Task.sleep(nanoseconds: phase1DeadlineNs)
+            guard let self, self.connectionGeneration == generation else { return }
+            if case .requesting = self.state {
+                phase = 2
+                logger.info("Relay handshake phase 1 → 2 (direct not yet succeeded)")
+            }
+        }
+
+        // Phase 3 at 20s: give up
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: phase3TimeoutNs)
             guard let self, self.connectionGeneration == generation else { return }
             if case .requesting = self.state {
                 ErrorReporter.report(
-                    error: "Relay connection timed out",
+                    error: "Relay connection timed out (phase 3)",
                     context: "relay.joiner.timeout",
-                    extras: ["roomCode": roomCode, "step": "negotiationTimeout"]
+                    extras: ["roomCode": roomCode, "step": "phase3Timeout"]
+                )
+                await ConnectionMetrics.shared.recordFailure(
+                    metricsToken,
+                    reason: "phase3Timeout"
                 )
                 self.transition(to: .failed(reason: "Relay connection timed out"))
             }
@@ -3439,6 +3610,32 @@ final class ConnectionManager: ObservableObject {
         guard let alert = pendingKeyChangeAlert else { return }
         trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .unknown)
         pendingKeyChangeAlert = nil
+    }
+
+    // MARK: - Network Fingerprint
+
+    /// Returns a stable fingerprint for the current network based on en0/en1/bridge subnet.
+    private func currentNetworkFingerprint() -> String {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return "unknown" }
+        defer { freeifaddrs(ifaddr) }
+        for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let i = ptr.pointee
+            let name = String(cString: i.ifa_name)
+            guard let addr = i.ifa_addr else { continue }
+            guard name == "en0" || name == "en1" || name.hasPrefix("bridge"),
+                  addr.pointee.sa_family == UInt8(AF_INET) else { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            getnameinfo(addr, socklen_t(addr.pointee.sa_len),
+                        &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
+            let ip = String(cString: host)
+            let octets = ip.split(separator: ".")
+            guard octets.count == 4 else { continue }
+            let subnet = "\(octets[0]).\(octets[1]).\(octets[2]).0/24"
+            let gateway = "\(octets[0]).\(octets[1]).\(octets[2]).1"
+            return NetworkFingerprint.fingerprint(subnet: subnet, gateway: gateway)
+        }
+        return "unknown"
     }
 }
 

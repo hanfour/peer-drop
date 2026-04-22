@@ -13,11 +13,15 @@
 import { sendAPNs } from "./apns";
 
 export interface Env {
+  // KV
   ROOMS: KVNamespace;
   V2_STORE: KVNamespace;
+  METRICS: KVNamespace;
+  // Durable Objects
   SIGNALING_ROOM: DurableObjectNamespace;
   PREKEY_STORE: DurableObjectNamespace;
   DEVICE_INBOX: DurableObjectNamespace;
+  // Secrets
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Shared secret for authenticating iOS clients
@@ -25,6 +29,7 @@ export interface Env {
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
+  ANALYTICS_KEY: string;
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
@@ -104,9 +109,12 @@ export default {
     // Periodic cleanup
     if (Math.random() < 0.01) cleanupRateLimits();
 
-    // API key authentication (required for room creation and ICE credentials)
+    // API key authentication (required for room creation, ICE credentials, device registration, and invites)
     const requiresAuth = (path === "/room" && request.method === "POST") ||
-                          (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST");
+                          (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST") ||
+                          (path === "/v2/device/register" && request.method === "POST") ||
+                          (path.match(/^\/v2\/invite\/[a-zA-Z0-9-]{8,64}$/) && request.method === "POST") ||
+                          (path.match(/^\/v2\/inbox\/[a-zA-Z0-9-]{8,64}$/) && request.headers.get("Upgrade") === "websocket");
     if (requiresAuth) {
       if (!env.API_KEY) {
         return new Response(
@@ -114,7 +122,7 @@ export default {
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const providedKey = request.headers.get("X-API-Key");
+      const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
       if (providedKey !== env.API_KEY) {
         return new Response(
           JSON.stringify({ error: "Unauthorized" }),
@@ -275,10 +283,27 @@ export default {
           iceServers: { urls: string[]; username: string; credential: string } | { urls: string[]; username: string; credential: string }[];
         };
 
-        // Cloudflare API returns iceServers as an object; normalize to array for iOS client
-        const iceServers = Array.isArray(turnData.iceServers)
+        // Cloudflare API returns iceServers as an object; normalize to array
+        const rawServers = Array.isArray(turnData.iceServers)
           ? turnData.iceServers
           : [turnData.iceServers];
+
+        // Extract credentials from the first TURN entry (all variants share the same creds)
+        const creds = rawServers[0];
+
+        // Reconstruct iceServers with STUN (no auth) + TURN over UDP, TCP, and TLS
+        const iceServers = [
+          { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
+          {
+            urls: [
+              "turn:turn.cloudflare.com:3478?transport=udp",
+              "turn:turn.cloudflare.com:3478?transport=tcp",
+              "turns:turn.cloudflare.com:5349?transport=tcp",
+            ],
+            username: creds.username,
+            credential: creds.credential,
+          },
+        ];
 
         return new Response(JSON.stringify({ iceServers, roomToken }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -322,6 +347,174 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+    }
+
+    // POST /debug/metric — ingest connection telemetry (API_KEY required)
+    if (path === "/debug/metric" && request.method === "POST") {
+      const unauth = requireKey(request, env, "API_KEY");
+      if (unauth) return unauth;
+      // Payload size limit: 4 KB
+      const body = await request.text();
+      if (body.length > 4 * 1024) {
+        return jsonResponse({ error: "Payload too large" }, 413);
+      }
+      let parsed: Record<string, unknown>;
+      try {
+        const raw = JSON.parse(body) as unknown;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          return jsonResponse({ error: "Expected JSON object" }, 400);
+        }
+        parsed = raw as Record<string, unknown>;
+      } catch {
+        return jsonResponse({ error: "Invalid JSON" }, 400);
+      }
+      // Require expected metric fields so leaked API_KEY can't flood KV with arbitrary blobs.
+      if (typeof parsed["connectionType"] !== "string" ||
+          typeof parsed["role"] !== "string" ||
+          typeof parsed["outcome"] !== "object" && typeof parsed["outcome"] !== "string") {
+        return jsonResponse({ error: "Missing required metric fields" }, 400);
+      }
+      const dateKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const metricId = `metric:${dateKey}:${crypto.randomUUID()}`;
+      // Store aggregation-friendly summary in KV metadata so stats endpoint
+      // can aggregate from list() results without individual get() calls.
+      const summary = {
+        ct: String(parsed["connectionType"] ?? "unknown"),
+        o: String((parsed["outcome"] as any)?.type ?? parsed["outcome"] ?? "unknown"),
+        d: typeof parsed["durationMs"] === "number" ? parsed["durationMs"] : null,
+        cu: (parsed["iceStats"] as any)?.candidatesUsed ?? null,
+        fr: (parsed["outcome"] as any)?.reason ?? null,
+      };
+      await env.METRICS.put(metricId, JSON.stringify({
+        ...parsed,
+        ingestedAt: new Date().toISOString(),
+      }), { expirationTtl: 14 * 86400, metadata: summary });
+      return jsonResponse({ ok: true, id: metricId }, 201);
+    }
+
+    // GET /config/metrics — remote circuit breaker (public, no auth).
+    // Fail-open: malformed KV JSON falls through to the default so clients
+    // keep polling a usable shape even if an operator botches `wrangler kv put`.
+    if (path === "/config/metrics" && request.method === "GET") {
+      const raw = await env.METRICS.get("config:metrics");
+      let parsed: { sampleRate: number; enabled: boolean } = { sampleRate: 1.0, enabled: true };
+      if (raw) {
+        try { parsed = JSON.parse(raw); }
+        catch (e) { console.error("Bad config:metrics JSON, serving default:", e); }
+      }
+      return jsonResponse(parsed);
+    }
+
+    // GET /debug/metrics/stats?range=24h|7d|30d — aggregate metrics (ANALYTICS_KEY required)
+    if (path === "/debug/metrics/stats" && request.method === "GET") {
+      const unauth = requireKey(request, env, "ANALYTICS_KEY");
+      if (unauth) return unauth;
+
+      const VALID_RANGES = new Set(["24h", "7d", "30d"]);
+      const range = url.searchParams.get("range") ?? "24h";
+      if (!VALID_RANGES.has(range)) {
+        return jsonResponse({ error: "range must be one of 24h|7d|30d" }, 400);
+      }
+      const daysBack = range === "7d" ? 7 : range === "30d" ? 30 : 1;
+      const METRIC_CAP = 5000;
+
+      const prefixes: string[] = [];
+      for (let i = 0; i < daysBack; i++) {
+        const d = new Date(Date.now() - i * 86400_000);
+        prefixes.push(`metric:${d.toISOString().slice(0, 10)}:`);
+      }
+
+      // Collect metrics from list metadata — no individual gets needed.
+      // Legacy entries without metadata are fetched individually (fallback).
+      type MetaSummary = { ct: string; o: string; d: number | null; cu: string | null; fr: string | null };
+      const entries: MetaSummary[] = [];
+      let keysScanned = 0;
+      let truncated = false;
+      let legacyFetches = 0;
+
+      try {
+        outer: for (const prefix of prefixes) {
+          let cursor: string | undefined;
+          do {
+            const list = await env.METRICS.list({ prefix, limit: 1000, cursor });
+            for (const key of list.keys) {
+              if (!key.name.startsWith(prefix)) continue; // defence-in-depth
+              keysScanned++;
+              if (entries.length >= METRIC_CAP) { truncated = true; break outer; }
+              const meta = key.metadata as MetaSummary | null | undefined;
+              if (meta && typeof meta.ct === "string") {
+                entries.push(meta);
+              } else {
+                // Fallback: legacy entry written before metadata was added
+                legacyFetches++;
+                const raw = await env.METRICS.get(key.name);
+                if (!raw) continue;
+                try {
+                  const m = JSON.parse(raw) as Record<string, unknown>;
+                  const outcomeField = m["outcome"];
+                  entries.push({
+                    ct: String(m["connectionType"] ?? "unknown"),
+                    o: String(typeof outcomeField === "object" && outcomeField !== null
+                      ? (outcomeField as any)["type"] ?? "unknown"
+                      : outcomeField ?? "unknown"),
+                    d: typeof m["durationMs"] === "number" ? m["durationMs"] as number : null,
+                    cu: (typeof m["iceStats"] === "object" && m["iceStats"] !== null
+                      ? (m["iceStats"] as any)["candidatesUsed"] : null) ?? null,
+                    fr: (typeof outcomeField === "object" && outcomeField !== null
+                      ? (outcomeField as any)["reason"] : null) ?? null,
+                  });
+                } catch { /* skip corrupt entry */ }
+              }
+            }
+            cursor = list.list_complete ? undefined : list.cursor;
+            if (entries.length >= METRIC_CAP) { truncated = true; break outer; }
+          } while (cursor);
+        }
+      } catch (e) {
+        return jsonResponse({
+          error: "aggregation_failed",
+          detail: String(e).slice(0, 200),
+          partial: entries.length,
+        }, 503);
+      }
+
+      // Aggregate from metadata summaries.
+      // Response contract: stats.byType[connectionType] = { success, failure, abandoned, p50, p95 }
+      // Keep keys stable — consumed by ops dashboard.
+      const byType: Record<string, { success: number; failure: number; abandoned: number; durations: number[] }> = {};
+      const candidateUse: Record<string, number> = {};
+      const failureReasons: Record<string, number> = {};
+      for (const m of entries) {
+        const t = m.ct || "unknown";
+        byType[t] ??= { success: 0, failure: 0, abandoned: 0, durations: [] };
+        if (m.o === "success") byType[t].success++;
+        else if (m.o === "abandoned") byType[t].abandoned++;
+        else byType[t].failure++;
+        if (typeof m.d === "number") byType[t].durations.push(m.d);
+        if (m.cu) candidateUse[m.cu] = (candidateUse[m.cu] ?? 0) + 1;
+        if (m.fr) failureReasons[m.fr] = (failureReasons[m.fr] ?? 0) + 1;
+      }
+
+      const stats = {
+        range,
+        total: entries.length,
+        keysScanned,
+        truncated,
+        legacyFetches,
+        byType: Object.fromEntries(Object.entries(byType).map(([k, v]) => {
+          const d = v.durations.slice().sort((a, b) => a - b);
+          return [k, {
+            success: v.success,
+            failure: v.failure,
+            abandoned: v.abandoned,
+            p50: d.length ? d[Math.floor(d.length * 0.5)] : null,
+            p95: d.length ? d[Math.floor(d.length * 0.95)] : null,
+          }];
+        })),
+        candidateUse,
+        failureReasons,
+      };
+      return jsonResponse(stats);
     }
 
     // GET /debug/reports — fetch recent error reports (requires API key)
@@ -591,12 +784,17 @@ export default {
       if (!body.roomCode || !body.roomToken || !body.senderName) {
         return jsonResponse({ error: "Missing invite fields" }, 400);
       }
+      if (!/^[A-Z0-9]{6}$/.test(body.roomCode)) {
+        return jsonResponse({ error: "Invalid roomCode format" }, 400);
+      }
+
+      const safeSenderName = (body.senderName || "").slice(0, 100);
 
       const invitePayload = JSON.stringify({
         type: "relay-invite",
         roomCode: body.roomCode,
         roomToken: body.roomToken,
-        senderName: body.senderName,
+        senderName: safeSenderName,
         senderId: body.senderId || "",
         timestamp: Date.now(),
       });
@@ -625,12 +823,15 @@ export default {
         }
         try {
           const result = await sendAPNs(info.pushToken, {
-            alert: { title: "PeerDrop", body: `${body.senderName} wants to connect` },
+            alert: { title: "PeerDrop", body: `${safeSenderName} wants to connect` },
             sound: "default",
+            contentAvailable: true,
             customData: {
+              // roomToken is NOT included in push — it stays in the DO queue.
+              // The app fetches it via the authenticated inbox WebSocket on wake.
               roomCode: body.roomCode,
-              roomToken: body.roomToken,
               senderId: body.senderId || "",
+              senderName: safeSenderName,
             },
           }, {
             keyId: env.APNS_KEY_ID,
@@ -657,6 +858,18 @@ function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Check `X-API-Key` header against the named secret in env.
+ * Returns null if authorized, or a 401 Response to return immediately.
+ */
+function requireKey(request: Request, env: Env, keyName: "API_KEY" | "ANALYTICS_KEY"): Response | null {
+  const expected = env[keyName];
+  if (!expected || request.headers.get("X-API-Key") !== expected) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+  return null;
 }
 
 // Proof-of-Work verification (matches client-side SHA256 hashcash)

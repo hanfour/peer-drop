@@ -25,7 +25,7 @@ struct ContentView: View {
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
     @State private var currentInvite: RelayInvite?
-    @State private var processedInviteIDs: Set<String> = []
+    @State private var processedInviteIDs: [String: Date] = [:] // id → timestamp, 60s TTL
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -164,12 +164,19 @@ struct ContentView: View {
         }
         .onReceive(inboxService.$receivedInvite.compactMap { $0 }) { invite in
             inboxService.receivedInvite = nil
-            guard !processedInviteIDs.contains(invite.id), currentInvite == nil else { return }
+            guard invite.hasToken else { return } // WS invites always have token
+            guard !isInviteProcessed(invite.id), currentInvite == nil else { return }
+            // If we had a token-less APNs invite for the same room, upgrade it
+            if let current = currentInvite, !current.hasToken, current.roomCode == invite.roomCode {
+                currentInvite = invite
+                return
+            }
             currentInvite = invite
         }
         .onReceive(pushManager.$receivedInvite.compactMap { $0 }) { invite in
             pushManager.receivedInvite = nil
-            guard !processedInviteIDs.contains(invite.id), currentInvite == nil else { return }
+            guard !isInviteProcessed(invite.id), currentInvite == nil else { return }
+            // APNs invite may not have token — show banner but disable Accept until WS flushes
             currentInvite = invite
         }
 
@@ -177,13 +184,14 @@ struct ContentView: View {
             if let invite = currentInvite {
                 InviteBanner(
                     invite: invite,
+                    canAccept: invite.hasToken,
                     onAccept: {
-                        processedInviteIDs.insert(invite.id)
+                        markInviteProcessed(invite.id)
                         connectionManager.acceptRelayInvite(invite)
                         currentInvite = nil
                     },
                     onDecline: {
-                        processedInviteIDs.insert(invite.id)
+                        markInviteProcessed(invite.id)
                         currentInvite = nil
                     }
                 )
@@ -219,6 +227,20 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Invite dedup helpers (60s TTL)
+
+    private func isInviteProcessed(_ id: String) -> Bool {
+        guard let ts = processedInviteIDs[id] else { return false }
+        return Date().timeIntervalSince(ts) < 60
+    }
+
+    private func markInviteProcessed(_ id: String) {
+        processedInviteIDs[id] = Date()
+        // Evict stale entries
+        let cutoff = Date().addingTimeInterval(-60)
+        processedInviteIDs = processedInviteIDs.filter { $0.value > cutoff }
     }
 }
 

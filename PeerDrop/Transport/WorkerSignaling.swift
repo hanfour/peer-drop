@@ -44,7 +44,7 @@ final class WorkerSignaling: NSObject {
     private let apiKey: String?
 
     /// Read the API key from Info.plist (injected via build settings).
-    private static var bundledAPIKey: String? {
+    static var bundledAPIKey: String? {
         Bundle.main.object(forInfoDictionaryKey: "PeerDropWorkerAPIKey") as? String
     }
 
@@ -110,6 +110,7 @@ final class WorkerSignaling: NSObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let apiKey { request.setValue(apiKey, forHTTPHeaderField: "X-API-Key") }
         let body: [String: String] = [
             "roomCode": roomCode,
             "roomToken": roomToken,

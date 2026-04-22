@@ -2,6 +2,7 @@ import SwiftUI
 
 struct InviteBanner: View {
     let invite: RelayInvite
+    var canAccept: Bool = true
     let onAccept: () -> Void
     let onDecline: () -> Void
 
@@ -14,24 +15,30 @@ struct InviteBanner: View {
                 Text(invite.senderName)
                     .font(.subheadline).bold()
                     .foregroundStyle(.white)
-                Text("wants to connect")
+                Text(String(localized: "wants to connect"))
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.85))
             }
             Spacer()
             Button(action: onDecline) {
-                Text("Decline")
+                Text(String(localized: "Decline"))
                     .font(.caption).bold()
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(.white.opacity(0.2), in: Capsule())
                     .foregroundStyle(.white)
             }
-            Button(action: onAccept) {
-                Text("Accept")
-                    .font(.caption).bold()
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(.white, in: Capsule())
-                    .foregroundStyle(.blue)
+            if canAccept {
+                Button(action: onAccept) {
+                    Text(String(localized: "Accept"))
+                        .font(.caption).bold()
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(.white, in: Capsule())
+                        .foregroundStyle(.blue)
+                }
+            } else {
+                ProgressView()
+                    .tint(.white)
+                    .padding(.horizontal, 8)
             }
         }
         .padding(.horizontal, 14)

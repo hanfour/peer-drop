@@ -44,28 +44,6 @@ final class DataChannelClient: NSObject {
 
     // MARK: - Setup
 
-    func setup(iceServers: [RTCIceServer]) {
-        let config = RTCConfiguration()
-        config.iceServers = iceServers
-        config.sdpSemantics = .unifiedPlan
-        config.iceTransportPolicy = .all
-        config.bundlePolicy = .maxBundle
-        config.rtcpMuxPolicy = .require
-        config.continualGatheringPolicy = .gatherContinually
-
-        let constraints = RTCMediaConstraints(
-            mandatoryConstraints: nil,
-            optionalConstraints: nil
-        )
-
-        peerConnection = peerConnectionFactory.peerConnection(
-            with: config,
-            constraints: constraints,
-            delegate: self
-        )
-        logger.info("DataChannelClient setup complete")
-    }
-
     func setup(with configuration: RTCConfiguration) {
         let constraints = RTCMediaConstraints(
             mandatoryConstraints: nil,

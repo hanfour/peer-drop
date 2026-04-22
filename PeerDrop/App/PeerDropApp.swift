@@ -29,8 +29,19 @@ struct PeerDropApp: App {
                 }
             }
             .animation(.easeOut(duration: 0.4), value: showLaunch)
+            .onReceive(NotificationCenter.default.publisher(for: .didReceiveRelayPush)) { notification in
+                guard let userInfo = notification.userInfo as? [AnyHashable: Any] else { return }
+                PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
+            }
             .task {
                 await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                await ConnectionMetrics.shared.fetchRemoteConfig()
+                // Re-fetch every hour while foregrounded.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 3600 * 1_000_000_000)
+                    if Task.isCancelled { break }
+                    await ConnectionMetrics.shared.fetchRemoteConfig()
+                }
             }
             .onAppear {
                 // Wire CallKit into ConnectionManager
@@ -95,6 +106,7 @@ struct PeerDropApp: App {
             switch newPhase {
             case .background:
                 inboxService.disconnect()
+                Task { await ConnectionMetrics.shared.flush() }
                 try? PetStore().save(petEngine.pet)
                 try? PetCloudSync().syncFullState(petEngine.pet)
                 petEngine.syncSharedState()
