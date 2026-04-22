@@ -25,6 +25,8 @@ export interface Env {
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
+  METRICS: KVNamespace;
+  ANALYTICS_KEY: string;
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)

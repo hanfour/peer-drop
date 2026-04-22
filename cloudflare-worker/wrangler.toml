@@ -18,6 +18,10 @@ id = "376d9f22d4c743bfb1509b814087192c"
 binding = "V2_STORE"
 id = "9968f53e396f441da9e9fa419285ed68"
 
+[[kv_namespaces]]
+binding = "METRICS"
+id = "d49e0db6cc5b4dc3b17678937cb11233"
+
 [[durable_objects.bindings]]
 name = "SIGNALING_ROOM"
 class_name = "SignalingRoom"
