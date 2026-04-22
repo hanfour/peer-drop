@@ -35,17 +35,13 @@ enum ICEConfigurationProvider {
         config.bundlePolicy = .maxBundle
         config.rtcpMuxPolicy = .require
         config.continualGatheringPolicy = .gatherContinually
+        config.iceCandidatePoolSize = 2
         return config
     }
 
     static func configuration(with credentials: ICECredentials) -> RTCConfiguration {
-        let config = RTCConfiguration()
+        let config = defaultConfiguration()
         config.iceServers = iceServers(from: credentials)
-        config.sdpSemantics = .unifiedPlan
-        config.iceTransportPolicy = .all
-        config.bundlePolicy = .maxBundle
-        config.rtcpMuxPolicy = .require
-        config.continualGatheringPolicy = .gatherContinually
         return config
     }
 }
