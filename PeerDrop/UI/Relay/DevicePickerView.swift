@@ -6,15 +6,15 @@ struct DevicePickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var availableDevices: [DeviceRecord] = []
-    @State private var busy = false
+    @State private var busyDeviceId: String?
     @State private var errorText: String?
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Invite a known device") {
+                Section(String(localized: "Invite a known device")) {
                     if availableDevices.isEmpty {
-                        Text("No known devices yet. Share a room code manually for the first connection.")
+                        Text(String(localized: "No known devices yet. Share a room code manually for the first connection."))
                             .foregroundStyle(.secondary)
                     }
                     ForEach(availableDevices) { device in
@@ -28,26 +28,26 @@ struct DevicePickerView: View {
                                         Text(peerId.prefix(8) + "...")
                                             .font(.caption2).foregroundStyle(.secondary)
                                     } else {
-                                        Text("Device ID not yet known")
+                                        Text(String(localized: "Device ID not yet known"))
                                             .font(.caption2).foregroundStyle(.orange)
                                     }
                                 }
                                 Spacer()
-                                if busy { ProgressView() }
+                                if busyDeviceId == device.id { ProgressView() }
                             }
                         }
-                        .disabled(device.peerDeviceId == nil || busy)
+                        .disabled(device.peerDeviceId == nil || busyDeviceId != nil)
                     }
                 }
                 if let errorText {
                     Section { Text(errorText).foregroundStyle(.red) }
                 }
             }
-            .navigationTitle("Invite")
+            .navigationTitle(String(localized: "Invite"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(String(localized: "Cancel")) { dismiss() }
                 }
             }
             .onAppear { refresh() }
@@ -62,14 +62,14 @@ struct DevicePickerView: View {
 
     private func invite(_ device: DeviceRecord) async {
         guard let peerDeviceId = device.peerDeviceId else { return }
-        busy = true
+        busyDeviceId = device.id
         errorText = nil
-        defer { busy = false }
+        defer { busyDeviceId = nil }
         do {
             let signaling = WorkerSignaling()
             let room = try await signaling.createRoom()
             guard let roomToken = room.roomToken else {
-                errorText = "Server did not return room token"
+                errorText = String(localized: "Server did not return room token")
                 return
             }
             let senderName = UIDevice.current.name

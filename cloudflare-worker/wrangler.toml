@@ -5,6 +5,10 @@ compatibility_date = "2024-01-01"
 [vars]
 # Set TURN_KEY_ID via `wrangler secret put TURN_KEY_ID`
 # Set TURN_API_TOKEN via `wrangler secret put TURN_API_TOKEN`
+# Set APNS_KEY_P8 via `cat AuthKey.p8 | wrangler secret put APNS_KEY_P8`
+# Set APNS_KEY_ID via `wrangler secret put APNS_KEY_ID`
+# Set APNS_TEAM_ID via `wrangler secret put APNS_TEAM_ID`
+# Set APNS_BUNDLE_ID via `wrangler secret put APNS_BUNDLE_ID`
 
 [[kv_namespaces]]
 binding = "ROOMS"

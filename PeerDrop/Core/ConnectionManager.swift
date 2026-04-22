@@ -1939,9 +1939,17 @@ final class ConnectionManager: ObservableObject {
         )
     }
 
+    /// Stores the current invite-accept task so it can be cancelled if superseded.
+    private var activeInviteTask: Task<Void, Never>?
+
     /// Accept a relay invite — creates signaling and joins as the answerer.
     /// Dedups concurrent delivery from WebSocket inbox + APNs within a 60s window.
     func acceptRelayInvite(_ invite: RelayInvite) {
+        guard invite.hasToken else {
+            logger.info("Ignoring invite without token (waiting for inbox WS flush)")
+            return
+        }
+
         let now = Date()
         inProgressInviteRoomCodes = inProgressInviteRoomCodes.filter { now.timeIntervalSince($0.value) < inviteDedupTTL }
         guard inProgressInviteRoomCodes[invite.roomCode] == nil else {
@@ -1950,11 +1958,14 @@ final class ConnectionManager: ObservableObject {
         }
         inProgressInviteRoomCodes[invite.roomCode] = now
 
+        // Cancel any prior in-flight invite negotiation
+        activeInviteTask?.cancel()
+
         let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             .flatMap(URL.init(string:))
             ?? URL(string: "https://peerdrop-signal.hanfourhuang.workers.dev")!
         let signaling = WorkerSignaling(baseURL: baseURL)
-        Task {
+        activeInviteTask = Task {
             do {
                 try await self.startWorkerRelayAsJoinerWithToken(
                     roomCode: invite.roomCode,

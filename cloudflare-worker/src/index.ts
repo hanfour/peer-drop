@@ -104,9 +104,12 @@ export default {
     // Periodic cleanup
     if (Math.random() < 0.01) cleanupRateLimits();
 
-    // API key authentication (required for room creation and ICE credentials)
+    // API key authentication (required for room creation, ICE credentials, device registration, and invites)
     const requiresAuth = (path === "/room" && request.method === "POST") ||
-                          (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST");
+                          (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST") ||
+                          (path === "/v2/device/register" && request.method === "POST") ||
+                          (path.match(/^\/v2\/invite\/[a-zA-Z0-9-]{8,64}$/) && request.method === "POST") ||
+                          (path.match(/^\/v2\/inbox\/[a-zA-Z0-9-]{8,64}$/) && request.headers.get("Upgrade") === "websocket");
     if (requiresAuth) {
       if (!env.API_KEY) {
         return new Response(
@@ -114,7 +117,7 @@ export default {
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const providedKey = request.headers.get("X-API-Key");
+      const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
       if (providedKey !== env.API_KEY) {
         return new Response(
           JSON.stringify({ error: "Unauthorized" }),
@@ -591,12 +594,17 @@ export default {
       if (!body.roomCode || !body.roomToken || !body.senderName) {
         return jsonResponse({ error: "Missing invite fields" }, 400);
       }
+      if (!/^[A-Z0-9]{6}$/.test(body.roomCode)) {
+        return jsonResponse({ error: "Invalid roomCode format" }, 400);
+      }
+
+      const safeSenderName = (body.senderName || "").slice(0, 100);
 
       const invitePayload = JSON.stringify({
         type: "relay-invite",
         roomCode: body.roomCode,
         roomToken: body.roomToken,
-        senderName: body.senderName,
+        senderName: safeSenderName,
         senderId: body.senderId || "",
         timestamp: Date.now(),
       });
@@ -625,12 +633,15 @@ export default {
         }
         try {
           const result = await sendAPNs(info.pushToken, {
-            alert: { title: "PeerDrop", body: `${body.senderName} wants to connect` },
+            alert: { title: "PeerDrop", body: `${safeSenderName} wants to connect` },
             sound: "default",
+            contentAvailable: true,
             customData: {
+              // roomToken is NOT included in push — it stays in the DO queue.
+              // The app fetches it via the authenticated inbox WebSocket on wake.
               roomCode: body.roomCode,
-              roomToken: body.roomToken,
               senderId: body.senderId || "",
+              senderName: safeSenderName,
             },
           }, {
             keyId: env.APNS_KEY_ID,

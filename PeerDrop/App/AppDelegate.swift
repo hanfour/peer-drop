@@ -2,6 +2,10 @@ import UIKit
 import CallKit
 import UserNotifications
 
+extension Notification.Name {
+    static let didReceiveRelayPush = Notification.Name("didReceiveRelayPush")
+}
+
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var callKitManager: CallKitManager?
 
@@ -33,9 +37,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        Task { @MainActor in
-            PushNotificationManager.shared.handleRemoteNotification(userInfo)
-            completionHandler(.newData)
-        }
+        // Post to NotificationCenter so PeerDropApp (which owns inboxService) can handle it
+        NotificationCenter.default.post(
+            name: .didReceiveRelayPush,
+            object: nil,
+            userInfo: userInfo as? [String: Any] ?? [:]
+        )
+        completionHandler(.newData)
     }
 }

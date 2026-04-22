@@ -12,6 +12,9 @@ final class PushNotificationManager: NSObject, ObservableObject {
     /// Emits when a push-delivered invite arrives (App in background or tap on notification).
     @Published var receivedInvite: RelayInvite?
 
+    /// Called by InboxService when it flushes queued invites after push-triggered reconnect.
+    var onInboxFlush: ((RelayInvite) -> Void)?
+
     private override init() { super.init() }
 
     func requestAuthorizationAndRegister() async {
@@ -35,6 +38,9 @@ final class PushNotificationManager: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let apiKey = UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? WorkerSignaling.bundledAPIKey {
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
         let body: [String: String] = [
             "deviceId": DeviceIdentity.deviceId,
             "pushToken": tokenHex,
@@ -52,20 +58,29 @@ final class PushNotificationManager: NSObject, ObservableObject {
         }
     }
 
-    /// Parse an APNs payload into a RelayInvite.
-    func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) {
-        guard let roomCode = userInfo["roomCode"] as? String,
-              let roomToken = userInfo["roomToken"] as? String else {
-            logger.warning("Ignoring push without invite fields")
+    /// Handle a background push notification.
+    /// The push only contains roomCode + senderName (no roomToken for security).
+    /// Triggers InboxService reconnect to fetch the full invite from the DO queue.
+    func handleRemoteNotification(_ userInfo: [AnyHashable: Any], inboxService: InboxService) {
+        guard let roomCode = userInfo["roomCode"] as? String else {
+            logger.warning("Ignoring push without roomCode")
             return
         }
-        let senderName = (userInfo["aps"] as? [String: Any])
-            .flatMap { ($0["alert"] as? [String: String])?["body"] }
+        let senderName = userInfo["senderName"] as? String
+            ?? (userInfo["aps"] as? [String: Any]).flatMap { ($0["alert"] as? [String: Any])?["body"] as? String }
             ?? "Unknown"
         let senderId = userInfo["senderId"] as? String ?? ""
+
+        logger.info("Push received for room \(roomCode) from \(senderName) — reconnecting inbox to fetch token")
+
+        // Reconnect inbox WS — the DO will flush the queued invite (which has the roomToken)
+        inboxService.connect()
+
+        // Also emit a partial invite so the UI can show a "connecting..." state if needed
+        // The full invite (with roomToken) will arrive via InboxService once WS connects
         receivedInvite = RelayInvite(
             roomCode: roomCode,
-            roomToken: roomToken,
+            roomToken: "", // empty — will be filled by inbox WS flush
             senderName: senderName,
             senderId: senderId,
             source: .apns
@@ -82,4 +97,7 @@ struct RelayInvite: Identifiable, Equatable {
     let senderName: String
     let senderId: String
     let source: Source
+
+    /// Whether this invite has a valid room token (APNs push invites may not).
+    var hasToken: Bool { !roomToken.isEmpty }
 }
