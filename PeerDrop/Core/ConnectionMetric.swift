@@ -21,9 +21,15 @@ struct ConnectionMetric: Codable, Equatable {
     enum Role: String, Codable { case initiator, joiner }
 
     enum NetworkType: String, Codable {
-        case wifi, cellular, wifi_hotspot, ethernet, unknown
+        case wifi
+        case cellular
+        case wifiHotspot = "wifi_hotspot"
+        case ethernet
+        case unknown
     }
 
+    /// WebRTC ICE candidate types. `srflx` = server-reflexive (STUN),
+    /// `prflx` = peer-reflexive, `relay` = TURN.
     enum CandidateType: String, Codable { case host, srflx, relay, prflx }
 
     enum Outcome: Codable, Equatable {
@@ -69,5 +75,21 @@ struct ConnectionMetric: Codable, Equatable {
         let phase2ConnectedMs: Int?
         let ipv6CandidateGathered: Bool
         let ipv6Connected: Bool
+    }
+}
+
+extension ConnectionMetric {
+    /// Canonical encoder — use this when posting metrics to the Worker
+    /// so `timestamp` matches the Worker's ISO-8601 convention for other date fields.
+    static func makeEncoder() -> JSONEncoder {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }
+
+    static func makeDecoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
     }
 }

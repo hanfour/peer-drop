@@ -59,6 +59,27 @@ final class ConnectionMetricTests: XCTestCase {
         // Codable default: nil optional -> key absent.
         XCTAssertNil(json["iceStats"])
     }
+
+    func test_timestampEncodesAsISO8601() throws {
+        let m = ConnectionMetric.withOutcome(.success)
+        let data = try ConnectionMetric.makeEncoder().encode(m)
+        let str = String(data: data, encoding: .utf8)!
+        // ISO-8601 timestamps contain "T" and end with "Z" (UTC) — double-based encoding doesn't.
+        XCTAssertTrue(str.contains("\"timestamp\":\""), "timestamp should be string-encoded")
+        XCTAssertTrue(str.contains("T") && str.contains("Z"), "timestamp should look like ISO-8601")
+    }
+
+    func test_wifiHotspotSerializesWithSnakeCaseRawValue() throws {
+        let m = ConnectionMetric(
+            id: "x", timestamp: Date(), connectionType: .relayWorker, role: .joiner,
+            outcome: .success, durationMs: 0, iceStats: nil,
+            platform: "ios", appVersion: "3.3.0", networkType: .wifiHotspot,
+            hasTailscale: false, hasIPv6: false
+        )
+        let data = try ConnectionMetric.makeEncoder().encode(m)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["networkType"] as? String, "wifi_hotspot")
+    }
 }
 
 // Test helper used by the short-form tests above.
