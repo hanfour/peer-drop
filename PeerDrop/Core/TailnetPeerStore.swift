@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Network
+import os
 
 @MainActor
 final class TailnetPeerStore: ObservableObject {
@@ -32,7 +33,7 @@ final class TailnetPeerStore: ObservableObject {
         entries = decoded
     }
 
-    func persist() {
+    fileprivate func persist() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
@@ -93,17 +94,25 @@ extension TailnetPeerStore {
                 host: NWEndpoint.Host(ip),
                 port: NWEndpoint.Port(integerLiteral: port),
                 using: .tcp)
-            var done = false
+            let done = OSAllocatedUnfairLock(initialState: false)
+            /// Atomically claim the done flag; returns `true` if successfully claimed.
+            func claimDone() -> Bool {
+                done.withLock { val in
+                    if val { return false }
+                    val = true
+                    return true
+                }
+            }
             let timeout = DispatchWorkItem {
-                guard !done else { return }; done = true
+                guard claimDone() else { return }
                 conn.cancel(); cont.resume(returning: false)
             }
             conn.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    if !done { done = true; timeout.cancel(); conn.cancel(); cont.resume(returning: true) }
+                    if claimDone() { timeout.cancel(); conn.cancel(); cont.resume(returning: true) }
                 case .failed, .cancelled:
-                    if !done { done = true; timeout.cancel(); cont.resume(returning: false) }
+                    if claimDone() { timeout.cancel(); cont.resume(returning: false) }
                 default: break
                 }
             }
