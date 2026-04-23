@@ -33,7 +33,7 @@ targets:
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "3.3.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: PeerDrop/App/PeerDrop.entitlements
@@ -146,7 +146,7 @@ targets:
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "3.3.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
         CODE_SIGN_ENTITLEMENTS: PeerDropWidget/PeerDropWidget.entitlements
     entitlements:
       path: PeerDropWidget/PeerDropWidget.entitlements
