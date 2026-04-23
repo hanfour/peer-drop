@@ -47,10 +47,13 @@ struct DiscoveryView: View {
                 }
 
                 Section {
+                    NavigationLink(String(localized: "Manage Tailnet Peers")) {
+                        TailnetPeersView().environmentObject(connectionManager)
+                    }
                     Button {
                         showManualConnect = true
                     } label: {
-                        Label("Connect by IP Address", systemImage: "network")
+                        Label(String(localized: "One-time IP connect"), systemImage: "network")
                     }
                     .disabled(isConnecting)
                     .accessibilityHint("Double tap to enter an IP address manually")
