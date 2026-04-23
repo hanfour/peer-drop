@@ -4,6 +4,7 @@ import SwiftUI
 struct PeerDropApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var connectionManager = ConnectionManager()
+    @StateObject private var connectionContext = ConnectionContext()
     @StateObject private var voicePlayer = VoicePlayer()
     @StateObject private var petEngine = PetEngine()
     @StateObject private var inboxService = InboxService()
@@ -17,6 +18,7 @@ struct PeerDropApp: App {
             ZStack {
                 ContentView()
                     .environmentObject(connectionManager)
+                    .environmentObject(connectionContext)
                     .environmentObject(voicePlayer)
                     .environmentObject(petEngine)
                     .environmentObject(inboxService)
@@ -44,6 +46,11 @@ struct PeerDropApp: App {
                 }
             }
             .onAppear {
+                // Wire ConnectionContext to live signals
+                connectionContext.observe(
+                    deviceStore: connectionManager.deviceStore,
+                    tailnetStore: connectionManager.tailnetStore)
+
                 // Wire CallKit into ConnectionManager
                 if let callKit = appDelegate.callKitManager {
                     connectionManager.configureVoiceCalling(callKitManager: callKit)
