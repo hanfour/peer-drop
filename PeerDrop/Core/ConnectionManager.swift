@@ -108,6 +108,8 @@ final class ConnectionManager: ObservableObject {
     /// Pending key change alert for a contact whose key has changed
     @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
 
+    let tailnetStore = TailnetPeerStore()
+
     var onPeerConnectedForPet: ((String) -> Void)?
     var onPeerDisconnectedForPet: ((String) -> Void)?
 
@@ -544,7 +546,20 @@ final class ConnectionManager: ObservableObject {
         let coordinator = DiscoveryCoordinator(backends: backends)
         coordinator.$peers
             .receive(on: DispatchQueue.main)
-            .assign(to: &$discoveredPeers)
+            .sink { [weak self] coordinatorPeers in
+                guard let self else { return }
+                self.updateDiscoveredPeers(coordinatorPeers: coordinatorPeers)
+            }
+            .store(in: &cancellables)
+
+        // Also observe tailnet store changes
+        tailnetStore.$entries
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.updateDiscoveredPeers(coordinatorPeers: self.discoveryCoordinator?.peers ?? [])
+            }
+            .store(in: &cancellables)
 
         coordinator.start()
         self.bonjourDiscovery = bonjour
@@ -558,6 +573,23 @@ final class ConnectionManager: ObservableObject {
 
         // Start network path monitoring
         startNetworkPathMonitor()
+    }
+
+    private func updateDiscoveredPeers(coordinatorPeers: [DiscoveredPeer]) {
+        var peers = coordinatorPeers
+        for entry in tailnetStore.entries where tailnetStore.isReachable(entry.id) {
+            let id = "tailnet:\(entry.id.uuidString)"
+            // Don't duplicate if coordinator already has this peer
+            guard !peers.contains(where: { $0.id == id }) else { continue }
+            let peer = DiscoveredPeer(
+                id: id,
+                displayName: entry.displayName,
+                endpoint: .manual(host: entry.ip, port: entry.port),
+                source: .manual
+            )
+            peers.append(peer)
+        }
+        discoveredPeers = peers
     }
 
     /// Screenshot mode: inject mock data without real network operations.
@@ -1461,6 +1493,12 @@ final class ConnectionManager: ObservableObject {
                 let peerIdentity = try JSONDecoder().decode(PeerIdentity.self, from: payload)
                 logger.info("Peer identity received: \(peerIdentity.displayName)")
                 checkPeerTrust(peerIdentity: peerIdentity)
+
+                // Auto-add incoming tailnet peers
+                if let remoteHost = self.extractRemoteHost(from: connection.endpoint),
+                   self.isTailnetIP(remoteHost) {
+                    self.tailnetStore.addIfMissing(displayName: peerIdentity.displayName, ip: remoteHost)
+                }
 
                 // Check if already connected to this peer
                 if connections[peerIdentity.id]?.state.isConnected == true {
@@ -3636,6 +3674,27 @@ final class ConnectionManager: ObservableObject {
             return NetworkFingerprint.fingerprint(subnet: subnet, gateway: gateway)
         }
         return "unknown"
+    }
+
+    // MARK: - Tailnet Helpers
+
+    private func extractRemoteHost(from endpoint: NWEndpoint) -> String? {
+        switch endpoint {
+        case .hostPort(let host, _):
+            switch host {
+            case .ipv4(let addr): return "\(addr)"
+            case .ipv6(let addr): return "\(addr)"
+            case .name(let s, _): return s
+            @unknown default: return nil
+            }
+        default: return nil
+        }
+    }
+
+    private func isTailnetIP(_ ip: String) -> Bool {
+        let parts = ip.split(separator: ".").compactMap { UInt8($0) }
+        guard parts.count == 4 else { return false }
+        return parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127
     }
 }
 
