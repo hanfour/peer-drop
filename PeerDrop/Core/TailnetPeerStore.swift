@@ -82,6 +82,11 @@ extension TailnetPeerStore {
         }
     }
 
+    func addIfMissing(displayName: String, ip: String, port: UInt16 = 9876) {
+        if entries.contains(where: { $0.ip == ip }) { return }
+        add(displayName: displayName, ip: ip, port: port)
+    }
+
     nonisolated private static func probeOne(ip: String, port: UInt16) async -> Bool {
         await withCheckedContinuation { cont in
             let conn = NWConnection(

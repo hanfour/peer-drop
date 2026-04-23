@@ -1494,6 +1494,12 @@ final class ConnectionManager: ObservableObject {
                 logger.info("Peer identity received: \(peerIdentity.displayName)")
                 checkPeerTrust(peerIdentity: peerIdentity)
 
+                // Auto-add incoming tailnet peers
+                if let remoteHost = self.extractRemoteHost(from: connection.endpoint),
+                   self.isTailnetIP(remoteHost) {
+                    self.tailnetStore.addIfMissing(displayName: peerIdentity.displayName, ip: remoteHost)
+                }
+
                 // Check if already connected to this peer
                 if connections[peerIdentity.id]?.state.isConnected == true {
                     logger.info("Already connected to this peer, rejecting duplicate")
@@ -3668,6 +3674,27 @@ final class ConnectionManager: ObservableObject {
             return NetworkFingerprint.fingerprint(subnet: subnet, gateway: gateway)
         }
         return "unknown"
+    }
+
+    // MARK: - Tailnet Helpers
+
+    private func extractRemoteHost(from endpoint: NWEndpoint) -> String? {
+        switch endpoint {
+        case .hostPort(let host, _):
+            switch host {
+            case .ipv4(let addr): return "\(addr)"
+            case .ipv6(let addr): return "\(addr)"
+            case .name(let s, _): return s
+            @unknown default: return nil
+            }
+        default: return nil
+        }
+    }
+
+    private func isTailnetIP(_ ip: String) -> Bool {
+        let parts = ip.split(separator: ".").compactMap { UInt8($0) }
+        guard parts.count == 4 else { return false }
+        return parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127
     }
 }
 
