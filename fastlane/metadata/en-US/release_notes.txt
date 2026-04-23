@@ -1,5 +1,11 @@
-PeerDrop 3.2.2
+PeerDrop 3.3.0 — Cross-Network Experience
 
-Fixes
-- Definitively resolved the relay -1011 WebSocket error. Reconnects now dedup by client ID, so retries evict their own stale socket instead of piling up and triggering "room is full".
-- QR code and deep link now include the device's IP even when it is sharing a Personal Hotspot (bridge interface), so scanners can reach it over the hotspot without falling back to relay.
+New
+- Smart suggestions adapt to your environment: invite a known device, use your tailnet, create a relay room, or try Tailscale when things keep failing.
+- Tailnet peer management: add Tailscale peers once and PeerDrop probes them every 60s so they appear in Nearby automatically.
+- TURN-over-TLS (port 5349) for corporate and restrictive networks where UDP is blocked.
+
+Improvements
+- Faster relay handshake with candidate pool pre-warming and phase-aware timeouts (8s direct → 20s give up).
+- Adaptive ICE policy: networks that repeatedly require relay rescue now skip direct attempts automatically.
+- Anonymous connection telemetry to help us ship reliable cross-network connects (no personal data, opt-out via remote config).
