@@ -108,6 +108,8 @@ final class ConnectionManager: ObservableObject {
     /// Pending key change alert for a contact whose key has changed
     @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
 
+    let tailnetStore = TailnetPeerStore()
+
     var onPeerConnectedForPet: ((String) -> Void)?
     var onPeerDisconnectedForPet: ((String) -> Void)?
 

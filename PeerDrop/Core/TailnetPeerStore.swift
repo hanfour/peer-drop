@@ -36,6 +36,22 @@ final class TailnetPeerStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
+
+    // MARK: - Periodic Probe
+
+    private var probeTask: Task<Void, Never>?
+
+    func startPeriodicProbe() {
+        probeTask?.cancel()
+        probeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.probeAll()
+                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+            }
+        }
+    }
+
+    func stopPeriodicProbe() { probeTask?.cancel(); probeTask = nil }
 }
 
 extension TailnetPeerStore {

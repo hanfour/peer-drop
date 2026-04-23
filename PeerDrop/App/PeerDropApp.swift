@@ -106,6 +106,7 @@ struct PeerDropApp: App {
             switch newPhase {
             case .background:
                 inboxService.disconnect()
+                connectionManager.tailnetStore.stopPeriodicProbe()
                 Task { await ConnectionMetrics.shared.flush() }
                 try? PetStore().save(petEngine.pet)
                 try? PetCloudSync().syncFullState(petEngine.pet)
@@ -113,6 +114,7 @@ struct PeerDropApp: App {
                 petEngine.startLiveActivity()
             case .active:
                 inboxService.connect()
+                connectionManager.tailnetStore.startPeriodicProbe()
                 petEngine.endLiveActivity()
             default:
                 break
