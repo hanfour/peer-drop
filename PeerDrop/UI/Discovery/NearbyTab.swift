@@ -12,9 +12,11 @@ struct NearbyTab: View {
     @State private var showTransferHistory = false
     @State private var showRelayConnect = false
     @State private var showConnectionQR = false
+    @State private var showOptionsSheet = false
     @State private var isSearchActive = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
+    @EnvironmentObject var connectionContext: ConnectionContext
 
     private var sortMode: SortMode {
         SortMode(rawValue: sortModeRaw) ?? .name
@@ -80,6 +82,8 @@ struct NearbyTab: View {
                         ProgressView()
                         Text("Searching for nearby devices...")
                             .foregroundStyle(.secondary)
+                        GuidanceCard(trigger: .emptyState, onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
+                            .padding(.top, 8)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if isGridMode {
@@ -371,6 +375,11 @@ struct NearbyTab: View {
         }) {
             RelayConnectView()
                 .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showOptionsSheet) {
+            ConnectionOptionsSheet()
+                .environmentObject(connectionManager)
+                .environmentObject(connectionContext)
         }
         .onChange(of: connectionManager.shouldShowRelayConnect) { shouldShow in
             if shouldShow && !showRelayConnect {
