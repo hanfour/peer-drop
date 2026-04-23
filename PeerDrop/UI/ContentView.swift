@@ -24,9 +24,12 @@ struct ContentView: View {
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
+    @State private var failureCardReason: String?
+    @State private var showFailureOptionsSheet = false
     @State private var currentInvite: RelayInvite?
     @State private var processedInviteIDs: [String: Date] = [:] // id → timestamp, 60s TTL
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @EnvironmentObject var connectionContext: ConnectionContext
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -128,6 +131,7 @@ struct ContentView: View {
             case .connected, .transferring, .voiceCall:
                 selectedTab = 1
             case .failed(let reason):
+                failureCardReason = reason
                 // Only show alert if not suppressed (e.g., ChatView handles it locally)
                 if !connectionManager.suppressErrorAlert {
                     errorMessage = reason
@@ -216,6 +220,16 @@ struct ContentView: View {
                     .padding(.top, 8)
                     .zIndex(2)
             }
+
+            // Failure guidance overlay
+            if let reason = failureCardReason {
+                failureGuidanceCard(reason: reason)
+            }
+        }
+        .sheet(isPresented: $showFailureOptionsSheet) {
+            ConnectionOptionsSheet()
+                .environmentObject(connectionManager)
+                .environmentObject(connectionContext)
         }
         .onChange(of: showReportSentToast) { newValue in
             if newValue {
@@ -227,6 +241,19 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Failure Guidance Card
+
+    @ViewBuilder
+    private func failureGuidanceCard(reason: String) -> some View {
+        let trigger = GuidanceCard.Trigger.failure(reason: reason)
+        let dismissAction: () -> Void = { withAnimation { failureCardReason = nil } }
+        let moreAction: () -> Void = { showFailureOptionsSheet = true }
+        GuidanceCard(trigger: trigger, onMoreOptions: moreAction, onDismiss: dismissAction)
+            .transition(AnyTransition.move(edge: .top).combined(with: .opacity))
+            .padding(Edge.Set.top, 8)
+            .zIndex(4)
     }
 
     // MARK: - Invite dedup helpers (60s TTL)
