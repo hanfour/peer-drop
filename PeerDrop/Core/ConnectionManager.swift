@@ -2146,7 +2146,10 @@ final class ConnectionManager: ObservableObject {
         let handshakeStart = Date()
         var phase = 1  // 1 = prefer direct, 2 = accept relay, 3 = give up
         let phase1DeadlineNs: UInt64 = 8_000_000_000   // 8s — direct connection window
-        let phase3TimeoutNs: UInt64 = 20_000_000_000   // 20s — give up entirely
+        let phase3TimeoutNs: UInt64 = 30_000_000_000   // 30s — give up entirely
+        // Note: 30s matches the creator timeout and v3.2.x behaviour. The earlier
+        // 20s value was too aggressive for cross-network relay handshakes over
+        // TURN-over-TLS, causing premature failures that leaked zombie sockets.
 
         // Handle offer
         signaling.onSDPOffer = { [weak self] sdp in
