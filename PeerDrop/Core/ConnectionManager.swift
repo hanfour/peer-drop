@@ -1878,7 +1878,7 @@ final class ConnectionManager: ObservableObject {
                 }
 
                 // Handle signaling errors
-                signaling.onError = { [weak self] error in
+                signaling.onError = { [weak self, weak signaling] error in
                     guard let self, self.connectionGeneration == generation else { return }
                     let nsError = error as NSError
                     ErrorReporter.report(
@@ -1898,6 +1898,9 @@ final class ConnectionManager: ObservableObject {
                         )
                     }
                     Task { @MainActor in
+                        // Close the signaling WS so the DO evicts our socket
+                        // instead of keeping a zombie that fills the room.
+                        signaling?.disconnect()
                         self.transition(to: .failed(reason: error.localizedDescription))
                     }
                 }
@@ -1929,6 +1932,7 @@ final class ConnectionManager: ObservableObject {
                                 metricsToken,
                                 reason: "dataChannel: \(error.localizedDescription)"
                             )
+                            signaling?.disconnect()
                             self.transition(to: .failed(reason: error.localizedDescription))
                         case .cancelled:
                             break
@@ -1939,7 +1943,7 @@ final class ConnectionManager: ObservableObject {
                 }
 
                 // Timeout if negotiation doesn't complete in 30 seconds
-                Task { [weak self] in
+                Task { [weak self, weak signaling] in
                     try? await Task.sleep(nanoseconds: 30_000_000_000)
                     guard let self, self.connectionGeneration == generation else { return }
                     if case .requesting = self.state {
@@ -1952,6 +1956,7 @@ final class ConnectionManager: ObservableObject {
                             metricsToken,
                             reason: "negotiationTimeout"
                         )
+                        signaling?.disconnect()
                         self.transition(to: .failed(reason: "Relay connection timed out"))
                     }
                 }
@@ -1972,6 +1977,7 @@ final class ConnectionManager: ObservableObject {
                     metricsToken,
                     reason: "creatorSetup: \(error.localizedDescription)"
                 )
+                signaling.disconnect()
                 transition(to: .failed(reason: error.localizedDescription))
             }
         }
@@ -2195,7 +2201,7 @@ final class ConnectionManager: ObservableObject {
         }
 
         // Handle signaling errors
-        signaling.onError = { [weak self] error in
+        signaling.onError = { [weak self, weak signaling] error in
             guard let self, self.connectionGeneration == generation else { return }
             let nsError = error as NSError
             ErrorReporter.report(
@@ -2215,6 +2221,9 @@ final class ConnectionManager: ObservableObject {
                 )
             }
             Task { @MainActor in
+                // Close the signaling WS so the DO evicts our socket
+                // instead of keeping a zombie that fills the room.
+                signaling?.disconnect()
                 self.transition(to: .failed(reason: error.localizedDescription))
             }
         }
@@ -2255,6 +2264,7 @@ final class ConnectionManager: ObservableObject {
                         metricsToken,
                         reason: "dataChannel: \(error.localizedDescription)"
                     )
+                    signaling?.disconnect()
                     self.transition(to: .failed(reason: error.localizedDescription))
                 case .cancelled:
                     break
@@ -2275,7 +2285,7 @@ final class ConnectionManager: ObservableObject {
         }
 
         // Phase 3 at 20s: give up
-        Task { [weak self] in
+        Task { [weak self, weak signaling] in
             try? await Task.sleep(nanoseconds: phase3TimeoutNs)
             guard let self, self.connectionGeneration == generation else { return }
             if case .requesting = self.state {
@@ -2288,6 +2298,7 @@ final class ConnectionManager: ObservableObject {
                     metricsToken,
                     reason: "phase3Timeout"
                 )
+                signaling?.disconnect()
                 self.transition(to: .failed(reason: "Relay connection timed out"))
             }
         }
