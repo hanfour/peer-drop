@@ -938,8 +938,41 @@ export class SignalingRoom {
     }
 
     // Re-read after eviction to get the authoritative count.
-    const remaining = this.state.getWebSockets();
-    const activeSockets = remaining.filter(ws => ws.readyState === 0 || ws.readyState === 1);
+    let remaining = this.state.getWebSockets();
+    let activeSockets = remaining.filter(ws => ws.readyState === 0 || ws.readyState === 1);
+
+    // If room appears full, evict any zombie sockets before giving up.
+    // Legitimate peers disconnect their signaling WS within ~30s (on .ready
+    // success or on any failure path, post iOS fix for zombie leak). Any
+    // socket still here after STALE_THRESHOLD_MS is almost certainly a
+    // leaked socket from a prior session whose close frame never propagated
+    // — evicting it frees the room for the new joiner.
+    //
+    // Also probe recent sockets with a ping; if send() throws, the underlying
+    // connection is dead and the socket is evictable regardless of age.
+    if (activeSockets.length >= MAX_PEERS_PER_ROOM) {
+      const now = Date.now();
+      const STALE_THRESHOLD_MS = 60 * 1000;
+      for (const ws of activeSockets) {
+        const att = ws.deserializeAttachment() as { clientId?: string; createdAt?: number } | null;
+        const age = att?.createdAt ? now - att.createdAt : Infinity;
+        let isStale = age > STALE_THRESHOLD_MS;
+        if (!isStale) {
+          try {
+            ws.send(JSON.stringify({ type: "ping" }));
+          } catch {
+            isStale = true;
+          }
+        }
+        if (isStale) {
+          try { ws.close(1001, "stale socket evicted on capacity overflow"); } catch { /* already closed */ }
+          evicted++;
+        }
+      }
+      // Re-read authoritative count after stale eviction.
+      remaining = this.state.getWebSockets();
+      activeSockets = remaining.filter(ws => ws.readyState === 0 || ws.readyState === 1);
+    }
 
     if (activeSockets.length >= MAX_PEERS_PER_ROOM) {
       return new Response(JSON.stringify({
