@@ -14,6 +14,34 @@ final class DataChannelTransport: TransportProtocol {
     /// Header: [4B total length][2B message ID][2B chunk index][2B total chunks]
     static let chunkHeaderSize = 10
 
+    /// Max total bytes reserved across all in-flight reassembly states.
+    /// Prevents memory DoS from an attacker sending many partial messages.
+    /// 256 MB covers every legitimate PeerDrop payload (largest media ~100 MB).
+    private static let maxReassemblyTotalBytes: Int = 256 * 1024 * 1024
+    /// Max concurrent partial messages (prevents key-space attack).
+    private static let maxReassemblyEntries: Int = 32
+
+    // MARK: - Reassembly Rejection
+
+    /// Reasons an incoming chunk may be rejected during reassembly.
+    /// Surfaced via `onReassemblyRejected` for metrics and tests.
+    enum ReassemblyRejectReason: String {
+        case chunkIndexOutOfRange
+        case totalChunksInvalid
+        case duplicateChunk
+        case bufferTotalBytesExceeded
+        case bufferEntryCountExceeded
+    }
+
+    /// Called when an incoming chunk is rejected. Useful for metrics + tests.
+    /// MainActor dispatch not guaranteed — caller should hop if needed.
+    var onReassemblyRejected: ((ReassemblyRejectReason) -> Void)?
+
+    /// Test-only accessor for the current buffer state.
+    var reassemblyBufferCount: Int {
+        queue.sync { reassemblyBuffer.count }
+    }
+
     // MARK: - Properties
 
     let client: DataChannelClient
@@ -211,13 +239,27 @@ final class DataChannelTransport: TransportProtocol {
         }
     }
 
-    private func handleReceivedData(_ data: Data) {
+    /// Exposed as `internal` (not `private`) so tests can inject crafted chunks
+    /// without constructing a real WebRTC data-channel client.
+    func handleReceivedData(_ data: Data) {
         guard let parsed = Self.parseChunkHeader(data) else {
             logger.warning("Received malformed chunk data (\(data.count) bytes)")
             return
         }
 
         let (_, messageID, chunkIndex, totalChunks, payload) = parsed
+
+        // Reject nonsensical totalChunks (0 or chunkIndex out of range)
+        guard totalChunks > 0 else {
+            logger.warning("Rejecting chunk: totalChunks=0")
+            onReassemblyRejected?(.totalChunksInvalid)
+            return
+        }
+        guard chunkIndex < totalChunks else {
+            logger.warning("Rejecting chunk: index \(chunkIndex) out of range (total=\(totalChunks))")
+            onReassemblyRejected?(.chunkIndexOutOfRange)
+            return
+        }
 
         if totalChunks == 1 {
             // Single-chunk message, deliver immediately
@@ -226,14 +268,44 @@ final class DataChannelTransport: TransportProtocol {
         }
 
         // Multi-chunk reassembly keyed by messageID — synchronized
+        var rejectReason: ReassemblyRejectReason?
         let assembled: Data? = queue.sync {
             // Purge expired entries
             reassemblyBuffer = reassemblyBuffer.filter { !$0.value.isExpired }
 
+            // Estimate bytes if we create a new entry. This is a rough cap
+            // based on already-received chunks; real payloads are typically
+            // smaller than the per-chunk maximum.
+            let currentBytes = reassemblyBuffer.values.reduce(0) { acc, state in
+                acc + state.chunks.values.reduce(0) { $0 + $1.count }
+            }
+
             if reassemblyBuffer[messageID] == nil {
+                // Cap concurrent partial messages
+                guard reassemblyBuffer.count < Self.maxReassemblyEntries else {
+                    rejectReason = .bufferEntryCountExceeded
+                    return nil
+                }
                 reassemblyBuffer[messageID] = ReassemblyState(
                     totalChunks: totalChunks
                 )
+            }
+
+            // Cap total buffered bytes before adding this chunk.
+            // Dropping a chunk leaves the existing partial state intact so it
+            // can still complete if the sender retries; it simply won't grow.
+            guard currentBytes + payload.count <= Self.maxReassemblyTotalBytes else {
+                rejectReason = .bufferTotalBytesExceeded
+                return nil
+            }
+
+            // Detect duplicate chunks with a conflicting payload for the same
+            // index — likely an attack or a peer bug. Benign replays with
+            // identical bytes are silently accepted.
+            if let existing = reassemblyBuffer[messageID]?.chunks[chunkIndex],
+               existing != payload {
+                rejectReason = .duplicateChunk
+                return nil
             }
 
             reassemblyBuffer[messageID]?.chunks[chunkIndex] = payload
@@ -244,6 +316,11 @@ final class DataChannelTransport: TransportProtocol {
                 return result
             }
             return nil
+        }
+
+        if let rejectReason {
+            onReassemblyRejected?(rejectReason)
+            return
         }
 
         if let assembled {
