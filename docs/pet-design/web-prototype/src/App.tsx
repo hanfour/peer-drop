@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadSprite } from './sprite/loadSprite';
-import { SpriteCanvas } from './render/SpriteCanvas';
-import { PetStage } from './stage/PetStage';
+import { PetStage, type StagePet } from './stage/PetStage';
 import { useFrameAnimation } from './animation/useFrameAnimation';
 import type { SpriteData, Palette } from './sprite/types';
 import { TraitPanel } from './traits/TraitPanel';
@@ -15,11 +14,22 @@ const ACCENT: Record<TraitName, string> = {
   independent: 'rgba(220, 220, 230, 0.4)', // neutral gray
 };
 
+const buttonStyle: React.CSSProperties = {
+  padding: '6px 12px',
+  fontSize: 13,
+  fontFamily: 'system-ui',
+  borderRadius: 6,
+  border: '1px solid rgba(0,0,0,0.15)',
+  background: '#fff',
+  cursor: 'pointer',
+};
+
 export default function App() {
   const [data, setData] = useState<SpriteData | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
   const [traits, setTraits] = useState<Traits>(defaultTraits);
   const [currentAction, setCurrentAction] = useState<IdleAction>('idle');
+  const [peerConnected, setPeerConnected] = useState(false);
 
   useEffect(() => {
     loadSprite('/data/cat.json').then(setData).catch(console.error);
@@ -38,16 +48,40 @@ export default function App() {
     return () => clearInterval(id);
   }, [traits]);
 
-  const frames =
+  const localFrames =
     (data?.baby[currentAction] && data.baby[currentAction].length > 0
       ? data.baby[currentAction]
       : data?.baby.idle) ?? [];
-  const frameIdx = useFrameAnimation(frames.length);
-  // Clamp: when `currentAction` switches between actions with different frame
-  // counts, the hook's internal frame state may transiently exceed the new
-  // length on the first render. Clamping here avoids handing an undefined
-  // frame to SpriteCanvas.
-  const safeFrameIdx = frames.length > 0 ? Math.min(frameIdx, frames.length - 1) : 0;
+  const localFrameIdx = useFrameAnimation(localFrames.length);
+  const safeLocalIdx = localFrames.length > 0 ? Math.min(localFrameIdx, localFrames.length - 1) : 0;
+
+  // Peer pet currently always plays idle (walk-in lands in Task 14).
+  const peerFrames = data?.baby.idle ?? [];
+  const peerFrameIdx = useFrameAnimation(peerFrames.length);
+  const safePeerIdx = peerFrames.length > 0 ? Math.min(peerFrameIdx, peerFrames.length - 1) : 0;
+
+  const ready = data && palette && localFrames.length > 0;
+
+  let pets: StagePet[] = [];
+  if (ready) {
+    const localPet: StagePet = {
+      id: 'local',
+      frame: localFrames[safeLocalIdx],
+      palette,
+      xPercent: 30,
+      flipped: false,
+    };
+    pets = [localPet];
+    if (peerConnected && peerFrames.length > 0) {
+      pets.push({
+        id: 'peer',
+        frame: peerFrames[safePeerIdx],
+        palette,
+        xPercent: 70,
+        flipped: true,
+      });
+    }
+  }
 
   return (
     <div
@@ -62,12 +96,17 @@ export default function App() {
       }}
     >
       <h1 style={{ margin: 0 }}>PeerDrop Pet Prototype</h1>
-      {data && palette && frames.length > 0 ? (
+      {ready ? (
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-          <PetStage accentColor={ACCENT[dominantTrait(traits)]}>
-            <SpriteCanvas frame={frames[safeFrameIdx]} palette={palette} />
-          </PetStage>
-          <TraitPanel traits={traits} setTraits={setTraits} />
+          <PetStage pets={pets} accentColor={ACCENT[dominantTrait(traits)]} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <TraitPanel traits={traits} setTraits={setTraits} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button style={buttonStyle} onClick={() => setPeerConnected((c) => !c)}>
+                {peerConnected ? 'Disconnect peer' : 'Connect peer'}
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div>Loading...</div>
