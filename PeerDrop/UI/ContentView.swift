@@ -78,6 +78,17 @@ struct ContentView: View {
             ConsentSheet(request: request)
                 .environmentObject(connectionManager)
         }
+        .sheet(item: $connectionManager.pendingFirstContact) { pending in
+            FirstContactVerificationSheet(
+                pending: pending,
+                onApprove: {
+                    connectionManager.approveFirstContact(fingerprint: pending.fingerprint)
+                },
+                onReject: {
+                    connectionManager.rejectFirstContact(fingerprint: pending.fingerprint)
+                }
+            )
+        }
         .sheet(isPresented: $connectionManager.showTransferProgress) {
             TransferProgressView()
                 .environmentObject(connectionManager)

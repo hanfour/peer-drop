@@ -81,6 +81,17 @@ struct KeyChangeAlertInfo: Identifiable {
     let newPublicKey: Data
 }
 
+/// An envelope from an unknown peer awaiting user consent before X3DH session
+/// establishment. The fingerprint is the short human-readable hex string the
+/// user compares out-of-band to defend against MITM at first contact.
+struct PendingFirstContact: Equatable, Identifiable {
+    let fingerprint: String           // stable dedup key (also used as Identifiable id)
+    let senderDisplayName: String     // what to show in the sheet
+    let senderIdentityKey: Data
+
+    var id: String { fingerprint }
+}
+
 /// Central state machine that orchestrates discovery, connections, transfers, and calls.
 @MainActor
 final class ConnectionManager: ObservableObject {
@@ -107,6 +118,15 @@ final class ConnectionManager: ObservableObject {
     @Published var shouldShowRelayConnect = false
     /// Pending key change alert for a contact whose key has changed
     @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
+    /// Pending first-contact verification: an envelope from an unknown peer
+    /// awaiting user consent before we create a TrustedContact and respond
+    /// to X3DH. Drives the FirstContactVerificationSheet.
+    @Published var pendingFirstContact: PendingFirstContact?
+
+    /// Envelopes awaiting user consent, keyed by sender identity key (base64).
+    /// Holds both the envelope and the original wire message so we can replay
+    /// once the user approves.
+    private var pendingFirstContactEnvelopes: [String: (envelope: RemoteMessageEnvelope, message: MailboxMessage)] = [:]
 
     let tailnetStore = TailnetPeerStore()
 
@@ -875,17 +895,25 @@ final class ConnectionManager: ObservableObject {
                 return
             }
 
-            // First message from unknown sender: create trusted contact
+            // First message from unknown sender: GATE on user consent.
+            // Do NOT auto-create the contact or call respondToSession — instead,
+            // queue the envelope and surface the fingerprint so the user can
+            // verify the peer out-of-band (see FirstContactVerificationSheet).
             if contact == nil && envelope.isInitialMessage {
-                let newContact = TrustedContact(
-                    displayName: envelope.senderDisplayName ?? "Remote Peer",
-                    identityPublicKey: envelope.senderIdentityKey,
-                    trustLevel: .linked,
-                    mailboxId: envelope.senderMailboxId
-                )
-                trustedContactStore.add(newContact)
-                contact = newContact
-                logger.info("Created new remote contact: \(newContact.displayName)")
+                let fpKey = envelope.senderIdentityKey.base64EncodedString()
+                if pendingFirstContactEnvelopes[fpKey] == nil {
+                    pendingFirstContactEnvelopes[fpKey] = (envelope: envelope, message: message)
+                    let displayFingerprint = Self.computeFingerprint(of: envelope.senderIdentityKey)
+                    pendingFirstContact = PendingFirstContact(
+                        fingerprint: displayFingerprint,
+                        senderDisplayName: envelope.senderDisplayName ?? "Remote Peer",
+                        senderIdentityKey: envelope.senderIdentityKey
+                    )
+                    logger.info("First contact from unknown peer pending user consent")
+                } else {
+                    logger.debug("Duplicate first-contact envelope from same unknown peer — already queued")
+                }
+                return // wait for user approval
             }
 
             guard let contact else {
@@ -927,6 +955,62 @@ final class ConnectionManager: ObservableObject {
             logger.error("Failed to process remote message: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - First-Contact Verification
+
+    /// Compute the human-readable fingerprint shown to the user for a sender's
+    /// identity key. Mirrors `TrustedContact.keyFingerprint` so the on-screen
+    /// value matches what users see for already-trusted contacts.
+    static func computeFingerprint(of publicKey: Data) -> String {
+        let hash = SHA256.hash(data: publicKey)
+        let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
+        return stride(from: 0, to: 20, by: 4).map { i in
+            let start = hex.index(hex.startIndex, offsetBy: i)
+            let end = hex.index(start, offsetBy: 4)
+            return String(hex[start..<end])
+        }.joined(separator: " ")
+    }
+
+    /// User approved a first-contact. Replay the queued envelope through the
+    /// normal flow: create contact at `.linked` trust, then re-enter
+    /// `handleRemoteMessage` so the existing X3DH respond + decrypt path runs.
+    func approveFirstContact(fingerprint: String) {
+        guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
+        let fpKey = current.senderIdentityKey.base64EncodedString()
+        guard let pending = pendingFirstContactEnvelopes.removeValue(forKey: fpKey) else { return }
+        pendingFirstContact = nil
+
+        let newContact = TrustedContact(
+            displayName: current.senderDisplayName,
+            identityPublicKey: current.senderIdentityKey,
+            trustLevel: .linked,
+            mailboxId: pending.envelope.senderMailboxId
+        )
+        trustedContactStore.add(newContact)
+        logger.info("Created first-contact after user approval: \(newContact.displayName)")
+        // Re-enter handleRemoteMessage now that the contact exists — the
+        // unknown-peer branch will be skipped and the normal X3DH responder +
+        // decrypt + deliver path runs.
+        handleRemoteMessage(pending.message)
+    }
+
+    /// User rejected a first-contact. Discard the queued envelope and do not
+    /// create a TrustedContact; the X3DH session is never established.
+    func rejectFirstContact(fingerprint: String) {
+        guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
+        let fpKey = current.senderIdentityKey.base64EncodedString()
+        pendingFirstContactEnvelopes.removeValue(forKey: fpKey)
+        pendingFirstContact = nil
+        logger.info("User rejected first-contact from unknown peer")
+    }
+
+    #if DEBUG
+    /// Test-only: invoke the private `handleRemoteMessage` so unit tests can
+    /// drive the consent gate without going through MailboxManager.
+    func handleRemoteMessageForTesting(_ message: MailboxMessage) {
+        handleRemoteMessage(message)
+    }
+    #endif
 
     func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
         guard let peerMailboxId = contact.mailboxId else {

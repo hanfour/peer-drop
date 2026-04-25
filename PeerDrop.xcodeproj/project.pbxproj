@@ -24,6 +24,7 @@
 		0EB449EE2838A44505508B07 /* DataChannelTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CF2ADC56F3918BA1B6A59B /* DataChannelTransport.swift */; };
 		0EC22A6A34B1DBCC1F58A721 /* BodyMeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B5508CC637CCC9A71A0575 /* BodyMeta.swift */; };
 		0FC5D9230D4D2179ADC0C958 /* TrustBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4DE23F4DC70DE5619071BA /* TrustBadgeView.swift */; };
+		108EADB923B64158D93DEC6A /* FirstContactVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A44B4BE21C89356292B4D0 /* FirstContactVerificationTests.swift */; };
 		10927C944B88E8D8D21D69B2 /* FloatingPetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54A502D9E6E28ABA5E84DE73 /* FloatingPetView.swift */; };
 		12755A9BA2910DF05FA5EBEA /* PetParticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E336AAC74502665926EF051 /* PetParticle.swift */; };
 		129DB963A1C4849488D78A41 /* PetSecretChatRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D7E4A6EE9C506EDF235ED18 /* PetSecretChatRow.swift */; };
@@ -129,6 +130,7 @@
 		5404B9ED2402C165C2331399 /* PreKeyBundleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32671B725E75F8B4558D1CFB /* PreKeyBundleTests.swift */; };
 		5418D2C8E97B7FA61101B692 /* ConsentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923FD5FA87FD257ADB28D0D2 /* ConsentSheet.swift */; };
 		546CC3D2ECA71633B3AA8A76 /* PetLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4717B3021E2DAD82772B39 /* PetLevel.swift */; };
+		55354112F7209861BD1216F1 /* FirstContactVerificationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */; };
 		5671C51DDFC869D7C249A544 /* PetTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8153A2193E408C3F30B049DD /* PetTabView.swift */; };
 		5675BD6D590DF7AEF6F44A22 /* DataChannelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A90A886C2B08F97C6ED3F42 /* DataChannelClient.swift */; };
 		576B501BA221A9FAD6309E7B /* VoicePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DECB18745BF9BF19F554D57 /* VoicePlayer.swift */; };
@@ -511,6 +513,7 @@
 		2BA47165FC60DE16D51823B6 /* FileResumePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileResumePayload.swift; sourceTree = "<group>"; };
 		2E188F98137CC86BA3F87F9E /* ConnectionTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionTimeoutTests.swift; sourceTree = "<group>"; };
 		2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRecordListView.swift; sourceTree = "<group>"; };
+		2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		31EC0B7D4092FB9BB364440F /* PetLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLiveActivity.swift; sourceTree = "<group>"; };
 		325AF5B8F87E9729F5782A22 /* TrustedContactStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedContactStore.swift; sourceTree = "<group>"; };
 		32671B725E75F8B4558D1CFB /* PreKeyBundleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyBundleTests.swift; sourceTree = "<group>"; };
@@ -530,6 +533,7 @@
 		3F5A5A4F2AA8CCB19B5623D8 /* PetAnimationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetAnimationController.swift; sourceTree = "<group>"; };
 		405A064FF9B9B45DFF4A8D8A /* SocialEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialEntry.swift; sourceTree = "<group>"; };
 		4140F87FED34F546E01E5EDC /* URL+Zip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+Zip.swift"; sourceTree = "<group>"; };
+		416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstContactVerificationSheet.swift; sourceTree = "<group>"; };
 		41DCF1ACEEF25E8262FC1291 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		420320526B18E15D11A63B4C /* GroupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDetailView.swift; sourceTree = "<group>"; };
 		453F20DBDA714A7B590261F6 /* PetStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetStats.swift; sourceTree = "<group>"; };
@@ -610,7 +614,6 @@
 		6E06927E83F57264F730DDE2 /* PoopState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoopState.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
 		707C3B175646BDCF72AEA51C /* PetSnapshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotRendererTests.swift; sourceTree = "<group>"; };
-		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
@@ -646,6 +649,7 @@
 		84C0D4FA1E9B081F5960A5F5 /* SnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotTests.swift; sourceTree = "<group>"; };
 		84D629FA007356EBA90D5F5A /* ConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionState.swift; sourceTree = "<group>"; };
 		8522C558C3B5DDC867FCE801 /* StatusToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusToastView.swift; sourceTree = "<group>"; };
+		86A44B4BE21C89356292B4D0 /* FirstContactVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstContactVerificationTests.swift; sourceTree = "<group>"; };
 		875CC6A80A6C3A38571013C5 /* PetBehaviorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetBehaviorController.swift; sourceTree = "<group>"; };
 		87B5508CC637CCC9A71A0575 /* BodyMeta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyMeta.swift; sourceTree = "<group>"; };
 		883D84FF5E1F966F1CED7BC2 /* MockTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockTransport.swift; sourceTree = "<group>"; };
@@ -832,12 +836,12 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				9EC0E908E1A38EE0458CEC1B /* peer-drop */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
 				348FC413895A2131299A9250 /* PeerDropWidget */,
 				A7818433838A4B7AEF968F11 /* Shared */,
+				F5ABB9F9CC717D153374B0B7 /* peer-drop */,
 				B852FD7C848E2615AF9BF284 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -941,6 +945,7 @@
 				0694CAF31BEAB2BA98E99ECB /* EdgeCaseTests.swift */,
 				D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */,
 				90A9DA5F16B00839A9012834 /* FileTransferTests.swift */,
+				86A44B4BE21C89356292B4D0 /* FirstContactVerificationTests.swift */,
 				61E4079207CA3828B0ECF602 /* FoodInventoryTests.swift */,
 				75B994B2C20C496C8C7CC828 /* FrogSpriteDataTests.swift */,
 				AEBC71AADF78A31348300DC3 /* GhostSpriteDataTests.swift */,
@@ -1178,6 +1183,7 @@
 		71203F913DF3E6E389EE350F /* Security */ = {
 			isa = PBXGroup;
 			children = (
+				416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */,
 				1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */,
 				5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */,
 				4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */,
@@ -1304,15 +1310,6 @@
 				FB09411CC81953144963CB18 /* PeerRowView.swift */,
 			);
 			path = Discovery;
-			sourceTree = "<group>";
-		};
-		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
-			isa = PBXGroup;
-			children = (
-				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
-			);
-			name = "peer-drop";
-			path = .;
 			sourceTree = "<group>";
 		};
 		A29F6E76ECC1DF4E1D976EFA /* Settings */ = {
@@ -1542,6 +1539,15 @@
 			path = Connection;
 			sourceTree = "<group>";
 		};
+		F5ABB9F9CC717D153374B0B7 /* peer-drop */ = {
+			isa = PBXGroup;
+			children = (
+				2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop";
+			path = .;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1757,6 +1763,7 @@
 				8DA618D655A058770E1034F8 /* EdgeCaseTests.swift in Sources */,
 				4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */,
 				F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */,
+				108EADB923B64158D93DEC6A /* FirstContactVerificationTests.swift in Sources */,
 				A8A1F50CB79026F13570A1E2 /* FoodInventoryTests.swift in Sources */,
 				2DE9670AF758F4F8752C9709 /* FrogSpriteDataTests.swift in Sources */,
 				3B2036658C3A10BB3DF43396 /* GhostSpriteDataTests.swift in Sources */,
@@ -1956,6 +1963,7 @@
 				3B1C9C7E585B12D66582DF45 /* FileResumePayload.swift in Sources */,
 				D382B38045C3F4ED6239D259 /* FileTransfer.swift in Sources */,
 				62EE3D9CDBDADC0A2D8DC24B /* FileTransferSession.swift in Sources */,
+				55354112F7209861BD1216F1 /* FirstContactVerificationSheet.swift in Sources */,
 				10927C944B88E8D8D21D69B2 /* FloatingPetView.swift in Sources */,
 				D40F36CC206D2B409F8A6AB4 /* FoodInventory.swift in Sources */,
 				0B2BFEB57F5C62AE8FCB8500 /* FrogBehavior.swift in Sources */,
@@ -2241,7 +2249,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
+			baseConfigurationReference = 2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2264,7 +2272,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
+			baseConfigurationReference = 2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
