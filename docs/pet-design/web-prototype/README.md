@@ -1,73 +1,61 @@
-# React + TypeScript + Vite
+# PeerDrop Pet Prototype
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Web prototype of the v3.5+ pet companion redesign. Discussion + iteration sandbox before SwiftUI port.
 
-Currently, two official plugins are available:
+See [`../../plans/2026-04-25-pet-companion-redesign-design.md`](../../plans/2026-04-25-pet-companion-redesign-design.md) for the design context and rationale.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Quick start
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd docs/pet-design/web-prototype
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open http://localhost:5173/.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## What's in v0
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- One cat sprite, animated at 6 FPS, breathing + drop shadow
+- Four trait sliders (Independent / Curious / Timid / Mischievous) that visibly change behavior
+- Mood-accent stage tint based on dominant trait
+- Connect peer → second cat walks in, trait-flavored greeting beat
+- Tap cat → tapReact + heart particles (variants by trait)
+- Transfer success → progress bar + dual-pet cheer + emoji burst
+- Transfer fail → progress halts at 70% + trait-flavored failure reactions
+- Trait-weighted dialogue bubbles wired to all scenarios + ambient idle
+
+## Tech
+
+- Vite + React + TypeScript
+- Canvas 2D for pet rendering
+- No game engine — keeps it portable to SwiftUI
+
+## Sprite data
+
+`public/data/cat.json` is exported from `PeerDrop/Pet/Sprites/CatSpriteData.swift` via `scripts/export-sprite.mjs`. Re-run that script if the source Swift sprites change.
+
+## Deploy
+
+```bash
+npm run build         # produces dist/
 ```
+
+The `dist/` directory is fully static. Drop it on any static host (Vercel, Netlify, GitHub Pages, S3+CloudFront).
+
+For Vercel:
+
+```bash
+vercel deploy        # interactive
+# or set up a GitHub integration pointing at this subdir
+```
+
+`vercel.json` already configures this directory as the project root with the right build settings.
+
+## Tests
+
+```bash
+npm test
+```
+
+Vitest unit tests for sprite loading, trait selectors, greeting beat, and dialogue selector.
