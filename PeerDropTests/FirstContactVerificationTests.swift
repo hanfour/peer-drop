@@ -151,6 +151,78 @@ final class FirstContactVerificationTests: XCTestCase {
         XCTAssertEqual(pendingFingerprint, referenceContact.keyFingerprint)
     }
 
+    func test_secondUnknownPeer_queuedBehindFirst() {
+        // Multi-peer UX: when peer A is awaiting consent and peer B's initial
+        // message arrives, peer B must be queued behind A. Once the user
+        // resolves A (reject), the sheet must surface B so they're not
+        // silently stranded.
+        let cm = makeManager()
+        let envelopeA = makeInitialEnvelope(displayName: "Alice")
+        let envelopeB = makeInitialEnvelope(displayName: "Bob")
+        createdIdentityKeys.append(envelopeA.senderIdentityKey)
+        createdIdentityKeys.append(envelopeB.senderIdentityKey)
+
+        // Peer A arrives — sheet shows A.
+        cm.handleRemoteMessageForTesting(makeMailboxMessage(envelope: envelopeA))
+        XCTAssertEqual(cm.pendingFirstContact?.senderDisplayName, "Alice",
+                       "First peer should be surfaced immediately")
+        let fpA = cm.pendingFirstContact?.fingerprint
+
+        // Peer B arrives — sheet still shows A (B silently queued).
+        cm.handleRemoteMessageForTesting(makeMailboxMessage(envelope: envelopeB))
+        XCTAssertEqual(cm.pendingFirstContact?.senderDisplayName, "Alice",
+                       "Second peer must NOT replace the active first-contact")
+        XCTAssertEqual(cm.pendingFirstContact?.fingerprint, fpA)
+
+        // User rejects A — sheet now surfaces B.
+        cm.rejectFirstContact(fingerprint: fpA!)
+        XCTAssertEqual(cm.pendingFirstContact?.senderDisplayName, "Bob",
+                       "After resolving A, B must surface for user action")
+        XCTAssertEqual(cm.pendingFirstContact?.senderIdentityKey, envelopeB.senderIdentityKey)
+
+        // User approves B — contact for B is created.
+        let fpB = cm.pendingFirstContact?.fingerprint
+        cm.approveFirstContact(fingerprint: fpB!)
+        XCTAssertNil(cm.pendingFirstContact, "Queue should be empty after both peers resolved")
+        XCTAssertNotNil(cm.trustedContactStore.find(byPublicKey: envelopeB.senderIdentityKey),
+                        "Approving B must create the trusted contact")
+        XCTAssertNil(cm.trustedContactStore.find(byPublicKey: envelopeA.senderIdentityKey),
+                     "Rejected peer A must NOT appear in the trusted store")
+    }
+
+    func test_floodOfUnknownPeers_dropsAfter16() {
+        // Flood cap: a hostile peer (or botnet) cannot fill the consent queue
+        // unboundedly. Cap is 16 entries (1 active + 15 queued).
+        let cm = makeManager()
+        var envelopes: [RemoteMessageEnvelope] = []
+        for i in 0..<17 {
+            let env = makeInitialEnvelope(displayName: "Peer \(i)")
+            envelopes.append(env)
+            createdIdentityKeys.append(env.senderIdentityKey)
+            cm.handleRemoteMessageForTesting(makeMailboxMessage(envelope: env))
+        }
+
+        // Sheet should still show the FIRST peer (it never moves).
+        XCTAssertEqual(cm.pendingFirstContact?.senderDisplayName, "Peer 0",
+                       "Active first-contact must remain peer 0 throughout the flood")
+        XCTAssertEqual(cm.pendingFirstContact?.senderIdentityKey,
+                       envelopes[0].senderIdentityKey)
+
+        // Verify exactly 16 entries are queued by walking the queue: reject
+        // each in turn and count how many surface. Peer 16 (the 17th) was
+        // dropped at insertion, so we should see Peer 0 → Peer 15, then nil.
+        var seenNames: [String] = []
+        while let fp = cm.pendingFirstContact?.fingerprint {
+            seenNames.append(cm.pendingFirstContact!.senderDisplayName)
+            cm.rejectFirstContact(fingerprint: fp)
+        }
+        XCTAssertEqual(seenNames.count, 16,
+                       "Cap must allow exactly 16 pending entries (1 active + 15 queued); got \(seenNames.count)")
+        XCTAssertEqual(seenNames.first, "Peer 0")
+        XCTAssertEqual(seenNames.last, "Peer 15",
+                       "Peer 16 must have been dropped at the cap, not displacing Peer 15")
+    }
+
     func test_rejectWithMismatchedFingerprint_isNoOp() {
         // The UI passes the fingerprint back so a stale/expired sheet doesn't
         // act on a different pending contact. Test that mismatched fingerprints

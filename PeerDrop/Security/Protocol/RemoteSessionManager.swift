@@ -76,6 +76,11 @@ final class RemoteSessionManager: ObservableObject {
 
     // MARK: - Respond to Session (Bob side)
 
+    /// **SECURITY**: Callers MUST verify peer trust before invoking this method.
+    /// This function performs no consent gating — it unconditionally derives
+    /// shared keys and persists a session. The first-contact verification gate
+    /// lives in `ConnectionManager.handleRemoteMessage`; any new caller of this
+    /// method must implement equivalent gating or the X3DH-MITM property is lost.
     func respondToSession(
         contactId: String,
         theirIdentityKey: Data,

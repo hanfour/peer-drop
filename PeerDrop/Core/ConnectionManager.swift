@@ -123,10 +123,18 @@ final class ConnectionManager: ObservableObject {
     /// to X3DH. Drives the FirstContactVerificationSheet.
     @Published var pendingFirstContact: PendingFirstContact?
 
-    /// Envelopes awaiting user consent, keyed by sender identity key (base64).
-    /// Holds both the envelope and the original wire message so we can replay
-    /// once the user approves.
-    private var pendingFirstContactEnvelopes: [String: (envelope: RemoteMessageEnvelope, message: MailboxMessage)] = [:]
+    /// Envelopes awaiting user consent. Insertion-ordered so that when the
+    /// active `pendingFirstContact` is resolved (approve or reject), the next
+    /// queued unknown peer can be surfaced to the user. Each entry holds the
+    /// fingerprint dedup key (base64 of identity key), the parsed envelope,
+    /// and the original wire message so we can replay once approved.
+    private var pendingFirstContactEnvelopes: [(fpKey: String, envelope: RemoteMessageEnvelope, message: MailboxMessage)] = []
+
+    /// Maximum number of unknown peers we will queue for first-contact
+    /// consent. Guards against a hostile peer (or botnet) from filling the
+    /// queue unboundedly until the user notices. Once at capacity, additional
+    /// envelopes from new peers are dropped.
+    private static let maxPendingFirstContacts = 16
 
     let tailnetStore = TailnetPeerStore()
 
@@ -901,17 +909,26 @@ final class ConnectionManager: ObservableObject {
             // verify the peer out-of-band (see FirstContactVerificationSheet).
             if contact == nil && envelope.isInitialMessage {
                 let fpKey = envelope.senderIdentityKey.base64EncodedString()
-                if pendingFirstContactEnvelopes[fpKey] == nil {
-                    pendingFirstContactEnvelopes[fpKey] = (envelope: envelope, message: message)
+                if pendingFirstContactEnvelopes.contains(where: { $0.fpKey == fpKey }) {
+                    // Duplicate envelope from same unknown peer — dedup.
+                    logger.debug("Duplicate first-contact envelope from same unknown peer — already queued")
+                    return
+                }
+                guard pendingFirstContactEnvelopes.count < Self.maxPendingFirstContacts else {
+                    logger.warning("First-contact queue at capacity (\(Self.maxPendingFirstContacts)); dropping envelope from new peer")
+                    return
+                }
+                pendingFirstContactEnvelopes.append((fpKey: fpKey, envelope: envelope, message: message))
+                if pendingFirstContact == nil {
                     let displayFingerprint = Self.computeFingerprint(of: envelope.senderIdentityKey)
                     pendingFirstContact = PendingFirstContact(
                         fingerprint: displayFingerprint,
-                        senderDisplayName: envelope.senderDisplayName ?? "Remote Peer",
+                        senderDisplayName: envelope.senderDisplayName ?? String(localized: "Remote Peer"),
                         senderIdentityKey: envelope.senderIdentityKey
                     )
                     logger.info("First contact from unknown peer pending user consent")
                 } else {
-                    logger.debug("Duplicate first-contact envelope from same unknown peer — already queued")
+                    logger.info("Additional unknown peer queued behind active first-contact; will surface after current decision")
                 }
                 return // wait for user approval
             }
@@ -977,7 +994,8 @@ final class ConnectionManager: ObservableObject {
     func approveFirstContact(fingerprint: String) {
         guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
         let fpKey = current.senderIdentityKey.base64EncodedString()
-        guard let pending = pendingFirstContactEnvelopes.removeValue(forKey: fpKey) else { return }
+        guard let idx = pendingFirstContactEnvelopes.firstIndex(where: { $0.fpKey == fpKey }) else { return }
+        let pending = pendingFirstContactEnvelopes.remove(at: idx)
         pendingFirstContact = nil
 
         let newContact = TrustedContact(
@@ -992,6 +1010,10 @@ final class ConnectionManager: ObservableObject {
         // unknown-peer branch will be skipped and the normal X3DH responder +
         // decrypt + deliver path runs.
         handleRemoteMessage(pending.message)
+        // Surface the next queued unknown peer (if any) so the user can act
+        // on them. Multi-peer UX: don't silently strand peers behind the one
+        // that just resolved.
+        surfaceNextPendingFirstContact()
     }
 
     /// User rejected a first-contact. Discard the queued envelope and do not
@@ -999,9 +1021,25 @@ final class ConnectionManager: ObservableObject {
     func rejectFirstContact(fingerprint: String) {
         guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
         let fpKey = current.senderIdentityKey.base64EncodedString()
-        pendingFirstContactEnvelopes.removeValue(forKey: fpKey)
+        pendingFirstContactEnvelopes.removeAll(where: { $0.fpKey == fpKey })
         pendingFirstContact = nil
         logger.info("User rejected first-contact from unknown peer")
+        // Surface the next queued unknown peer (if any).
+        surfaceNextPendingFirstContact()
+    }
+
+    /// After the active `pendingFirstContact` is resolved, promote the next
+    /// queued envelope (in insertion order) into the published slot so the
+    /// FirstContactVerificationSheet can show it. No-op if a pending contact
+    /// is still set or the queue is empty.
+    private func surfaceNextPendingFirstContact() {
+        guard pendingFirstContact == nil else { return }
+        guard let next = pendingFirstContactEnvelopes.first else { return }
+        pendingFirstContact = PendingFirstContact(
+            fingerprint: Self.computeFingerprint(of: next.envelope.senderIdentityKey),
+            senderDisplayName: next.envelope.senderDisplayName ?? String(localized: "Remote Peer"),
+            senderIdentityKey: next.envelope.senderIdentityKey
+        )
     }
 
     #if DEBUG
