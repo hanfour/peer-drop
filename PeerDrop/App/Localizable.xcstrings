@@ -892,6 +892,42 @@
         }
       }
     },
+    "Can't decrypt messages from %@": {
+      "comment": "Banner shown in the chat when decrypt failures from this peer cross a threshold. The %@ placeholder is the peer's display name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't decrypt messages from %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ からのメッセージを復号できません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 메시지를 복호화할 수 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法解密来自 %@ 的讯息"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法解密來自 %@ 的訊息"
+          }
+        }
+      }
+    },
     "Cancel": {
       "extractionState": "manual",
       "localizations": {
@@ -8491,6 +8527,42 @@
         }
       }
     },
+    "Their identity key may have changed. Verify the fingerprint to continue.": {
+      "comment": "Body text of the decrypt-failure banner shown in chat. Explains the likely cause of repeated decryption failures and prompts the user to verify the peer's fingerprint out-of-band.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Their identity key may have changed. Verify the fingerprint to continue."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手のIDキーが変更された可能性があります。続行する前にフィンガープリントを確認してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상대방의 ID 키가 변경되었을 수 있습니다. 계속하려면 지문을 확인하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方的身份密钥可能已变更。请先验证指纹再继续。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方的身分金鑰可能已變更，請先驗證指紋再繼續。"
+          }
+        }
+      }
+    },
     "These devices were discovered via Bluetooth. Connect to the same WiFi network to transfer files.": {
       "extractionState": "manual",
       "localizations": {
@@ -8893,6 +8965,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用 Relay 連線與此裝置傳輸檔案"
+          }
+        }
+      }
+    },
+    "Verify": {
+      "comment": "Action button in the decrypt-failure banner that takes the user to verify the peer's fingerprint.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證"
           }
         }
       }

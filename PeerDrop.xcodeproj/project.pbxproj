@@ -15,6 +15,7 @@
 		04A866DFCC66CDFCA6721E7E /* PetPalettesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5767B6A73DE0E5BA62C8BCC1 /* PetPalettesTests.swift */; };
 		06528AA9160E9CF2F6DC7F90 /* PeerIdentitySecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */; };
 		07D09D7D283E95AF2677205A /* SpriteCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC33A6107EBDCD17F2E1472B /* SpriteCompositor.swift */; };
+		0860AFDB158802DF211AEC3F /* DecryptFailureBannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D067A433D853F7D010BEA796 /* DecryptFailureBannerTests.swift */; };
 		086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09411CC81953144963CB18 /* PeerRowView.swift */; };
 		08D5A3F73F02BF99E0E3A7A7 /* DogSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1DCEAE6AEBE1D9EF22B06D /* DogSpriteData.swift */; };
 		09AEDF3A4837256033A13616 /* DogSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1DCEAE6AEBE1D9EF22B06D /* DogSpriteData.swift */; };
@@ -377,6 +378,7 @@
 		F21394B4FF3FCF7E66AE4035 /* PeerIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */; };
 		F377575793BC39A79422CA05 /* NearbyInteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FE9642235E04A824571838 /* NearbyInteractionManager.swift */; };
 		F422276653E0728E859B9BC9 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C17EA9E6BE4797FC20EBBBC /* WebRTC */; };
+		F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
 		F466FB89CB8672F3E104263B /* PairingPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06B83396F6C34EDDDD268A60 /* PairingPayload.swift */; };
 		F4F4293A5A8616CB1AE18CF7 /* PetEvolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76246879247CD18F2ABD6E1 /* PetEvolutionTests.swift */; };
 		F533289FF2327987074FC0E7 /* FrogSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA23C320E11244F2F5293A4 /* FrogSpriteData.swift */; };
@@ -481,6 +483,7 @@
 		1240CE114D649D9D23131928 /* DeviceRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordTests.swift; sourceTree = "<group>"; };
 		12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerActionSheet.swift; sourceTree = "<group>"; };
 		137D4C965D7DFC2C55F1346F /* WorkerSignalingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerSignalingTests.swift; sourceTree = "<group>"; };
+		15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecryptFailureBannerView.swift; sourceTree = "<group>"; };
 		164E30461F67A2E80FD9DA0A /* ReactionPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPayload.swift; sourceTree = "<group>"; };
 		1650253E0339B14BB1857FBF /* DoubleRatchetPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoubleRatchetPersistenceTests.swift; sourceTree = "<group>"; };
 		17AAAEF08C9D347971BD3E47 /* FeatureSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureSettings.swift; sourceTree = "<group>"; };
@@ -760,6 +763,7 @@
 		CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorTests.swift; sourceTree = "<group>"; };
 		CFD9E475DC3BECCE5C2C5C4E /* PetDailyLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetDailyLoginTests.swift; sourceTree = "<group>"; };
 		D02B75A4974AB0C59CB9A7CD /* InteractionType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InteractionType.swift; path = PeerDrop/Pet/Model/InteractionType.swift; sourceTree = "<group>"; };
+		D067A433D853F7D010BEA796 /* DecryptFailureBannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecryptFailureBannerTests.swift; sourceTree = "<group>"; };
 		D06AC783121D682F8E46DA1D /* PetIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetIntegrationTests.swift; sourceTree = "<group>"; };
 		D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReplyTests.swift; sourceTree = "<group>"; };
 		D1154746BAA9972114FA8C15 /* PetDialogEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetDialogEngine.swift; sourceTree = "<group>"; };
@@ -938,6 +942,7 @@
 				2E188F98137CC86BA3F87F9E /* ConnectionTimeoutTests.swift */,
 				A4C80BFCC4EAF2CB326660AA /* DataChannelTransportReassemblyTests.swift */,
 				CD3861D6EB13D47D188BBB05 /* DataChannelTransportTests.swift */,
+				D067A433D853F7D010BEA796 /* DecryptFailureBannerTests.swift */,
 				6B34AD557F41611401810878 /* DeviceIdentityTests.swift */,
 				C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */,
 				1240CE114D649D9D23131928 /* DeviceRecordTests.swift */,
@@ -1285,6 +1290,7 @@
 				CAED5F8373D498D847E54328 /* ChatBubbleView.swift */,
 				E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */,
 				C4148097F734513B29899E4A /* ChatView.swift */,
+				15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */,
 				712CCBDE5A63978DD474D214 /* GroupChatView.swift */,
 				DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */,
 				A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */,
@@ -1758,6 +1764,7 @@
 				6F346DC19133E5CC09B63891 /* ConnectionTimeoutTests.swift in Sources */,
 				5BD25C6F8D17B4AB4AF8966C /* DataChannelTransportReassemblyTests.swift in Sources */,
 				FA0FFE153DDBF58EC23F9419 /* DataChannelTransportTests.swift in Sources */,
+				0860AFDB158802DF211AEC3F /* DecryptFailureBannerTests.swift in Sources */,
 				160727C51F606D20EB362D28 /* DeviceIdentityTests.swift in Sources */,
 				F197E8CFA4067CF49BC85B16 /* DeviceRecordStoreTests.swift in Sources */,
 				3BD6BDEACD112B57E75D5A84 /* DeviceRecordTests.swift in Sources */,
@@ -1946,6 +1953,7 @@
 				13BDBEF232701A8D65911FA4 /* Data+Chunking.swift in Sources */,
 				5675BD6D590DF7AEF6F44A22 /* DataChannelClient.swift in Sources */,
 				0EB449EE2838A44505508B07 /* DataChannelTransport.swift in Sources */,
+				F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */,
 				AB02B2955669F006F3D1FC9D /* DeviceGroup.swift in Sources */,
 				18A43C643870F03CF49EEE09 /* DeviceGroupStore.swift in Sources */,
 				5979A61B244DDF555E19417F /* DeviceIdentity.swift in Sources */,

@@ -183,6 +183,25 @@ struct ChatView: View {
 
             Divider()
 
+            // Decrypt-failure banner: surfaces after N consecutive decrypt
+            // failures from this peer. Either action clears it.
+            if let failureBanner = connectionManager.decryptFailureBanner,
+               failureBanner.contactId == peerID {
+                DecryptFailureBannerView(
+                    displayName: failureBanner.displayName,
+                    onVerify: {
+                        // No dedicated fingerprint sheet from inside the chat
+                        // yet — dismissing keeps the user in the chat without
+                        // re-nagging. Future: navigate to contact detail.
+                        connectionManager.dismissDecryptFailureBanner()
+                    },
+                    onDismiss: {
+                        connectionManager.dismissDecryptFailureBanner()
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             // Disconnected banner with reconnect option
             if isPeerDisconnected {
                 VStack(spacing: 8) {

@@ -81,6 +81,16 @@ struct KeyChangeAlertInfo: Identifiable {
     let newPublicKey: Data
 }
 
+/// Surfaced to the user after a configurable number of consecutive decrypt
+/// failures from the same peer. Drives a dismissible banner in `ChatView`
+/// suggesting the user verify the peer's fingerprint (e.g., the peer rotated
+/// their identity key without our knowledge, or a session is corrupted).
+struct DecryptFailureBanner: Identifiable, Equatable {
+    let contactId: String
+    let displayName: String
+    var id: String { contactId }
+}
+
 /// An envelope from an unknown peer awaiting user consent before X3DH session
 /// establishment. The fingerprint is the short human-readable hex string the
 /// user compares out-of-band to defend against MITM at first contact.
@@ -122,6 +132,20 @@ final class ConnectionManager: ObservableObject {
     /// awaiting user consent before we create a TrustedContact and respond
     /// to X3DH. Drives the FirstContactVerificationSheet.
     @Published var pendingFirstContact: PendingFirstContact?
+
+    /// Surfaced banner when consecutive decrypt failures from a single peer
+    /// cross `decryptFailureBannerThreshold`. Cleared on successful decrypt
+    /// from the same peer or explicit user dismissal.
+    @Published var decryptFailureBanner: DecryptFailureBanner?
+
+    /// Per-contact running count of consecutive decrypt failures. Reset to 0
+    /// on a successful decrypt from the same peer. Keyed by `contact.id.uuidString`.
+    private var consecutiveDecryptFailures: [String: Int] = [:]
+
+    /// Number of back-to-back decrypt failures from the same peer required
+    /// before we surface a banner to the user. Picked to ride out brief
+    /// out-of-order ratchet hiccups without nagging.
+    private static let decryptFailureBannerThreshold = 3
 
     /// Envelopes awaiting user consent. Insertion-ordered so that when the
     /// active `pendingFirstContact` is resolved (approve or reject), the next
@@ -956,10 +980,35 @@ final class ConnectionManager: ObservableObject {
                 )
             }
 
-            let plaintext = try remoteSessionManager.decrypt(
-                message: envelope.ratchetMessage,
-                from: contact.id.uuidString
-            )
+            // Decrypt is wrapped in its own do/catch so we can track consecutive
+            // failures per peer and surface a banner to the user. Other errors
+            // (envelope decode, session establishment) flow through the OUTER
+            // catch unchanged.
+            let plaintext: Data
+            do {
+                plaintext = try remoteSessionManager.decrypt(
+                    message: envelope.ratchetMessage,
+                    from: contact.id.uuidString
+                )
+                // Successful decrypt — reset the failure counter for this peer.
+                consecutiveDecryptFailures[contact.id.uuidString] = 0
+                // If a banner was visible for this peer, dismiss it (recovered).
+                if decryptFailureBanner?.contactId == contact.id.uuidString {
+                    decryptFailureBanner = nil
+                }
+            } catch {
+                let count = (consecutiveDecryptFailures[contact.id.uuidString] ?? 0) + 1
+                consecutiveDecryptFailures[contact.id.uuidString] = count
+                logger.error("Decrypt failure #\(count) from \(contact.displayName): \(error.localizedDescription)")
+                if count >= Self.decryptFailureBannerThreshold,
+                   decryptFailureBanner?.contactId != contact.id.uuidString {
+                    decryptFailureBanner = DecryptFailureBanner(
+                        contactId: contact.id.uuidString,
+                        displayName: contact.displayName
+                    )
+                }
+                return
+            }
 
             if let text = String(data: plaintext, encoding: .utf8) {
                 chatManager.saveIncoming(
@@ -972,6 +1021,39 @@ final class ConnectionManager: ObservableObject {
             logger.error("Failed to process remote message: \(error.localizedDescription)")
         }
     }
+
+    /// User-initiated dismissal of the decrypt-failure banner. Resets the
+    /// per-peer failure counter so the banner does not immediately re-appear
+    /// on the next failure — it will only return after `threshold` NEW
+    /// consecutive failures from the same peer.
+    func dismissDecryptFailureBanner() {
+        if let banner = decryptFailureBanner {
+            consecutiveDecryptFailures[banner.contactId] = 0
+        }
+        decryptFailureBanner = nil
+    }
+
+    #if DEBUG
+    /// Test-only: simulate a decrypt failure from a peer without driving the
+    /// full `handleRemoteMessage` flow. Mirrors the production branch.
+    func recordDecryptFailureForTesting(contactId: String, displayName: String) {
+        let count = (consecutiveDecryptFailures[contactId] ?? 0) + 1
+        consecutiveDecryptFailures[contactId] = count
+        if count >= Self.decryptFailureBannerThreshold,
+           decryptFailureBanner?.contactId != contactId {
+            decryptFailureBanner = DecryptFailureBanner(
+                contactId: contactId, displayName: displayName)
+        }
+    }
+
+    /// Test-only: simulate a successful decrypt from a peer.
+    func recordDecryptSuccessForTesting(contactId: String) {
+        consecutiveDecryptFailures[contactId] = 0
+        if decryptFailureBanner?.contactId == contactId {
+            decryptFailureBanner = nil
+        }
+    }
+    #endif
 
     // MARK: - First-Contact Verification
 
