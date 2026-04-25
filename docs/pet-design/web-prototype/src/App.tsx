@@ -43,6 +43,11 @@ export default function App() {
       ? data.baby[currentAction]
       : data?.baby.idle) ?? [];
   const frameIdx = useFrameAnimation(frames.length);
+  // Clamp: when `currentAction` switches between actions with different frame
+  // counts, the hook's internal frame state may transiently exceed the new
+  // length on the first render. Clamping here avoids handing an undefined
+  // frame to SpriteCanvas.
+  const safeFrameIdx = frames.length > 0 ? Math.min(frameIdx, frames.length - 1) : 0;
 
   return (
     <div
@@ -60,7 +65,7 @@ export default function App() {
       {data && palette && frames.length > 0 ? (
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           <PetStage accentColor={ACCENT[dominantTrait(traits)]}>
-            <SpriteCanvas frame={frames[frameIdx]} palette={palette} />
+            <SpriteCanvas frame={frames[safeFrameIdx]} palette={palette} />
           </PetStage>
           <TraitPanel traits={traits} setTraits={setTraits} />
         </div>
