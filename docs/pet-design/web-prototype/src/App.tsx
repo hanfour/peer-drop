@@ -8,6 +8,7 @@ import { defaultTraits, dominantTrait, type TraitName, type Traits } from './tra
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
 import { selectGreeting, type GreetingBeat } from './scenarios/greeting';
 import { Particles, type Particle } from './render/Particles';
+import { ProgressBar, useTransfer } from './scenarios/Transfer';
 
 const ACCENT: Record<TraitName, string> = {
   curious: 'rgba(180, 220, 255, 0.5)', // cool blue
@@ -39,6 +40,7 @@ export default function App() {
   const [localBeat, setLocalBeat] = useState<GreetingBeat | null>(null);
   const [particles, setParticles] = useState<Particle[]>([]);
   const particleIdRef = useRef(0);
+  const transfer = useTransfer();
 
   // Stage size (must match PetStage's intrinsic 480x240) — used to position
   // particle bursts in stage-local coordinates.
@@ -120,7 +122,53 @@ export default function App() {
     setPeerPhase((p) => (p === 'absent' ? 'walking-in' : 'absent'));
   };
 
-  const peerAction: 'walking' | 'idle' = peerPhase === 'walking-in' ? 'walking' : 'idle';
+  const onTransferSuccess = () => {
+    // If the peer isn't on stage yet, run the walk-in first then start
+    // the transfer. We wait slightly past the 1.5s walk-in so the
+    // greeting beat doesn't immediately get clobbered by transfer state.
+    if (peerPhase === 'absent') {
+      setPeerPhase('walking-in');
+      setTimeout(() => transfer.start('success'), 1700);
+    } else {
+      transfer.start('success');
+    }
+  };
+
+  // React to transfer completion: emit a celebratory burst and put the
+  // local pet into a longer `happy` beat. Peer pet's reaction is handled
+  // by the transfer state itself (see action selection below).
+  useEffect(() => {
+    if (transfer.state === 'success') {
+      const burst: Particle[] = Array.from({ length: 12 }, (_, i) => ({
+        id: ++particleIdRef.current,
+        x: STAGE_W * 0.5 + (Math.random() - 0.5) * 80,
+        y: STAGE_H * 0.46,
+        vx: (Math.random() - 0.5) * 80,
+        vy: -100 - Math.random() * 40,
+        emoji: ['✨', '💖', '🎉', '⭐'][i % 4],
+        bornAt: performance.now(),
+        lifeMs: 1500,
+      }));
+      setParticles((prev) => [...prev, ...burst]);
+      setLocalBeat({ action: 'happy' as GreetingBeat['action'], durationMs: 1500 });
+      const id = setTimeout(() => setLocalBeat(null), 1500);
+      return () => clearTimeout(id);
+    }
+  }, [transfer.state]);
+
+  // Peer pet's force-action — transfer outcomes drive this so both pets
+  // can cheer (or commiserate) in sync. Cleared on a timer.
+  const [peerForceAction, setPeerForceAction] = useState<string | null>(null);
+  useEffect(() => {
+    if (transfer.state === 'success') {
+      setPeerForceAction('happy');
+      const id = setTimeout(() => setPeerForceAction(null), 1500);
+      return () => clearTimeout(id);
+    }
+  }, [transfer.state]);
+
+  const peerAction: string =
+    peerForceAction ?? (peerPhase === 'walking-in' ? 'walking' : 'idle');
   const peerFrames =
     (data?.baby[peerAction] && data.baby[peerAction].length > 0
       ? data.baby[peerAction]
@@ -209,6 +257,7 @@ export default function App() {
           <PetStage
             pets={pets}
             accentColor={ACCENT[dominantTrait(traits)]}
+            progressBar={<ProgressBar progress={transfer.progress} state={transfer.state} />}
             overlay={<Particles particles={particles} />}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -216,6 +265,13 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <button style={buttonStyle} onClick={onTogglePeer}>
                 {peerPhase === 'absent' ? 'Connect peer' : 'Disconnect peer'}
+              </button>
+              <button
+                style={buttonStyle}
+                onClick={onTransferSuccess}
+                disabled={transfer.state === 'running'}
+              >
+                Transfer (success)
               </button>
             </div>
           </div>

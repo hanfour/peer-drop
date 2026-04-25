@@ -1,7 +1,7 @@
 import type { Traits } from '../traits/types';
 import { dominantTrait } from '../traits/types';
 
-export type GreetingAction = 'walking' | 'scared' | 'tapReact' | 'idle';
+export type GreetingAction = 'walking' | 'scared' | 'tapReact' | 'idle' | 'happy';
 
 export type GreetingBeat = {
   action: GreetingAction;
