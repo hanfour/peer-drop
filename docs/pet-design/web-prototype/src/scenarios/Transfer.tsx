@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 export type TransferState = 'idle' | 'running' | 'success' | 'failed';
 
 /**
- * Centered progress bar drawn inside the stage (between the two pets).
- * Color shifts from blue → red when the transfer enters the `failed`
- * terminal state.
+ * Pixel-art progress bar centered inside the stage (between the two
+ * pets). 2px black border, recessed inner shadow (white top / gray
+ * bottom), solid flat fill — saturated blue while running/success,
+ * saturated red on failure. A 1px white shimmer stripe sweeps across
+ * the success path for life.
  */
 export function ProgressBar({
   progress,
@@ -15,33 +17,72 @@ export function ProgressBar({
   state: TransferState;
 }) {
   if (state === 'idle') return null;
-  const fillBackground =
-    state === 'failed'
-      ? 'linear-gradient(90deg, #FF7B7B, #FF5252)'
-      : 'linear-gradient(90deg, #4FC3F7, #29B6F6)';
+  const isFail = state === 'failed';
+  const fillColor = isFail ? '#FF5566' : '#5599FF';
+  const fillShade = isFail ? '#B43040' : '#3A6FCC';
   return (
     <div
       style={{
         position: 'absolute',
         left: '50%',
-        top: '46%',
+        top: '55%',
         transform: 'translate(-50%, -50%)',
         width: 160,
-        height: 8,
-        background: 'rgba(0,0,0,0.08)',
-        borderRadius: 4,
-        overflow: 'hidden',
+        height: 12,
+        // 2px black outer border + recessed inner shadow.
+        background: '#1A1410',
+        border: '2px solid #1A1410',
+        borderRadius: 0,
+        boxShadow:
+          'inset 0 1px 0 rgba(0,0,0,0.6), 0 2px 0 rgba(0,0,0,0.25)',
         pointerEvents: 'none',
+        imageRendering: 'pixelated',
       }}
     >
+      {/* Recessed inner well (lighter top / darker bottom slivers) */}
       <div
         style={{
-          width: `${Math.min(100, Math.max(0, progress * 100))}%`,
-          height: '100%',
-          background: fillBackground,
-          transition: 'width 0.1s linear, background 0.3s ease',
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(180deg, #2A2018 0%, #100A06 100%)',
         }}
       />
+      {/* Filled portion — flat top color + 1px darker shade at bottom */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          height: '100%',
+          width: `${Math.min(100, Math.max(0, progress * 100))}%`,
+          background: `linear-gradient(180deg, ${fillColor} 0%, ${fillColor} 60%, ${fillShade} 100%)`,
+          transition: 'width 0.1s linear, background 0.3s ease',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Shimmer stripe (only on running/success). 1px white stripe
+            sweeping diagonally — gives the bar life. */}
+        {!isFail && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 24,
+              height: '100%',
+              background:
+                'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%)',
+              animation: 'progress-shimmer 1.4s linear infinite',
+            }}
+          />
+        )}
+      </div>
+      <style>{`
+        @keyframes progress-shimmer {
+          0%   { transform: translateX(-30px); }
+          100% { transform: translateX(160px); }
+        }
+      `}</style>
     </div>
   );
 }
