@@ -82,26 +82,65 @@ final class DataChannelTransportReassemblyTests: XCTestCase {
         var reason: DataChannelTransport.ReassemblyRejectReason?
         transport.onReassemblyRejected = { reason = $0 }
 
+        // Capture the assembled bytes so we can verify the original chunk
+        // survived the attacker's conflicting replay.
+        var assembled: Data?
+        transport.onAssembledDataForTesting = { assembled = $0 }
+
         let first = DataChannelTransport.makeChunkPacket(
-            totalLength: 200,
+            totalLength: 4,
             messageID: 1,
             chunkIndex: 0,
             totalChunks: 2,
             payload: Data([0xAA, 0xBB])
         )
-        let second = DataChannelTransport.makeChunkPacket(
-            totalLength: 200,
+        let attacker = DataChannelTransport.makeChunkPacket(
+            totalLength: 4,
             messageID: 1,
             chunkIndex: 0,
             totalChunks: 2,
             payload: Data([0xCC, 0xDD])
         )
         transport.handleReceivedData(first)
-        transport.handleReceivedData(second)
+        transport.handleReceivedData(attacker)
 
         XCTAssertEqual(reason, .duplicateChunk)
         // Original entry should still be present (we drop the offending chunk only).
         XCTAssertEqual(transport.reassemblyBufferCount, 1)
+
+        // Complete the message with a legitimate second chunk and verify the
+        // assembled bytes preserve the ORIGINAL first chunk, not the attacker's.
+        let second = DataChannelTransport.makeChunkPacket(
+            totalLength: 4,
+            messageID: 1,
+            chunkIndex: 1,
+            totalChunks: 2,
+            payload: Data([0x11, 0x22])
+        )
+        transport.handleReceivedData(second)
+
+        XCTAssertEqual(assembled, Data([0xAA, 0xBB, 0x11, 0x22]))
+        XCTAssertEqual(transport.reassemblyBufferCount, 0)
+    }
+
+    func test_declaredTotalLengthExceedingCap_isRejected() {
+        let transport = makeTransport()
+        var reason: DataChannelTransport.ReassemblyRejectReason?
+        transport.onReassemblyRejected = { reason = $0 }
+
+        // Attacker declares a 4 GB message in the header. Must be rejected
+        // upfront — before any buffer entry is created.
+        let packet = DataChannelTransport.makeChunkPacket(
+            totalLength: UInt32.max,
+            messageID: 1,
+            chunkIndex: 0,
+            totalChunks: 100,
+            payload: Data(count: 10)
+        )
+        transport.handleReceivedData(packet)
+
+        XCTAssertEqual(reason, .messageTooLarge)
+        XCTAssertEqual(transport.reassemblyBufferCount, 0)
     }
 
     func test_identicalDuplicateChunk_isAccepted() {

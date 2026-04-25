@@ -31,6 +31,7 @@ final class DataChannelTransport: TransportProtocol {
         case duplicateChunk
         case bufferTotalBytesExceeded
         case bufferEntryCountExceeded
+        case messageTooLarge
     }
 
     /// Called when an incoming chunk is rejected. Useful for metrics + tests.
@@ -41,6 +42,11 @@ final class DataChannelTransport: TransportProtocol {
     var reassemblyBufferCount: Int {
         queue.sync { reassemblyBuffer.count }
     }
+
+    /// Test-only hook fired when a multi-chunk message completes reassembly.
+    /// Exposes the raw assembled bytes before `PeerMessage.decoded(from:)` runs,
+    /// so tests can verify byte-level integrity without a real `PeerMessage` payload.
+    var onAssembledDataForTesting: ((Data) -> Void)?
 
     // MARK: - Properties
 
@@ -57,6 +63,9 @@ final class DataChannelTransport: TransportProtocol {
     private var nextMessageID: UInt16 = 0
     /// Reassembly buffer for chunked messages, keyed by message ID.
     private var reassemblyBuffer: [UInt16: ReassemblyState] = [:]
+    /// Running cache of total bytes across all entries in `reassemblyBuffer`.
+    /// Maintained on every mutation to avoid O(N·M) recomputation per chunk.
+    private var reassemblyTotalBytes: Int = 0
 
     /// Stale reassembly entries older than this are purged.
     private static let reassemblyTimeout: TimeInterval = 30
@@ -247,7 +256,7 @@ final class DataChannelTransport: TransportProtocol {
             return
         }
 
-        let (_, messageID, chunkIndex, totalChunks, payload) = parsed
+        let (totalLength, messageID, chunkIndex, totalChunks, payload) = parsed
 
         // Reject nonsensical totalChunks (0 or chunkIndex out of range)
         guard totalChunks > 0 else {
@@ -261,6 +270,17 @@ final class DataChannelTransport: TransportProtocol {
             return
         }
 
+        // Reject upfront any chunk whose declared totalLength already exceeds
+        // the global reassembly cap. Without this, an attacker could send a
+        // single chunk of a 3 GB-declared message and waste up to the cap
+        // before we notice.
+        guard totalLength > 0,
+              totalLength <= UInt32(Self.maxReassemblyTotalBytes) else {
+            logger.warning("Rejecting chunk: declared totalLength=\(totalLength) exceeds cap")
+            onReassemblyRejected?(.messageTooLarge)
+            return
+        }
+
         if totalChunks == 1 {
             // Single-chunk message, deliver immediately
             receiveContinuation.yield(payload)
@@ -270,18 +290,33 @@ final class DataChannelTransport: TransportProtocol {
         // Multi-chunk reassembly keyed by messageID — synchronized
         var rejectReason: ReassemblyRejectReason?
         let assembled: Data? = queue.sync {
-            // Purge expired entries
-            reassemblyBuffer = reassemblyBuffer.filter { !$0.value.isExpired }
+            #if DEBUG
+            // Detect drift between the running cache and ground truth.
+            assert(
+                reassemblyTotalBytes == reassemblyBuffer.values.reduce(0) { acc, state in
+                    acc + state.chunks.values.reduce(0) { $0 + $1.count }
+                },
+                "reassemblyTotalBytes drifted from actual buffer contents"
+            )
+            #endif
 
-            // Estimate bytes if we create a new entry. This is a rough cap
-            // based on already-received chunks; real payloads are typically
-            // smaller than the per-chunk maximum.
-            let currentBytes = reassemblyBuffer.values.reduce(0) { acc, state in
-                acc + state.chunks.values.reduce(0) { $0 + $1.count }
+            // Purge expired entries, decrementing the running cache for each.
+            let beforePurge = reassemblyBuffer
+            reassemblyBuffer = reassemblyBuffer.filter { !$0.value.isExpired }
+            for (id, state) in beforePurge where reassemblyBuffer[id] == nil {
+                reassemblyTotalBytes -= state.chunks.values.reduce(0) { $0 + $1.count }
             }
 
+            // 1. Byte cap — cheapest + most likely to reject malicious traffic.
+            //    Check BEFORE inserting any new entry so failed chunks can't
+            //    leave empty placeholders hanging around.
+            guard reassemblyTotalBytes + payload.count <= Self.maxReassemblyTotalBytes else {
+                rejectReason = .bufferTotalBytesExceeded
+                return nil
+            }
+
+            // 2. Entry-count cap — only if creating a new entry.
             if reassemblyBuffer[messageID] == nil {
-                // Cap concurrent partial messages
                 guard reassemblyBuffer.count < Self.maxReassemblyEntries else {
                     rejectReason = .bufferEntryCountExceeded
                     return nil
@@ -291,28 +326,33 @@ final class DataChannelTransport: TransportProtocol {
                 )
             }
 
-            // Cap total buffered bytes before adding this chunk.
-            // Dropping a chunk leaves the existing partial state intact so it
-            // can still complete if the sender retries; it simply won't grow.
-            guard currentBytes + payload.count <= Self.maxReassemblyTotalBytes else {
-                rejectReason = .bufferTotalBytesExceeded
+            // 3. Duplicate check — detect conflicting payload for same index.
+            //    Benign replays with identical bytes are silently accepted.
+            if let existing = reassemblyBuffer[messageID]?.chunks[chunkIndex] {
+                if existing != payload {
+                    rejectReason = .duplicateChunk
+                    return nil
+                }
+                // Identical replay — no-op, don't double-count bytes.
+                if reassemblyBuffer[messageID]?.isComplete == true {
+                    let result = reassemblyBuffer[messageID]!.assemble()
+                    let removedBytes = reassemblyBuffer[messageID]!.chunks.values.reduce(0) { $0 + $1.count }
+                    reassemblyBuffer.removeValue(forKey: messageID)
+                    reassemblyTotalBytes -= removedBytes
+                    return result
+                }
                 return nil
             }
 
-            // Detect duplicate chunks with a conflicting payload for the same
-            // index — likely an attack or a peer bug. Benign replays with
-            // identical bytes are silently accepted.
-            if let existing = reassemblyBuffer[messageID]?.chunks[chunkIndex],
-               existing != payload {
-                rejectReason = .duplicateChunk
-                return nil
-            }
-
+            // 4. Store chunk + update running cache.
             reassemblyBuffer[messageID]?.chunks[chunkIndex] = payload
+            reassemblyTotalBytes += payload.count
 
             if reassemblyBuffer[messageID]?.isComplete == true {
                 let result = reassemblyBuffer[messageID]!.assemble()
+                let removedBytes = reassemblyBuffer[messageID]!.chunks.values.reduce(0) { $0 + $1.count }
                 reassemblyBuffer.removeValue(forKey: messageID)
+                reassemblyTotalBytes -= removedBytes
                 return result
             }
             return nil
@@ -325,6 +365,7 @@ final class DataChannelTransport: TransportProtocol {
 
         if let assembled {
             logger.debug("Reassembled \(totalChunks) chunks → \(assembled.count) bytes")
+            onAssembledDataForTesting?(assembled)
             receiveContinuation.yield(assembled)
         }
     }
