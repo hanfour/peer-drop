@@ -19,16 +19,6 @@ const ACCENT: Record<TraitName, string> = {
   independent: 'rgba(220, 220, 230, 0.4)', // neutral gray
 };
 
-const buttonStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 13,
-  fontFamily: 'system-ui',
-  borderRadius: 6,
-  border: '1px solid rgba(0,0,0,0.15)',
-  background: '#fff',
-  cursor: 'pointer',
-};
-
 export default function App() {
   const [data, setData] = useState<SpriteData | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
@@ -336,17 +326,28 @@ export default function App() {
     <div
       style={{
         minHeight: '100vh',
-        padding: 24,
-        fontFamily: 'system-ui',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 16,
+        padding: '32px 24px',
+        maxWidth: 1100,
+        margin: '0 auto',
       }}
     >
-      <h1 style={{ margin: 0 }}>PeerDrop Pet Prototype</h1>
+      <header style={{ marginBottom: 24 }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.5px' }}>
+          PeerDrop Pet Prototype
+        </h1>
+        <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
+          v0 — design exploration for the v3.5 pet companion redesign
+        </p>
+      </header>
       {ready ? (
-        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+        <main
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, auto) minmax(280px, 320px)',
+            gap: 32,
+            alignItems: 'flex-start',
+          }}
+        >
           <PetStage
             pets={pets}
             accentColor={ACCENT[dominantTrait(traits)]}
@@ -354,32 +355,28 @@ export default function App() {
             overlay={<Particles particles={particles} />}
             dialogueByPet={dialogue}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <aside style={{ display: 'grid', gap: 16 }}>
             <TraitPanel traits={traits} setTraits={setTraits} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <button style={buttonStyle} onClick={onTogglePeer}>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <button onClick={onTogglePeer}>
                 {peerPhase === 'absent' ? 'Connect peer' : 'Disconnect peer'}
               </button>
-              <button
-                style={buttonStyle}
-                onClick={onTransferSuccess}
-                disabled={transfer.state === 'running'}
-              >
+              <button onClick={onTransferSuccess} disabled={transfer.state === 'running'}>
                 Transfer (success)
               </button>
-              <button
-                style={buttonStyle}
-                onClick={onTransferFail}
-                disabled={transfer.state === 'running'}
-              >
+              <button onClick={onTransferFail} disabled={transfer.state === 'running'}>
                 Transfer (fail)
               </button>
             </div>
-          </div>
-        </div>
+          </aside>
+        </main>
       ) : (
         <div>Loading...</div>
       )}
+      <footer style={{ marginTop: 48, color: '#aaa', fontSize: 12 }}>
+        Designed 2026-04-25. See{' '}
+        <code>docs/plans/2026-04-25-pet-companion-redesign-design.md</code> for context.
+      </footer>
     </div>
   );
 }
