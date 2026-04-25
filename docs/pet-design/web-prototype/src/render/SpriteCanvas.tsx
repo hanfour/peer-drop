@@ -35,6 +35,41 @@ export function SpriteCanvas({ frame, palette, scale = 8, flipped = false }: Pro
       }
     }
     ctx.restore();
+
+    // Rim light pass — drawn in WORLD coordinates (after restore) so the
+    // highlight always lands on the world-right edge of the sprite, even
+    // when the sprite itself is mirrored via `flipped`.
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    const width = frame[0]?.length ?? 0;
+    for (let y = 0; y < frame.length; y++) {
+      const row = frame[y];
+      if (!flipped) {
+        let rightmost = -1;
+        for (let x = row.length - 1; x >= 0; x--) {
+          if (row[x] !== 0) {
+            rightmost = x;
+            break;
+          }
+        }
+        if (rightmost >= 0) {
+          ctx.fillRect(rightmost * scale, y * scale, scale, scale);
+        }
+      } else {
+        // For flipped sprites: the world-right edge is the source-frame's
+        // leftmost non-transparent pixel, mapped via (width - 1 - leftmost).
+        let leftmost = -1;
+        for (let x = 0; x < row.length; x++) {
+          if (row[x] !== 0) {
+            leftmost = x;
+            break;
+          }
+        }
+        if (leftmost >= 0) {
+          const worldX = width - 1 - leftmost;
+          ctx.fillRect(worldX * scale, y * scale, scale, scale);
+        }
+      }
+    }
   }, [frame, palette, scale, flipped]);
 
   return (
