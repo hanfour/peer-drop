@@ -11,6 +11,23 @@ struct TabBarOnlyModifier: ViewModifier {
     }
 }
 
+/// Unified sheet state for `ContentView` — replaces the previous mix of
+/// boolean `@State` flags driving `.sheet(isPresented:)`. Sheets owned by
+/// `ConnectionManager` (transferProgress, voiceCall, pendingIncomingRequest,
+/// pendingFirstContact) stay where they are; alerts and toasts use their
+/// own mechanics and are intentionally not unified here.
+enum ContentSheet: Identifiable {
+    case share(URL)
+    case connectionOptions
+
+    var id: String {
+        switch self {
+        case .share: return "share"
+        case .connectionOptions: return "connectionOptions"
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @EnvironmentObject var petEngine: PetEngine
@@ -19,13 +36,11 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var errorMessage: String?
     @State private var showError = false
-    @State private var showShareSheet = false
-    @State private var receivedFileURL: URL?
+    @State private var activeSheet: ContentSheet?
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
     @State private var failureCardReason: String?
-    @State private var showFailureOptionsSheet = false
     @State private var currentInvite: RelayInvite?
     @State private var processedInviteIDs: [String: Date] = [:] // id → timestamp, 60s TTL
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -97,9 +112,14 @@ struct ContentView: View {
             VoiceCallView()
                 .environmentObject(connectionManager)
         }
-        .sheet(isPresented: $showShareSheet) {
-            if let url = receivedFileURL {
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .share(let url):
                 ShareSheet(items: [url])
+            case .connectionOptions:
+                ConnectionOptionsSheet()
+                    .environmentObject(connectionManager)
+                    .environmentObject(connectionContext)
             }
         }
         .alert("Connection Error", isPresented: $showError) {
@@ -158,8 +178,7 @@ struct ContentView: View {
         }
         .onChange(of: connectionManager.fileTransfer?.receivedFileURL) { _ in
             if let url = connectionManager.fileTransfer?.receivedFileURL {
-                receivedFileURL = url
-                showShareSheet = true
+                activeSheet = .share(url)
                 connectionManager.fileTransfer?.receivedFileURL = nil
             }
         }
@@ -237,11 +256,6 @@ struct ContentView: View {
                 failureGuidanceCard(reason: reason)
             }
         }
-        .sheet(isPresented: $showFailureOptionsSheet) {
-            ConnectionOptionsSheet()
-                .environmentObject(connectionManager)
-                .environmentObject(connectionContext)
-        }
         .onChange(of: showReportSentToast) { newValue in
             if newValue {
                 Task {
@@ -260,7 +274,7 @@ struct ContentView: View {
     private func failureGuidanceCard(reason: String) -> some View {
         let trigger = GuidanceCard.Trigger.failure(reason: reason)
         let dismissAction: () -> Void = { withAnimation { failureCardReason = nil } }
-        let moreAction: () -> Void = { showFailureOptionsSheet = true }
+        let moreAction: () -> Void = { activeSheet = .connectionOptions }
         GuidanceCard(trigger: trigger, onMoreOptions: moreAction, onDismiss: dismissAction)
             .transition(AnyTransition.move(edge: .top).combined(with: .opacity))
             .padding(Edge.Set.top, 8)

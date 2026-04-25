@@ -61,7 +61,7 @@ struct ConnectionQRView: View {
                                 Label("Relay: \(code)", systemImage: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
                             } else if isCreatingRelay {
-                                Label("Relay: \(String(localized: "建立中..."))", systemImage: "arrow.triangle.2.circlepath")
+                                Label("Relay: \(String(localized: "Creating..."))", systemImage: "arrow.triangle.2.circlepath")
                                     .foregroundStyle(.orange)
                             } else if let error = relayError {
                                 Label("Relay: \(error)", systemImage: "xmark.circle.fill")
@@ -69,7 +69,7 @@ struct ConnectionQRView: View {
                             }
 
                             if addresses.isEmpty && relayCode == nil && !isCreatingRelay {
-                                Label(String(localized: "未偵測到網路連線"), systemImage: "wifi.slash")
+                                Label(String(localized: "No network connection detected"), systemImage: "wifi.slash")
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -90,7 +90,7 @@ struct ConnectionQRView: View {
                                 copied = false
                             }
                         } label: {
-                            Label(copied ? String(localized: "已複製") : String(localized: "Copy Link"), systemImage: copied ? "checkmark" : "doc.on.doc")
+                            Label(copied ? String(localized: "Copied") : String(localized: "Copy Link"), systemImage: copied ? "checkmark" : "doc.on.doc")
                         }
                         .buttonStyle(.bordered)
                     } else if addresses.isEmpty && relayCode == nil && !isCreatingRelay {
