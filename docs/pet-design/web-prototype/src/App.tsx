@@ -7,6 +7,7 @@ import { TraitPanel } from './traits/TraitPanel';
 import { defaultTraits, dominantTrait, type TraitName, type Traits } from './traits/types';
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
 import { selectGreeting, type GreetingBeat } from './scenarios/greeting';
+import { Particles, type Particle } from './render/Particles';
 
 const ACCENT: Record<TraitName, string> = {
   curious: 'rgba(180, 220, 255, 0.5)', // cool blue
@@ -36,6 +37,13 @@ export default function App() {
   // beat (Task 15), tap reaction (Task 16), and transfer outcomes
   // (Tasks 17/18). When non-null it wins over `currentAction`.
   const [localBeat, setLocalBeat] = useState<GreetingBeat | null>(null);
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const particleIdRef = useRef(0);
+
+  // Stage size (must match PetStage's intrinsic 480x240) — used to position
+  // particle bursts in stage-local coordinates.
+  const STAGE_W = 480;
+  const STAGE_H = 240;
 
   useEffect(() => {
     loadSprite('/data/cat.json').then(setData).catch(console.error);
@@ -123,6 +131,44 @@ export default function App() {
 
   const ready = data && palette && localFrames.length > 0;
 
+  const onLocalPetTap = () => {
+    // 1. Trait-flavored tap reaction. Timid pets recoil with `scared`,
+    //    everyone else does the standard `tapReact` poke. Latest-write-wins
+    //    if a greeting/transfer beat is also active.
+    const dom = dominantTrait(traits);
+    const tapAction: GreetingBeat['action'] = dom === 'timid' ? 'scared' : 'tapReact';
+    setLocalBeat({ action: tapAction, durationMs: 600 });
+    setTimeout(() => {
+      // Only clear if our beat is still the latest. We keep this simple:
+      // always clear; if a newer beat overwrites this one, this clear
+      // races harmlessly (`localBeat` will already be null or the next).
+      setLocalBeat((b) => (b && b.action === tapAction ? null : b));
+    }, 600);
+
+    // 2. Trait-flavored particle burst from the local pet's position.
+    const emoji = dom === 'mischievous' ? '?' : dom === 'timid' ? '♡' : '♥';
+    const count = dom === 'timid' ? 3 : dom === 'mischievous' ? 2 : 5;
+    const petX = STAGE_W * (localXPercent / 100);
+    const petY = STAGE_H * 0.6 + 40;
+    const newParticles: Particle[] = Array.from({ length: count }, () => ({
+      id: ++particleIdRef.current,
+      x: petX + (Math.random() - 0.5) * 30,
+      y: petY,
+      vx: (Math.random() - 0.5) * 30,
+      vy: -60 - Math.random() * 40, // upward
+      emoji,
+      bornAt: performance.now(),
+      lifeMs: 1100,
+    }));
+    setParticles((prev) => [...prev, ...newParticles]);
+
+    // 3. Cleanup expired particles after their max lifespan to keep the
+    //    array bounded.
+    setTimeout(() => {
+      setParticles((prev) => prev.filter((p) => performance.now() - p.bornAt < p.lifeMs));
+    }, 1500);
+  };
+
   let pets: StagePet[] = [];
   if (ready) {
     const localPet: StagePet = {
@@ -131,6 +177,7 @@ export default function App() {
       palette,
       xPercent: localXPercent,
       flipped: false,
+      onClick: onLocalPetTap,
     };
     pets = [localPet];
     if (peerPhase !== 'absent' && peerFrames.length > 0) {
@@ -159,7 +206,11 @@ export default function App() {
       <h1 style={{ margin: 0 }}>PeerDrop Pet Prototype</h1>
       {ready ? (
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-          <PetStage pets={pets} accentColor={ACCENT[dominantTrait(traits)]} />
+          <PetStage
+            pets={pets}
+            accentColor={ACCENT[dominantTrait(traits)]}
+            overlay={<Particles particles={particles} />}
+          />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <TraitPanel traits={traits} setTraits={setTraits} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
