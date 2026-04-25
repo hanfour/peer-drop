@@ -25,6 +25,21 @@ export function PetStage({ children }: { children: ReactNode }) {
         overflow: 'hidden',
       }}
     >
+      {/* Drop shadow */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '74%',
+          transform: 'translateX(-50%)',
+          width: 96,
+          height: 14,
+          background:
+            'radial-gradient(ellipse at center, rgba(0,0,0,0.22), transparent 70%)',
+          filter: 'blur(2px)',
+          pointerEvents: 'none',
+        }}
+      />
       <div
         style={{
           position: 'absolute',
