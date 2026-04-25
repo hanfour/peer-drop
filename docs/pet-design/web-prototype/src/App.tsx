@@ -134,6 +134,15 @@ export default function App() {
     }
   };
 
+  const onTransferFail = () => {
+    if (peerPhase === 'absent') {
+      setPeerPhase('walking-in');
+      setTimeout(() => transfer.start('fail'), 1700);
+    } else {
+      transfer.start('fail');
+    }
+  };
+
   // React to transfer completion: emit a celebratory burst and put the
   // local pet into a longer `happy` beat. Peer pet's reaction is handled
   // by the transfer state itself (see action selection below).
@@ -154,7 +163,21 @@ export default function App() {
       const id = setTimeout(() => setLocalBeat(null), 1500);
       return () => clearTimeout(id);
     }
-  }, [transfer.state]);
+    if (transfer.state === 'failed') {
+      // Trait-flavored local reaction. Independent/curious are stoic;
+      // timid recoils; mischievous goes smug.
+      const reactionByTrait: Record<TraitName, GreetingBeat['action']> = {
+        independent: 'idle',
+        curious: 'idle',
+        timid: 'scared',
+        mischievous: 'tapReact',
+      };
+      const dom = dominantTrait(traits);
+      setLocalBeat({ action: reactionByTrait[dom], durationMs: 1500 });
+      const id = setTimeout(() => setLocalBeat(null), 1500);
+      return () => clearTimeout(id);
+    }
+  }, [transfer.state, traits]);
 
   // Peer pet's force-action — transfer outcomes drive this so both pets
   // can cheer (or commiserate) in sync. Cleared on a timer.
@@ -162,6 +185,12 @@ export default function App() {
   useEffect(() => {
     if (transfer.state === 'success') {
       setPeerForceAction('happy');
+      const id = setTimeout(() => setPeerForceAction(null), 1500);
+      return () => clearTimeout(id);
+    }
+    if (transfer.state === 'failed') {
+      // Peer always looks concerned regardless of local pet's trait.
+      setPeerForceAction('scared');
       const id = setTimeout(() => setPeerForceAction(null), 1500);
       return () => clearTimeout(id);
     }
@@ -272,6 +301,13 @@ export default function App() {
                 disabled={transfer.state === 'running'}
               >
                 Transfer (success)
+              </button>
+              <button
+                style={buttonStyle}
+                onClick={onTransferFail}
+                disabled={transfer.state === 'running'}
+              >
+                Transfer (fail)
               </button>
             </div>
           </div>
