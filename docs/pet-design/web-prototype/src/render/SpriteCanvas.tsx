@@ -16,6 +16,10 @@ export function SpriteCanvas({ frame, palette, scale = 8, flipped = false }: Pro
     if (!c) return;
     const ctx = c.getContext('2d');
     if (!ctx) return;
+    if (!frame || frame.length === 0) {
+      ctx.clearRect(0, 0, c.width, c.height);
+      return;
+    }
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.save();
@@ -72,11 +76,16 @@ export function SpriteCanvas({ frame, palette, scale = 8, flipped = false }: Pro
     }
   }, [frame, palette, scale, flipped]);
 
+  // Frame is square; derive size from frame data. For empty/missing
+  // frames the canvas collapses to 0×0 — caller is expected to gate on
+  // `frames.length`, but we tolerate it defensively here.
+  const size = frame?.length ?? 0;
+
   return (
     <canvas
       ref={ref}
-      width={16 * scale}
-      height={16 * scale}
+      width={size * scale}
+      height={size * scale}
       style={{ imageRendering: 'pixelated' }}
     />
   );
