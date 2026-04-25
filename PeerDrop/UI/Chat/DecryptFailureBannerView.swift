@@ -11,21 +11,30 @@ struct DecryptFailureBannerView: View {
     let onVerify: () -> Void
     let onDismiss: () -> Void
 
+    @ScaledMetric private var rowSpacing: CGFloat = 12
+    @ScaledMetric private var contentSpacing: CGFloat = 4
+    @ScaledMetric private var actionRowSpacing: CGFloat = 12
+    @ScaledMetric private var actionRowTopPadding: CGFloat = 4
+    @ScaledMetric private var bannerPadding: CGFloat = 12
+    @ScaledMetric private var outerHPadding: CGFloat = 12
+    @ScaledMetric private var outerTopPadding: CGFloat = 8
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: rowSpacing) {
             Image(systemName: "exclamationmark.shield.fill")
                 .foregroundStyle(.orange)
                 .font(.title3)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: contentSpacing) {
                 Text("Can't decrypt messages from \(displayName)")
                     .font(.subheadline.bold())
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("Their identity key may have changed. Verify the fingerprint to continue.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 12) {
+                HStack(spacing: actionRowSpacing) {
                     Button(action: onVerify) {
                         Text("Verify")
                             .font(.caption.bold())
@@ -34,8 +43,9 @@ struct DecryptFailureBannerView: View {
                     .controlSize(.small)
                     .tint(.orange)
                 }
-                .padding(.top, 4)
+                .padding(.top, actionRowTopPadding)
             }
+            .layoutPriority(1)
 
             Spacer(minLength: 0)
 
@@ -47,13 +57,13 @@ struct DecryptFailureBannerView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Dismiss"))
         }
-        .padding(12)
+        .padding(bannerPadding)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.orange.opacity(0.35), lineWidth: 1)
         )
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .padding(.horizontal, outerHPadding)
+        .padding(.top, outerTopPadding)
     }
 }

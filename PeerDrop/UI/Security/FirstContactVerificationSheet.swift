@@ -11,16 +11,21 @@ struct FirstContactVerificationSheet: View {
     let onReject: () -> Void
     @Environment(\.dismiss) private var dismiss
 
+    @ScaledMetric private var stackSpacing: CGFloat = 16
+    @ScaledMetric private var headerSpacing: CGFloat = 12
+    @ScaledMetric private var buttonRowSpacing: CGFloat = 12
+
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: stackSpacing) {
+                HStack(spacing: headerSpacing) {
                     Image(systemName: "exclamationmark.shield.fill")
                         .font(.largeTitle)
                         .foregroundStyle(.orange)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(pending.senderDisplayName)
                             .font(.headline)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text("Unknown Device")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -34,6 +39,8 @@ struct FirstContactVerificationSheet: View {
 
                 Text(pending.fingerprint)
                     .font(.system(.title3, design: .monospaced).weight(.semibold))
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(2)
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(
@@ -45,7 +52,7 @@ struct FirstContactVerificationSheet: View {
 
                 Spacer()
 
-                HStack(spacing: 12) {
+                HStack(spacing: buttonRowSpacing) {
                     Button(role: .destructive) {
                         onReject()
                         dismiss()
