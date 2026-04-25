@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { SpriteCanvas } from '../render/SpriteCanvas';
+import { DialogueBubble } from '../dialogue/DialogueBubble';
 import type { Frame, Palette } from '../sprite/types';
 
 export type StagePet = {
@@ -24,11 +25,14 @@ export function PetStage({
   accentColor = 'rgba(220, 220, 230, 0.0)',
   progressBar,
   overlay,
+  dialogueByPet,
 }: {
   pets: StagePet[];
   accentColor?: string;
   progressBar?: ReactNode;
   overlay?: ReactNode;
+  /** Map of pet id → current bubble text. Pets without a key get no bubble. */
+  dialogueByPet?: Record<string, string>;
 }) {
   const [bobY, setBobY] = useState(0);
 
@@ -85,6 +89,9 @@ export function PetStage({
             scale={p.scale}
             flipped={p.flipped}
           />
+          {dialogueByPet?.[p.id] && (
+            <DialogueBubble key={dialogueByPet[p.id]} text={dialogueByPet[p.id]} />
+          )}
         </div>
       ))}
       {/* ground line */}

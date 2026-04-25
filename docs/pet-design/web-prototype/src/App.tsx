@@ -9,6 +9,8 @@ import { selectIdleAction, type IdleAction } from './traits/idleSelector';
 import { selectGreeting, type GreetingBeat } from './scenarios/greeting';
 import { Particles, type Particle } from './render/Particles';
 import { ProgressBar, useTransfer } from './scenarios/Transfer';
+import { selectLine } from './dialogue/select';
+import type { DialogueContext } from './dialogue/types';
 
 const ACCENT: Record<TraitName, string> = {
   curious: 'rgba(180, 220, 255, 0.5)', // cool blue
@@ -41,6 +43,38 @@ export default function App() {
   const [particles, setParticles] = useState<Particle[]>([]);
   const particleIdRef = useRef(0);
   const transfer = useTransfer();
+
+  // Dialogue bubbles, keyed by pet id ('local' | 'peer'). One concurrent
+  // bubble per pet — newer bubble replaces older via the timer ref.
+  const [dialogue, setDialogue] = useState<Record<string, string>>({});
+  const dialogueTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const traitsRef = useRef<Traits>(traits);
+  useEffect(() => {
+    traitsRef.current = traits;
+  }, [traits]);
+
+  const showDialogue = (
+    petId: 'local' | 'peer',
+    ctx: DialogueContext,
+    durationMs = 2200,
+  ) => {
+    // Peer uses the same trait pool for v0; independent peer traits aren't
+    // simulated yet.
+    const line = selectLine(traitsRef.current, ctx);
+    if (!line) return;
+    setDialogue((prev) => ({ ...prev, [petId]: line.text }));
+    const existing = dialogueTimerRef.current.get(petId);
+    if (existing) clearTimeout(existing);
+    const t = setTimeout(() => {
+      setDialogue((prev) => {
+        const next = { ...prev };
+        delete next[petId];
+        return next;
+      });
+      dialogueTimerRef.current.delete(petId);
+    }, durationMs);
+    dialogueTimerRef.current.set(petId, t);
+  };
 
   // Stage size (must match PetStage's intrinsic 480x240) — used to position
   // particle bursts in stage-local coordinates.
@@ -86,6 +120,8 @@ export default function App() {
     if (prev !== 'idle' && peerPhase === 'idle') {
       const beat = selectGreeting(traits);
       setLocalBeat(beat);
+      showDialogue('local', 'greeting');
+      showDialogue('peer', 'greeting', 2500);
       const id = setTimeout(() => setLocalBeat(null), beat.durationMs);
       return () => clearTimeout(id);
     }
@@ -121,6 +157,27 @@ export default function App() {
   const onTogglePeer = () => {
     setPeerPhase((p) => (p === 'absent' ? 'walking-in' : 'absent'));
   };
+
+  // Ambient idle dialogue: every ~10s, if neither pet is in a beat,
+  // randomly emit one idle bubble from one of the two pets (alternating).
+  // Provides a gentle sense of life without over-saturating the bubbles.
+  const ambientToggleRef = useRef<'local' | 'peer'>('local');
+  useEffect(() => {
+    const id = setInterval(() => {
+      // Skip if a transfer or local beat is in flight — those have their
+      // own dialogue.
+      if (transfer.state === 'running' || localBeat) return;
+      const target = ambientToggleRef.current;
+      // Only emit a peer bubble when the peer is on stage and idle.
+      if (target === 'peer' && peerPhase !== 'idle') {
+        ambientToggleRef.current = 'local';
+        return;
+      }
+      showDialogue(target, 'idle');
+      ambientToggleRef.current = target === 'local' ? 'peer' : 'local';
+    }, 10000);
+    return () => clearInterval(id);
+  }, [transfer.state, localBeat, peerPhase]);
 
   const onTransferSuccess = () => {
     // If the peer isn't on stage yet, run the walk-in first then start
@@ -160,6 +217,8 @@ export default function App() {
       }));
       setParticles((prev) => [...prev, ...burst]);
       setLocalBeat({ action: 'happy' as GreetingBeat['action'], durationMs: 1500 });
+      showDialogue('local', 'transferSuccess');
+      showDialogue('peer', 'transferSuccess');
       const id = setTimeout(() => setLocalBeat(null), 1500);
       return () => clearTimeout(id);
     }
@@ -174,6 +233,8 @@ export default function App() {
       };
       const dom = dominantTrait(traits);
       setLocalBeat({ action: reactionByTrait[dom], durationMs: 1500 });
+      showDialogue('local', 'transferFail');
+      showDialogue('peer', 'transferFail');
       const id = setTimeout(() => setLocalBeat(null), 1500);
       return () => clearTimeout(id);
     }
@@ -221,6 +282,9 @@ export default function App() {
       // races harmlessly (`localBeat` will already be null or the next).
       setLocalBeat((b) => (b && b.action === tapAction ? null : b));
     }, 600);
+
+    // Tap dialogue bubble.
+    showDialogue('local', 'tap');
 
     // 2. Trait-flavored particle burst from the local pet's position.
     const emoji = dom === 'mischievous' ? '?' : dom === 'timid' ? '♡' : '♥';
@@ -288,6 +352,7 @@ export default function App() {
             accentColor={ACCENT[dominantTrait(traits)]}
             progressBar={<ProgressBar progress={transfer.progress} state={transfer.state} />}
             overlay={<Particles particles={particles} />}
+            dialogueByPet={dialogue}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <TraitPanel traits={traits} setTraits={setTraits} />
