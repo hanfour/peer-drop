@@ -5,8 +5,15 @@ import { PetStage } from './stage/PetStage';
 import { useFrameAnimation } from './animation/useFrameAnimation';
 import type { SpriteData, Palette } from './sprite/types';
 import { TraitPanel } from './traits/TraitPanel';
-import { defaultTraits, type Traits } from './traits/types';
+import { defaultTraits, dominantTrait, type TraitName, type Traits } from './traits/types';
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
+
+const ACCENT: Record<TraitName, string> = {
+  curious: 'rgba(180, 220, 255, 0.5)', // cool blue
+  timid: 'rgba(255, 200, 220, 0.45)', // pink
+  mischievous: 'rgba(255, 240, 180, 0.5)', // warm yellow
+  independent: 'rgba(220, 220, 230, 0.4)', // neutral gray
+};
 
 export default function App() {
   const [data, setData] = useState<SpriteData | null>(null);
@@ -52,7 +59,7 @@ export default function App() {
       <h1 style={{ margin: 0 }}>PeerDrop Pet Prototype</h1>
       {data && palette && frames.length > 0 ? (
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-          <PetStage>
+          <PetStage accentColor={ACCENT[dominantTrait(traits)]}>
             <SpriteCanvas frame={frames[frameIdx]} palette={palette} />
           </PetStage>
           <TraitPanel traits={traits} setTraits={setTraits} />
