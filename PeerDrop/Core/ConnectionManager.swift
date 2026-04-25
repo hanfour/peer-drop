@@ -3775,14 +3775,24 @@ final class ConnectionManager: ObservableObject {
     /// User chose to accept the new key (sets trust to .linked — user actively accepted)
     func handleKeyChangeAccept() {
         guard let alert = pendingKeyChangeAlert else { return }
-        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .linked)
+        trustedContactStore.updatePublicKey(
+            for: alert.contactId,
+            newKey: alert.newPublicKey,
+            trustLevel: .linked,
+            reason: .userAcceptedNewKey
+        )
         pendingKeyChangeAlert = nil
     }
 
     /// User chose to verify later (stays at .unknown until face-to-face verification)
     func handleKeyChangeVerifyLater() {
         guard let alert = pendingKeyChangeAlert else { return }
-        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .unknown)
+        trustedContactStore.updatePublicKey(
+            for: alert.contactId,
+            newKey: alert.newPublicKey,
+            trustLevel: .unknown,
+            reason: .userAcceptedNewKey
+        )
         pendingKeyChangeAlert = nil
     }
 

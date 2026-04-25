@@ -12,6 +12,10 @@ final class TrustedContactStore: ObservableObject {
     private let encryptor = ChatDataEncryptor.shared
     private var pendingSave: DispatchWorkItem?
 
+    /// Maximum number of key-rotation audit entries kept per contact.
+    /// Older entries are dropped to bound on-disk size.
+    private static let maxKeyHistoryEntries = 20
+
     var all: [TrustedContact] { contacts }
 
     var nonBlocked: [TrustedContact] {
@@ -87,8 +91,38 @@ final class TrustedContactStore: ObservableObject {
         return !contact.matchesKey(newPublicKey)
     }
 
-    func updatePublicKey(for id: UUID, newKey: Data, trustLevel: TrustLevel = .unknown) {
+    /// Rotate the identity key for a contact and append an audit-trail entry to
+    /// `keyHistory`. The history is bounded; oldest entries are dropped.
+    /// No history entry is recorded when the new key matches the current key.
+    func updatePublicKey(
+        for id: UUID,
+        newKey: Data,
+        trustLevel: TrustLevel = .unknown,
+        reason: KeyChangeReason
+    ) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        let oldKey = contacts[index].identityPublicKey
+        // No-op rotation: still apply trust-level changes, but skip history.
+        guard oldKey != newKey else {
+            contacts[index].trustLevel = trustLevel
+            if trustLevel != .verified {
+                contacts[index].lastVerified = nil
+            }
+            scheduleSave()
+            return
+        }
+        let record = KeyChangeRecord(
+            oldKey: oldKey,
+            newKey: newKey,
+            changedAt: Date(),
+            reason: reason
+        )
+        contacts[index].keyHistory.append(record)
+        // Cap history to bound disk size.
+        let overflow = contacts[index].keyHistory.count - Self.maxKeyHistoryEntries
+        if overflow > 0 {
+            contacts[index].keyHistory.removeFirst(overflow)
+        }
         contacts[index].identityPublicKey = newKey
         contacts[index].trustLevel = trustLevel
         if trustLevel != .verified {
