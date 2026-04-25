@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadSprite } from './sprite/loadSprite';
 import { PetStage, type StagePet } from './stage/PetStage';
 import { useFrameAnimation } from './animation/useFrameAnimation';
@@ -6,6 +6,7 @@ import type { SpriteData, Palette } from './sprite/types';
 import { TraitPanel } from './traits/TraitPanel';
 import { defaultTraits, dominantTrait, type TraitName, type Traits } from './traits/types';
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
+import { selectGreeting, type GreetingBeat } from './scenarios/greeting';
 
 const ACCENT: Record<TraitName, string> = {
   curious: 'rgba(180, 220, 255, 0.5)', // cool blue
@@ -31,6 +32,10 @@ export default function App() {
   const [currentAction, setCurrentAction] = useState<IdleAction>('idle');
   type PeerPhase = 'absent' | 'walking-in' | 'idle';
   const [peerPhase, setPeerPhase] = useState<PeerPhase>('absent');
+  // One-shot override for the local pet's action — used by the greeting
+  // beat (Task 15), tap reaction (Task 16), and transfer outcomes
+  // (Tasks 17/18). When non-null it wins over `currentAction`.
+  const [localBeat, setLocalBeat] = useState<GreetingBeat | null>(null);
 
   useEffect(() => {
     loadSprite('/data/cat.json').then(setData).catch(console.error);
@@ -49,12 +54,32 @@ export default function App() {
     return () => clearInterval(id);
   }, [traits]);
 
+  // The local pet's effective action: if a beat is active, it overrides
+  // the ambient idle pick.
+  const effectiveLocalAction: string = localBeat?.action ?? currentAction;
   const localFrames =
-    (data?.baby[currentAction] && data.baby[currentAction].length > 0
-      ? data.baby[currentAction]
+    (data?.baby[effectiveLocalAction] && data.baby[effectiveLocalAction].length > 0
+      ? data.baby[effectiveLocalAction]
       : data?.baby.idle) ?? [];
-  const localFrameIdx = useFrameAnimation(localFrames.length);
+  const localFps = effectiveLocalAction === 'walking' ? 8 : 6;
+  const localFrameIdx = useFrameAnimation(localFrames.length, localFps);
   const safeLocalIdx = localFrames.length > 0 ? Math.min(localFrameIdx, localFrames.length - 1) : 0;
+  const localXPercent = 30 + (localBeat?.xOffset ?? 0);
+
+  // Trigger a greeting beat each time peerPhase enters 'idle' (i.e. the
+  // walk-in just finished). Latest-write-wins if a tap or transfer beat
+  // is already active — accept the conflict for now.
+  const prevPeerPhaseRef = useRef<PeerPhase>('absent');
+  useEffect(() => {
+    const prev = prevPeerPhaseRef.current;
+    prevPeerPhaseRef.current = peerPhase;
+    if (prev !== 'idle' && peerPhase === 'idle') {
+      const beat = selectGreeting(traits);
+      setLocalBeat(beat);
+      const id = setTimeout(() => setLocalBeat(null), beat.durationMs);
+      return () => clearTimeout(id);
+    }
+  }, [peerPhase, traits]);
 
   // Animated peer position. We mount the peer at xPercent=110 (offscreen
   // right) for one frame, then update to 70 so the CSS transition on `left`
@@ -104,7 +129,7 @@ export default function App() {
       id: 'local',
       frame: localFrames[safeLocalIdx],
       palette,
-      xPercent: 30,
+      xPercent: localXPercent,
       flipped: false,
     };
     pets = [localPet];
