@@ -6,7 +6,7 @@ import type { SpriteData, Palette } from './sprite/types';
 import { TraitPanel } from './traits/TraitPanel';
 import { defaultTraits, dominantTrait, type TraitName, type Traits } from './traits/types';
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
-import { selectGreeting, type GreetingBeat } from './scenarios/greeting';
+import type { GreetingBeat } from './scenarios/greeting';
 import { Particles, type Particle } from './render/Particles';
 import { ProgressBar, useTransfer } from './scenarios/Transfer';
 import { selectLine } from './dialogue/select';
@@ -71,13 +71,20 @@ export default function App() {
   const STAGE_W = 480;
   const STAGE_H = 240;
 
+  // v0 = original 16×16 production sprite (cat.json).
+  // v1 = new 32×32 chibi sprite (cat-v1.json) — see scripts/paint-v1-cat.mjs.
+  // Default to v1 so the polished version shows first.
+  type SpriteVersion = 'v0' | 'v1';
+  const [spriteVersion, setSpriteVersion] = useState<SpriteVersion>('v1');
+
   useEffect(() => {
-    loadSprite('/data/cat.json').then(setData).catch(console.error);
+    const url = spriteVersion === 'v1' ? '/data/cat-v1.json' : '/data/cat.json';
+    loadSprite(url).then(setData).catch(console.error);
     fetch('/data/palettes.json')
       .then((r) => r.json())
       .then((j) => setPalette(j.default))
       .catch(console.error);
-  }, []);
+  }, [spriteVersion]);
 
   // Re-roll the idle action whenever traits change so the user immediately
   // sees the effect of moving a slider, then re-roll again every 5s for
@@ -87,6 +94,22 @@ export default function App() {
     const id = setInterval(() => setCurrentAction(selectIdleAction(traits)), 5000);
     return () => clearInterval(id);
   }, [traits]);
+
+  // v1 idle micro-actions: every 12s, if no other beat is in flight,
+  // briefly play `happy` for 1s as a "look around / brief enthusiasm" tic.
+  // The blink is already baked into the idle 4-frame sequence (frame 2),
+  // so the cat naturally blinks ~once per cycle without extra logic here.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (localBeat) return;
+      if (transfer.state === 'running') return;
+      // 50% chance per tick — keeps the tic from feeling clockwork.
+      if (Math.random() < 0.5) return;
+      setLocalBeat({ action: 'happy', durationMs: 900 });
+      setTimeout(() => setLocalBeat((b) => (b?.action === 'happy' ? null : b)), 900);
+    }, 12000);
+    return () => clearInterval(id);
+  }, [localBeat, transfer.state]);
 
   // The local pet's effective action: if a beat is active, it overrides
   // the ambient idle pick.
@@ -100,21 +123,68 @@ export default function App() {
   const safeLocalIdx = localFrames.length > 0 ? Math.min(localFrameIdx, localFrames.length - 1) : 0;
   const localXPercent = 30 + (localBeat?.xOffset ?? 0);
 
-  // Trigger a greeting beat each time peerPhase enters 'idle' (i.e. the
-  // walk-in just finished). Latest-write-wins if a tap or transfer beat
-  // is already active — accept the conflict for now.
+  // Trigger a multi-beat greeting each time peerPhase enters 'idle'.
+  // v1: instead of running a single action for `durationMs`, we sequence
+  // an anticipation → main → settle so the gesture has weight.
+  //   curious:     tapReact (lean back, 200ms) → walking forward (1300ms) → idle (settle)
+  //   mischievous: tapReact poke (250ms) → happy bounce (800ms)
+  //   timid:       scared (recoil with negative xOffset, 400ms) → idle (scoot back, 600ms)
+  //   independent: a single brief beat — basically nothing (character)
   const prevPeerPhaseRef = useRef<PeerPhase>('absent');
   useEffect(() => {
     const prev = prevPeerPhaseRef.current;
     prevPeerPhaseRef.current = peerPhase;
-    if (prev !== 'idle' && peerPhase === 'idle') {
-      const beat = selectGreeting(traits);
-      setLocalBeat(beat);
-      showDialogue('local', 'greeting');
-      showDialogue('peer', 'greeting', 2500);
-      const id = setTimeout(() => setLocalBeat(null), beat.durationMs);
-      return () => clearTimeout(id);
+    if (prev === 'idle' || peerPhase !== 'idle') return;
+
+    showDialogue('local', 'greeting');
+    showDialogue('peer', 'greeting', 2500);
+
+    const dom = dominantTrait(traits);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    if (dom === 'curious') {
+      // Anticipation: lean back briefly
+      setLocalBeat({ action: 'tapReact', durationMs: 200, xOffset: -2 });
+      timers.push(
+        setTimeout(() => {
+          // Main: trot forward
+          setLocalBeat({ action: 'walking', durationMs: 1300, xOffset: 15 });
+        }, 200),
+      );
+      timers.push(
+        setTimeout(() => {
+          // Settle: idle, hold the new spot
+          setLocalBeat({ action: 'idle', durationMs: 400, xOffset: 15 });
+        }, 1500),
+      );
+      timers.push(setTimeout(() => setLocalBeat(null), 1900));
+    } else if (dom === 'mischievous') {
+      // Quick poke then happy bounce
+      setLocalBeat({ action: 'tapReact', durationMs: 250 });
+      timers.push(
+        setTimeout(() => {
+          setLocalBeat({ action: 'happy', durationMs: 800 });
+        }, 250),
+      );
+      timers.push(setTimeout(() => setLocalBeat(null), 1050));
+    } else if (dom === 'timid') {
+      // Scared then a tiny scoot back
+      setLocalBeat({ action: 'scared', durationMs: 400, xOffset: -10 });
+      timers.push(
+        setTimeout(() => {
+          setLocalBeat({ action: 'idle', durationMs: 600, xOffset: -4 });
+        }, 400),
+      );
+      timers.push(setTimeout(() => setLocalBeat(null), 1000));
+    } else {
+      // Independent: a single brief glance.
+      setLocalBeat({ action: 'idle', durationMs: 600 });
+      timers.push(setTimeout(() => setLocalBeat(null), 600));
     }
+
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
   }, [peerPhase, traits]);
 
   // Animated peer position. We mount the peer at xPercent=110 (offscreen
@@ -195,13 +265,19 @@ export default function App() {
   // by the transfer state itself (see action selection below).
   useEffect(() => {
     if (transfer.state === 'success') {
+      const successKinds: ('sparkle' | 'heart' | 'exclamation')[] = [
+        'sparkle',
+        'heart',
+        'sparkle',
+        'exclamation',
+      ];
       const burst: Particle[] = Array.from({ length: 12 }, (_, i) => ({
         id: ++particleIdRef.current,
         x: STAGE_W * 0.5 + (Math.random() - 0.5) * 80,
         y: STAGE_H * 0.46,
         vx: (Math.random() - 0.5) * 80,
         vy: -100 - Math.random() * 40,
-        emoji: ['✨', '💖', '🎉', '⭐'][i % 4],
+        kind: successKinds[i % successKinds.length],
         bornAt: performance.now(),
         lifeMs: 1500,
       }));
@@ -277,7 +353,8 @@ export default function App() {
     showDialogue('local', 'tap');
 
     // 2. Trait-flavored particle burst from the local pet's position.
-    const emoji = dom === 'mischievous' ? '?' : dom === 'timid' ? '♡' : '♥';
+    const kind: 'heart' | 'question' | 'sparkle' =
+      dom === 'mischievous' ? 'question' : dom === 'timid' ? 'sparkle' : 'heart';
     const count = dom === 'timid' ? 3 : dom === 'mischievous' ? 2 : 5;
     const petX = STAGE_W * (localXPercent / 100);
     const petY = STAGE_H * 0.6 + 40;
@@ -287,7 +364,7 @@ export default function App() {
       y: petY,
       vx: (Math.random() - 0.5) * 30,
       vy: -60 - Math.random() * 40, // upward
-      emoji,
+      kind,
       bornAt: performance.now(),
       lifeMs: 1100,
     }));
@@ -300,12 +377,18 @@ export default function App() {
     }, 1500);
   };
 
+  // Derive scale from the sprite size so v0 (16×16) and v1 (32×32) both
+  // render at the same on-stage display size (~128px).
+  const spriteSize = data?.baby.idle?.[0]?.length ?? 16;
+  const renderScale = spriteSize <= 16 ? 8 : 4;
+
   let pets: StagePet[] = [];
   if (ready) {
     const localPet: StagePet = {
       id: 'local',
       frame: localFrames[safeLocalIdx],
       palette,
+      scale: renderScale,
       xPercent: localXPercent,
       flipped: false,
       onClick: onLocalPetTap,
@@ -316,6 +399,7 @@ export default function App() {
         id: 'peer',
         frame: peerFrames[safePeerIdx],
         palette,
+        scale: renderScale,
         xPercent: peerXPercent,
         flipped: true,
       });
@@ -331,13 +415,63 @@ export default function App() {
         margin: '0 auto',
       }}
     >
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.5px' }}>
-          PeerDrop Pet Prototype
-        </h1>
-        <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
-          v0 — design exploration for the v3.5 pet companion redesign
-        </p>
+      <header
+        style={{
+          marginBottom: 24,
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.5px' }}>
+            PeerDrop Pet Prototype
+          </h1>
+          <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
+            {spriteVersion === 'v1'
+              ? 'v1 polish pass — 32×32 chibi sprites, scene-ified stage'
+              : 'v0 — production 16×16 sprite baseline'}
+          </p>
+        </div>
+        <div
+          role="group"
+          aria-label="Sprite version toggle"
+          style={{
+            display: 'inline-flex',
+            border: '2px solid currentColor',
+            borderRadius: 8,
+            overflow: 'hidden',
+            fontSize: 13,
+          }}
+        >
+          <button
+            onClick={() => setSpriteVersion('v0')}
+            style={{
+              background:
+                spriteVersion === 'v0' ? '#1976d2' : 'rgba(0,0,0,0.05)',
+              color: spriteVersion === 'v0' ? 'white' : 'inherit',
+              padding: '6px 14px',
+              borderRadius: 0,
+              fontWeight: spriteVersion === 'v0' ? 600 : 400,
+            }}
+          >
+            v0 (16×16)
+          </button>
+          <button
+            onClick={() => setSpriteVersion('v1')}
+            style={{
+              background:
+                spriteVersion === 'v1' ? '#1976d2' : 'rgba(0,0,0,0.05)',
+              color: spriteVersion === 'v1' ? 'white' : 'inherit',
+              padding: '6px 14px',
+              borderRadius: 0,
+              fontWeight: spriteVersion === 'v1' ? 600 : 400,
+            }}
+          >
+            v1 (32×32 chibi)
+          </button>
+        </div>
       </header>
       {ready ? (
         <main
