@@ -3,8 +3,23 @@ import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "WorkerSignaling")
 
+/// Subset of `WorkerSignaling` behaviour that `RelaySession` consumes. Defined as
+/// a protocol so tests can inject a mock without standing up a real WebSocket.
+/// Production code uses the concrete `WorkerSignaling` class.
+protocol WorkerSignalingProtocol: AnyObject {
+    var onSDPOffer: ((String) -> Void)? { get set }
+    var onSDPAnswer: ((String) -> Void)? { get set }
+    var onICECandidate: ((String, String?, Int32) -> Void)? { get set }
+    var onPeerJoined: (() -> Void)? { get set }
+    var onError: ((Error) -> Void)? { get set }
+
+    func sendSDP(_ sdp: String, type: String)
+    func sendICECandidate(sdp: String, sdpMid: String?, sdpMLineIndex: Int32)
+    func disconnect()
+}
+
 /// Client for the PeerDrop Cloudflare Worker signaling server.
-final class WorkerSignaling: NSObject {
+final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
 
     // MARK: - Properties
 
