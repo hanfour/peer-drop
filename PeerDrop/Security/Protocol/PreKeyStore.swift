@@ -21,6 +21,10 @@ final class PreKeyStore {
     private var oneTimePreKeys: [UInt32: OneTimePreKey] = [:]
     private var nextOneTimePreKeyId: UInt32 = 0
     private var nextSignedPreKeyId: UInt32 = 1
+    /// Ids of one-time pre-keys that have been consumed. Persisted so that a
+    /// crash between in-memory removal and disk persist cannot expose a
+    /// consumed OTP for replay on next launch.
+    private var consumedOneTimePreKeyIds: Set<UInt32> = []
 
     var currentSignedPreKey: SignedPreKey {
         lock.lock()
@@ -40,9 +44,20 @@ final class PreKeyStore {
         if let state = Self.loadState(storageKey: storageKey, encryptor: ChatDataEncryptor.shared) {
             self._currentSignedPreKey = state.currentSignedPreKey.toSignedPreKey()
             self.previousSignedPreKeys = state.previousSignedPreKeys.map { $0.toSignedPreKey() }
-            self.oneTimePreKeys = Dictionary(uniqueKeysWithValues:
+            self.consumedOneTimePreKeyIds = state.consumedOneTimePreKeyIds ?? []
+            var loaded = Dictionary(uniqueKeysWithValues:
                 state.oneTimePreKeys.map { ($0.id, $0.toOneTimePreKey()) }
             )
+            // Crash-recovery: if any persisted OTP id is also in the consumed
+            // set, that means we crashed after marking the OTP consumed but
+            // before its removal landed on disk. Drop those OTPs now so they
+            // are never surfaced for reuse.
+            let crashedConsume = self.consumedOneTimePreKeyIds.intersection(loaded.keys)
+            if !crashedConsume.isEmpty {
+                Self.logger.warning("Evicting \(crashedConsume.count) OTP(s) on load (consumed but not removed before crash)")
+                for id in crashedConsume { loaded.removeValue(forKey: id) }
+            }
+            self.oneTimePreKeys = loaded
             self.nextOneTimePreKeyId = state.nextOneTimePreKeyId
             self.nextSignedPreKeyId = state.nextSignedPreKeyId
         } else {
@@ -73,10 +88,28 @@ final class PreKeyStore {
 
     func consumeOneTimePreKey(id: UInt32) throws -> OneTimePreKey? {
         lock.lock()
-        defer { lock.unlock() }
-        guard let key = oneTimePreKeys.removeValue(forKey: id) else { return nil }
-        scheduleSave()
+        // Reject re-consumption attempts. This guards against:
+        //  (a) replays of an old initial message after the OTP was consumed
+        //  (b) crash-after-mark-consumed-before-evict races (load() drops these
+        //      from oneTimePreKeys, but the consumed set still rejects them)
+        if consumedOneTimePreKeyIds.contains(id) {
+            lock.unlock()
+            return nil
+        }
+        guard let key = oneTimePreKeys[id] else {
+            lock.unlock()
+            return nil
+        }
+        // Mark consumed FIRST so that even if the synchronous save below
+        // crashes mid-write, the next launch sees the id in the consumed set
+        // and won't surface this OTP for reuse.
+        consumedOneTimePreKeyIds.insert(id)
+        oneTimePreKeys.removeValue(forKey: id)
         replenishOneTimePreKeysLocked()
+        // Snapshot state under the lock; release before file I/O.
+        let stateToSave = makePersistedStateLocked()
+        lock.unlock()
+        saveSync(state: stateToSave)
         return key
     }
 
@@ -138,6 +171,10 @@ final class PreKeyStore {
         let oneTimePreKeys: [PersistedOneTimePreKey]
         let nextOneTimePreKeyId: UInt32
         let nextSignedPreKeyId: UInt32
+        /// Optional for backward compatibility with v3.3-era stores written
+        /// before transactional OTP consumption was introduced. Decoding nil
+        /// means "no consumed set yet" and is treated as empty on load.
+        let consumedOneTimePreKeyIds: Set<UInt32>?
     }
 
     private struct PersistedSignedPreKey: Codable {
@@ -186,17 +223,22 @@ final class PreKeyStore {
         save()
     }
 
-    private func save() {
-        lock.lock()
-        let state = PersistedState(
+    /// Caller MUST hold `lock`. Builds an immutable snapshot for I/O outside
+    /// the lock.
+    private func makePersistedStateLocked() -> PersistedState {
+        PersistedState(
             currentSignedPreKey: PersistedSignedPreKey(from: _currentSignedPreKey),
             previousSignedPreKeys: previousSignedPreKeys.map { PersistedSignedPreKey(from: $0) },
             oneTimePreKeys: oneTimePreKeys.values.map { PersistedOneTimePreKey(from: $0) },
             nextOneTimePreKeyId: nextOneTimePreKeyId,
-            nextSignedPreKeyId: nextSignedPreKeyId
+            nextSignedPreKeyId: nextSignedPreKeyId,
+            consumedOneTimePreKeyIds: consumedOneTimePreKeyIds
         )
-        lock.unlock()
+    }
 
+    /// Synchronous write. Lock MUST NOT be held while this runs — file I/O on
+    /// the lock would serialise consumers behind disk latency.
+    private func saveSync(state: PersistedState) {
         do {
             let data = try JSONEncoder().encode(state)
             let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -207,6 +249,13 @@ final class PreKeyStore {
         } catch {
             Self.logger.error("Failed to save pre-keys: \(error.localizedDescription)")
         }
+    }
+
+    private func save() {
+        lock.lock()
+        let state = makePersistedStateLocked()
+        lock.unlock()
+        saveSync(state: state)
     }
 
     private static func loadState(storageKey: String, encryptor: ChatDataEncryptor) -> PersistedState? {
@@ -227,6 +276,7 @@ final class PreKeyStore {
         lock.lock()
         oneTimePreKeys.removeAll()
         previousSignedPreKeys.removeAll()
+        consumedOneTimePreKeyIds.removeAll()
         lock.unlock()
 
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

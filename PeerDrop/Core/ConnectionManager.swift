@@ -81,6 +81,27 @@ struct KeyChangeAlertInfo: Identifiable {
     let newPublicKey: Data
 }
 
+/// Surfaced to the user after a configurable number of consecutive decrypt
+/// failures from the same peer. Drives a dismissible banner in `ChatView`
+/// suggesting the user verify the peer's fingerprint (e.g., the peer rotated
+/// their identity key without our knowledge, or a session is corrupted).
+struct DecryptFailureBanner: Identifiable, Equatable {
+    let contactId: String
+    let displayName: String
+    var id: String { contactId }
+}
+
+/// An envelope from an unknown peer awaiting user consent before X3DH session
+/// establishment. The fingerprint is the short human-readable hex string the
+/// user compares out-of-band to defend against MITM at first contact.
+struct PendingFirstContact: Equatable, Identifiable {
+    let fingerprint: String           // stable dedup key (also used as Identifiable id)
+    let senderDisplayName: String     // what to show in the sheet
+    let senderIdentityKey: Data
+
+    var id: String { fingerprint }
+}
+
 /// Central state machine that orchestrates discovery, connections, transfers, and calls.
 @MainActor
 final class ConnectionManager: ObservableObject {
@@ -107,6 +128,37 @@ final class ConnectionManager: ObservableObject {
     @Published var shouldShowRelayConnect = false
     /// Pending key change alert for a contact whose key has changed
     @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
+    /// Pending first-contact verification: an envelope from an unknown peer
+    /// awaiting user consent before we create a TrustedContact and respond
+    /// to X3DH. Drives the FirstContactVerificationSheet.
+    @Published var pendingFirstContact: PendingFirstContact?
+
+    /// Surfaced banner when consecutive decrypt failures from a single peer
+    /// cross `decryptFailureBannerThreshold`. Cleared on successful decrypt
+    /// from the same peer or explicit user dismissal.
+    @Published var decryptFailureBanner: DecryptFailureBanner?
+
+    /// Per-contact running count of consecutive decrypt failures. Reset to 0
+    /// on a successful decrypt from the same peer. Keyed by `contact.id.uuidString`.
+    private var consecutiveDecryptFailures: [String: Int] = [:]
+
+    /// Number of back-to-back decrypt failures from the same peer required
+    /// before we surface a banner to the user. Picked to ride out brief
+    /// out-of-order ratchet hiccups without nagging.
+    private static let decryptFailureBannerThreshold = 3
+
+    /// Envelopes awaiting user consent. Insertion-ordered so that when the
+    /// active `pendingFirstContact` is resolved (approve or reject), the next
+    /// queued unknown peer can be surfaced to the user. Each entry holds the
+    /// fingerprint dedup key (base64 of identity key), the parsed envelope,
+    /// and the original wire message so we can replay once approved.
+    private var pendingFirstContactEnvelopes: [(fpKey: String, envelope: RemoteMessageEnvelope, message: MailboxMessage)] = []
+
+    /// Maximum number of unknown peers we will queue for first-contact
+    /// consent. Guards against a hostile peer (or botnet) from filling the
+    /// queue unboundedly until the user notices. Once at capacity, additional
+    /// envelopes from new peers are dropped.
+    private static let maxPendingFirstContacts = 16
 
     let tailnetStore = TailnetPeerStore()
 
@@ -875,17 +927,34 @@ final class ConnectionManager: ObservableObject {
                 return
             }
 
-            // First message from unknown sender: create trusted contact
+            // First message from unknown sender: GATE on user consent.
+            // Do NOT auto-create the contact or call respondToSession — instead,
+            // queue the envelope and surface the fingerprint so the user can
+            // verify the peer out-of-band (see FirstContactVerificationSheet).
             if contact == nil && envelope.isInitialMessage {
-                let newContact = TrustedContact(
-                    displayName: envelope.senderDisplayName ?? "Remote Peer",
-                    identityPublicKey: envelope.senderIdentityKey,
-                    trustLevel: .linked,
-                    mailboxId: envelope.senderMailboxId
-                )
-                trustedContactStore.add(newContact)
-                contact = newContact
-                logger.info("Created new remote contact: \(newContact.displayName)")
+                let fpKey = envelope.senderIdentityKey.base64EncodedString()
+                if pendingFirstContactEnvelopes.contains(where: { $0.fpKey == fpKey }) {
+                    // Duplicate envelope from same unknown peer — dedup.
+                    logger.debug("Duplicate first-contact envelope from same unknown peer — already queued")
+                    return
+                }
+                guard pendingFirstContactEnvelopes.count < Self.maxPendingFirstContacts else {
+                    logger.warning("First-contact queue at capacity (\(Self.maxPendingFirstContacts)); dropping envelope from new peer")
+                    return
+                }
+                pendingFirstContactEnvelopes.append((fpKey: fpKey, envelope: envelope, message: message))
+                if pendingFirstContact == nil {
+                    let displayFingerprint = Self.computeFingerprint(of: envelope.senderIdentityKey)
+                    pendingFirstContact = PendingFirstContact(
+                        fingerprint: displayFingerprint,
+                        senderDisplayName: envelope.senderDisplayName ?? String(localized: "Remote Peer"),
+                        senderIdentityKey: envelope.senderIdentityKey
+                    )
+                    logger.info("First contact from unknown peer pending user consent")
+                } else {
+                    logger.info("Additional unknown peer queued behind active first-contact; will surface after current decision")
+                }
+                return // wait for user approval
             }
 
             guard let contact else {
@@ -911,10 +980,35 @@ final class ConnectionManager: ObservableObject {
                 )
             }
 
-            let plaintext = try remoteSessionManager.decrypt(
-                message: envelope.ratchetMessage,
-                from: contact.id.uuidString
-            )
+            // Decrypt is wrapped in its own do/catch so we can track consecutive
+            // failures per peer and surface a banner to the user. Other errors
+            // (envelope decode, session establishment) flow through the OUTER
+            // catch unchanged.
+            let plaintext: Data
+            do {
+                plaintext = try remoteSessionManager.decrypt(
+                    message: envelope.ratchetMessage,
+                    from: contact.id.uuidString
+                )
+                // Successful decrypt — reset the failure counter for this peer.
+                consecutiveDecryptFailures[contact.id.uuidString] = 0
+                // If a banner was visible for this peer, dismiss it (recovered).
+                if decryptFailureBanner?.contactId == contact.id.uuidString {
+                    decryptFailureBanner = nil
+                }
+            } catch {
+                let count = (consecutiveDecryptFailures[contact.id.uuidString] ?? 0) + 1
+                consecutiveDecryptFailures[contact.id.uuidString] = count
+                logger.error("Decrypt failure #\(count) from \(contact.displayName): \(error.localizedDescription)")
+                if count >= Self.decryptFailureBannerThreshold,
+                   decryptFailureBanner?.contactId != contact.id.uuidString {
+                    decryptFailureBanner = DecryptFailureBanner(
+                        contactId: contact.id.uuidString,
+                        displayName: contact.displayName
+                    )
+                }
+                return
+            }
 
             if let text = String(data: plaintext, encoding: .utf8) {
                 chatManager.saveIncoming(
@@ -927,6 +1021,116 @@ final class ConnectionManager: ObservableObject {
             logger.error("Failed to process remote message: \(error.localizedDescription)")
         }
     }
+
+    /// User-initiated dismissal of the decrypt-failure banner. Resets the
+    /// per-peer failure counter so the banner does not immediately re-appear
+    /// on the next failure — it will only return after `threshold` NEW
+    /// consecutive failures from the same peer.
+    func dismissDecryptFailureBanner() {
+        if let banner = decryptFailureBanner {
+            consecutiveDecryptFailures[banner.contactId] = 0
+        }
+        decryptFailureBanner = nil
+    }
+
+    #if DEBUG
+    /// Test-only: simulate a decrypt failure from a peer without driving the
+    /// full `handleRemoteMessage` flow. Mirrors the production branch.
+    func recordDecryptFailureForTesting(contactId: String, displayName: String) {
+        let count = (consecutiveDecryptFailures[contactId] ?? 0) + 1
+        consecutiveDecryptFailures[contactId] = count
+        if count >= Self.decryptFailureBannerThreshold,
+           decryptFailureBanner?.contactId != contactId {
+            decryptFailureBanner = DecryptFailureBanner(
+                contactId: contactId, displayName: displayName)
+        }
+    }
+
+    /// Test-only: simulate a successful decrypt from a peer.
+    func recordDecryptSuccessForTesting(contactId: String) {
+        consecutiveDecryptFailures[contactId] = 0
+        if decryptFailureBanner?.contactId == contactId {
+            decryptFailureBanner = nil
+        }
+    }
+    #endif
+
+    // MARK: - First-Contact Verification
+
+    /// Compute the human-readable fingerprint shown to the user for a sender's
+    /// identity key. Mirrors `TrustedContact.keyFingerprint` so the on-screen
+    /// value matches what users see for already-trusted contacts.
+    static func computeFingerprint(of publicKey: Data) -> String {
+        let hash = SHA256.hash(data: publicKey)
+        let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
+        return stride(from: 0, to: 20, by: 4).map { i in
+            let start = hex.index(hex.startIndex, offsetBy: i)
+            let end = hex.index(start, offsetBy: 4)
+            return String(hex[start..<end])
+        }.joined(separator: " ")
+    }
+
+    /// User approved a first-contact. Replay the queued envelope through the
+    /// normal flow: create contact at `.linked` trust, then re-enter
+    /// `handleRemoteMessage` so the existing X3DH respond + decrypt path runs.
+    func approveFirstContact(fingerprint: String) {
+        guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
+        let fpKey = current.senderIdentityKey.base64EncodedString()
+        guard let idx = pendingFirstContactEnvelopes.firstIndex(where: { $0.fpKey == fpKey }) else { return }
+        let pending = pendingFirstContactEnvelopes.remove(at: idx)
+        pendingFirstContact = nil
+
+        let newContact = TrustedContact(
+            displayName: current.senderDisplayName,
+            identityPublicKey: current.senderIdentityKey,
+            trustLevel: .linked,
+            mailboxId: pending.envelope.senderMailboxId
+        )
+        trustedContactStore.add(newContact)
+        logger.info("Created first-contact after user approval: \(newContact.displayName)")
+        // Re-enter handleRemoteMessage now that the contact exists — the
+        // unknown-peer branch will be skipped and the normal X3DH responder +
+        // decrypt + deliver path runs.
+        handleRemoteMessage(pending.message)
+        // Surface the next queued unknown peer (if any) so the user can act
+        // on them. Multi-peer UX: don't silently strand peers behind the one
+        // that just resolved.
+        surfaceNextPendingFirstContact()
+    }
+
+    /// User rejected a first-contact. Discard the queued envelope and do not
+    /// create a TrustedContact; the X3DH session is never established.
+    func rejectFirstContact(fingerprint: String) {
+        guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
+        let fpKey = current.senderIdentityKey.base64EncodedString()
+        pendingFirstContactEnvelopes.removeAll(where: { $0.fpKey == fpKey })
+        pendingFirstContact = nil
+        logger.info("User rejected first-contact from unknown peer")
+        // Surface the next queued unknown peer (if any).
+        surfaceNextPendingFirstContact()
+    }
+
+    /// After the active `pendingFirstContact` is resolved, promote the next
+    /// queued envelope (in insertion order) into the published slot so the
+    /// FirstContactVerificationSheet can show it. No-op if a pending contact
+    /// is still set or the queue is empty.
+    private func surfaceNextPendingFirstContact() {
+        guard pendingFirstContact == nil else { return }
+        guard let next = pendingFirstContactEnvelopes.first else { return }
+        pendingFirstContact = PendingFirstContact(
+            fingerprint: Self.computeFingerprint(of: next.envelope.senderIdentityKey),
+            senderDisplayName: next.envelope.senderDisplayName ?? String(localized: "Remote Peer"),
+            senderIdentityKey: next.envelope.senderIdentityKey
+        )
+    }
+
+    #if DEBUG
+    /// Test-only: invoke the private `handleRemoteMessage` so unit tests can
+    /// drive the consent gate without going through MailboxManager.
+    func handleRemoteMessageForTesting(_ message: MailboxMessage) {
+        handleRemoteMessage(message)
+    }
+    #endif
 
     func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
         guard let peerMailboxId = contact.mailboxId else {
@@ -3653,14 +3857,24 @@ final class ConnectionManager: ObservableObject {
     /// User chose to accept the new key (sets trust to .linked — user actively accepted)
     func handleKeyChangeAccept() {
         guard let alert = pendingKeyChangeAlert else { return }
-        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .linked)
+        trustedContactStore.updatePublicKey(
+            for: alert.contactId,
+            newKey: alert.newPublicKey,
+            trustLevel: .linked,
+            reason: .userAcceptedNewKey
+        )
         pendingKeyChangeAlert = nil
     }
 
     /// User chose to verify later (stays at .unknown until face-to-face verification)
     func handleKeyChangeVerifyLater() {
         guard let alert = pendingKeyChangeAlert else { return }
-        trustedContactStore.updatePublicKey(for: alert.contactId, newKey: alert.newPublicKey, trustLevel: .unknown)
+        trustedContactStore.updatePublicKey(
+            for: alert.contactId,
+            newKey: alert.newPublicKey,
+            trustLevel: .unknown,
+            reason: .userAcceptedNewKey
+        )
         pendingKeyChangeAlert = nil
     }
 

@@ -171,6 +171,41 @@
         }
       }
     },
+    "Accept & Trust": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accept & Trust"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "受け入れて信頼する"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "수락 및 신뢰"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接受并信任"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接受並信任"
+          }
+        }
+      }
+    },
     "Add Member": {
       "extractionState": "manual",
       "localizations": {
@@ -853,6 +888,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "相機"
+          }
+        }
+      }
+    },
+    "Can't decrypt messages from %@": {
+      "comment": "Banner shown in the chat when decrypt failures from this peer cross a threshold. The %@ placeholder is the peer's display name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't decrypt messages from %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ からのメッセージを復号できません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 메시지를 복호화할 수 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法解密来自 %@ 的讯息"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法解密來自 %@ 的訊息"
           }
         }
       }
@@ -6720,6 +6791,41 @@
         }
       }
     },
+    "Reject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒否"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "거부"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒绝"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒絕"
+          }
+        }
+      }
+    },
     "Rejected": {
       "extractionState": "manual",
       "localizations": {
@@ -6751,6 +6857,41 @@
           "stringUnit": {
             "state": "translated",
             "value": "已拒絕"
+          }
+        }
+      }
+    },
+    "Remote Peer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Peer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモートデバイス"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "원격 기기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "远端设备"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "遠端裝置"
           }
         }
       }
@@ -8386,6 +8527,42 @@
         }
       }
     },
+    "Their identity key may have changed. Verify the fingerprint to continue.": {
+      "comment": "Body text of the decrypt-failure banner shown in chat. Explains the likely cause of repeated decryption failures and prompts the user to verify the peer's fingerprint out-of-band.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Their identity key may have changed. Verify the fingerprint to continue."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手のIDキーが変更された可能性があります。続行する前にフィンガープリントを確認してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상대방의 ID 키가 변경되었을 수 있습니다. 계속하려면 지문을 확인하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方的身份密钥可能已变更。请先验证指纹再继续。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方的身分金鑰可能已變更，請先驗證指紋再繼續。"
+          }
+        }
+      }
+    },
     "These devices were discovered via Bluetooth. Connect to the same WiFi network to transfer files.": {
       "extractionState": "manual",
       "localizations": {
@@ -8417,6 +8594,41 @@
           "stringUnit": {
             "state": "translated",
             "value": "這些裝置透過藍牙發現。請連接相同的 WiFi 網路以傳輸檔案。"
+          }
+        }
+      }
+    },
+    "This is the first message from this device. Compare the fingerprint below in person or over a trusted channel (call, Signal, etc.) before accepting — it's the only way to ensure no one is intercepting your connection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is the first message from this device. Compare the fingerprint below in person or over a trusted channel (call, Signal, etc.) before accepting — it's the only way to ensure no one is intercepting your connection."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスからの最初のメッセージです。承認する前に、対面または信頼できる手段（通話、Signalなど）で下のフィンガープリントを比較してください。これが第三者による傍受を防ぐ唯一の方法です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에서 보낸 첫 메시지입니다. 수락하기 전에 대면 또는 신뢰할 수 있는 채널(통화, Signal 등)을 통해 아래 지문을 비교하세요. 누군가 연결을 가로채지 못하도록 하는 유일한 방법입니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这是来自此设备的第一条消息。请在接受前，通过当面或可信的渠道（电话、Signal 等）核对下方的指纹——这是确保连接未被拦截的唯一方法。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是來自此裝置的第一則訊息。請在接受前，透過當面或可信的管道（電話、Signal 等）核對下方的指紋——這是確保連線未被攔截的唯一方法。"
           }
         }
       }
@@ -8753,6 +8965,77 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用 Relay 連線與此裝置傳輸檔案"
+          }
+        }
+      }
+    },
+    "Verify": {
+      "comment": "Action button in the decrypt-failure banner that takes the user to verify the peer's fingerprint.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證"
+          }
+        }
+      }
+    },
+    "Verify first contact": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify first contact"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "初回接触を確認"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 접촉 확인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证首次联络"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證首次連絡"
           }
         }
       }
