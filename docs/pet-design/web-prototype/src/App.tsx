@@ -29,7 +29,8 @@ export default function App() {
   const [palette, setPalette] = useState<Palette | null>(null);
   const [traits, setTraits] = useState<Traits>(defaultTraits);
   const [currentAction, setCurrentAction] = useState<IdleAction>('idle');
-  const [peerConnected, setPeerConnected] = useState(false);
+  type PeerPhase = 'absent' | 'walking-in' | 'idle';
+  const [peerPhase, setPeerPhase] = useState<PeerPhase>('absent');
 
   useEffect(() => {
     loadSprite('/data/cat.json').then(setData).catch(console.error);
@@ -55,9 +56,44 @@ export default function App() {
   const localFrameIdx = useFrameAnimation(localFrames.length);
   const safeLocalIdx = localFrames.length > 0 ? Math.min(localFrameIdx, localFrames.length - 1) : 0;
 
-  // Peer pet currently always plays idle (walk-in lands in Task 14).
-  const peerFrames = data?.baby.idle ?? [];
-  const peerFrameIdx = useFrameAnimation(peerFrames.length);
+  // Animated peer position. We mount the peer at xPercent=110 (offscreen
+  // right) for one frame, then update to 70 so the CSS transition on `left`
+  // animates a slide-in. After 1.5s we switch phase to 'idle'.
+  const [peerXPercent, setPeerXPercent] = useState(110);
+  useEffect(() => {
+    if (peerPhase === 'walking-in') {
+      // Ensure starting position is offscreen, then on next frame move to 70.
+      setPeerXPercent(110);
+      const raf = requestAnimationFrame(() => {
+        // A second rAF guarantees the browser has painted the 110 frame
+        // before we transition to 70.
+        requestAnimationFrame(() => setPeerXPercent(70));
+      });
+      const id = setTimeout(() => setPeerPhase('idle'), 1500);
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(id);
+      };
+    }
+    if (peerPhase === 'idle') {
+      setPeerXPercent(70);
+    }
+    if (peerPhase === 'absent') {
+      setPeerXPercent(110);
+    }
+  }, [peerPhase]);
+
+  const onTogglePeer = () => {
+    setPeerPhase((p) => (p === 'absent' ? 'walking-in' : 'absent'));
+  };
+
+  const peerAction: 'walking' | 'idle' = peerPhase === 'walking-in' ? 'walking' : 'idle';
+  const peerFrames =
+    (data?.baby[peerAction] && data.baby[peerAction].length > 0
+      ? data.baby[peerAction]
+      : data?.baby.idle) ?? [];
+  // Slightly faster fps for the walking sprite reads better at speed.
+  const peerFrameIdx = useFrameAnimation(peerFrames.length, peerAction === 'walking' ? 8 : 6);
   const safePeerIdx = peerFrames.length > 0 ? Math.min(peerFrameIdx, peerFrames.length - 1) : 0;
 
   const ready = data && palette && localFrames.length > 0;
@@ -72,12 +108,12 @@ export default function App() {
       flipped: false,
     };
     pets = [localPet];
-    if (peerConnected && peerFrames.length > 0) {
+    if (peerPhase !== 'absent' && peerFrames.length > 0) {
       pets.push({
         id: 'peer',
         frame: peerFrames[safePeerIdx],
         palette,
-        xPercent: 70,
+        xPercent: peerXPercent,
         flipped: true,
       });
     }
@@ -102,8 +138,8 @@ export default function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <TraitPanel traits={traits} setTraits={setTraits} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <button style={buttonStyle} onClick={() => setPeerConnected((c) => !c)}>
-                {peerConnected ? 'Disconnect peer' : 'Connect peer'}
+              <button style={buttonStyle} onClick={onTogglePeer}>
+                {peerPhase === 'absent' ? 'Connect peer' : 'Disconnect peer'}
               </button>
             </div>
           </div>
