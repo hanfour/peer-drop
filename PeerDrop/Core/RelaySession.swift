@@ -92,10 +92,17 @@ final class RelaySession {
 
     /// Start the relay flow. Returns when initial setup is dispatched; outcome is
     /// delivered via onConnected / onFailed callbacks.
+    ///
+    /// - Parameter peerAlreadyJoined: `true` if the caller installed a bootstrap
+    ///   `onPeerJoined` shim before calling `start()` and that shim already
+    ///   observed the `peer-joined` event. When `true`, the creator flow sends
+    ///   the SDP offer immediately after wiring up its real handler instead of
+    ///   waiting for another callback (which would never come — the WS
+    ///   delivers `peer-joined` only once). Has no effect for the joiner role.
     @MainActor
-    func start() async {
+    func start(peerAlreadyJoined: Bool = false) async {
         switch role {
-        case .creator: await startCreator()
+        case .creator: await startCreator(peerAlreadyJoined: peerAlreadyJoined)
         case .joiner:  startJoiner()
         }
     }
@@ -293,7 +300,7 @@ final class RelaySession {
     // MARK: - Creator flow
 
     @MainActor
-    private func startCreator() async {
+    private func startCreator(peerAlreadyJoined: Bool) async {
         let client = DataChannelClient()
         self.client = client
 
@@ -353,15 +360,22 @@ final class RelaySession {
         }
 
         // Send offer when peer joins. The legacy code used an AsyncStream so the
-        // event was buffered if the joiner connected before the offer was ready;
-        // here createOffer has already returned by the time we install this hook,
-        // so a direct callback is sufficient.
+        // event was buffered if the joiner connected before the offer was ready.
+        // Now the buffering is done by ConnectionManager: it installs a one-shot
+        // bootstrap shim on `signaling.onPeerJoined` BEFORE `joinRoom`, then passes
+        // the observed flag here as `peerAlreadyJoined`. We REPLACE the bootstrap
+        // shim with the real handler below, and if the event was already seen we
+        // send the offer immediately.
         signaling.onPeerJoined = { [weak self] in
             guard let self else { return }
             Task { @MainActor in
                 guard case .pending = self.outcome else { return }
                 self.signaling.sendSDP(offer.sdp, type: "offer")
             }
+        }
+        if peerAlreadyJoined {
+            guard case .pending = outcome else { return }
+            signaling.sendSDP(offer.sdp, type: "offer")
         }
 
         // SDP answer
@@ -472,4 +486,21 @@ final class RelaySession {
         let tokens = sdp.components(separatedBy: " ").dropFirst()
         return tokens.contains { $0.contains(":") && !$0.contains(".") && $0.count >= 3 }
     }
+
+#if DEBUG
+    // MARK: - Test seams
+
+    /// Test-only: directly transition to `.connected` state without running the full
+    /// WebRTC flow. Mirrors the disconnect-once side effect of `recordSuccess` so
+    /// tests can verify that deinit does NOT call `disconnect()` a second time
+    /// (regression guard against accidentally removing the `if case .connected`
+    /// short-circuit in deinit).
+    @MainActor
+    func markConnectedForTesting() async {
+        guard case .pending = outcome else { return }
+        let dummyTransport = DataChannelTransport(client: DataChannelClient())
+        outcome = .connected(dummyTransport)
+        signaling.disconnect()
+    }
+#endif
 }

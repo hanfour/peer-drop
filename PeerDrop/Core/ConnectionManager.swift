@@ -1961,6 +1961,14 @@ final class ConnectionManager: ObservableObject {
     /// not `.connected` — that is the structural v3.3.0 zombie-socket fix.
     private var activeRelaySession: RelaySession?
 
+    /// Reference-typed flag holder used by `startWorkerRelayAsCreator` to
+    /// capture a `peer-joined` event that arrives during the ICE-credentials
+    /// HTTPS round-trip. A class lets the WS callback closure mutate the flag
+    /// without needing inout semantics.
+    private final class PeerJoinedBox {
+        var fired: Bool = false
+    }
+
     /// Start a relay connection as the room creator (offerer).
     func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
         logger.info("Starting relay as creator for room: \(roomCode)")
@@ -1968,6 +1976,20 @@ final class ConnectionManager: ObservableObject {
         let generation = UUID()
         connectionGeneration = generation
         forceTransitionToRequesting()
+
+        // CRITICAL race fix: install a one-shot buffering shim on
+        // `onPeerJoined` BEFORE calling `joinRoom`. The WS receive loop may
+        // deliver `peer-joined` while we are still awaiting the ICE-credentials
+        // HTTPS round-trip, and `RelaySession.startCreator` only installs its
+        // real handler at the end of that round-trip. Without this shim the
+        // event would be dropped (callback was nil) and the offer would never
+        // be sent → 30s negotiation timeout.
+        //
+        // `RelaySession.startCreator` REPLACES this shim with its real handler;
+        // if the shim already saw the event we forward `peerAlreadyJoined: true`
+        // so the session sends the offer immediately.
+        let peerJoinedBox = PeerJoinedBox()
+        signaling.onPeerJoined = { peerJoinedBox.fired = true }
 
         // Open the WebSocket — we already have the token from createRoom.
         signaling.joinRoom(code: roomCode, token: roomToken)
@@ -2006,8 +2028,9 @@ final class ConnectionManager: ObservableObject {
                     self.transition(to: .failed(reason: reason))
                 }
                 self.activeRelaySession = session
+                let alreadyJoined = peerJoinedBox.fired
                 Task { @MainActor in
-                    await session.start()
+                    await session.start(peerAlreadyJoined: alreadyJoined)
                 }
             }
         }

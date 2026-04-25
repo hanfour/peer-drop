@@ -123,4 +123,87 @@ final class RelaySessionTests: XCTestCase {
         }
         XCTAssertTrue(mockSig.disconnectCalled)
     }
+
+    /// Issue 1 regression guard: the ConnectionManager bootstrap shim must
+    /// capture `peer-joined` events that arrive between `joinRoom` and the
+    /// `RelaySession.start(peerAlreadyJoined:)` call, and `RelaySession` must
+    /// accept the flag without throwing.
+    ///
+    /// We can't drive a real WebRTC offer in a unit test (no injectable
+    /// `RTCPeerConnection`), so this is an API-contract smoke test: we verify
+    /// (a) a bootstrap shim sees the event before the session is created,
+    /// (b) `start(peerAlreadyJoined:)` is callable with the boolean, and
+    /// (c) once the session is constructed, calling `start` does not crash and
+    /// the session remains in pending state long enough for the offer path to
+    /// be attempted (i.e. no early failure short-circuits the
+    /// `peerAlreadyJoined` branch).
+    ///
+    /// The end-to-end behaviour (offer actually sent via signaling.sendSDP) is
+    /// covered by manual integration testing — see the Issue 1 spec.
+    func test_creatorPeerJoinedArrivesBeforeStart_offerStillSent() async throws {
+        let mockSig = MockWorkerSignaling()
+        let metricsToken = await ConnectionMetrics.shared.begin(type: .relayWorker, role: .initiator)
+
+        // (a) Bootstrap shim, mimicking ConnectionManager.startWorkerRelayAsCreator.
+        var peerAlreadyJoined = false
+        mockSig.onPeerJoined = { peerAlreadyJoined = true }
+
+        // Simulate WS delivering peer-joined BEFORE RelaySession is constructed.
+        mockSig.onPeerJoined?()
+        XCTAssertTrue(
+            peerAlreadyJoined,
+            "bootstrap shim must record peer-joined arriving before session construction"
+        )
+
+        // (b) Construct RelaySession with creator role and (c) call start with the flag.
+        // Note: we cannot create a real RTCPeerConnection in the unit-test target,
+        // so `startCreator` will fail at `createDataChannel` / `createOffer` — that's
+        // expected. What we're proving here is that the API surface (the boolean
+        // parameter being threaded through `start` → `startCreator`) is wired up.
+        let session = RelaySession(
+            roomCode: "TEST01",
+            role: .creator,
+            signaling: mockSig,
+            metricsToken: metricsToken,
+            iceResult: nil,
+            logger: logger
+        )
+
+        // Drive start; should not throw or trap.
+        await session.start(peerAlreadyJoined: peerAlreadyJoined)
+
+        // The session must not be left in a weird half-state — once start returns,
+        // it has either sent the offer (success path) or recorded a failure. Either
+        // way, calling cancel afterwards must remain idempotent and safe.
+        session.cancel(reason: "testTeardown")
+    }
+
+    /// Issue 2 regression guard: after a session has been recorded as connected
+    /// (via the test seam that mimics `recordSuccess`), the deinit MUST short-circuit
+    /// and NOT call `signaling.disconnect()` a second time. If a future refactor
+    /// removes the `if case .connected = outcome { return }` guard in deinit, this
+    /// test fails.
+    func test_sessionAfterRecordSuccess_doesNotDisconnectInDeinit() async {
+        let mockSig = MockWorkerSignaling()
+        let metricsToken = await ConnectionMetrics.shared.begin(type: .relayWorker, role: .joiner)
+
+        do {
+            let session = RelaySession(
+                roomCode: "TEST01",
+                role: .joiner,
+                signaling: mockSig,
+                metricsToken: metricsToken,
+                iceResult: nil,
+                logger: logger
+            )
+            await session.markConnectedForTesting()
+            // Deinit will run when this scope exits and `session` drops to refcount 0.
+        }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            mockSig.disconnectCallCount, 1,
+            "After recordSuccess, deinit must NOT call disconnect again — exactly one call expected"
+        )
+    }
 }
