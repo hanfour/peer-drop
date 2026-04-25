@@ -1,6 +1,9 @@
 # Node
 node_modules/
 
+# Cloudflare Wrangler local state
+.wrangler/
+
 # Xcode user data
 xcuserdata/
 *.xcodeproj/xcuserdata/
