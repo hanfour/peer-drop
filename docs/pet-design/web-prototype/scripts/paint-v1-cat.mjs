@@ -1,23 +1,29 @@
 #!/usr/bin/env node
-// Paint a 32x32 chibi-style cat sprite as JSON, in the ProHama tradition:
-// big head (~60% vertical), big eyes, blush, round silhouette, triangular
-// ears, small triangle nose. Output schema matches cat.json so the existing
-// loader/SpriteCanvas can render it unchanged.
+// Paint a 32x32 chibi-style CAT sprite as JSON.
 //
-// Palette indices (extends the 6-slot scheme by 1):
+// Design brief (v1.1 — feline anatomy fix):
+//   - Sharp narrow triangular ears (1px tip, 3px base, 4-5px tall)
+//     with pink inner triangle. Set ON TOP of the head dome.
+//   - FLAT FACE — no protruding muzzle, no cream snout patch.
+//     Nose sits directly between/below the eyes.
+//   - Whiskers — 3 short horizontal lines on each side at nose row.
+//     This is the single biggest "cat" semaphore in chibi pixel art.
+//   - Almond/slanted eyes — outer column dropped 1px so the eye reads as
+//     subtly slanted upward at the outer corner (not a perfect rectangle).
+//   - Thin curled tail (1-2px wide) clearly visible behind the body.
+//
+// Output schema matches cat.json so the existing loader/SpriteCanvas can
+// render it unchanged.
+//
+// Palette (extends the 6-slot scheme by 1):
 //   0 transparent
-//   1 outline       (#3A2418  warm dark brown — softer than pure black)
+//   1 outline       (#3A2418  warm dark brown)
 //   2 primary body  (#F4A041  saturated orange tabby)
 //   3 secondary     (#FFE0B5  cream belly)
 //   4 highlight     (#FFFFFF  pure white shine for eyes)
 //   5 accent eyes   (#1F1F2E  near-black eye fill)
-//   6 pattern       (#D67B26  warm darker orange — stripes)
-//   7 blush         (#FF8FAA  soft pink — v1 extension)
-//
-// We compose each frame by stamping named regions onto a 32x32 grid.
-// Frames share most pixels and differ only in eyes, mouth, ear tilt,
-// paws, tail, body offset, etc. so we paint a base "head" + "body" once
-// and then overlay deltas per frame.
+//   6 pattern       (#D67B26  warm darker orange — stripes / whiskers)
+//   7 blush         (#FF8FAA  soft pink — inner ear, nose, cheeks)
 
 import fs from 'fs';
 import path from 'path';
@@ -32,11 +38,11 @@ const SIZE = 32;
 const T = 0; // transparent
 const O = 1; // outline
 const P = 2; // primary
-const S = 3; // secondary (belly/inner ear)
+const S = 3; // secondary (belly)
 const H = 4; // highlight (white)
 const E = 5; // eye fill (near-black)
-const M = 6; // pattern (darker orange stripes)
-const B = 7; // blush
+const M = 6; // pattern (darker orange stripes / whiskers)
+const B = 7; // blush / inner ear / nose
 
 // =====================================================================
 // Grid helpers
@@ -45,15 +51,13 @@ const B = 7; // blush
 const blank = () =>
   Array.from({ length: SIZE }, () => Array(SIZE).fill(T));
 
-const cloneGrid = (g) => g.map((row) => row.slice());
-
 /** Draw a horizontal run starting at (x,y), width w, in color c. */
 function hLine(g, x, y, w, c) {
   if (y < 0 || y >= SIZE) return;
   for (let i = 0; i < w; i++) {
-    const px = x + i;
-    if (px < 0 || px >= SIZE) continue;
-    g[y][px] = c;
+    const xx = x + i;
+    if (xx < 0 || xx >= SIZE) continue;
+    g[y][xx] = c;
   }
 }
 
@@ -61,9 +65,9 @@ function hLine(g, x, y, w, c) {
 function vLine(g, x, y, h, c) {
   if (x < 0 || x >= SIZE) return;
   for (let i = 0; i < h; i++) {
-    const py = y + i;
-    if (py < 0 || py >= SIZE) continue;
-    g[py][x] = c;
+    const yy = y + i;
+    if (yy < 0 || yy >= SIZE) continue;
+    g[yy][x] = c;
   }
 }
 
@@ -82,308 +86,323 @@ function rect(g, x, y, w, h, c) {
   }
 }
 
-/** Draw a row by reading a string of ASCII codes. */
-function row(g, x, y, str) {
-  const map = {
-    '.': null, // skip (preserve underlying pixel)
-    ' ': null,
-    o: O,
-    p: P,
-    s: S,
-    h: H,
-    e: E,
-    m: M,
-    b: B,
-    '_': T, // explicit transparent
-  };
-  for (let i = 0; i < str.length; i++) {
-    const ch = str[i];
-    const c = map[ch];
-    if (c === undefined)
-      throw new Error(`Unknown char '${ch}' in row at y=${y}`);
-    if (c === null) continue;
-    px(g, x + i, y, c);
-  }
-}
-
-/** Stamp a small 2D pattern onto the grid at (x,y). Use null/undefined to skip. */
-function stamp(g, x, y, pattern) {
-  for (let dy = 0; dy < pattern.length; dy++) {
-    const r = pattern[dy];
-    for (let dx = 0; dx < r.length; dx++) {
-      const c = r[dx];
-      if (c === null || c === undefined) continue;
-      px(g, x + dx, y + dy, c);
-    }
-  }
-}
-
 // =====================================================================
-// Body / head silhouette
+// Head silhouette + ears
 // =====================================================================
 //
 // Layout plan (32x32):
-//  rows 0..1   blush of empty space + ear tips
-//  rows 2..6   ears (triangular, 5 rows tall)
-//  rows 4..19  HEAD — big, round, ~16 rows tall, ~20 wide centered at x=16
-//  rows 20..27 BODY — round, ~8 rows tall, narrower than head
-//  rows 28..29 paws/feet
-//  rows 30..31 ground-line shadow / tail tip
+//  rows 1..5    EARS (5 rows tall, sharp narrow triangles)
+//  rows 5..18   HEAD (round, ~13 rows tall, ~18 wide)
+//  rows 19..27  BODY (round, narrower than head)
+//  rows 28..29  PAWS / feet
 //
-// Outline strategy: only outline the silhouette + key features. We DON'T
-// outline every interior shape — that's what makes ProHama feel "soft"
-// rather than "blocky pixel art."
+// Reading priority for a 32px chibi cat (from far away → close):
+//   1. Silhouette: round head + two pointy ears poking up (no flopping)
+//   2. Whiskers: triple horizontal ticks on each cheek
+//   3. Tiny pink nose + flat face (no muzzle bulge)
+//   4. Almond eyes with bright kawaii highlight
+//   5. Thin curled tail behind body
+//
+// Cheek/under-chin secondary patch is REMOVED — that was reading as
+// muzzle/snout and making the silhouette look canine.
 
 /**
- * Paint the base head (no eyes/mouth — just silhouette + ears + cheek
- * fill). Produces a round-ish head ~20px wide centered horizontally,
- * with triangle ears poking up.
- *
- * Returns a fresh grid.
+ * Paint base head silhouette + ears.
+ *   earTilt:  0 = default,  1 = ears perked higher (excited),
+ *            -1 = ears flatter (scared)
+ *   ears:    'up' (default) | 'flat' | 'tilt'
  */
-function paintBaseHead({ earTilt = 0 } = {}) {
+function paintBaseHead({ earTilt = 0, ears = 'up' } = {}) {
   const g = blank();
 
-  // ----- Ears (triangles, rows 2..7) -----
-  // Left ear roughly at columns 6..11, right ear at columns 20..25.
-  // Tilt: when earTilt = 1 the ears stand up slightly (1 row taller).
-  // when earTilt = -1 they flatten.
-  const earBaseY = 7 - earTilt; // 7 default; 6 when up, 8 when flat
-  // Left ear outline
-  // Triangular: tip at (8, earBaseY-5), base from (6, earBaseY) to (11, earBaseY)
-  const leftTipX = 8;
-  const rightTipX = 23;
-  // Left ear
-  for (let i = 0; i < 5; i++) {
-    // i=0 tip, i=4 base. Width grows.
-    const y = earBaseY - 5 + i + 1;
-    const halfW = i + 1;
-    const xStart = leftTipX - halfW + 1;
-    const xEnd = leftTipX + halfW;
-    // outline left + right of triangle row
-    px(g, xStart, y, O);
-    px(g, xEnd, y, O);
-    // fill between
-    for (let x = xStart + 1; x < xEnd; x++) px(g, x, y, P);
-  }
-  // Right ear (mirror)
-  for (let i = 0; i < 5; i++) {
-    const y = earBaseY - 5 + i + 1;
-    const halfW = i + 1;
-    const xStart = rightTipX - halfW + 1;
-    const xEnd = rightTipX + halfW;
-    px(g, xStart, y, O);
-    px(g, xEnd, y, O);
-    for (let x = xStart + 1; x < xEnd; x++) px(g, x, y, P);
-  }
-  // Inner ear pink/secondary triangles (smaller, inside each)
-  // Left inner ear
-  for (let i = 0; i < 3; i++) {
-    const y = earBaseY - 3 + i + 1;
-    const halfW = i;
-    if (halfW <= 0) continue;
-    for (let x = leftTipX - halfW + 1; x < leftTipX + halfW; x++) {
-      px(g, x, y, S);
-    }
-  }
-  for (let i = 0; i < 3; i++) {
-    const y = earBaseY - 3 + i + 1;
-    const halfW = i;
-    if (halfW <= 0) continue;
-    for (let x = rightTipX - halfW + 1; x < rightTipX + halfW; x++) {
-      px(g, x, y, S);
-    }
-  }
-
-  // ----- Head silhouette (round, rows ~6 to 19) -----
-  // We define an outline mask for a round head with chunky cheeks.
-  // Approximate shape: top flat-ish, sides curve out, bottom narrows
-  // into the body.
-  //
-  // Outline rows (left edge x → right edge x), inclusive:
-  // Index by absolute y row.
+  // ----- Head silhouette (rows 5..18, rounded) -----
+  // Outline rows: inclusive [xL, xR] for each y.
+  // Smooth dome on top — must read as one continuous head, not two
+  // separate "earlobes".
   const headOutline = {
-    6:  [9, 22],   // upper-top after ears
-    7:  [7, 24],   // forehead curve start
-    8:  [6, 25],
-    9:  [5, 26],
-    10: [4, 27],
-    11: [4, 27],
-    12: [4, 27],
-    13: [4, 27],
-    14: [5, 26],
-    15: [5, 26],
-    16: [6, 25],
-    17: [7, 24],
-    18: [9, 22],
-    19: [10, 21],
+    5:  [12, 19],   // top dome (between the two ears)
+    6:  [10, 21],
+    7:  [8, 23],
+    8:  [7, 24],
+    9:  [6, 25],
+    10: [6, 25],
+    11: [6, 25],
+    12: [6, 25],
+    13: [6, 25],
+    14: [7, 24],
+    15: [8, 23],
+    16: [9, 22],
+    17: [10, 21],
+    18: [11, 20],
   };
 
-  // Fill head interior with primary color; draw outline 1px on edges.
   for (const [yStr, [xL, xR]] of Object.entries(headOutline)) {
     const y = parseInt(yStr, 10);
     px(g, xL, y, O);
     px(g, xR, y, O);
     for (let x = xL + 1; x < xR; x++) px(g, x, y, P);
   }
-  // Top cap between ears at y=5 — connect ears
-  // (this is the head dome between the two ears)
-  for (let x = 11; x <= 20; x++) px(g, x, 5, O);
-  // Re-fill interior just below
-  for (let x = 12; x <= 19; x++) px(g, x, 6, P);
 
-  // Cheek/under-chin secondary patch (lighter cream around mouth area)
-  // This makes the lower face read as "muzzle" — important for cute reading.
-  for (let y = 14; y <= 17; y++) {
-    for (let x = 12; x <= 19; x++) {
-      g[y][x] = S;
+  // ----- Ears -----
+  // Sharp narrow triangles. Anchored at the head dome top (y=5).
+  // Default earBase row is 5 (the top of the head).
+  // Ears extend UP from there: tip is 4 rows above the base.
+  //
+  //   .X.    row earBase-4  (1px tip)
+  //   XPX    row earBase-3  (2 outline + 1 pink inner)
+  //   XPX    row earBase-2
+  //   XPX    row earBase-1
+  //   XBX    row earBase    (sits on head dome — wider base = 3 wide)
+  //
+  // Left ear centered around column 11; right ear centered around 20.
+  const earBaseY = 5;
+  const tilt = earTilt; // 1 = perked (taller), -1 = flat (shorter)
+  const earHeight = 4 + tilt; // default 4, perked 5, flat 3
+
+  function paintEar(centerX, side /* -1 left, +1 right */) {
+    const tipY = earBaseY - earHeight;
+    if (ears === 'flat') {
+      // Flat ears: render as squashed triangle, half-height
+      const h = Math.max(2, earHeight - 1);
+      for (let i = 0; i < h; i++) {
+        const y = earBaseY - h + i;
+        const halfW = Math.floor((i + 1) / 2);
+        const xStart = centerX - halfW;
+        const xEnd = centerX + halfW;
+        px(g, xStart, y, O);
+        if (xEnd > xStart) px(g, xEnd, y, O);
+        for (let x = xStart + 1; x < xEnd; x++) px(g, x, y, P);
+      }
+      return;
+    }
+
+    // Sharp ear:
+    // Tip (1px) at (centerX, tipY)
+    px(g, centerX, tipY, O);
+    // Mid rows (3 rows): outline at center-1 and center+1, pink fill in middle
+    for (let r = 1; r <= earHeight - 1; r++) {
+      const y = tipY + r;
+      px(g, centerX - 1, y, O);
+      px(g, centerX + 1, y, O);
+      // Inner ear pink fill (only middle row gets pink to keep it small)
+      if (r >= 1) {
+        px(g, centerX, y, B);
+      }
+    }
+    // Base row (sits on head, 3 wide)
+    const baseY = earBaseY;
+    px(g, centerX - 1, baseY, O);
+    px(g, centerX + 1, baseY, O);
+    px(g, centerX, baseY, B);
+
+    // 'tilt' variant: lean ear outward by 1 column at tip
+    if (ears === 'tilt') {
+      // Erase the upper tip and re-place 1 column outward
+      px(g, centerX, tipY, T);
+      px(g, centerX + side, tipY, O);
     }
   }
-  // Tighten the muzzle region slightly
-  px(g, 12, 14, P);
-  px(g, 19, 14, P);
-  px(g, 12, 17, P);
-  px(g, 19, 17, P);
+
+  paintEar(11, -1); // left ear
+  paintEar(20, +1); // right ear
+
+  // The head dome row (y=5) is between x=12..19 — let's make sure
+  // the ear bases plug cleanly into the dome. Ear bases are at x=10..12
+  // (left) and x=19..21 (right). The dome row already has outline at
+  // x=12 and x=19 from headOutline[5]. We need to ensure x=11 and x=20
+  // (ear bases) blend into the head silhouette.
+  // Actually: at row 5 the head outline runs x=12..19 (outline at 12,19;
+  // primary at 13..18). The ear base at row 5 is at x=10,11,12 (left)
+  // and 19,20,21 (right). So the ear and head share columns 12 and 19.
+  // That's fine — the outline at those points reads as the head dome's
+  // edge AND the ear's base edge. Pretty.
+
+  // ----- Subtle tabby stripe pattern on the forehead -----
+  // 2 small ticks above the eyes — adds tabby cat character.
+  px(g, 13, 7, M);
+  px(g, 18, 7, M);
 
   return g;
 }
 
-/**
- * Stamp eyes + nose + mouth onto a head grid.
- * Mode controls the variant.
- *   - 'open'   : large open eyes (default idle)
- *   - 'blink'  : eyes closed (thin horizontal line)
- *   - 'smile'  : ^^ shaped happy eyes
- *   - 'wide'   : larger eyes for scared
- *   - 'closed-smile': peaceful — used for reactions
- */
-function paintFace(g, mode = 'open', { mouth = 'small', blushBoost = false } = {}) {
-  const leftEyeX = 10;
-  const rightEyeX = 19;
-  const eyeY = 11;
+// =====================================================================
+// Face: eyes + nose + mouth + whiskers + cheek blush
+// =====================================================================
+//
+// THE WHISKERS ARE THE MOST IMPORTANT FEATURE. They read CAT instantly
+// even at thumbnail size.
+//
+// Eye anchor: leftEye at (10, 9), rightEye at (19, 9). Eyes are 3 cols
+// wide × 4 rows tall, but the OUTER column drops 1 row to create the
+// almond/slanted-up shape.
+//
+// Nose sits at (15, 13). FLAT face — no muzzle, no cream patch.
+// Mouth is a tiny "^v^" or single dimple at (15, 14).
+//
+// Whiskers at row 13-14 (nose level), 3 short ticks on each side.
+
+function paintFace(g, mode = 'open', { mouth = 'small', blushBoost = false, whiskers = true } = {}) {
+  // Eye anchors
+  const lx = 10; // left eye left column
+  const rx = 19; // right eye left column
+  const ey = 9;  // eye top row
 
   if (mode === 'open') {
-    // 3x4 eye blocks with outline + white highlight pixel.
-    // Left eye
-    rect(g, leftEyeX, eyeY, 3, 4, E);
-    px(g, leftEyeX + 1, eyeY + 1, H); // highlight
-    // Right eye
-    rect(g, rightEyeX, eyeY, 3, 4, E);
-    px(g, rightEyeX + 1, eyeY + 1, H);
+    // Almond/slanted eye:
+    //   Inner column (lx+1 for left, rx for right): 3 pixels tall (rows ey..ey+2)
+    //   Middle column: 3 pixels tall
+    //   Outer column: shifted DOWN 1 (rows ey+1..ey+3) — makes the eye
+    //   slant upward at the outer corner.
+    // Plus a pure white highlight at upper-INNER corner (kawaii gleam).
+    //
+    // Left eye (outer corner is on the LEFT, so outer = column lx)
+    // Right eye (outer corner is on the RIGHT, so outer = column rx+2)
+
+    // ---- Left eye ----
+    // outer column (lx): rows ey+1..ey+3
+    vLine(g, lx, ey + 1, 3, E);
+    // middle column (lx+1): rows ey..ey+2
+    vLine(g, lx + 1, ey, 3, E);
+    // inner column (lx+2): rows ey..ey+2
+    vLine(g, lx + 2, ey, 3, E);
+    // highlight at upper-inner
+    px(g, lx + 2, ey, H);
+    // tiny lower-inner sparkle (1px)
+    px(g, lx + 2, ey + 2, H);
+
+    // ---- Right eye (mirrored) ----
+    // outer column (rx+2): rows ey+1..ey+3
+    vLine(g, rx + 2, ey + 1, 3, E);
+    // middle column (rx+1): rows ey..ey+2
+    vLine(g, rx + 1, ey, 3, E);
+    // inner column (rx): rows ey..ey+2
+    vLine(g, rx, ey, 3, E);
+    // highlight at upper-inner
+    px(g, rx, ey, H);
+    // tiny lower-inner sparkle
+    px(g, rx, ey + 2, H);
   } else if (mode === 'blink') {
-    // Thin horizontal line (closed eyes)
-    hLine(g, leftEyeX, eyeY + 2, 3, O);
-    hLine(g, rightEyeX, eyeY + 2, 3, O);
+    // Closed eyes — short curved line per eye (slight upward slant)
+    hLine(g, lx, ey + 2, 3, O);
+    px(g, lx, ey + 1, O); // outer corner lifted
+    hLine(g, rx, ey + 2, 3, O);
+    px(g, rx + 2, ey + 1, O); // outer corner lifted
   } else if (mode === 'smile') {
-    // ^^ — outline pixels forming an upward arc
-    px(g, leftEyeX, eyeY + 2, O);
-    px(g, leftEyeX + 1, eyeY + 1, O);
-    px(g, leftEyeX + 2, eyeY + 2, O);
-    px(g, rightEyeX, eyeY + 2, O);
-    px(g, rightEyeX + 1, eyeY + 1, O);
-    px(g, rightEyeX + 2, eyeY + 2, O);
+    // ^^ happy eyes — closed-arc shape
+    px(g, lx, ey + 2, O);
+    px(g, lx + 1, ey + 1, O);
+    px(g, lx + 2, ey + 2, O);
+    px(g, rx, ey + 2, O);
+    px(g, rx + 1, ey + 1, O);
+    px(g, rx + 2, ey + 2, O);
   } else if (mode === 'wide') {
-    // Larger eye blocks (4x5 with prominent white)
-    rect(g, leftEyeX - 1, eyeY - 1, 4, 5, E);
-    rect(g, leftEyeX, eyeY, 2, 2, H);
-    rect(g, rightEyeX, eyeY - 1, 4, 5, E);
-    rect(g, rightEyeX + 1, eyeY, 2, 2, H);
+    // Big shocked eyes — 4×4 with prominent white. Maintain slant.
+    rect(g, lx - 1, ey, 4, 4, E);
+    rect(g, lx, ey + 1, 2, 2, H);
+    rect(g, rx, ey, 4, 4, E);
+    rect(g, rx + 1, ey + 1, 2, 2, H);
   } else if (mode === 'closed-smile') {
-    // Like blink but slightly curved: ‿ ‿
-    hLine(g, leftEyeX, eyeY + 2, 3, O);
-    px(g, leftEyeX, eyeY + 1, O);
-    px(g, leftEyeX + 2, eyeY + 1, O);
-    hLine(g, rightEyeX, eyeY + 2, 3, O);
-    px(g, rightEyeX, eyeY + 1, O);
-    px(g, rightEyeX + 2, eyeY + 1, O);
+    // ‿ ‿
+    hLine(g, lx, ey + 2, 3, O);
+    px(g, lx, ey + 1, O);
+    px(g, lx + 2, ey + 1, O);
+    hLine(g, rx, ey + 2, 3, O);
+    px(g, rx, ey + 1, O);
+    px(g, rx + 2, ey + 1, O);
   }
 
-  // Nose — small pink/dark triangle in the muzzle area, centered.
-  // Centered between eyes, just above muzzle.
-  const noseY = 15;
+  // ----- Nose -----
+  // Tiny pink inverted triangle, centered between eyes.
+  // 2 cols wide × 1 row, plus a single pixel below tapering to the mouth.
   const noseX = 15;
-  // small inverted triangle
+  const noseY = 13;
   px(g, noseX, noseY, B);
   px(g, noseX + 1, noseY, B);
-  px(g, noseX, noseY + 1, B);
-  // outline the bottom of the nose lightly
-  px(g, noseX + 1, noseY + 1, O);
+  px(g, noseX, noseY + 1, B); // taper
 
-  // Mouth
+  // ----- Mouth -----
+  // Smaller and lower than v0. Tiny line just under the nose.
   if (mouth === 'small') {
-    // tiny "w" or single dimple under the nose
+    // Single subtle ^ shape — 2 px
     px(g, noseX, noseY + 2, O);
     px(g, noseX + 1, noseY + 2, O);
   } else if (mouth === 'open') {
-    // small "o"
+    // Small "o" — 2x2 with pink interior
+    rect(g, noseX, noseY + 2, 2, 2, O);
     px(g, noseX, noseY + 2, O);
-    px(g, noseX + 1, noseY + 2, O);
-    px(g, noseX, noseY + 3, O);
-    px(g, noseX + 1, noseY + 3, O);
-    // pink inside
-    // (no inside pixels available — keep simple)
+    // (no inside fill — keeps it crisp at this size)
   } else if (mouth === 'happy-w') {
-    // ^v^ shape: small "w" mouth
+    // Tiny ^v^ — 4 px arrangement
     px(g, noseX - 1, noseY + 2, O);
     px(g, noseX, noseY + 3, O);
     px(g, noseX + 1, noseY + 3, O);
     px(g, noseX + 2, noseY + 2, O);
   } else if (mouth === 'frown') {
+    // Inverted ^ — corners up, middle down
     px(g, noseX - 1, noseY + 3, O);
     px(g, noseX, noseY + 2, O);
     px(g, noseX + 1, noseY + 2, O);
     px(g, noseX + 2, noseY + 3, O);
   }
 
-  // Blush dots — pink ovals on each cheek, BENEATH the eyes.
-  // 2x1 strip per cheek; brighter when blushBoost.
-  const blushY = eyeY + 4; // row 15
-  // Left cheek
-  px(g, 7, blushY, B);
-  px(g, 8, blushY, B);
-  // Right cheek
-  px(g, 23, blushY, B);
-  px(g, 24, blushY, B);
-  if (blushBoost) {
-    // Add a 2nd row of blush + a wider cheek smear
-    px(g, 7, blushY + 1, B);
-    px(g, 8, blushY + 1, B);
-    px(g, 23, blushY + 1, B);
-    px(g, 24, blushY + 1, B);
-    px(g, 6, blushY, B);
-    px(g, 25, blushY, B);
+  // ----- WHISKERS — the cat's signature -----
+  // 3 horizontal ticks on each side, at nose level.
+  // Use pattern color (M = darker orange) so they read as fur-tinted
+  // hairs rather than silhouette outline. Length 3px each.
+  //
+  // Left whiskers: extend from cheek (x=4..6, x=3..5, x=4..6)
+  // Right whiskers: mirrored
+  // Stagger: middle whisker is 1px longer / starts 1px further out
+  // for a natural "spray" silhouette.
+  if (whiskers) {
+    // Left side — start adjacent to the head edge (head outline at rows
+    // 12..14 sits at x=6) and extend outward. 3 whiskers, middle longest.
+    // Upper whisker  (row 12, length 3, x=3..5)
+    hLine(g, 3, 12, 3, M);
+    // Middle whisker (row 13, length 4, x=1..4) — longest, lowest start
+    hLine(g, 1, 13, 4, M);
+    // Lower whisker  (row 14, length 3, x=3..5)
+    hLine(g, 3, 14, 3, M);
+
+    // Right side — mirror
+    hLine(g, 26, 12, 3, M);
+    hLine(g, 27, 13, 4, M);
+    hLine(g, 26, 14, 3, M);
   }
 
-  // Forehead tabby pattern — 2 small ticks at top of head (subtle)
-  px(g, 12, 7, M);
-  px(g, 14, 6, M);
-  px(g, 17, 6, M);
-  px(g, 19, 7, M);
+  // ----- Cheek blush -----
+  // Small pink dots beneath the eyes, ABOVE the whiskers, so they don't
+  // collide. Position: row 12, just inside the head edge.
+  const blushY = 12;
+  px(g, 8, blushY, B);
+  px(g, 23, blushY, B);
+  if (blushBoost) {
+    px(g, 7, blushY, B);
+    px(g, 8, blushY + 1, B);
+    px(g, 24, blushY, B);
+    px(g, 23, blushY + 1, B);
+  }
 }
 
-/**
- * Paint the body silhouette — round-ish blob that connects to the head.
- * Body proportions:
- *   - rows 20..27 (8 tall)
- *   - centered at x=16, ~16 wide
- *   - belly (cream) is a vertical strip in the middle-bottom
- *
- * Variants (controlled by paws/tail/squash/lift):
- *   pose: 'idle' | 'walkA' | 'walkB' | 'sit-squash' | 'sit-stretch' | 'shrunk'
- *   tail: 'up' | 'curl' | 'wagL' | 'wagR' | 'tucked'
- */
+// =====================================================================
+// Body + paws + tail
+// =====================================================================
+
 function paintBody(g, { pose = 'idle', tail = 'curl', yShift = 0 } = {}) {
-  // Body silhouette outline rows (the "blob").
+  // Body silhouette: rows 19..27, narrower than head (~15 wide).
+  // The neck/shoulders blend into head bottom (which ended at y=18).
   const bodyShape = {
-    20: [10, 21], // shoulders blend into head bottom
+    19: [11, 20], // shoulders blend into head bottom
+    20: [10, 21],
     21: [9, 22],
-    22: [8, 23],
-    23: [8, 23],
-    24: [8, 23],
-    25: [8, 23],
-    26: [9, 22],
-    27: [10, 21], // bottom narrows
+    22: [9, 22],
+    23: [9, 22],
+    24: [9, 22],
+    25: [10, 21],
+    26: [10, 21],
+    27: [11, 20], // bottom narrows
   };
+
   for (const [yStr, [xL, xR]] of Object.entries(bodyShape)) {
     const y = parseInt(yStr, 10) + yShift;
     if (y < 0 || y >= SIZE) continue;
@@ -391,18 +410,19 @@ function paintBody(g, { pose = 'idle', tail = 'curl', yShift = 0 } = {}) {
     px(g, xR, y, O);
     for (let x = xL + 1; x < xR; x++) px(g, x, y, P);
   }
+
   // Belly cream — center bottom of body
-  for (let y = 23 + yShift; y <= 26 + yShift; y++) {
+  for (let y = 22 + yShift; y <= 26 + yShift; y++) {
     if (y < 0 || y >= SIZE) continue;
     for (let x = 12; x <= 19; x++) {
       g[y][x] = S;
     }
   }
-  // A subtle stripe band on the back
-  for (let x = 11; x <= 20; x++) {
-    px(g, x, 21 + yShift, M);
+  // Subtle stripe band on the back
+  for (let x = 12; x <= 19; x++) {
+    px(g, x, 20 + yShift, M);
   }
-  // Re-outline the belly area's left/right edges so stripe doesn't paint over outline
+  // Re-outline body edges (in case stripe overran)
   for (const [yStr, [xL, xR]] of Object.entries(bodyShape)) {
     const y = parseInt(yStr, 10) + yShift;
     if (y < 0 || y >= SIZE) continue;
@@ -411,139 +431,153 @@ function paintBody(g, { pose = 'idle', tail = 'curl', yShift = 0 } = {}) {
   }
 
   // ----- Paws (rows 28..29) -----
-  // Two front paws, position depends on pose.
   const pawY = 28 + yShift;
   if (pose === 'idle' || pose === 'sit-squash' || pose === 'sit-stretch') {
-    // Symmetric small paws
-    rect(g, 11, pawY, 3, 2, P);
+    // Two tiny front paws, symmetric
+    rect(g, 12, pawY, 3, 2, P);
+    rect(g, 17, pawY, 3, 2, P);
+    hLine(g, 12, pawY + 1, 3, O);
+    hLine(g, 17, pawY + 1, 3, O);
+    px(g, 12, pawY, O);
+    px(g, 14, pawY, O);
+    px(g, 17, pawY, O);
+    px(g, 19, pawY, O);
+  } else if (pose === 'walkA') {
+    // Right paw forward (lifted), left paw back
+    rect(g, 11, pawY - 1, 3, 2, P);
+    hLine(g, 11, pawY, 3, O);
+    px(g, 11, pawY - 1, O);
+    px(g, 13, pawY - 1, O);
     rect(g, 18, pawY, 3, 2, P);
-    // outline bottom
-    hLine(g, 11, pawY + 1, 3, O);
     hLine(g, 18, pawY + 1, 3, O);
-    // outline top edges (where they meet body)
-    px(g, 11, pawY, O);
-    px(g, 13, pawY, O);
     px(g, 18, pawY, O);
     px(g, 20, pawY, O);
-  } else if (pose === 'walkA') {
-    // Right paw forward (lifted slightly), left paw back
-    rect(g, 10, pawY - 1, 3, 2, P);
-    hLine(g, 10, pawY, 3, O);
-    px(g, 10, pawY - 1, O);
-    px(g, 12, pawY - 1, O);
-    rect(g, 19, pawY, 3, 2, P);
-    hLine(g, 19, pawY + 1, 3, O);
-    px(g, 19, pawY, O);
-    px(g, 21, pawY, O);
   } else if (pose === 'walkB') {
     // Left paw forward, right paw back
-    rect(g, 10, pawY, 3, 2, P);
-    hLine(g, 10, pawY + 1, 3, O);
-    px(g, 10, pawY, O);
-    px(g, 12, pawY, O);
-    rect(g, 19, pawY - 1, 3, 2, P);
-    hLine(g, 19, pawY, 3, O);
-    px(g, 19, pawY - 1, O);
-    px(g, 21, pawY - 1, O);
+    rect(g, 11, pawY, 3, 2, P);
+    hLine(g, 11, pawY + 1, 3, O);
+    px(g, 11, pawY, O);
+    px(g, 13, pawY, O);
+    rect(g, 18, pawY - 1, 3, 2, P);
+    hLine(g, 18, pawY, 3, O);
+    px(g, 18, pawY - 1, O);
+    px(g, 20, pawY - 1, O);
   } else if (pose === 'shrunk') {
-    // Tucked paws — single thin row
-    rect(g, 12, pawY, 8, 1, P);
-    hLine(g, 12, pawY + 1, 8, O);
+    // Tucked paws
+    rect(g, 13, pawY, 6, 1, P);
+    hLine(g, 13, pawY + 1, 6, O);
   }
 
-  // ----- Tail -----
-  // Tail comes off the right side of body, curls up.
+  // ----- Tail (2px wide, curled over the body) -----
+  // The tail curls UP and OVER from the rear-right of the body.
+  // Cats hold their tail like a question mark when content.
+  // All tail coordinates respect the body's yShift so the tail moves with
+  // the body during hop/squash animations.
+  const ys = yShift;
+  const fillPx = (x, y) => px(g, x, y + ys, P);
+  const outPx  = (x, y) => px(g, x, y + ys, O);
+  const blushPx = (x, y) => px(g, x, y + ys, B);
   if (tail === 'curl') {
-    // Curling up over the back-right
-    px(g, 24, 25, O);
-    px(g, 25, 24, O);
-    px(g, 25, 23, O);
-    px(g, 26, 22, O);
-    px(g, 26, 21, O);
-    px(g, 26, 20, O);
-    px(g, 25, 19, O);
-    // fill curl interior (1px shy of outline)
-    px(g, 25, 22, P);
-    px(g, 25, 21, P);
-    px(g, 25, 20, P);
-    // tip
-    px(g, 24, 19, S);
+    // Question-mark curl rising from rear of body up over the back
+    const spine = [
+      [22, 26], [23, 25], [24, 24], [25, 23],
+      [25, 22], [25, 21], [25, 20], [24, 19],
+    ];
+    // Fill — adjacent primary pixels for 2px width
+    const fill = [
+      [22, 25], [23, 24], [24, 23], [24, 22],
+      [24, 21], [24, 20], [23, 19],
+    ];
+    for (const [x, y] of fill) fillPx(x, y);
+    for (const [x, y] of spine) outPx(x, y);
+    // Tip — pink with outline anchor
+    blushPx(23, 18);
+    outPx(23, 19); // already drawn but ensures continuity
   } else if (tail === 'up') {
-    vLine(g, 25, 19, 7, O);
-    vLine(g, 26, 19, 7, P);
-    px(g, 26, 18, S);
+    // Straight-up alert tail (excited) — 2px wide column with pink tip
+    for (let y = 16; y < 25; y++) fillPx(24, y);
+    for (let y = 16; y < 25; y++) outPx(25, y);
+    blushPx(24, 15);
   } else if (tail === 'wagL') {
-    px(g, 24, 25, O);
-    px(g, 25, 24, O);
-    px(g, 26, 23, O);
-    px(g, 27, 22, O);
-    px(g, 28, 21, O);
-    px(g, 27, 21, P);
-    px(g, 28, 22, P);
+    const spine = [
+      [22, 26], [23, 25], [24, 24], [25, 23],
+      [26, 22], [26, 21], [25, 20], [24, 19],
+    ];
+    const fill = [
+      [22, 25], [23, 24], [24, 23], [25, 22],
+      [25, 21], [24, 20], [23, 19],
+    ];
+    for (const [x, y] of fill) fillPx(x, y);
+    for (const [x, y] of spine) outPx(x, y);
+    blushPx(23, 18);
   } else if (tail === 'wagR') {
-    px(g, 24, 25, O);
-    px(g, 25, 25, O);
-    px(g, 26, 24, O);
-    px(g, 27, 24, O);
-    px(g, 28, 23, O);
-    px(g, 28, 24, P);
-    px(g, 27, 23, P);
+    const spine = [
+      [22, 26], [23, 26], [24, 25], [25, 25],
+      [26, 24], [27, 23], [27, 22], [26, 21],
+    ];
+    const fill = [
+      [22, 25], [23, 25], [24, 24], [25, 24],
+      [26, 23], [26, 22], [25, 21],
+    ];
+    for (const [x, y] of fill) fillPx(x, y);
+    for (const [x, y] of spine) outPx(x, y);
+    blushPx(26, 20);
   } else if (tail === 'tucked') {
-    // Just a stub
-    px(g, 23, 26, P);
-    px(g, 24, 26, O);
+    // Tucked under — barely visible stub
+    fillPx(22, 27);
+    outPx(23, 27);
+    outPx(22, 26);
   }
 }
 
 // =====================================================================
-// Frame composition for each action
+// Frame composition
 // =====================================================================
 
-/** Compose a single frame from head+face+body options. */
 function frame({
   faceMode = 'open',
   mouth = 'small',
   earTilt = 0,
+  ears = 'up',
   blushBoost = false,
+  whiskers = true,
   pose = 'idle',
   tail = 'curl',
   headYShift = 0,
   bodyYShift = 0,
 }) {
-  const g = paintBaseHead({ earTilt });
-  paintFace(g, faceMode, { mouth, blushBoost });
+  const headG = paintBaseHead({ earTilt, ears });
+  paintFace(headG, faceMode, { mouth, blushBoost, whiskers });
 
-  // Apply head Y-shift by translating the painted head DOWN/UP by
-  // copying rows. (Simpler than threading yShift into every helper.)
-  let headShifted = g;
+  // Apply head Y-shift
+  let g = headG;
   if (headYShift !== 0) {
-    headShifted = blank();
+    g = blank();
     for (let y = 0; y < SIZE; y++) {
       const srcY = y - headYShift;
       if (srcY < 0 || srcY >= SIZE) continue;
       for (let x = 0; x < SIZE; x++) {
-        if (g[srcY][x] !== T) headShifted[y][x] = g[srcY][x];
+        if (headG[srcY][x] !== T) g[y][x] = headG[srcY][x];
       }
     }
   }
 
-  paintBody(headShifted, { pose, tail, yShift: bodyYShift });
-
-  return headShifted;
+  paintBody(g, { pose, tail, yShift: bodyYShift });
+  return g;
 }
 
 // =====================================================================
-// Action definitions
+// Action definitions — 5 actions, paint them all
 // =====================================================================
 
 const idle = [
-  // 0: standard
+  // 0: standard pose, tail curled
   frame({ faceMode: 'open', mouth: 'small', tail: 'curl' }),
   // 1: subtle breath rise — head 1px up
   frame({ faceMode: 'open', mouth: 'small', tail: 'curl', headYShift: -1 }),
   // 2: blink
   frame({ faceMode: 'blink', mouth: 'small', tail: 'curl' }),
-  // 3: standard again (frame 0 echo)
+  // 3: standard echo
   frame({ faceMode: 'open', mouth: 'small', tail: 'curl' }),
 ];
 
@@ -562,7 +596,7 @@ const happy = [
     tail: 'up',
     blushBoost: true,
   }),
-  // Hop: whole body 1px up, ears still tilted
+  // Hop frame: whole body 2px up, ears tilted, tail straight up
   frame({
     faceMode: 'smile',
     mouth: 'happy-w',
@@ -575,7 +609,7 @@ const happy = [
 ];
 
 const tapReact = [
-  // Squashed
+  // Squashed — wide eyes, surprised
   frame({
     faceMode: 'wide',
     mouth: 'open',
@@ -584,7 +618,7 @@ const tapReact = [
     bodyYShift: 1,
     headYShift: 1,
   }),
-  // Stretched + cheek blush boost
+  // Stretched + cheek blush boost — recovered
   frame({
     faceMode: 'open',
     mouth: 'happy-w',
@@ -596,19 +630,21 @@ const tapReact = [
 ];
 
 const scared = [
-  // Wide eyes, ears flat (negative tilt)
+  // Wide eyes, ears flat, tail tucked — frame 0
   frame({
     faceMode: 'wide',
     mouth: 'frown',
     earTilt: -1,
+    ears: 'flat',
     pose: 'idle',
     tail: 'tucked',
   }),
-  // Body shrunk
+  // Body shrunk, even smaller — frame 1
   frame({
     faceMode: 'wide',
     mouth: 'frown',
     earTilt: -1,
+    ears: 'flat',
     pose: 'shrunk',
     tail: 'tucked',
     bodyYShift: 1,
@@ -624,7 +660,7 @@ const catV1 = {
   size: 32,
   meta: {
     groundY: 28,
-    eyeAnchor: { x: 16, y: 11 },
+    eyeAnchor: { x: 16, y: 9 },
   },
   baby: {
     idle,
@@ -642,10 +678,6 @@ fs.writeFileSync(outFile, JSON.stringify(catV1) + '\n');
 // Also extend palettes.json with index 7 (blush) for the v1 sprite.
 const palettesPath = path.join(outDir, 'palettes.json');
 const palettes = JSON.parse(fs.readFileSync(palettesPath, 'utf8'));
-// Update default palette only (v1 cat references default).
-// Refine outline + primary to read more "chibi": warmer dark-brown outline,
-// saturated orange body, lighter cream secondary, near-black eyes (5),
-// darker tabby (6), blush pink (7).
 palettes.default = {
   '0': 'transparent',
   '1': '#3A2418', // outline (warm dark brown)
@@ -653,11 +685,9 @@ palettes.default = {
   '3': '#FFE0B5', // secondary (cream)
   '4': '#FFFFFF', // highlight (pure white)
   '5': '#1F1F2E', // eye fill (deep blue-black)
-  '6': '#D67B26', // pattern (warm darker orange stripes)
+  '6': '#D67B26', // pattern (warm darker orange — stripes / whiskers)
   '7': '#FF8FAA', // blush (v1 extension)
 };
-// Ensure all alternate palettes also have an index 7 (so multi-palette
-// rendering doesn't break). Use a soft pink default.
 for (const p of palettes.all) {
   if (!p['7']) p['7'] = '#FF8FAA';
 }
