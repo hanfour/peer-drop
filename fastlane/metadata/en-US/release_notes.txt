@@ -1,7 +1,10 @@
-PeerDrop 3.3.1 — Relay Reliability Hotfix
+PeerDrop 3.4.0 — Security Hardening
 
-Fixes
-- Relay connections occasionally failed within seconds with a WebSocket error (-1011). Previously, any failed relay handshake left a socket lingering on the server, and two such leftovers would make the room reject all new joiners. Every failure path now properly closes its signaling connection, and the server evicts stale sockets before refusing a new peer.
-- Restored the 30-second relay handshake timeout. 20 seconds was too aggressive for TURN-over-TLS on cellular or high-latency networks and caused premature failures.
+New
+- First-contact verification: when a peer messages you for the first time, you'll be asked to compare a fingerprint before establishing an encrypted session — preventing silent man-in-the-middle attacks.
+- Decryption alerts: if PeerDrop can't decrypt three messages in a row from the same peer (usually because their identity key changed), a banner now tells you to verify their fingerprint instead of failing silently.
 
-Also includes the full v3.3 cross-network experience from 3.3.0.
+Under the hood
+- One-time pre-keys are now persisted as consumed before being removed, so a crash mid-handshake can't re-expose them for replay.
+- Every identity-key rotation is recorded in a per-contact audit trail, so post-incident forensics can reconstruct what happened.
+- Hardened the message reassembly path against malformed peers: caps message size at 256 MB, rejects out-of-range chunk indices, and detects conflicting duplicate chunks.
