@@ -119,10 +119,15 @@ struct PeerDropApp: App {
                 try? PetCloudSync().syncFullState(petEngine.pet)
                 petEngine.syncSharedState()
                 petEngine.startLiveActivity()
+                // Pause the 6 FPS animation timer to avoid burning CPU/battery
+                // while the app is suspended. Resumed on .active.
+                petEngine.animator.stopAnimation()
             case .active:
                 inboxService.connect()
                 connectionManager.tailnetStore.startPeriodicProbe()
                 petEngine.endLiveActivity()
+                // Resume animation timer (no-op if already running).
+                petEngine.animator.startAnimation()
             default:
                 break
             }

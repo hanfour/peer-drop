@@ -10,6 +10,10 @@ class PetAnimationController: ObservableObject {
     private var currentAction: PetAction = .idle
     private var timer: Timer?
 
+    /// Whether the animation timer is currently scheduled.
+    /// Used by tests and by scene-phase pause/resume logic to verify state.
+    var isAnimating: Bool { timer != nil }
+
     func setAction(_ action: PetAction, frameCount: Int) {
         guard action != currentAction || frameCount != totalFrames else { return }
         currentAction = action

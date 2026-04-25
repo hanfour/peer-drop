@@ -344,6 +344,7 @@
 		D9EC478B8AFFA2B7B210BDF4 /* DragonSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A797F52BD91FBE6E972D6EBF /* DragonSpriteData.swift */; };
 		DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F68921A1EFE5717EFF8690 /* PeerMessage.swift */; };
 		DAF0872294A78635ED2BD12A /* TimeoutConsentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */; };
+		DB0AFCFF5E049E2BA0B83B2C /* PetAnimationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829734910FC0A9179C752C30 /* PetAnimationLifecycleTests.swift */; };
 		DB9F13A8597DFF80A5947F32 /* PetBehaviorProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0D5CB4C84E2B9D9B7ED45B /* PetBehaviorProviderTests.swift */; };
 		DC0421157A0A3E37E504D457 /* SpriteDataRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CACE77F48AE3D60B46842BF /* SpriteDataRegistry.swift */; };
 		DC36D0D22B9764100D164C35 /* TypingIndicatorPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 808A9F64C76046B0B42E2472 /* TypingIndicatorPayload.swift */; };
@@ -650,6 +651,7 @@
 		808A9F64C76046B0B42E2472 /* TypingIndicatorPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorPayload.swift; sourceTree = "<group>"; };
 		8153A2193E408C3F30B049DD /* PetTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetTabView.swift; sourceTree = "<group>"; };
 		8224792B71D1A4AEB8670080 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
+		829734910FC0A9179C752C30 /* PetAnimationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetAnimationLifecycleTests.swift; sourceTree = "<group>"; };
 		832F36BF0DBBD408CEA57692 /* PeerDropWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PeerDropWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		83469B778451248945B64577 /* BearBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BearBehavior.swift; sourceTree = "<group>"; };
 		834914784D4C95CFABAA0C27 /* BonjourDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscovery.swift; sourceTree = "<group>"; };
@@ -988,6 +990,7 @@
 				8419E06C5E5140DF440694BF /* PetActionTests.swift */,
 				DE2480F4283AC6F131BD23A8 /* PetActivityManagerTests.swift */,
 				7ECC605BD759FF63C543E56B /* PetAnimationControllerV2Tests.swift */,
+				829734910FC0A9179C752C30 /* PetAnimationLifecycleTests.swift */,
 				982C0858F44441D64C0F6487 /* PetBehaviorControllerTests.swift */,
 				5D0D5CB4C84E2B9D9B7ED45B /* PetBehaviorProviderTests.swift */,
 				7232A7A0BA24C480CCF1112E /* PetChatInteractionTests.swift */,
@@ -1814,6 +1817,7 @@
 				D0675553BFE32A1539A3E61F /* PetActionTests.swift in Sources */,
 				302E20A9AA48155F8AC10B82 /* PetActivityManagerTests.swift in Sources */,
 				1564C99F8CC926774BE6932D /* PetAnimationControllerV2Tests.swift in Sources */,
+				DB0AFCFF5E049E2BA0B83B2C /* PetAnimationLifecycleTests.swift in Sources */,
 				E88F3F87E73BC8FEE5B7A971 /* PetBehaviorControllerTests.swift in Sources */,
 				DB9F13A8597DFF80A5947F32 /* PetBehaviorProviderTests.swift in Sources */,
 				B9AB8931EB890CFF33322E83 /* PetChatInteractionTests.swift in Sources */,
