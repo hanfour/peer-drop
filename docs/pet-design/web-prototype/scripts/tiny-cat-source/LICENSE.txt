@@ -1,0 +1,17 @@
+Tiny Cat Sprite
+===============
+
+Author:  Segel
+Source:  https://opengameart.org/content/tiny-kitten-game-sprite
+License: CC0 1.0 Universal (Creative Commons Zero — Public Domain)
+
+The PNG files in this directory are the original, unmodified frames as
+distributed in `tiny_cat_sprite.zip` on OpenGameArt.org. They are kept
+in-tree so that `scripts/import-sprite.mjs` is reproducible offline
+without re-downloading.
+
+CC0 1.0 Universal does not require attribution. We credit Segel anyway
+because it's polite and because anyone forking this prototype should
+know the asset isn't original to PeerDrop.
+
+Full license text: https://creativecommons.org/publicdomain/zero/1.0/

@@ -1,4 +1,17 @@
 #!/usr/bin/env node
+// SUPERSEDED — kept for historical reference only.
+//
+// As of 2026-04-26 the v1 sprite is no longer hand-painted in this file;
+// it is imported from the CC0 "Tiny Cat Sprite" pack via
+// `scripts/import-sprite.mjs`. See `docs/pet-design/web-prototype/README.md`
+// "Asset credit" for context.
+//
+// Running this script will regenerate cat-v1.json from the in-house
+// pixel art below, overwriting the imported version. Don't do that
+// unless you're deliberately reverting to the hand-painted look.
+//
+// ----------------------------------------------------------------------
+// Original header:
 // Paint a 32x32 chibi-style CAT sprite as JSON.
 //
 // Design brief (v2 — ProHama alignment):

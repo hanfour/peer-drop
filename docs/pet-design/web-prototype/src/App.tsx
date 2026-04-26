@@ -79,10 +79,23 @@ export default function App() {
 
   useEffect(() => {
     const url = spriteVersion === 'v1' ? '/data/cat-v1.json' : '/data/cat.json';
-    loadSprite(url).then(setData).catch(console.error);
-    fetch('/data/palettes.json')
-      .then((r) => r.json())
-      .then((j) => setPalette(j.default))
+    loadSprite(url)
+      .then((d) => {
+        setData(d);
+        // If the sprite ships its own palette (v1 chibi placeholder is
+        // grayscale-quantised at import time), use it directly. This keeps
+        // the v0 production palette (warm orange/cream from palettes.json)
+        // untouched while the v1 sprite renders against its own intrinsic
+        // gray scheme.
+        if (d.palette) {
+          setPalette(d.palette);
+        } else {
+          fetch('/data/palettes.json')
+            .then((r) => r.json())
+            .then((j) => setPalette(j.default))
+            .catch(console.error);
+        }
+      })
       .catch(console.error);
   }, [spriteVersion]);
 
@@ -382,6 +395,20 @@ export default function App() {
   const spriteSize = data?.baby.idle?.[0]?.length ?? 16;
   const renderScale = spriteSize <= 16 ? 8 : 4;
 
+  // Scope-framing banner state. Persists per-tab via sessionStorage so
+  // it stays out of the way once the reviewer has acknowledged it, but
+  // re-appears for fresh sessions (and hard reloads).
+  const [scopeBannerDismissed, setScopeBannerDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.sessionStorage.getItem('petPrototype.scopeBannerDismissed') === '1';
+  });
+  const dismissScopeBanner = () => {
+    setScopeBannerDismissed(true);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('petPrototype.scopeBannerDismissed', '1');
+    }
+  };
+
   let pets: StagePet[] = [];
   if (ready) {
     const localPet: StagePet = {
@@ -430,7 +457,7 @@ export default function App() {
           </h1>
           <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
             {spriteVersion === 'v1'
-              ? 'v1 polish pass — 32×32 chibi sprites, scene-ified stage'
+              ? 'v1 — Tiny Cat Sprite (Segel, CC0) imported as 32×32 chibi placeholder'
               : 'v0 — production 16×16 sprite baseline'}
           </p>
         </div>
@@ -473,6 +500,57 @@ export default function App() {
           </button>
         </div>
       </header>
+      {!scopeBannerDismissed && (
+        <div
+          role="note"
+          aria-label="原型範圍說明"
+          style={{
+            marginBottom: 20,
+            padding: '14px 18px',
+            border: '1px solid #d6e4ff',
+            borderLeft: '4px solid #1976d2',
+            background: 'rgba(25, 118, 210, 0.06)',
+            borderRadius: 6,
+            fontSize: 13.5,
+            lineHeight: 1.6,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <strong style={{ display: 'block', marginBottom: 4 }}>
+              本原型聚焦於互動設計討論
+            </strong>
+            請評估：見面動作編排、檔案傳輸反應、性格特徵滑桿、對話泡泡時機、場景視覺。
+            Sprite 美術為占位素材（
+            <a
+              href="https://opengameart.org/content/tiny-kitten-game-sprite"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#1976d2' }}
+            >
+              Tiny Cat Sprite by Segel, CC0
+            </a>
+            ），production 階段將另行委託定製像素藝術，請忽略目前 sprite 的細節品質。
+          </div>
+          <button
+            onClick={dismissScopeBanner}
+            aria-label="關閉說明"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontSize: 18,
+              lineHeight: 1,
+              color: '#1976d2',
+              padding: '2px 6px',
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {ready ? (
         <main
           style={{
