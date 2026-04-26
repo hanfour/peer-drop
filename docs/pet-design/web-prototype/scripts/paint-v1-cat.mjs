@@ -1,23 +1,30 @@
 #!/usr/bin/env node
 // Paint a 32x32 chibi-style CAT sprite as JSON.
 //
-// Design brief (v1.2 — conservative anatomy fix):
-//   The previous iteration over-emphasised feline features — tall ears,
-//   long whiskers and articulated paws — and the result read as a
-//   rabbit-rabbit-teddy hybrid. This pass dials each feature WAY back:
+// Design brief (v2 — ProHama alignment):
+//   The previous iterations (v1.0, v1.1, v1.2) read as a fluffy generic
+//   chibi but were a long way from ProHama's iconic style. After actually
+//   studying ProHama cat patterns 5/7/9/11/12/13/15/19, the family
+//   signature is:
 //
-//   - Ears: max 3 rows tall, narrow triangle (1px tip → 3px base).
-//     Anchored on a wide head dome so the silhouette is "round head with
-//     two small triangles", not "vertical bars sticking up".
-//   - Whiskers: short — 2 pixels of outward protrusion at most. A single
-//     stagger line of pattern colour, sitting flush with the cheek.
-//   - Body: a single sitting oval with a cream belly. The bottom edge is
-//     a flat outline row — NO leg/paw articulation, no separate digits.
-//     Cat reads as sitting, not standing on hind legs.
-//   - Eyes: closer together — at most 4 px of forehead between the inner
-//     edges. Almond shape with white highlight + dark pupil.
-//   - Nose + mouth: kept tiny (3-px nose triangle, 2-3 px mouth line).
-//   - Tail: a simple curl up the rear-right of the body.
+//   - Eyes: SOLID BLACK 2×2 squares. No white highlight. No almond. No
+//     pupil rim. Two flat black dots, separated by a meaningful gap of
+//     forehead. (ref: cat-11, cat-12)
+//   - Ears: TALL POINTY triangles, 5–6 rows tall, each ear with a light
+//     inner highlight (lighter shade or pink). The ears define the
+//     silhouette. (ref: cat-11, cat-12)
+//   - Body: An egg/teardrop with a NARROW upper third (head) and a
+//     wider lower third (body). The bottom is BROKEN by two discrete
+//     front paws — separated by a gap of background. (ref: cat-11)
+//   - Tail: A visible curl looping up from the side. (ref: cat-11, cat-12)
+//   - Mouth: Tiny inverted V at most 2px wide. No separate nose. The
+//     pink blob at center is a single pixel of accent at most.
+//   - Cheeks: Tiny pink blush dots OFF to the sides — never the central
+//     pink rectangle that dominated v1.
+//   - Color palette: 5 colors. Outline (warm black-brown), primary fur
+//     (saturated orange), secondary cream (belly + inner ears), pink
+//     blush, mouth/nose accent (same pink works).
+//   - NO whiskers. NO tabby stripes. NO white eye highlight.
 //
 // Implementation: each frame is encoded as a 32×32 ASCII grid using the
 // character map below. This makes the sprite directly inspectable from
@@ -34,22 +41,17 @@ const SIZE = 32;
 
 // Character → palette index map for the ASCII grids.
 //   . transparent
-//   X outline (dark brown)
+//   X outline (warm dark brown)
 //   O primary body (orange)
-//   c cream belly (secondary)
-//   W white eye highlight
-//   B dark pupil — we override palette index 5 to a dark colour for v1
-//     so this reads as a pupil, not the warm orange #E85D3A.
-//   P pattern darker orange (back stripes)
-//   R blush pink (inner ear, nose)
+//   c secondary cream (belly + inner ears)
+//   B black eye dot (uses palette index 5 — repurposed from v1 pupil)
+//   R blush pink (cheeks, mouth)
 const CHAR_MAP = {
   '.': 0,
   X: 1,
   O: 2,
   c: 3,
-  W: 4,
   B: 5,
-  P: 6,
   R: 7,
 };
 
@@ -77,57 +79,66 @@ function gridFromAscii(lines) {
 // Idle frame 0 — the canonical pose
 // =====================================================================
 //
-// Anatomy plan (32x32):
-//   rows  3-5    ears (3 rows tall, narrow triangle, pink inner)
-//   rows  6-9    head dome (curved top)
-//   rows 10-15   face — back stripes, eyes, whiskers
-//   rows 16-18   chin / nose / mouth
-//   rows 19-26   sitting body oval with cream belly
-//   row  27      flat outline (no leg articulation)
-//   rows 23-26   curl tail to rear-right of body
+// Layout (32x32, 0-indexed; sprite spans cols 6-25 = 20 wide, rows 2-29):
+//
+//   rows  2-3    ear tips (1px each)
+//   rows  4-7    ear bodies (widening triangles, with cream highlight)
+//   rows  7-12   head dome (egg-top)
+//   rows 11-13   eye row — 2x2 black squares with 4px gap
+//   rows 14-15   cheek row — pink blush dots, tiny mouth
+//   rows 16-25   body egg (slightly wider than head); cream chest patch
+//                rows 16-23
+//   rows 24-26   tail curl (right side)
+//   rows 26-28   front paws (two separate ovals with gap)
 //
 // Eye anchors:
-//   left  eye cols 11-13 (3 wide)
-//   right eye cols 18-20 (3 wide)
-//   forehead gap = cols 14-17 (4 px) — at the upper limit
+//   left  eye cols 11-12 (2 wide, 2 tall: rows 12-13)
+//   right eye cols 19-20 (2 wide, 2 tall: rows 12-13)
+//   forehead gap = cols 13-18 (6 px) — wider gap reads "ProHama"
 //
-// Whisker anchors (short!):
-//   left:  cols 5-6 (2 px outward of the head edge at col 7)
-//   right: cols 25-26 (2 px outward of the head edge at col 24)
-//
-// Counted carefully: each row is 32 chars.
+// Mouth anchor: cols 15-16 row 15 (2px inverted V at row 15-16 cols 15/16)
+// Cheek anchors: col 9 row 14, col 22 row 14 (single pink dots)
 
+// Refined v2 layout — ears shortened to 4 rows, chest patch narrower
+// vertical-oriented, tail curl larger.
+//
+// rows 3-7  ears (5 rows including base; tip at row 3)
+// rows 7-9  head dome top
+// rows 10-16 face (eyes row 12-13, blush row 13, mouth row 15)
+// rows 17-24 body (chest patch is a vertical oval cols 13-18 rows 17-23)
+// rows 21-25 tail curl (right side, larger sweeping curl)
+// rows 25-28 paws + ground
 const IDLE_F0 = gridFromAscii([
   /* 0  */ '................................',
   /* 1  */ '................................',
   /* 2  */ '................................',
-  /* 3  */ '..........X.........X...........',
-  /* 4  */ '.........XRX.......XRX..........',
-  /* 5  */ '........XORX.......XORX.........',
-  /* 6  */ '.......XOOOXXXXXXXXXOOOX........',
-  /* 7  */ '......XOOOOOOOOOOOOOOOOOX.......',
-  /* 8  */ '......XOOOOOOOOOOOOOOOOOX.......',
-  /* 9  */ '.....XOOOPPOOOOOOOOPPOOOOX......',
-  /* 10 */ '.....XOOOOOOOOOOOOOOOOOOOX......',
-  /* 11 */ '.....XOOOOOOOOOOOOOOOOOOOX......',
-  /* 12 */ '.....XOOOOOXWBXOOXBWXOOOOOX.....',
-  /* 13 */ '.....XOOOOOXBBXOOXBBXOOOOOX.....',
-  /* 14 */ '.....XOOOOOOXXOOOOXXOOOOOOX.....',
-  /* 15 */ '...XXXOOOOOOOOORROOOOOOOOOXXX...',
-  /* 16 */ '.....XOOOOOOOOORROOOOOOOOOX.....',
-  /* 17 */ '.....XOOOOOOOOOXXOOOOOOOOOX.....',
-  /* 18 */ '.....XOOOOOOOOOOOOOOOOOOOX......',
-  /* 19 */ '......XOOOOOOOOOOOOOOOOOX.......',
-  /* 20 */ '.......XOOOOOOOOOOOOOOOX........',
-  /* 21 */ '.......XOOOOOOOOOOOOOOOX........',
-  /* 22 */ '......XOOcccccccccccccOX........',
-  /* 23 */ '......XOcccccccccccccccOX.......',
-  /* 24 */ '......XOcccccccccccccccOX..XX...',
-  /* 25 */ '......XOcccccccccccccccOXXXOOX..',
-  /* 26 */ '......XOOcccccccccccccOOXXOOX...',
-  /* 27 */ '.......XOOOOOOOOOOOOOOOXXOOX....',
-  /* 28 */ '........XXXXXXXXXXXXXXXXXX......',
-  /* 29 */ '................................',
+  /* 3  */ '..........X............X........',
+  /* 4  */ '..........XX..........XX........',
+  /* 5  */ '..........XcX........XcX........',
+  /* 6  */ '..........XccX......XccX........',
+  /* 7  */ '..........XOccXXXXXXccOX........',
+  /* 8  */ '.........XOOOOOOOOOOOOOOX.......',
+  /* 9  */ '.........XOOOOOOOOOOOOOOX.......',
+  /* 10 */ '........XOOOOOOOOOOOOOOOOX......',
+  /* 11 */ '........XOOOOOOOOOOOOOOOOX......',
+  /* 12 */ '........XOOOBBOOOOOOBBOOOX......',
+  /* 13 */ '........XOOOBBOOOOOOBBOOOX......',
+  /* 14 */ '........XOROOOOOOOOOOOOROX......',
+  /* 15 */ '........XOOOOOOOXROXOOOOOX......',
+  /* 16 */ '........XOOOOOOOXXOXOOOOOX......',
+  /* 17 */ '.......XOOOOOOcccccOOOOOOOX.....',
+  /* 18 */ '.......XOOOOOcccccccOOOOOOX.....',
+  /* 19 */ '.......XOOOOcccccccccOOOOOX.....',
+  /* 20 */ '.......XOOOOcccccccccOOOOOXX....',
+  /* 21 */ '.......XOOOOcccccccccOOOOOXOX...',
+  /* 22 */ '.......XOOOOcccccccccOOOOOXOOX..',
+  /* 23 */ '.......XOOOOOcccccccOOOOOOXOOX..',
+  /* 24 */ '.......XOOOOOOOOOOOOOOOOOOXOOX..',
+  /* 25 */ '.......XOOOOOOOOOOOOOOOOOOXXOX..',
+  /* 26 */ '.......XOOXXXOOOOOOXXXOOOOXXX...',
+  /* 27 */ '.......XOOXccXOOOOXccXOOOOX.....',
+  /* 28 */ '.......XXXXccXXXXXXccXXXXX......',
+  /* 29 */ '..........XXXX....XXXX..........',
   /* 30 */ '................................',
   /* 31 */ '................................',
 ]);
@@ -166,58 +177,55 @@ function translate(base, dx, dy) {
   return g;
 }
 
+// Eye coordinates (after iter3 grid shift):
+//   left  eye: cols 12-13, rows 12-13 (2×2 black square)
+//   right eye: cols 20-21, rows 12-13 (2×2 black square)
+
 // ----- Idle: 4 frames -----
-// f0: standard
+// f0: canonical pose
 // f1: subtle breath rise — entire sprite up 1 px
-// f2: blink — eyes become a single horizontal line
-// f3: standard echo
-const idle = [
-  IDLE_F0,
-  translate(IDLE_F0, 0, -1),
-  // Blink: replace eye blocks with a single dark line at row 13.
-  // Original eyes occupy rows 12-14 cols 11-14 (left) and 17-20 (right).
-  patch(IDLE_F0, [
-    // Clear eye area (rows 12-13 at eye columns) → restore body orange.
-    [11, 12, 2], [12, 12, 2], [13, 12, 2], [14, 12, 2],
-    [17, 12, 2], [18, 12, 2], [19, 12, 2], [20, 12, 2],
-    [11, 13, 2], [12, 13, 2], [13, 13, 2], [14, 13, 2],
-    [17, 13, 2], [18, 13, 2], [19, 13, 2], [20, 13, 2],
-    [12, 14, 2], [13, 14, 2], [18, 14, 2], [19, 14, 2],
-    // Closed-eye lines (3 px each) at row 13.
-    [11, 13, 1], [12, 13, 1], [13, 13, 1],
-    [18, 13, 1], [19, 13, 1], [20, 13, 1],
-  ]),
-  IDLE_F0,
-];
+// f2: blink — both eyes become single horizontal black line (2x1 each)
+// f3: canonical echo
+const BLINK_F = patch(IDLE_F0, [
+  // Clear the eyes → restore to fur orange
+  [12, 12, 2], [13, 12, 2], [20, 12, 2], [21, 12, 2],
+  [12, 13, 2], [13, 13, 2], [20, 13, 2], [21, 13, 2],
+  // Single horizontal line at row 13 (closed eye look)
+  [12, 13, 5], [13, 13, 5], [20, 13, 5], [21, 13, 5],
+]);
+const idle = [IDLE_F0, translate(IDLE_F0, 0, -1), BLINK_F, IDLE_F0];
 
 // ----- Walking: 4 frames -----
-// We don't try to articulate paws (the sprite intentionally has no leg
-// articulation). Instead we simulate trotting via vertical bob + tail
-// wag. The body+head stays as a single oval — that's what reads "cat".
+// We don't articulate the paws between frames — instead we bob the
+// whole sprite to suggest a trot. ProHama's chibi cats don't do walk
+// cycles either; their style is iconic-static, so a vertical bob
+// preserves the look.
 const walking = [
   IDLE_F0,
-  translate(IDLE_F0, 0, -1), // bob up
+  translate(IDLE_F0, 0, -1),
   IDLE_F0,
-  translate(IDLE_F0, 0, 1),  // bob down
+  translate(IDLE_F0, 0, 1),
 ];
 
 // ----- Happy: 2 frames -----
-// f0: smile eyes + perked ears + body lifts 1 px (excited)
-// f1: same with ears even higher (tip pixel raised) + body lifts another 1 px
+// f0: closed-arc smile eyes (^^), body lifts 1 px
+// f1: same with body lifts 2 px (excited bounce)
+//
+// The closed-arc smile is a 3-px wide ^ shape per eye:
+//   row 12: . X .   (tip of arc)
+//   row 13: X . X   (legs of arc)
+// We use eye anchors cols 12-13 (left) and 20-21 (right) and EXTEND
+// by 1 col outward so the arc is 3 wide:
+//   left arc cols 11-13: row13 col11, row12 col12, row13 col13
+//   right arc cols 20-22: row13 col20, row12 col21, row13 col22
 const HAPPY_BASE = patch(IDLE_F0, [
-  // Replace open eyes with closed-arc smile eyes (^^):
-  // Clear the 3-row eye blocks first
-  [11, 12, 2], [12, 12, 2], [13, 12, 2], [14, 12, 2],
-  [17, 12, 2], [18, 12, 2], [19, 12, 2], [20, 12, 2],
-  [11, 13, 2], [12, 13, 2], [13, 13, 2], [14, 13, 2],
-  [17, 13, 2], [18, 13, 2], [19, 13, 2], [20, 13, 2],
-  [12, 14, 2], [13, 14, 2], [18, 14, 2], [19, 14, 2],
-  // ^ shapes: dip in the middle
-  [11, 13, 1], [12, 12, 1], [13, 13, 1],
-  [18, 13, 1], [19, 12, 1], [20, 13, 1],
-  // Slightly bigger blush dots on the cheeks (replace existing pink at
-  // rows 15-16 — already blush). Add dots at row 14.
-  [9, 14, 7], [22, 14, 7],
+  // Clear the original 2x2 black eyes back to fur
+  [12, 12, 2], [13, 12, 2], [20, 12, 2], [21, 12, 2],
+  [12, 13, 2], [13, 13, 2], [20, 13, 2], [21, 13, 2],
+  // Left ^ smile
+  [11, 13, 5], [12, 12, 5], [13, 13, 5],
+  // Right ^ smile
+  [20, 13, 5], [21, 12, 5], [22, 13, 5],
 ]);
 const happy = [
   translate(HAPPY_BASE, 0, -1),
@@ -225,22 +233,25 @@ const happy = [
 ];
 
 // ----- TapReact: 2 frames -----
-// f0: squash — body 1 px down, eyes wide
-// f1: stretch — body 1 px up
+// f0: surprised wide black eyes (3x2), body squashed 1 px down
+// f1: stretched up 1 px, normal eyes (recovery)
+//
+// Wide eyes: extend 2x2 by one col toward the centre:
+//   left  3x2 at cols 12-14 rows 12-13
+//   right 3x2 at cols 19-21 rows 12-13
 const TAP_WIDE_EYES = patch(IDLE_F0, [
   // Clear original eyes
-  [11, 12, 2], [12, 12, 2], [13, 12, 2], [14, 12, 2],
-  [17, 12, 2], [18, 12, 2], [19, 12, 2], [20, 12, 2],
-  [11, 13, 2], [12, 13, 2], [13, 13, 2], [14, 13, 2],
-  [17, 13, 2], [18, 13, 2], [19, 13, 2], [20, 13, 2],
-  [12, 14, 2], [13, 14, 2], [18, 14, 2], [19, 14, 2],
-  // Wide round eyes (3x3 block of dark with white highlight in centre):
-  [11, 12, 1], [12, 12, 5], [13, 12, 5], [14, 12, 1],
-  [11, 13, 1], [12, 13, 5], [13, 13, 4], [14, 13, 1],
-  [11, 14, 1], [12, 14, 1], [13, 14, 1], [14, 14, 1],
-  [17, 12, 1], [18, 12, 5], [19, 12, 5], [20, 12, 1],
-  [17, 13, 1], [18, 13, 4], [19, 13, 5], [20, 13, 1],
-  [17, 14, 1], [18, 14, 1], [19, 14, 1], [20, 14, 1],
+  [12, 12, 2], [13, 12, 2], [20, 12, 2], [21, 12, 2],
+  [12, 13, 2], [13, 13, 2], [20, 13, 2], [21, 13, 2],
+  // 3x2 wide eyes
+  [12, 12, 5], [13, 12, 5], [14, 12, 5],
+  [12, 13, 5], [13, 13, 5], [14, 13, 5],
+  [19, 12, 5], [20, 12, 5], [21, 12, 5],
+  [19, 13, 5], [20, 13, 5], [21, 13, 5],
+  // Tiny "o" mouth (round 2x2 black) instead of inverted V
+  // Mouth was at row 15-16 cols 16-17 (XROXX). Replace with 2x2 black.
+  [16, 15, 5], [17, 15, 5],
+  [16, 16, 5], [17, 16, 5],
 ]);
 const tapReact = [
   translate(TAP_WIDE_EYES, 0, 1),
@@ -248,50 +259,42 @@ const tapReact = [
 ];
 
 // ----- Scared: 2 frames -----
-// f0: ears flat (only 2 rows), wide eyes, body shrunk 1 px down
-// f1: same but tail tucked (we cheat — tail stays the same; emphasis on body)
+// f0: ears flattened back, wide eyes, body shrunk 1 px down
+// f1: same, slight tremble (1 px shift left)
+//
+// Existing ears occupy rows 3-7 at cols 10-13 (left) and 19-22 (right).
 const SCARED_BASE = (() => {
   const g = clone(IDLE_F0);
-  // Erase the existing 3-row triangular ears (rows 3-5) — make them
-  // squashed into rows 4-5 only.
-  // Clear ear area first
-  for (let y = 3; y <= 5; y++) {
-    for (let x = 9; x <= 13; x++) g[y][x] = 0;
-    for (let x = 18; x <= 22; x++) g[y][x] = 0;
+  // Erase the tall ears (rows 3-7, ear cols)
+  for (let y = 3; y <= 6; y++) {
+    for (let x = 10; x <= 13; x++) g[y][x] = 0;
+    for (let x = 19; x <= 22; x++) g[y][x] = 0;
   }
-  // Add the head dome row at row 5 back (so ears sit ON the head):
-  // The dome at row 6 already has outline. We need to refill row 5
-  // where the head was visible (cols 8 and 23 outline, 9-22 primary).
-  // Original row 5 ASCII: "........XORX.......XORX........."
-  // After clearing: only col 8 outline, col 23 outline survive (both at
-  // x=8 and x=23 as outline). Let me redraw row 5 as flat:
-  // cols 8: X, 9-22: O (continuous head), 23: X
-  g[5][8] = 1;
-  for (let x = 9; x <= 22; x++) g[5][x] = 2;
-  g[5][23] = 1;
-  // Add flat ears (folded back) at rows 4-5: small triangles slightly
-  // off to the sides.
-  g[4][9] = 1; g[4][10] = 7; g[4][11] = 1;
-  g[4][20] = 1; g[4][21] = 7; g[4][22] = 1;
-  // Wide-eyes patches (rows 12-14)
+  // Reflatten row 7 head top: cols 9 outline, 10-22 head fill, 23 outline.
+  // Original row 7 left half had ears intermingled with head — clear and
+  // rebuild it cleanly.
+  for (let x = 9; x <= 23; x++) g[7][x] = 2;
+  g[7][9] = 1; g[7][23] = 1;
+  // Add flat back-folded ears: small dark triangles tilted outward sitting
+  // on top of the head dome (row 6 cols 9-10 left, cols 22-23 right).
+  g[6][9] = 1; g[6][10] = 1;
+  g[6][22] = 1; g[6][23] = 1;
+  // Wide-eyes: 3x2 wide black eyes (same as tap)
   const eyeFix = [
-    [11, 12, 1], [12, 12, 5], [13, 12, 5], [14, 12, 1],
-    [11, 13, 1], [12, 13, 4], [13, 13, 5], [14, 13, 1],
-    [11, 14, 1], [12, 14, 1], [13, 14, 1], [14, 14, 1],
-    [17, 12, 1], [18, 12, 5], [19, 12, 5], [20, 12, 1],
-    [17, 13, 1], [18, 13, 5], [19, 13, 4], [20, 13, 1],
-    [17, 14, 1], [18, 14, 1], [19, 14, 1], [20, 14, 1],
+    [12, 12, 5], [13, 12, 5], [14, 12, 5],
+    [12, 13, 5], [13, 13, 5], [14, 13, 5],
+    [19, 12, 5], [20, 12, 5], [21, 12, 5],
+    [19, 13, 5], [20, 13, 5], [21, 13, 5],
   ];
   for (const [x, y, c] of eyeFix) g[y][x] = c;
-  // Frown mouth: replace the small mouth ^ at row 17 cols 15-16 with a
-  // downward V (corners up, middle down)
-  g[17][14] = 1; g[17][15] = 0; g[17][16] = 0; g[17][17] = 1;
-  g[18][15] = 1; g[18][16] = 1;
+  // Tiny "o" sad mouth (2x2 black) at cols 16-17 rows 15-16
+  g[15][16] = 5; g[15][17] = 5;
+  g[16][16] = 5; g[16][17] = 5;
   return g;
 })();
 const scared = [
   translate(SCARED_BASE, 0, 1),
-  translate(SCARED_BASE, 0, 1),
+  translate(SCARED_BASE, -1, 1),
 ];
 
 // =====================================================================
@@ -302,7 +305,7 @@ const catV1 = {
   version: 'v1',
   size: 32,
   meta: {
-    groundY: 28,
+    groundY: 29,
     eyeAnchor: { x: 16, y: 13 },
   },
   baby: {
@@ -318,20 +321,26 @@ fs.mkdirSync(outDir, { recursive: true });
 const outFile = path.join(outDir, 'cat-v1.json');
 fs.writeFileSync(outFile, JSON.stringify(catV1) + '\n');
 
-// Update palettes.json so palette index 5 is the dark pupil colour for
-// v1 (#3A2418-ish, not the warm orange that the production palette
-// originally used).
+// Update palettes.json. v2 uses only 5 colors:
+//   1 outline (warm dark brown)
+//   2 primary fur (saturated orange)
+//   3 secondary cream (belly + inner ears + paw centers)
+//   5 black eye dots
+//   7 pink blush (cheeks, mouth)
+// Index 4 (white highlight) and 6 (tabby pattern) are unused but
+// retained so the rest of the prototype's palette infrastructure
+// keeps working.
 const palettesPath = path.join(outDir, 'palettes.json');
 const palettes = JSON.parse(fs.readFileSync(palettesPath, 'utf8'));
 palettes.default = {
   '0': 'transparent',
   '1': '#3A2418', // outline (warm dark brown)
-  '2': '#F4A041', // primary (saturated orange)
-  '3': '#FFE0B5', // secondary cream
-  '4': '#FFFFFF', // highlight (pure white for eye gleam)
-  '5': '#1F1F2E', // dark pupil for v1
-  '6': '#D67B26', // pattern (warm darker orange — back stripes)
-  '7': '#FF8FAA', // blush pink (inner ear, nose)
+  '2': '#F0A040', // primary fur (warm saturated orange)
+  '3': '#FFE6BE', // secondary cream (belly + inner ear + paw centers)
+  '4': '#FFFFFF', // (unused in v2, kept for compat)
+  '5': '#1A1A1A', // black eye dots
+  '6': '#D67B26', // (unused in v2, kept for compat)
+  '7': '#FF8FAA', // pink blush
 };
 for (const p of palettes.all) {
   if (!p['7']) p['7'] = '#FF8FAA';
