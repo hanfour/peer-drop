@@ -10,14 +10,21 @@ type Props = {
   /**
    * Optional pattern overlay. When provided, source-space pixels that
    * currently render with palette slot 2 (primary) AND match the
-   * pattern's `shouldOverlay(x, y)` predicate are re-mapped to slot 6
-   * (pattern colour). All other pixels render normally.
+   * pattern's `shouldOverlay(x, y, seed)` predicate are re-mapped to
+   * slot 6 (pattern colour). All other pixels render normally.
    *
    * The pattern coordinate is always the SOURCE frame's (x, y) — even
    * when `flipped` is true — so the pattern stays visually consistent
    * regardless of which direction the sprite is facing.
    */
   pattern?: Pattern;
+  /**
+   * Per-pet seed feeding the pattern's PRNG. Same seed → same layout
+   * across renders; different seeds → distinctive layouts within the
+   * same pattern category (organic-stripe variations, scattered spots,
+   * etc.). Defaults to 0 when omitted.
+   */
+  seed?: number;
 };
 
 export function SpriteCanvas({
@@ -26,6 +33,7 @@ export function SpriteCanvas({
   scale = 8,
   flipped = false,
   pattern,
+  seed = 0,
 }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -62,7 +70,7 @@ export function SpriteCanvas({
           idx === 2 &&
           patternColor &&
           patternColor !== 'transparent' &&
-          pattern.shouldOverlay(x, y)
+          pattern.shouldOverlay(x, y, seed)
         ) {
           drawIdx = 6;
         }
@@ -108,7 +116,7 @@ export function SpriteCanvas({
         }
       }
     }
-  }, [frame, palette, scale, flipped, pattern]);
+  }, [frame, palette, scale, flipped, pattern, seed]);
 
   // Frame is square; derive size from frame data. For empty/missing
   // frames the canvas collapses to 0×0 — caller is expected to gate on

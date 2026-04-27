@@ -8,7 +8,7 @@ import { defaultTraits, dominantTrait, type TraitName, type Traits } from './tra
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
 import type { GreetingBeat } from './scenarios/greeting';
 import { Particles, type Particle } from './render/Particles';
-import { PATTERNS, findPattern } from './render/patterns';
+import { PATTERNS, findPattern, PREVIEW_SEED } from './render/patterns';
 import { ProgressBar, useTransfer } from './scenarios/Transfer';
 import { selectLine } from './dialogue/select';
 import type { DialogueContext } from './dialogue/types';
@@ -110,6 +110,14 @@ export default function App() {
     defaultPaletteName: string;
     path: string;
     hasWalkAnimation: boolean;
+    /**
+     * Per-species visual scale multiplier (cat = 1.0 baseline). Multiplied
+     * on top of the version-derived `renderScale` at construction time so
+     * relative on-stage sizes read as realistic (bear > cat > rabbit >
+     * frog/bird). Only consumed in v3; absent / 1.0 leaves rendering
+     * unchanged for older versions.
+     */
+    displayScale?: number;
   };
   type PaletteSwatch = {
     index: number;
@@ -135,6 +143,17 @@ export default function App() {
   // appearance.
   const [patternId, setPatternId] = useState<string>('plain');
   const activePattern = findPattern(patternId);
+  // Per-pet pattern seed — gives each individual a unique layout within
+  // the chosen pattern category (e.g. tabby A vs tabby B). Persists
+  // across pattern/palette/species swaps so the pet keeps its identity;
+  // only the 🔀 button reshuffles. Peer pet gets a separate seed so the
+  // two pets are always visually distinct.
+  const [localSeed, setLocalSeed] = useState<number>(() =>
+    Math.floor(Math.random() * 0xffffffff),
+  );
+  const [peerSeed, setPeerSeed] = useState<number>(() =>
+    Math.floor(Math.random() * 0xffffffff),
+  );
   // When the user actively picks a palette, treat it as a per-species
   // override; otherwise picking a new species snaps to that species's
   // default palette. We track the last manual override so toggling
@@ -397,6 +416,8 @@ export default function App() {
           } else {
             setPeerPaletteIdx(Math.floor(Math.random() * speciesIndex.palettes.length));
           }
+          // Fresh peer = fresh pattern identity. Local seed is preserved.
+          setPeerSeed(Math.floor(Math.random() * 0xffffffff));
         }
       }
       return next;
@@ -600,15 +621,24 @@ export default function App() {
     // For v0/v1/v2 we leave it undefined so the renderer falls back to
     // the legacy unpatterned path.
     const petPattern = spriteVersion === 'v3' ? activePattern : undefined;
+    // Per-species displayScale multiplier — only meaningful in v3 (where
+    // each species ships its own scale baseline). v0/v1/v2 use 1.0 so
+    // their on-stage size is unchanged.
+    const localSpeciesEntry =
+      spriteVersion === 'v3' && speciesIndex
+        ? speciesIndex.species.find((s) => s.species === selectedSpecies)
+        : undefined;
+    const localDisplayScale = localSpeciesEntry?.displayScale ?? 1.0;
     const localPet: StagePet = {
       id: 'local',
       frame: localFrames[safeLocalIdx],
       palette,
-      scale: renderScale,
+      scale: renderScale * localDisplayScale,
       xPercent: localXPercent,
       flipped: false,
       onClick: onLocalPetTap,
       pattern: petPattern,
+      seed: localSeed,
     };
     pets = [localPet];
     if (peerPhase !== 'absent' && peerFrames.length > 0 && peerPalette) {
@@ -616,14 +646,20 @@ export default function App() {
       // different-sized species in v3).
       const peerSize = peerSourceData?.baby.idle?.[0]?.length ?? spriteSize;
       const peerScale = peerSize <= 16 ? 8 : peerSize <= 32 ? 4 : 3;
+      const peerSpeciesEntry =
+        spriteVersion === 'v3' && speciesIndex
+          ? speciesIndex.species.find((s) => s.species === peerSpecies)
+          : undefined;
+      const peerDisplayScale = peerSpeciesEntry?.displayScale ?? 1.0;
       pets.push({
         id: 'peer',
         frame: peerFrames[safePeerIdx],
         palette: peerPalette,
-        scale: peerScale,
+        scale: peerScale * peerDisplayScale,
         xPercent: peerXPercent,
         flipped: true,
         pattern: petPattern,
+        seed: peerSeed,
       });
     }
   }
@@ -845,6 +881,30 @@ export default function App() {
                   </button>
                 );
               })}
+              <button
+                onClick={() =>
+                  setLocalSeed(Math.floor(Math.random() * 0xffffffff))
+                }
+                aria-label="隨機重抽花紋"
+                title="隨機重抽當前寵物的花紋變化（同一種類，不同個體）"
+                data-testid="pattern-shuffle"
+                style={{
+                  alignSelf: 'center',
+                  marginLeft: 4,
+                  padding: '6px 12px',
+                  border: '1px dashed rgba(0,0,0,0.25)',
+                  borderRadius: 8,
+                  background: 'white',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  color: '#444',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  height: 56,
+                }}
+              >
+                🔀 隨機重抽
+              </button>
             </div>
           </div>
         </div>
@@ -952,9 +1012,12 @@ export default function App() {
 }
 
 /**
- * Tiny inline preview for the pattern picker buttons. Renders a 16×16
+ * Tiny inline preview for the pattern picker buttons. Renders a 32×32
  * canvas where every pixel starts as `primary`, then any pixel that
- * matches `pattern.shouldOverlay(x, y)` is recoloured to `patternColor`.
+ * matches `pattern.shouldOverlay(x, y, PREVIEW_SEED)` is recoloured to
+ * `patternColor`. Uses a fixed PREVIEW_SEED so the picker thumbnails
+ * stay visually stable when the user clicks 🔀 — only the on-stage pet
+ * reshuffles.
  *
  * The preview uses the same source-frame coordinate space as the live
  * sprite, but scaled to 16 — patterns calibrated against a 48×48 grid
@@ -986,7 +1049,10 @@ function PatternPreview({
     ctx.clearRect(0, 0, c.width, c.height);
     for (let y = 0; y < SRC; y++) {
       for (let x = 0; x < SRC; x++) {
-        const isPattern = pattern.shouldOverlay(x, y);
+        // Picker thumbnails always use a fixed PREVIEW_SEED so they
+        // stay visually stable across 🔀 clicks. The live stage uses
+        // the active pet's `localSeed`.
+        const isPattern = pattern.shouldOverlay(x, y, PREVIEW_SEED);
         ctx.fillStyle = isPattern ? patternColor : primary;
         ctx.fillRect(Math.floor(x * PIX), Math.floor(y * PIX), Math.ceil(PIX), Math.ceil(PIX));
       }

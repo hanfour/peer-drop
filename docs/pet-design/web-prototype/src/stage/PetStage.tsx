@@ -15,6 +15,8 @@ export type StagePet = {
   onClick?: () => void;
   /** Optional pattern overlay applied at render time. */
   pattern?: Pattern;
+  /** Per-pet seed feeding the pattern's PRNG (stable identity). */
+  seed?: number;
 };
 
 const STAGE_W = 480;
@@ -186,6 +188,7 @@ export function PetStage({
             scale={p.scale}
             flipped={p.flipped}
             pattern={p.pattern}
+            seed={p.seed}
           />
           {dialogueByPet?.[p.id] && (
             <DialogueBubble key={dialogueByPet[p.id]} text={dialogueByPet[p.id]} />
