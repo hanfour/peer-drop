@@ -9,9 +9,10 @@ type Props = {
   flipped?: boolean;
   /**
    * Optional pattern overlay. When provided, source-space pixels that
-   * currently render with palette slot 2 (primary) AND match the
-   * pattern's `shouldOverlay(x, y, seed)` predicate are re-mapped to
-   * slot 6 (pattern colour). All other pixels render normally.
+   * currently render with palette slot 2 (primary) AND for which the
+   * pattern's `getOverlayIndex(x, y, seed)` returns a non-null slot
+   * (3/4/5/6) are re-mapped to that slot's colour. All other pixels
+   * render normally.
    *
    * The pattern coordinate is always the SOURCE frame's (x, y) — even
    * when `flipped` is true — so the pattern stays visually consistent
@@ -53,26 +54,30 @@ export function SpriteCanvas({
       ctx.translate(c.width, 0);
       ctx.scale(-1, 1);
     }
-    const patternColor = palette['6'];
     for (let y = 0; y < frame.length; y++) {
       const row = frame[y];
       for (let x = 0; x < row.length; x++) {
         const idx = row[x];
         if (idx === 0) continue;
-        // Pattern overlay: recolour primary (slot 2) pixels that match
-        // the pattern predicate to the palette's pattern slot (slot 6).
-        // Coordinates passed to the predicate are SOURCE-frame coords —
-        // we're inside the (possibly mirrored) ctx, but `x`/`y` are read
-        // directly from the source `frame` so they're already source-space.
+        // Pattern overlay: recolour primary (slot 2) pixels to one of
+        // the overlay slots (3/4/5/6) chosen by the pattern. The slot
+        // and which palette entries fill it are decided per-seed inside
+        // the pattern (see patterns.ts). Coordinates passed are SOURCE-
+        // frame coords — we're inside the (possibly mirrored) ctx, but
+        // `x`/`y` are read directly from `frame` so they're already
+        // source-space.
         let drawIdx = idx;
-        if (
-          pattern &&
-          idx === 2 &&
-          patternColor &&
-          patternColor !== 'transparent' &&
-          pattern.shouldOverlay(x, y, seed)
-        ) {
-          drawIdx = 6;
+        if (pattern && idx === 2) {
+          const overlayIdx = pattern.getOverlayIndex(x, y, seed);
+          if (overlayIdx !== null) {
+            const overlayColor = palette[String(overlayIdx)];
+            // Only swap if the slot exists and is non-transparent.
+            // Otherwise fall back to primary so we never punch a
+            // transparent hole through the body.
+            if (overlayColor && overlayColor !== 'transparent') {
+              drawIdx = overlayIdx;
+            }
+          }
         }
         const color = palette[String(drawIdx)];
         if (!color || color === 'transparent') continue;

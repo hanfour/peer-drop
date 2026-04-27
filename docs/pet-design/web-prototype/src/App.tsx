@@ -874,7 +874,12 @@ export default function App() {
                   >
                     <PatternPreview
                       primary={swatch?.primary ?? '#cccccc'}
-                      patternColor={swatch?.pattern ?? '#888888'}
+                      overlayColors={{
+                        3: swatch?.secondary ?? '#aaaaaa',
+                        4: swatch?.highlight ?? '#dddddd',
+                        5: swatch?.accent ?? '#666666',
+                        6: swatch?.pattern ?? '#888888',
+                      }}
                       pattern={pat}
                     />
                     <span style={{ fontSize: 10, color: '#666' }}>{pat.label}</span>
@@ -1013,25 +1018,28 @@ export default function App() {
 
 /**
  * Tiny inline preview for the pattern picker buttons. Renders a 32×32
- * canvas where every pixel starts as `primary`, then any pixel that
- * matches `pattern.shouldOverlay(x, y, PREVIEW_SEED)` is recoloured to
- * `patternColor`. Uses a fixed PREVIEW_SEED so the picker thumbnails
- * stay visually stable when the user clicks 🔀 — only the on-stage pet
- * reshuffles.
+ * canvas where every pixel starts as `primary`, then any pixel for
+ * which `pattern.getOverlayIndex(x, y, PREVIEW_SEED)` returns 3/4/5/6
+ * is recoloured to the corresponding entry of `overlayColors`. Uses a
+ * fixed PREVIEW_SEED so the picker thumbnails stay visually stable
+ * when the user clicks 🔀 — only the on-stage pet reshuffles.
  *
  * The preview uses the same source-frame coordinate space as the live
  * sprite, but scaled to 16 — patterns calibrated against a 48×48 grid
  * (e.g. the star) intentionally render off-frame at 16, in which case
  * the preview shows just the primary fill (still helpful as a "this is
  * the colour pair" signal).
+ *
+ * Multi-colour patterns produce thumbnails with 2–3 overlay colours
+ * (intentional — matches the variety the live stage will produce).
  */
 function PatternPreview({
   primary,
-  patternColor,
+  overlayColors,
   pattern,
 }: {
   primary: string;
-  patternColor: string;
+  overlayColors: { 3: string; 4: string; 5: string; 6: string };
   pattern: import('./render/patterns').Pattern;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -1052,12 +1060,16 @@ function PatternPreview({
         // Picker thumbnails always use a fixed PREVIEW_SEED so they
         // stay visually stable across 🔀 clicks. The live stage uses
         // the active pet's `localSeed`.
-        const isPattern = pattern.shouldOverlay(x, y, PREVIEW_SEED);
-        ctx.fillStyle = isPattern ? patternColor : primary;
+        const overlayIdx = pattern.getOverlayIndex(x, y, PREVIEW_SEED);
+        const fill =
+          overlayIdx !== null
+            ? overlayColors[overlayIdx as 3 | 4 | 5 | 6] ?? primary
+            : primary;
+        ctx.fillStyle = fill;
         ctx.fillRect(Math.floor(x * PIX), Math.floor(y * PIX), Math.ceil(PIX), Math.ceil(PIX));
       }
     }
-  }, [primary, patternColor, pattern, PIX]);
+  }, [primary, overlayColors, pattern, PIX]);
   return (
     <canvas
       ref={ref}
