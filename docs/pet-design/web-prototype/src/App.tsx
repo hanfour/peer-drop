@@ -72,13 +72,20 @@ export default function App() {
   const STAGE_H = 240;
 
   // v0 = original 16×16 production sprite (cat.json).
-  // v1 = 32×32 side-view sprite (cat-v1.json) — see scripts/import-sprite.mjs.
-  // Default to v1 so the polished version shows first.
-  type SpriteVersion = 'v0' | 'v1';
-  const [spriteVersion, setSpriteVersion] = useState<SpriteVersion>('v1');
+  // v1 = 32×32 side-view sprite (cat-v1.json) — Shepardskin CC0, see scripts/import-sprite.mjs.
+  // v2 = 32×32 chibi sprite (cat-v2.json) — PixelLab AI image-to-image of v0,
+  //      see scripts/import-pixellab.mjs.
+  // Default to v2 so the latest iteration shows first.
+  type SpriteVersion = 'v0' | 'v1' | 'v2';
+  const [spriteVersion, setSpriteVersion] = useState<SpriteVersion>('v2');
 
   useEffect(() => {
-    const url = spriteVersion === 'v1' ? '/data/cat-v1.json' : '/data/cat.json';
+    const url =
+      spriteVersion === 'v2'
+        ? '/data/cat-v2.json'
+        : spriteVersion === 'v1'
+          ? '/data/cat-v1.json'
+          : '/data/cat.json';
     loadSprite(url)
       .then((d) => {
         setData(d);
@@ -456,9 +463,11 @@ export default function App() {
             PeerDrop Pet Prototype
           </h1>
           <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
-            {spriteVersion === 'v1'
-              ? 'v1 — Cat sprites (Shepardskin, CC0) imported as 32×32 side-view placeholder'
-              : 'v0 — production 16×16 sprite baseline'}
+            {spriteVersion === 'v2'
+              ? 'v2 — PixelLab AI chibi (image-to-image of v0, 32×32)'
+              : spriteVersion === 'v1'
+                ? 'v1 — Cat sprites (Shepardskin, CC0) imported as 32×32 side-view placeholder'
+                : 'v0 — production 16×16 sprite baseline'}
           </p>
         </div>
         <div
@@ -496,7 +505,21 @@ export default function App() {
               fontWeight: spriteVersion === 'v1' ? 600 : 400,
             }}
           >
-            v1 (32×32 side-view)
+            v1 (Shepardskin CC0)
+          </button>
+          <button
+            onClick={() => setSpriteVersion('v2')}
+            style={{
+              background:
+                spriteVersion === 'v2' ? '#1976d2' : 'rgba(0,0,0,0.05)',
+              color: spriteVersion === 'v2' ? 'white' : 'inherit',
+              padding: '6px 14px',
+              borderRadius: 0,
+              fontWeight: spriteVersion === 'v2' ? 600 : 400,
+            }}
+            title="PixelLab chibi (image-to-image of v0)"
+          >
+            v2 (PixelLab chibi)
           </button>
         </div>
       </header>
@@ -522,17 +545,26 @@ export default function App() {
             <strong style={{ display: 'block', marginBottom: 4 }}>
               本原型聚焦於互動設計討論
             </strong>
-            請評估：見面動作編排、檔案傳輸反應、性格特徵滑桿、對話泡泡時機、場景視覺。
-            Sprite 美術為占位素材（
+            Sprite 美術為占位 — 目前提供三個版本切換：v0（production 16×16）／
+            v1（
             <a
               href="https://opengameart.org/content/cat-sprites"
               target="_blank"
               rel="noreferrer"
               style={{ color: '#1976d2' }}
             >
-              Cat sprites by Shepardskin, CC0
+              Shepardskin CC0
             </a>
-            ），production 階段將另行委託定製像素藝術，請忽略目前 sprite 的細節品質。
+            側面）／v2（
+            <a
+              href="https://pixellab.ai"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#1976d2' }}
+            >
+              PixelLab AI
+            </a>
+            以 v0 為 reference 生成的 chibi）。本原型聚焦於互動設計討論。Production 階段美術將另行決定。
           </div>
           <button
             onClick={dismissScopeBanner}
