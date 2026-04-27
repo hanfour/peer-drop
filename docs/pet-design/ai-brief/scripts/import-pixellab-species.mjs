@@ -92,6 +92,24 @@ const SPECIES_DISPLAY = {
   octopus: { en: 'Octopus', zh: '章魚' },
 };
 
+// Per-species visual scale multiplier for relative-size realism on stage.
+// Cat is the baseline (1.0); other species scale up or down so a bear reads
+// noticeably bigger than a cat, a bird/frog noticeably smaller, etc. Applied
+// at render time on top of the version-derived `renderScale` (so v0/v1/v2
+// remain unaffected — only v3 reads `displayScale`).
+const SPECIES_DISPLAY_SCALE = {
+  cat: 1.0,
+  dog: 1.05,
+  rabbit: 0.75,
+  bird: 0.6,
+  frog: 0.65,
+  bear: 1.4,
+  dragon: 1.0,
+  slime: 0.8,
+  ghost: 0.85,
+  octopus: 0.95,
+};
+
 // ---------------------------------------------------------------------------
 
 function hexToRgb(hex) {
@@ -320,6 +338,7 @@ async function main() {
         defaultPaletteName: result.paletteName,
         path: `species/${species}.json`,
         hasWalkAnimation: result.walkingFromAnim,
+        displayScale: SPECIES_DISPLAY_SCALE[species] ?? 1.0,
       });
     } catch (e) {
       console.error(`FAILED: ${e.message}`);
@@ -337,7 +356,7 @@ async function main() {
 
   const indexJson = {
     version: 'v3',
-    note: 'PixelLab AI Vadimsadovski-style species pack. All sprites are 48×48 with 6-slot PetPalettes quantization (slots 1..6 = outline/primary/secondary/highlight/accent/pattern). Swap the palette block at runtime to recolour.',
+    note: 'PixelLab AI Vadimsadovski-style species pack. All sprites are 48×48 with 6-slot PetPalettes quantization (slots 1..6 = outline/primary/secondary/highlight/accent/pattern). Swap the palette block at runtime to recolour. Each species ships a `displayScale` multiplier (cat=1.0 baseline) so relative on-stage sizes are visually realistic — bear is largest, bird/frog smallest.',
     palettes: PET_PALETTES.map((p, i) => ({
       index: i,
       name: p.name,
