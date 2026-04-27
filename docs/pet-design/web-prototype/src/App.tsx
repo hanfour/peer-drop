@@ -111,13 +111,16 @@ export default function App() {
     path: string;
     hasWalkAnimation: boolean;
     /**
-     * Per-species visual scale multiplier (cat = 1.0 baseline). Multiplied
-     * on top of the version-derived `renderScale` at construction time so
-     * relative on-stage sizes read as realistic (bear > cat > rabbit >
-     * frog/bird). Only consumed in v3; absent / 1.0 leaves rendering
-     * unchanged for older versions.
+     * Default-stage display scale multiplier (cat-adult = 1.0 baseline).
+     * Kept for back-compat; the live picker reads `displayScales[currentStage]`.
      */
     displayScale?: number;
+    /** Available lifecycle stage keys for this species. */
+    stages?: string[];
+    /** Per-stage scale multiplier table. */
+    displayScales?: Record<string, number>;
+    /** Stage to fall back to on first species select. */
+    defaultStage?: string;
   };
   type PaletteSwatch = {
     index: number;
@@ -138,6 +141,17 @@ export default function App() {
   const [speciesIndex, setSpeciesIndex] = useState<SpeciesIndex | null>(null);
   const [selectedSpecies, setSelectedSpecies] = useState<string>('cat');
   const [selectedPaletteIdx, setSelectedPaletteIdx] = useState<number>(0);
+  // Lifecycle stage. Logical values are 'baby' | 'adult' | 'elder'; the
+  // bird's adult sub-variant is stored separately (`birdVariant`) and
+  // only consulted when species==='bird' && stage==='adult'.
+  type LifecycleStage = 'baby' | 'adult' | 'elder';
+  const [stage, setStage] = useState<LifecycleStage>('adult');
+  const [birdVariant, setBirdVariant] = useState<'rooster' | 'hen'>('rooster');
+  // Peer pet lifecycle is sampled when the peer walks in (mirrors the
+  // existing peerSpecies/peerPaletteIdx dance); kept stable while the peer
+  // is on stage. Default 'adult' so first render renders the adult form.
+  const [peerStage, setPeerStage] = useState<LifecycleStage>('adult');
+  const [peerBirdVariant, setPeerBirdVariant] = useState<'rooster' | 'hen'>('rooster');
   // Pattern overlay selection (v3 only). Defaults to 'plain' so the
   // picker change is opt-in and doesn't disturb the default first-load
   // appearance.
@@ -169,6 +183,42 @@ export default function App() {
   // peer species differs from the local species, we need a second
   // SpriteData so the two pets can render different shapes simultaneously.
   const [peerData, setPeerData] = useState<SpriteData | null>(null);
+
+  /**
+   * Resolve a (species, logical-stage, bird-variant) tuple to the actual
+   * stage-key used in the species JSON's `stages` map.
+   *
+   * Cases:
+   *   - bird + adult → 'adult-rooster' or 'adult-hen' (per variant)
+   *   - bird + baby → 'baby' (chick is the baby)
+   *   - bird + elder → 'elder'
+   *   - any species without the requested stage → falls back to its
+   *     defaultStage / first-available stage. Ghost (single-stage) auto-
+   *     falls back to 'adult'.
+   *
+   * Pure: takes only the species entry and the requested logical stage.
+   */
+  const resolveStageKey = (
+    entry: SpeciesEntry | undefined,
+    logical: LifecycleStage,
+    variant: 'rooster' | 'hen',
+  ): string => {
+    if (!entry) return logical;
+    const available = new Set(entry.stages ?? []);
+    if (entry.species === 'bird' && logical === 'adult') {
+      const v = variant === 'hen' ? 'adult-hen' : 'adult-rooster';
+      if (available.has(v)) return v;
+    }
+    if (available.has(logical)) return logical;
+    // Bird's "baby" is the chick — already covered by available.has('baby').
+    // Other species: try the species's default stage, then first listed.
+    if (entry.defaultStage && available.has(entry.defaultStage)) {
+      return entry.defaultStage;
+    }
+    const list = entry.stages ?? [];
+    if (list.length > 0) return list[0];
+    return 'adult';
+  };
 
   // Build a runtime palette `{0:'transparent', 1:outline, ..., 6:pattern}`
   // from a PaletteSwatch entry. This is the live remap target — we never
@@ -298,10 +348,22 @@ export default function App() {
   // The local pet's effective action: if a beat is active, it overrides
   // the ambient idle pick.
   const effectiveLocalAction: string = localBeat?.action ?? currentAction;
+  // Resolve which `stages[<key>]` block to read from. v3 species JSONs ship
+  // a `stages` map; v0/v1/v2 don't and we read `data.baby` instead.
+  const localSpeciesEntry =
+    spriteVersion === 'v3' && speciesIndex
+      ? speciesIndex.species.find((s) => s.species === selectedSpecies)
+      : undefined;
+  const localStageKey = resolveStageKey(localSpeciesEntry, stage, birdVariant);
+  const localStageBlock =
+    spriteVersion === 'v3' && data?.stages
+      ? data.stages[localStageKey as keyof typeof data.stages] ?? data.baby
+      : data?.baby;
   const localFrames =
-    (data?.baby[effectiveLocalAction] && data.baby[effectiveLocalAction].length > 0
-      ? data.baby[effectiveLocalAction]
-      : data?.baby.idle) ?? [];
+    (localStageBlock?.[effectiveLocalAction] &&
+    localStageBlock[effectiveLocalAction].length > 0
+      ? localStageBlock[effectiveLocalAction]
+      : localStageBlock?.idle) ?? [];
   const localFps = effectiveLocalAction === 'walking' ? 8 : 6;
   const localFrameIdx = useFrameAnimation(localFrames.length, localFps);
   const safeLocalIdx = localFrames.length > 0 ? Math.min(localFrameIdx, localFrames.length - 1) : 0;
@@ -418,6 +480,21 @@ export default function App() {
           }
           // Fresh peer = fresh pattern identity. Local seed is preserved.
           setPeerSeed(Math.floor(Math.random() * 0xffffffff));
+          // Also sample a peer lifecycle stage. We bias towards 'adult'
+          // (it's the canonical "hello, friend" form) but occasionally
+          // surface baby/elder for visual variety.
+          const stageRoll = Math.random();
+          let pickStage: LifecycleStage = 'adult';
+          if (stageRoll < 0.2 && (pick.stages ?? []).includes('baby')) {
+            pickStage = 'baby';
+          } else if (stageRoll < 0.35 && (pick.stages ?? []).includes('elder')) {
+            pickStage = 'elder';
+          }
+          setPeerStage(pickStage);
+          // For bird, randomly pick rooster / hen.
+          if (pick.species === 'bird') {
+            setPeerBirdVariant(Math.random() < 0.5 ? 'rooster' : 'hen');
+          }
         }
       }
       return next;
@@ -535,10 +612,21 @@ export default function App() {
   // when available, else fall back to the local sprite (v0/v1/v2 share
   // the same single cat).
   const peerSourceData = spriteVersion === 'v3' && peerData ? peerData : data;
+  // Resolve the peer's active stage block (v3) or fall back to baby (v0/v1/v2).
+  const peerSpeciesEntry =
+    spriteVersion === 'v3' && speciesIndex
+      ? speciesIndex.species.find((s) => s.species === peerSpecies)
+      : undefined;
+  const peerStageKey = resolveStageKey(peerSpeciesEntry, peerStage, peerBirdVariant);
+  const peerStageBlock =
+    spriteVersion === 'v3' && peerSourceData?.stages
+      ? peerSourceData.stages[peerStageKey as keyof typeof peerSourceData.stages] ??
+        peerSourceData.baby
+      : peerSourceData?.baby;
   const peerFrames =
-    (peerSourceData?.baby[peerAction] && peerSourceData.baby[peerAction].length > 0
-      ? peerSourceData.baby[peerAction]
-      : peerSourceData?.baby.idle) ?? [];
+    (peerStageBlock?.[peerAction] && peerStageBlock[peerAction].length > 0
+      ? peerStageBlock[peerAction]
+      : peerStageBlock?.idle) ?? [];
   // Slightly faster fps for the walking sprite reads better at speed.
   const peerFrameIdx = useFrameAnimation(peerFrames.length, peerAction === 'walking' ? 8 : 6);
   const safePeerIdx = peerFrames.length > 0 ? Math.min(peerFrameIdx, peerFrames.length - 1) : 0;
@@ -621,14 +709,22 @@ export default function App() {
     // For v0/v1/v2 we leave it undefined so the renderer falls back to
     // the legacy unpatterned path.
     const petPattern = spriteVersion === 'v3' ? activePattern : undefined;
-    // Per-species displayScale multiplier — only meaningful in v3 (where
-    // each species ships its own scale baseline). v0/v1/v2 use 1.0 so
-    // their on-stage size is unchanged.
-    const localSpeciesEntry =
-      spriteVersion === 'v3' && speciesIndex
-        ? speciesIndex.species.find((s) => s.species === selectedSpecies)
+    // Per-stage displayScale multiplier — only meaningful in v3.
+    // displayScales[<resolvedStageKey>] takes priority; falls back to
+    // the species's default `displayScale` so older index.json formats
+    // keep working.
+    const localDisplayScale =
+      spriteVersion === 'v3'
+        ? localSpeciesEntry?.displayScales?.[localStageKey] ??
+          localSpeciesEntry?.displayScale ??
+          1.0
+        : 1.0;
+    // groundOffsetY: read from the species JSON's per-stage map. Only
+    // applied in v3 — v0/v1/v2 sprites keep their legacy positioning.
+    const localGroundOffsetY =
+      spriteVersion === 'v3' && data?.groundOffsetsY
+        ? data.groundOffsetsY[localStageKey as keyof typeof data.groundOffsetsY]
         : undefined;
-    const localDisplayScale = localSpeciesEntry?.displayScale ?? 1.0;
     const localPet: StagePet = {
       id: 'local',
       frame: localFrames[safeLocalIdx],
@@ -639,6 +735,7 @@ export default function App() {
       onClick: onLocalPetTap,
       pattern: petPattern,
       seed: localSeed,
+      groundOffsetY: localGroundOffsetY,
     };
     pets = [localPet];
     if (peerPhase !== 'absent' && peerFrames.length > 0 && peerPalette) {
@@ -646,11 +743,18 @@ export default function App() {
       // different-sized species in v3).
       const peerSize = peerSourceData?.baby.idle?.[0]?.length ?? spriteSize;
       const peerScale = peerSize <= 16 ? 8 : peerSize <= 32 ? 4 : 3;
-      const peerSpeciesEntry =
-        spriteVersion === 'v3' && speciesIndex
-          ? speciesIndex.species.find((s) => s.species === peerSpecies)
+      const peerDisplayScale =
+        spriteVersion === 'v3'
+          ? peerSpeciesEntry?.displayScales?.[peerStageKey] ??
+            peerSpeciesEntry?.displayScale ??
+            1.0
+          : 1.0;
+      const peerGroundOffsetY =
+        spriteVersion === 'v3' && peerSourceData?.groundOffsetsY
+          ? peerSourceData.groundOffsetsY[
+              peerStageKey as keyof typeof peerSourceData.groundOffsetsY
+            ]
           : undefined;
-      const peerDisplayScale = peerSpeciesEntry?.displayScale ?? 1.0;
       pets.push({
         id: 'peer',
         frame: peerFrames[safePeerIdx],
@@ -660,6 +764,7 @@ export default function App() {
         flipped: true,
         pattern: petPattern,
         seed: peerSeed,
+        groundOffsetY: peerGroundOffsetY,
       });
     }
   }
@@ -688,7 +793,7 @@ export default function App() {
           </h1>
           <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
             {spriteVersion === 'v3'
-              ? 'v3 — PixelLab Vadimsadovski-style 10 species (48×48, palette-swappable)'
+              ? 'v3 — 10 物種 × 8 配色 × 5 花紋 × 3 階段（幼體／成熟體／老年體）'
               : spriteVersion === 'v2'
                 ? 'v2 — PixelLab AI chibi (image-to-image of v0, 32×32)'
                 : spriteVersion === 'v1'
@@ -774,6 +879,29 @@ export default function App() {
                       if (!paletteUserOverride) {
                         setSelectedPaletteIdx(s.defaultPaletteIndex);
                       }
+                      // Auto-fallback the lifecycle stage: if the new
+                      // species lacks the currently-selected stage (e.g.
+                      // user is on 'baby' and switches to ghost which is
+                      // adult-only), drop back to the species's default
+                      // stage so the picker doesn't render an empty pet.
+                      const stages = new Set(s.stages ?? []);
+                      const wantsBird = s.species === 'bird' && stage === 'adult';
+                      const stageOk = wantsBird
+                        ? stages.has(`adult-${birdVariant}`)
+                        : stages.has(stage);
+                      if (!stageOk) {
+                        const fallback = (s.defaultStage ?? 'adult') as string;
+                        // Map any rooster/hen default back to the logical 'adult'
+                        // so the picker UI's button selection stays clean.
+                        if (fallback.startsWith('adult')) {
+                          setStage('adult');
+                          if (s.species === 'bird') {
+                            setBirdVariant(fallback === 'adult-hen' ? 'hen' : 'rooster');
+                          }
+                        } else if (fallback === 'baby' || fallback === 'elder') {
+                          setStage(fallback);
+                        }
+                      }
                     }}
                     aria-pressed={active}
                     title={`${s.displayEn} / ${s.displayZh}`}
@@ -804,6 +932,124 @@ export default function App() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Lifecycle stage picker. Always renders three buttons; the
+              ones unavailable for the current species are disabled (so
+              the layout stays stable across species swaps). For bird at
+              the 成熟體 stage, a secondary 公雞 / 母雞 picker appears
+              below. */}
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#666',
+                marginBottom: 6,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span>生命階段（Lifecycle stage）</span>
+              {(() => {
+                const cur = speciesIndex.species.find((s) => s.species === selectedSpecies);
+                if (!cur) return null;
+                const stages = cur.stages ?? [];
+                if (stages.length <= 1) {
+                  return (
+                    <span style={{ fontWeight: 400, color: '#999' }}>
+                      （{cur.displayZh}僅單一階段）
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+            <div role="radiogroup" aria-label="Lifecycle stage" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([
+                { key: 'baby', label: '幼體' },
+                { key: 'adult', label: '成熟體' },
+                { key: 'elder', label: '老年體' },
+              ] as const).map((opt) => {
+                const cur = speciesIndex.species.find((s) => s.species === selectedSpecies);
+                const stages = new Set(cur?.stages ?? []);
+                // 'adult' is available if either pure 'adult' OR a bird
+                // adult variant is present.
+                const available =
+                  opt.key === 'adult'
+                    ? stages.has('adult') || stages.has('adult-rooster') || stages.has('adult-hen')
+                    : stages.has(opt.key);
+                const active = stage === opt.key && available;
+                return (
+                  <button
+                    key={opt.key}
+                    disabled={!available}
+                    onClick={() => setStage(opt.key)}
+                    aria-pressed={active}
+                    aria-disabled={!available}
+                    data-testid={`stage-${opt.key}`}
+                    style={{
+                      padding: '8px 14px',
+                      border: active
+                        ? '2px solid #1976d2'
+                        : available
+                          ? '2px solid rgba(0,0,0,0.15)'
+                          : '2px dashed rgba(0,0,0,0.1)',
+                      borderRadius: 8,
+                      background: active
+                        ? 'rgba(25,118,210,0.1)'
+                        : available
+                          ? 'white'
+                          : 'rgba(0,0,0,0.03)',
+                      color: available ? 'inherit' : '#bbb',
+                      cursor: available ? 'pointer' : 'not-allowed',
+                      fontWeight: active ? 600 : 400,
+                      fontSize: 13,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Bird sub-variant picker — only when species is bird AND
+                stage is the (adult) form, since chick/elder are gender-
+                neutral. */}
+            {selectedSpecies === 'bird' && stage === 'adult' && (
+              <div
+                role="radiogroup"
+                aria-label="Bird adult variant"
+                style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}
+              >
+                <span style={{ fontSize: 12, color: '#888' }}>成熟體分性別：</span>
+                {([
+                  { key: 'rooster' as const, label: '公雞' },
+                  { key: 'hen' as const, label: '母雞' },
+                ]).map((v) => {
+                  const active = birdVariant === v.key;
+                  return (
+                    <button
+                      key={v.key}
+                      onClick={() => setBirdVariant(v.key)}
+                      aria-pressed={active}
+                      data-testid={`bird-${v.key}`}
+                      style={{
+                        padding: '6px 12px',
+                        border: active ? '2px solid #1976d2' : '2px solid rgba(0,0,0,0.15)',
+                        borderRadius: 8,
+                        background: active ? 'rgba(25,118,210,0.1)' : 'white',
+                        cursor: 'pointer',
+                        fontWeight: active ? 600 : 400,
+                        fontSize: 12,
+                      }}
+                    >
+                      {v.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>
@@ -955,7 +1201,7 @@ export default function App() {
             >
               PixelLab AI
             </a>
-            以 v0 為 reference 生成的 chibi）／<strong>v3</strong>（PixelLab Vadimsadovski 風格 10 物種包：貓、狗、兔、鳥、蛙、熊、龍、史萊姆、幽靈、章魚；可即時切換 8 種 PetPalettes 配色 + 5 種花紋（Plain／條紋／斑點／雙色／星印））。連線時對方寵物會隨機選擇其他物種。Production 階段美術將另行決定。
+            以 v0 為 reference 生成的 chibi）／<strong>v3</strong>（10 物種 × 8 配色 × 5 花紋 × 3 階段 + 🔀 隨機；物種：貓、狗、兔、鳥、蛙、熊、龍、史萊姆、幽靈、章魚；生命階段：幼體／成熟體／老年體（鳥的成熟體再分公雞 / 母雞，幽靈僅成熟體））。連線時對方寵物會隨機選擇其他物種與階段。Production 階段美術將另行決定；章魚預計於 Phase 3 替換為龍貓。
           </div>
           <button
             onClick={dismissScopeBanner}

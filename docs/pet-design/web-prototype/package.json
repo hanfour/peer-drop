@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "import-species": "node ../ai-brief/scripts/import-pixellab-species.mjs ../ai-brief/species-zips/"
+    "import-species": "node ../ai-brief/scripts/import-pixellab-species.mjs ../ai-brief/species-zips/ ../ai-brief/species-zips-stages/",
+    "phase2-grid": "node scripts/compose-phase2-grid.mjs"
   },
   "dependencies": {
     "react": "^19.2.5",

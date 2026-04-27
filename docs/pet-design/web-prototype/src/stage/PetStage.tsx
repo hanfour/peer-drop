@@ -17,10 +17,28 @@ export type StagePet = {
   pattern?: Pattern;
   /** Per-pet seed feeding the pattern's PRNG (stable identity). */
   seed?: number;
+  /**
+   * Source-frame row index (0 = top) of the sprite's bottom-most
+   * non-transparent pixel — i.e. the "feet" line that should sit on
+   * `STAGE_GROUND_Y`. When present, PetStage bottom-anchors the sprite:
+   *
+   *   canvasTop = STAGE_GROUND_Y - groundOffsetY * scale
+   *
+   * so a tiny bird (small scale) and a chunky bear (large scale) both
+   * touch the ground regardless of `displayScale`. When omitted, falls
+   * back to the legacy `top:60%` behaviour for v0/v1/v2 sprites.
+   */
+  groundOffsetY?: number;
 };
 
 const STAGE_W = 480;
 const STAGE_H = 240;
+/**
+ * Y pixel where pet feet should rest. The stage's horizon/grass line is
+ * at 70% (= 168px); we anchor a couple of pixels below so feet visually
+ * sit *into* the grass tufts rather than floating on the horizon line.
+ */
+const STAGE_GROUND_Y = Math.round(STAGE_H * 0.74); // ≈178px
 
 /**
  * Pixel-art stage scene: sky gradient, drifting clouds, a soft sun,
@@ -152,49 +170,81 @@ export function PetStage({
       {/* Grass tufts band — repeating pixel pattern stamped along the horizon */}
       <GrassTufts />
 
-      {/* Pet sprites. */}
-      {pets.map((p) => (
-        <div
-          key={p.id}
-          onClick={p.onClick}
-          style={{
-            position: 'absolute',
-            left: `${p.xPercent}%`,
-            top: '60%',
-            transform: `translate(-50%, ${bobY}px)`,
-            transition:
-              'transform 1s ease-in-out, left 1.5s cubic-bezier(0.22, 1, 0.36, 1)',
-            cursor: p.onClick ? 'pointer' : 'default',
-          }}
-        >
-          {/* Drop shadow per pet */}
+      {/* Pet sprites. Bottom-anchored: when a pet supplies `groundOffsetY`
+          the canvas top is computed so the sprite's feet row lands exactly
+          on STAGE_GROUND_Y, regardless of scale. Otherwise we fall back
+          to the legacy `top:60%` placement (v0/v1/v2). */}
+      {pets.map((p) => {
+        const scale = p.scale ?? 8;
+        const spriteSize = p.frame?.length ?? 0;
+        const canvasH = spriteSize * scale;
+        const useBottomAnchor = typeof p.groundOffsetY === 'number';
+        // groundOffsetY is the source-frame row index of the feet (0 = top).
+        // The pixel offset of the feet from the canvas top is
+        //   feetPxFromTop = (groundOffsetY + 1) * scale
+        // (+1 so the bottom of the feet pixel — not its top — lands on the
+        // ground; without +1 the bottom row of pixels would sit one pixel
+        // below the line.) The canvas top is then
+        //   canvasTop = STAGE_GROUND_Y - feetPxFromTop
+        const feetPxFromTop = useBottomAnchor
+          ? ((p.groundOffsetY as number) + 1) * scale
+          : 0;
+        const canvasTopPx = useBottomAnchor
+          ? STAGE_GROUND_Y - feetPxFromTop
+          : 0;
+        // Drop shadow Y in canvas-local pixels — anchor to the feet line
+        // so it sits under the sprite regardless of scale.
+        const shadowTopPx = useBottomAnchor
+          ? feetPxFromTop - 6
+          : null;
+        return (
           <div
+            key={p.id}
+            onClick={p.onClick}
             style={{
               position: 'absolute',
-              left: '50%',
-              top: '76%',
-              transform: 'translateX(-50%)',
-              width: 96,
-              height: 14,
-              background:
-                'radial-gradient(ellipse at center, rgba(0,0,0,0.28), transparent 70%)',
-              filter: 'blur(2px)',
-              pointerEvents: 'none',
+              left: `${p.xPercent}%`,
+              top: useBottomAnchor ? canvasTopPx : '60%',
+              transform: `translate(-50%, ${bobY}px)`,
+              transition:
+                'transform 1s ease-in-out, left 1.5s cubic-bezier(0.22, 1, 0.36, 1)',
+              cursor: p.onClick ? 'pointer' : 'default',
+              // Width matches the canvas so left:x% + translate(-50%)
+              // centers correctly even when the canvas pixels are
+              // smaller than 96px.
+              width: useBottomAnchor ? canvasH : undefined,
+              height: useBottomAnchor ? canvasH : undefined,
             }}
-          />
-          <SpriteCanvas
-            frame={p.frame}
-            palette={p.palette}
-            scale={p.scale}
-            flipped={p.flipped}
-            pattern={p.pattern}
-            seed={p.seed}
-          />
-          {dialogueByPet?.[p.id] && (
-            <DialogueBubble key={dialogueByPet[p.id]} text={dialogueByPet[p.id]} />
-          )}
-        </div>
-      ))}
+          >
+            {/* Drop shadow per pet */}
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: shadowTopPx ?? '76%',
+                transform: 'translateX(-50%)',
+                width: useBottomAnchor ? Math.max(56, canvasH * 0.6) : 96,
+                height: 14,
+                background:
+                  'radial-gradient(ellipse at center, rgba(0,0,0,0.28), transparent 70%)',
+                filter: 'blur(2px)',
+                pointerEvents: 'none',
+              }}
+            />
+            <SpriteCanvas
+              frame={p.frame}
+              palette={p.palette}
+              scale={p.scale}
+              flipped={p.flipped}
+              pattern={p.pattern}
+              seed={p.seed}
+            />
+            {dialogueByPet?.[p.id] && (
+              <DialogueBubble key={dialogueByPet[p.id]} text={dialogueByPet[p.id]} />
+            )}
+          </div>
+        );
+      })}
 
       {/* Optional progress bar slot (rendered above pets, below mood overlay) */}
       {progressBar}

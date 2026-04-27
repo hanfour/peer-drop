@@ -2,26 +2,48 @@
 // Batch-import 10 PixelLab species ZIPs into the prototype's
 // docs/pet-design/web-prototype/public/data/species/ folder.
 //
-// Differences from import-pixellab.mjs (single-character v2 importer):
-//   1) Operates over a directory of ZIPs (cat.zip, dog.zip, ...).
-//   2) Quantizes each PNG to the *species's PetPalette* (6 slots: outline,
-//      primary, secondary, highlight, accent, pattern) instead of an
-//      ad-hoc top-12 frequency palette. This means every species's JSON
-//      uses palette indices 1..6 — swap the hex values in the palette
-//      block at render time and the sprite is recoloured. Index 0 is
-//      always transparent.
-//   3) Source size is 48×48 (PixelLab "Quadruped" / "Mannequin"
-//      template). We keep the sprite at 48 — no downscale needed since
-//      the prototype's renderer is size-agnostic.
-//   4) For each species we mirror horizontally so the WEST rotation
-//      becomes the East-facing baseline (matches v1/v2 convention).
+// Phase 2 (lifecycle): processes BOTH input directories so each species
+// JSON gets a `stages` map (baby / adult / elder; bird splits adult into
+// rooster + hen; ghost stays single-stage).
+//
+//   docs/pet-design/ai-brief/species-zips/         → adult stage of each species
+//   docs/pet-design/ai-brief/species-zips-stages/  → baby/elder/rooster/hen
+//
+// Output schema (per-species JSON):
+//   {
+//     species, version, size, paletteIndex, paletteName, palette, ...,
+//     displayScales:    { baby: 0.7, adult: 1.0, elder: 0.85 },
+//     groundOffsetsY:   { baby: 31, adult: 33, elder: 32 },
+//     stages: {
+//       baby:  { idle: [...], walking: [...], happy: [...], tapReact: [...], scared: [...] },
+//       adult: { ... },
+//       elder: { ... }
+//     },
+//     // Back-compat: `baby` field still points at the adult stage frames so
+//     // older v0/v1/v2 code paths and any test that reaches in for
+//     // `data.baby.idle` keep working.
+//     baby: { idle, walking, ... }
+//   }
+//
+// Bird is special:
+//   stages: { baby (= chick from species-zips/bird.zip),
+//             'adult-rooster', 'adult-hen', elder }
+//
+// Ghost stays single-stage: stages: { adult: ... }
+//
+// Differences from the previous single-character v2 importer:
+//   1) Operates over directories of ZIPs.
+//   2) Quantizes each PNG to the species's PetPalette (6 slots).
+//   3) Source size is 48×48; we keep it (renderer is size-agnostic).
+//   4) Mirrors WEST horizontally so the East-facing baseline matches v1/v2.
 //   5) Walking source: `animations/animation-*/west/frame_*.png` if
 //      present, else fall back to a single-frame `rotations/west.png`.
-//      All 10 ZIPs in the initial batch are static-rotations only; cat
-//      and dog ZIPs may be re-exported later with walk animations.
+//   6) Computes per-stage `groundOffsetY` = max y of any non-transparent
+//      pixel across ALL rotations (after quantization) so the renderer
+//      can bottom-anchor sprites and they always sit feet-on-ground.
 //
-// CLI:
-//   node import-pixellab-species.mjs <zips-dir>
+// CLI: pure positional arguments, both optional (defaults to repo paths).
+//   node import-pixellab-species.mjs [adults-zips-dir] [stages-zips-dir]
 //
 // License: PixelLab TOS — output may be used commercially in user
 // projects, may NOT be used to train models.
@@ -36,6 +58,8 @@ import sharp from 'sharp';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataRoot = path.resolve(__dirname, '../../web-prototype/public/data');
 const speciesDir = path.join(dataRoot, 'species');
+const defaultAdultsDir = path.resolve(__dirname, '../species-zips');
+const defaultStagesDir = path.resolve(__dirname, '../species-zips-stages');
 
 const ALPHA_THRESHOLD = 128;
 
@@ -67,7 +91,7 @@ const SLOT_ORDER = ['outline', 'primary', 'secondary', 'highlight', 'accent', 'p
 // the default colour the species ships with.
 const SPECIES_PALETTE = {
   cat: 0,      // Orange — orange tabby
-  dog: 0,      // Orange — shiba-inu prompt was orange (per task spec)
+  dog: 0,      // Orange — shiba-inu prompt was orange
   rabbit: 6,   // Slate Gray — neutral grey for white-ish primary
   dragon: 3,   // Fresh Green
   bear: 5,     // Caramel — brown bear
@@ -92,22 +116,40 @@ const SPECIES_DISPLAY = {
   octopus: { en: 'Octopus', zh: '章魚' },
 };
 
-// Per-species visual scale multiplier for relative-size realism on stage.
-// Cat is the baseline (1.0); other species scale up or down so a bear reads
-// noticeably bigger than a cat, a bird/frog noticeably smaller, etc. Applied
-// at render time on top of the version-derived `renderScale` (so v0/v1/v2
-// remain unaffected — only v3 reads `displayScale`).
-const SPECIES_DISPLAY_SCALE = {
-  cat: 1.0,
-  dog: 1.05,
-  rabbit: 0.75,
-  bird: 0.6,
-  frog: 0.65,
-  bear: 1.4,
-  dragon: 1.0,
-  slime: 0.8,
-  ghost: 0.85,
-  octopus: 0.95,
+// Per-stage display scale. Cat (adult) is the 1.0 baseline; everything
+// else scales up/down so a bear reads bigger than a cat, a baby smaller
+// than its adult, an octopus elder LARGER than its adult, etc.
+//
+// The renderer multiplies the version-derived `renderScale` by the active
+// stage's value here. v0/v1/v2 don't read stages so they're unaffected.
+const SPECIES_STAGE_SCALES = {
+  cat:    { baby: 0.7,  adult: 1.0,  elder: 0.85 },
+  dog:    { baby: 0.75, adult: 1.05, elder: 0.95 },
+  rabbit: { baby: 0.55, adult: 0.75, elder: 0.7 },
+  // Bird's "baby" is the chick from species-zips/bird.zip; "adult" splits
+  // into rooster / hen sub-variants.
+  bird:   { baby: 0.5,  'adult-rooster': 0.8, 'adult-hen': 0.8, elder: 0.7 },
+  frog:   { baby: 0.45, adult: 0.65, elder: 0.6 },
+  bear:   { baby: 0.9,  adult: 1.4,  elder: 1.25 },
+  dragon: { baby: 0.65, adult: 1.0,  elder: 0.95 },
+  slime:  { baby: 0.55, adult: 0.8,  elder: 0.65 },
+  // Ghost is intentionally single-stage.
+  ghost:  { adult: 0.85 },
+  // Octopus elder is LARGER than adult (giant ancient cephalopod).
+  octopus:{ baby: 0.6,  adult: 0.95, elder: 1.15 },
+};
+
+// Maps a stage ZIP filename suffix (after `<species>-`) to its canonical
+// stage key in the output JSON. e.g. cat-baby.zip → 'baby',
+// bird-rooster.zip → 'adult-rooster'.
+const STAGE_SUFFIX_TO_KEY = {
+  baby: 'baby',
+  cub: 'baby',
+  hatchling: 'baby',
+  tadpole: 'baby',
+  rooster: 'adult-rooster',
+  hen: 'adult-hen',
+  elder: 'elder',
 };
 
 // ---------------------------------------------------------------------------
@@ -185,6 +227,26 @@ function mirrorGridHorizontal(grid) {
   return grid.map((row) => row.slice().reverse());
 }
 
+/**
+ * Bottom-most non-transparent row index in a grid (0 = top row).
+ * Returns -1 if the grid is fully transparent.
+ *
+ * Public so the importer's grounding pipeline can run it across all
+ * frames+rotations and take max — chunky sprites with detached paws or
+ * trailing accessories (e.g. bear's separated paws) need the
+ * worst-case "feet" row to anchor at, otherwise the rim-light pass and
+ * the sprite body land above ground.
+ */
+function bottomNonTransparentRow(grid) {
+  for (let y = grid.length - 1; y >= 0; y--) {
+    const row = grid[y];
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] !== 0) return y;
+    }
+  }
+  return -1;
+}
+
 function buildPaletteJson(palette) {
   // Slot 0 = transparent; slots 1..6 follow SLOT_ORDER.
   const out = { 0: 'transparent' };
@@ -194,12 +256,14 @@ function buildPaletteJson(palette) {
   return out;
 }
 
-async function importSpecies(zipPath, species) {
-  const paletteIdx = SPECIES_PALETTE[species];
-  if (paletteIdx == null) throw new Error(`no palette mapping for species "${species}"`);
-  const palette = PET_PALETTES[paletteIdx];
-  const quantize = buildQuantizer(palette);
-
+/**
+ * Extract a single stage's frame set from one PixelLab ZIP (or extracted
+ * dir). Returns the per-action grids and the computed groundOffsetY.
+ *
+ * Pure: same input → same output. The caller composes per-stage frame
+ * sets into the final species JSON.
+ */
+async function extractStageFromZip(zipPath, quantize) {
   const { dir, cleanup } = ensureExtractedDir(zipPath);
   try {
     const metaPath = path.join(dir, 'metadata.json');
@@ -214,8 +278,7 @@ async function importSpecies(zipPath, species) {
       return p;
     };
 
-    // Idle/fallback source: rotations/west.png (after mirror → faces East,
-    // matching the prototype's flipped flag convention).
+    // Idle/fallback source: rotations/west.png (after mirror → faces East).
     const westPath = resolveFrame(meta.frames.rotations.west);
 
     // Walking source: animation frames if present, else fall back to west.
@@ -227,60 +290,46 @@ async function importSpecies(zipPath, species) {
     }
     const walkingFromAnim = walkingPaths.length > 0;
 
-    // Load + quantize all needed PNGs.
-    const allPaths = walkingFromAnim ? [westPath, ...walkingPaths] : [westPath];
+    // Load + quantize all needed PNGs (idle + walking).
+    const renderPaths = walkingFromAnim ? [westPath, ...walkingPaths] : [westPath];
     const buffersByPath = new Map();
-    for (const p of allPaths) {
+    for (const p of renderPaths) {
       buffersByPath.set(p, await loadRgba(p));
     }
-
     const quantizePath = (p) => {
       const { data, width: w, height: h } = buffersByPath.get(p);
       return mirrorGridHorizontal(quantizeBufferToGrid(data, w, h, quantize));
     };
 
     const idleGrid = quantizePath(westPath);
-    const walkingGrids = walkingFromAnim
-      ? walkingPaths.map(quantizePath)
-      : [idleGrid];
+    const walkingGrids = walkingFromAnim ? walkingPaths.map(quantizePath) : [idleGrid];
 
-    const out = {
-      version: 'v3',
-      species,
-      size: width,
-      groundY: Math.round(height * 0.875), // ~42 of 48
-      meta: {
-        groundY: Math.round(height * 0.875),
-        eyeAnchor: { x: Math.round(width / 2), y: Math.round(height * 0.30) },
-      },
-      paletteIndex: paletteIdx,
-      paletteName: palette.name,
-      _credit: {
-        asset: `PixelLab AI ${species} (${meta.character?.template_id ?? 'unknown template'})`,
-        source: 'https://pixellab.ai',
-        license: 'PixelLab Terms of Service — output may be used commercially in user projects. May NOT be used to train models.',
-        prompt: meta.character?.prompt,
-        sourceCharacterId: meta.character?.id,
-        templateId: meta.character?.template_id,
-        generatedAt: meta.character?.created_at,
-      },
-      _notes: {
-        importer: 'docs/pet-design/ai-brief/scripts/import-pixellab-species.mjs',
-        size: `${width}×${height} (PixelLab native, no downscale)`,
-        paletteScheme: `Quantised to PetPalettes index ${paletteIdx} (${palette.name}). Slots: 1=outline 2=primary 3=secondary 4=highlight 5=accent 6=pattern. Swap the palette block at render time to recolour.`,
-        frameSourceMapping: {
-          idle: 'rotations/west.png (mirrored → East-facing)',
-          walking: walkingFromAnim
-            ? `animations/${animKey}/west/frame_*.png (${walkingPaths.length} frames, mirrored)`
-            : 'rotations/west.png (single-frame fallback — no walk animation in source ZIP)',
-          happy: 'rotations/west.png (single-frame fallback)',
-          tapReact: 'rotations/west.png (single-frame fallback)',
-          scared: 'rotations/west.png (single-frame fallback)',
-        },
-        mirrored: 'All frames mirrored horizontally during import (East-facing baseline; PixelLab west.png faces left).',
-      },
-      palette: buildPaletteJson(palette),
-      baby: {
+    // Ground-offset detection: scan ALL rotations (not just the rendered
+    // west/walking subset) and take the maximum bottom-most-y. Reason:
+    // some species have asymmetric silhouettes (e.g. bear with one paw
+    // dropping further) — the worst-case across rotations is the "feet"
+    // line we want to anchor against.
+    let groundOffsetY = -1;
+    const rotPaths = Object.values(meta.frames.rotations).map(resolveFrame);
+    for (const p of rotPaths) {
+      const buf = buffersByPath.get(p) ?? (await loadRgba(p));
+      const grid = mirrorGridHorizontal(
+        quantizeBufferToGrid(buf.data, buf.width, buf.height, quantize),
+      );
+      const y = bottomNonTransparentRow(grid);
+      if (y > groundOffsetY) groundOffsetY = y;
+    }
+    if (groundOffsetY < 0) groundOffsetY = Math.round(height * 0.875);
+
+    return {
+      width,
+      height,
+      groundOffsetY,
+      walkingFromAnim,
+      animKey,
+      walkingFrames: walkingGrids.length,
+      meta,
+      frames: {
         idle: [idleGrid],
         walking: walkingGrids,
         happy: [idleGrid],
@@ -288,48 +337,198 @@ async function importSpecies(zipPath, species) {
         scared: [idleGrid],
       },
     };
-
-    fs.mkdirSync(speciesDir, { recursive: true });
-    const outPath = path.join(speciesDir, `${species}.json`);
-    fs.writeFileSync(outPath, JSON.stringify(out, null, 0) + '\n');
-    return {
-      species,
-      paletteIdx,
-      paletteName: palette.name,
-      walkingFrames: walkingGrids.length,
-      walkingFromAnim,
-      outPath,
-    };
   } finally {
     cleanup();
   }
 }
 
-async function main() {
-  const inputArg = process.argv[2];
-  if (!inputArg) {
-    console.error('Usage: node import-pixellab-species.mjs <zips-dir>');
-    process.exit(1);
+/**
+ * List all *.zip files in a directory whose filename basename starts
+ * with `<species>-`. Returns map of suffix → zip path. e.g. for `cat`
+ * with stages dir, returns { 'baby': '.../cat-baby.zip', 'elder': ... }.
+ */
+function findStageZips(stagesDir, species) {
+  if (!fs.existsSync(stagesDir)) return {};
+  const out = {};
+  const prefix = `${species}-`;
+  for (const f of fs.readdirSync(stagesDir)) {
+    if (!f.toLowerCase().endsWith('.zip')) continue;
+    const base = path.basename(f, '.zip').toLowerCase();
+    if (!base.startsWith(prefix)) continue;
+    const suffix = base.slice(prefix.length);
+    out[suffix] = path.join(stagesDir, f);
   }
-  const zipsDir = path.resolve(process.cwd(), inputArg);
-  if (!fs.existsSync(zipsDir) || !fs.statSync(zipsDir).isDirectory()) {
-    throw new Error(`expected directory, got: ${zipsDir}`);
+  return out;
+}
+
+async function importSpecies(adultZipPath, stagesDir, species) {
+  const paletteIdx = SPECIES_PALETTE[species];
+  if (paletteIdx == null) throw new Error(`no palette mapping for species "${species}"`);
+  const palette = PET_PALETTES[paletteIdx];
+  const quantize = buildQuantizer(palette);
+
+  // 1. Extract the adult stage from species-zips/<species>.zip.
+  const adultStage = await extractStageFromZip(adultZipPath, quantize);
+
+  // 2. Extract any auxiliary stages from species-zips-stages/.
+  const stageZips = findStageZips(stagesDir, species);
+  const auxStages = {};
+  for (const [suffix, zipPath] of Object.entries(stageZips)) {
+    auxStages[suffix] = await extractStageFromZip(zipPath, quantize);
   }
 
-  const zips = fs.readdirSync(zipsDir).filter((f) => f.toLowerCase().endsWith('.zip')).sort();
-  if (zips.length === 0) {
-    throw new Error(`no .zip files in ${zipsDir}`);
+  // 3. Compose per-stage frame map and per-stage groundOffsetY map.
+  //    Bird is special: its species-zips/bird.zip is actually the chick →
+  //    becomes the `baby` stage; rooster/hen ZIPs become the adult variants.
+  //    Ghost has no aux stages → single-stage adult.
+  const stages = {};
+  const groundOffsetsY = {};
+
+  if (species === 'bird') {
+    // Adult ZIP is the chick (= baby).
+    stages.baby = adultStage.frames;
+    groundOffsetsY.baby = adultStage.groundOffsetY;
+
+    if (auxStages.rooster) {
+      stages['adult-rooster'] = auxStages.rooster.frames;
+      groundOffsetsY['adult-rooster'] = auxStages.rooster.groundOffsetY;
+    }
+    if (auxStages.hen) {
+      stages['adult-hen'] = auxStages.hen.frames;
+      groundOffsetsY['adult-hen'] = auxStages.hen.groundOffsetY;
+    }
+    if (auxStages.elder) {
+      stages.elder = auxStages.elder.frames;
+      groundOffsetsY.elder = auxStages.elder.groundOffsetY;
+    }
+  } else {
+    // Default lifecycle: adult comes from species-zips/<species>.zip.
+    stages.adult = adultStage.frames;
+    groundOffsetsY.adult = adultStage.groundOffsetY;
+
+    // Map any normalised baby suffix (baby / cub / hatchling / tadpole) → baby.
+    const babySuffixes = ['baby', 'cub', 'hatchling', 'tadpole'];
+    for (const suf of babySuffixes) {
+      if (auxStages[suf]) {
+        stages.baby = auxStages[suf].frames;
+        groundOffsetsY.baby = auxStages[suf].groundOffsetY;
+        break;
+      }
+    }
+    if (auxStages.elder) {
+      stages.elder = auxStages.elder.frames;
+      groundOffsetsY.elder = auxStages.elder.groundOffsetY;
+    }
   }
-  console.log(`Found ${zips.length} ZIP(s) in ${zipsDir}`);
+
+  const stageScales = SPECIES_STAGE_SCALES[species] ?? { adult: 1.0 };
+  const adultMeta = adultStage.meta;
+  const width = adultStage.width;
+  const height = adultStage.height;
+
+  const out = {
+    version: 'v3',
+    species,
+    size: width,
+    groundY: Math.round(height * 0.875), // ~42 of 48 (sceneographic — not the per-sprite anchor)
+    meta: {
+      groundY: Math.round(height * 0.875),
+      eyeAnchor: { x: Math.round(width / 2), y: Math.round(height * 0.30) },
+    },
+    paletteIndex: paletteIdx,
+    paletteName: palette.name,
+    displayScales: stageScales,
+    /**
+     * Per-stage feet-row index (0 = top row). The renderer must compute
+     *   effectiveCanvasY = stageGroundY - (groundOffsetY * scale)
+     * so the sprite's bottom-most non-transparent pixel lands exactly on
+     * the stage's ground line, regardless of displayScale.
+     *
+     * Computed from the worst-case bottom row across all 8 rotations of
+     * each stage — handles asymmetric silhouettes (chunky bear paws,
+     * dragon tail tips, etc.).
+     */
+    groundOffsetsY,
+    _credit: {
+      asset: `PixelLab AI ${species} (${adultMeta.character?.template_id ?? 'unknown template'})`,
+      source: 'https://pixellab.ai',
+      license: 'PixelLab Terms of Service — output may be used commercially in user projects. May NOT be used to train models.',
+      prompt: adultMeta.character?.prompt,
+      sourceCharacterId: adultMeta.character?.id,
+      templateId: adultMeta.character?.template_id,
+      generatedAt: adultMeta.character?.created_at,
+    },
+    _notes: {
+      importer: 'docs/pet-design/ai-brief/scripts/import-pixellab-species.mjs',
+      size: `${width}×${height} (PixelLab native, no downscale)`,
+      paletteScheme: `Quantised to PetPalettes index ${paletteIdx} (${palette.name}). Slots: 1=outline 2=primary 3=secondary 4=highlight 5=accent 6=pattern. Swap the palette block at render time to recolour.`,
+      stages: Object.keys(stages),
+      mirrored: 'All frames mirrored horizontally during import (East-facing baseline; PixelLab west.png faces left).',
+      groundOffsetsY: 'Per-stage feet-row index from the top of the 48-row canvas — used by PetStage to bottom-anchor sprites so all displayScales sit on the ground line correctly.',
+    },
+    palette: buildPaletteJson(palette),
+    stages,
+    /**
+     * Back-compat: tests + v0/v1/v2 paths reach into `data.baby.idle`. We
+     * mirror the canonical "default" stage here so they keep working
+     * without any code change. The default stage is:
+     *   - bird → 'adult-rooster' (or whichever adult variant we ship first)
+     *   - everything else → 'adult'
+     */
+    baby:
+      species === 'bird'
+        ? stages['adult-rooster'] ?? stages.baby
+        : stages.adult,
+  };
+
+  fs.mkdirSync(speciesDir, { recursive: true });
+  const outPath = path.join(speciesDir, `${species}.json`);
+  fs.writeFileSync(outPath, JSON.stringify(out, null, 0) + '\n');
+
+  return {
+    species,
+    paletteIdx,
+    paletteName: palette.name,
+    stages: Object.keys(stages),
+    walkingFrames: adultStage.walkingFrames,
+    walkingFromAnim: adultStage.walkingFromAnim,
+    outPath,
+  };
+}
+
+async function main() {
+  const adultsDir = path.resolve(process.cwd(), process.argv[2] ?? defaultAdultsDir);
+  const stagesDir = path.resolve(process.cwd(), process.argv[3] ?? defaultStagesDir);
+  if (!fs.existsSync(adultsDir) || !fs.statSync(adultsDir).isDirectory()) {
+    throw new Error(`adults dir not found: ${adultsDir}`);
+  }
+  if (!fs.existsSync(stagesDir)) {
+    console.warn(`(stages dir missing — proceeding with adult-only): ${stagesDir}`);
+  }
+
+  const zips = fs.readdirSync(adultsDir).filter((f) => f.toLowerCase().endsWith('.zip')).sort();
+  if (zips.length === 0) {
+    throw new Error(`no .zip files in ${adultsDir}`);
+  }
+  console.log(`Adults dir:  ${adultsDir} (${zips.length} ZIP${zips.length === 1 ? '' : 's'})`);
+  console.log(`Stages dir:  ${stagesDir}`);
 
   const indexEntries = [];
   for (const z of zips) {
     const species = path.basename(z, '.zip').toLowerCase();
     process.stdout.write(`  • ${species.padEnd(8)} … `);
     try {
-      const result = await importSpecies(path.join(zipsDir, z), species);
+      const result = await importSpecies(path.join(adultsDir, z), stagesDir, species);
       const animTag = result.walkingFromAnim ? `walk:${result.walkingFrames}f` : 'walk:fallback';
-      console.log(`palette=${result.paletteIdx} (${result.paletteName})  ${animTag}`);
+      console.log(
+        `palette=${result.paletteIdx} (${result.paletteName})  ${animTag}  stages=[${result.stages.join(', ')}]`,
+      );
+      const stageScales = SPECIES_STAGE_SCALES[species] ?? { adult: 1.0 };
+      // Default-stage scale + key for legacy index field (`displayScale`) and
+      // for App.tsx fallbacks. Bird's default is 'adult-rooster'.
+      const defaultStageKey =
+        species === 'bird' ? 'adult-rooster' : 'adult';
+      const defaultDisplayScale = stageScales[defaultStageKey] ?? 1.0;
       indexEntries.push({
         species,
         displayEn: SPECIES_DISPLAY[species]?.en ?? species,
@@ -338,7 +537,12 @@ async function main() {
         defaultPaletteName: result.paletteName,
         path: `species/${species}.json`,
         hasWalkAnimation: result.walkingFromAnim,
-        displayScale: SPECIES_DISPLAY_SCALE[species] ?? 1.0,
+        // Default-stage scale, kept for back-compat with the v3 picker.
+        displayScale: defaultDisplayScale,
+        stages: result.stages,
+        // Full per-stage scale table — App.tsx reads this to size pets per stage.
+        displayScales: stageScales,
+        defaultStage: defaultStageKey,
       });
     } catch (e) {
       console.error(`FAILED: ${e.message}`);
@@ -356,7 +560,7 @@ async function main() {
 
   const indexJson = {
     version: 'v3',
-    note: 'PixelLab AI Vadimsadovski-style species pack. All sprites are 48×48 with 6-slot PetPalettes quantization (slots 1..6 = outline/primary/secondary/highlight/accent/pattern). Swap the palette block at runtime to recolour. Each species ships a `displayScale` multiplier (cat=1.0 baseline) so relative on-stage sizes are visually realistic — bear is largest, bird/frog smallest.',
+    note: 'PixelLab AI Vadimsadovski-style species pack with multi-stage lifecycle. Each species ships baby/adult/elder stages (bird splits adult into rooster/hen; ghost is single-stage). Slots 1..6 = outline/primary/secondary/highlight/accent/pattern. Per-stage `displayScales` and `groundOffsetsY` drive bottom-anchored rendering so all sizes sit on the ground line correctly.',
     palettes: PET_PALETTES.map((p, i) => ({
       index: i,
       name: p.name,

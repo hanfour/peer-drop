@@ -1,6 +1,6 @@
 {
   "version": "v3",
-  "note": "PixelLab AI Vadimsadovski-style species pack. All sprites are 48×48 with 6-slot PetPalettes quantization (slots 1..6 = outline/primary/secondary/highlight/accent/pattern). Swap the palette block at runtime to recolour. Each species ships a `displayScale` multiplier (cat=1.0 baseline) so relative on-stage sizes are visually realistic — bear is largest, bird/frog smallest.",
+  "note": "PixelLab AI Vadimsadovski-style species pack with multi-stage lifecycle. Each species ships baby/adult/elder stages (bird splits adult into rooster/hen; ghost is single-stage). Slots 1..6 = outline/primary/secondary/highlight/accent/pattern. Per-stage `displayScales` and `groundOffsetsY` drive bottom-anchored rendering so all sizes sit on the ground line correctly.",
   "palettes": [
     {
       "index": 0,
@@ -92,7 +92,18 @@
       "defaultPaletteName": "Orange",
       "path": "species/cat.json",
       "hasWalkAnimation": true,
-      "displayScale": 1
+      "displayScale": 1,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.7,
+        "adult": 1,
+        "elder": 0.85
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "dog",
@@ -102,7 +113,18 @@
       "defaultPaletteName": "Orange",
       "path": "species/dog.json",
       "hasWalkAnimation": false,
-      "displayScale": 1.05
+      "displayScale": 1.05,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.75,
+        "adult": 1.05,
+        "elder": 0.95
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "rabbit",
@@ -112,7 +134,18 @@
       "defaultPaletteName": "Slate Gray",
       "path": "species/rabbit.json",
       "hasWalkAnimation": false,
-      "displayScale": 0.75
+      "displayScale": 0.75,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.55,
+        "adult": 0.75,
+        "elder": 0.7
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "bird",
@@ -122,7 +155,20 @@
       "defaultPaletteName": "Lemon Yellow",
       "path": "species/bird.json",
       "hasWalkAnimation": false,
-      "displayScale": 0.6
+      "displayScale": 0.8,
+      "stages": [
+        "baby",
+        "adult-rooster",
+        "adult-hen",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.5,
+        "adult-rooster": 0.8,
+        "adult-hen": 0.8,
+        "elder": 0.7
+      },
+      "defaultStage": "adult-rooster"
     },
     {
       "species": "frog",
@@ -132,7 +178,18 @@
       "defaultPaletteName": "Fresh Green",
       "path": "species/frog.json",
       "hasWalkAnimation": false,
-      "displayScale": 0.65
+      "displayScale": 0.65,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.45,
+        "adult": 0.65,
+        "elder": 0.6
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "bear",
@@ -142,7 +199,18 @@
       "defaultPaletteName": "Caramel",
       "path": "species/bear.json",
       "hasWalkAnimation": false,
-      "displayScale": 1.4
+      "displayScale": 1.4,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.9,
+        "adult": 1.4,
+        "elder": 1.25
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "dragon",
@@ -152,7 +220,18 @@
       "defaultPaletteName": "Fresh Green",
       "path": "species/dragon.json",
       "hasWalkAnimation": false,
-      "displayScale": 1
+      "displayScale": 1,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.65,
+        "adult": 1,
+        "elder": 0.95
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "slime",
@@ -162,7 +241,18 @@
       "defaultPaletteName": "Fresh Green",
       "path": "species/slime.json",
       "hasWalkAnimation": false,
-      "displayScale": 0.8
+      "displayScale": 0.8,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.55,
+        "adult": 0.8,
+        "elder": 0.65
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "ghost",
@@ -172,7 +262,14 @@
       "defaultPaletteName": "Slate Gray",
       "path": "species/ghost.json",
       "hasWalkAnimation": false,
-      "displayScale": 0.85
+      "displayScale": 0.85,
+      "stages": [
+        "adult"
+      ],
+      "displayScales": {
+        "adult": 0.85
+      },
+      "defaultStage": "adult"
     },
     {
       "species": "octopus",
@@ -182,7 +279,18 @@
       "defaultPaletteName": "Lavender",
       "path": "species/octopus.json",
       "hasWalkAnimation": false,
-      "displayScale": 0.95
+      "displayScale": 0.95,
+      "stages": [
+        "adult",
+        "baby",
+        "elder"
+      ],
+      "displayScales": {
+        "baby": 0.6,
+        "adult": 0.95,
+        "elder": 1.15
+      },
+      "defaultStage": "adult"
     }
   ]
 }
