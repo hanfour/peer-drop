@@ -72,7 +72,7 @@ export default function App() {
   const STAGE_H = 240;
 
   // v0 = original 16×16 production sprite (cat.json).
-  // v1 = new 32×32 chibi sprite (cat-v1.json) — see scripts/paint-v1-cat.mjs.
+  // v1 = 32×32 side-view sprite (cat-v1.json) — see scripts/import-sprite.mjs.
   // Default to v1 so the polished version shows first.
   type SpriteVersion = 'v0' | 'v1';
   const [spriteVersion, setSpriteVersion] = useState<SpriteVersion>('v1');
@@ -457,7 +457,7 @@ export default function App() {
           </h1>
           <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
             {spriteVersion === 'v1'
-              ? 'v1 — Tiny Cat Sprite (Segel, CC0) imported as 32×32 chibi placeholder'
+              ? 'v1 — Cat sprites (Shepardskin, CC0) imported as 32×32 side-view placeholder'
               : 'v0 — production 16×16 sprite baseline'}
           </p>
         </div>
@@ -496,7 +496,7 @@ export default function App() {
               fontWeight: spriteVersion === 'v1' ? 600 : 400,
             }}
           >
-            v1 (32×32 chibi)
+            v1 (32×32 side-view)
           </button>
         </div>
       </header>
@@ -525,12 +525,12 @@ export default function App() {
             請評估：見面動作編排、檔案傳輸反應、性格特徵滑桿、對話泡泡時機、場景視覺。
             Sprite 美術為占位素材（
             <a
-              href="https://opengameart.org/content/tiny-kitten-game-sprite"
+              href="https://opengameart.org/content/cat-sprites"
               target="_blank"
               rel="noreferrer"
               style={{ color: '#1976d2' }}
             >
-              Tiny Cat Sprite by Segel, CC0
+              Cat sprites by Shepardskin, CC0
             </a>
             ），production 階段將另行委託定製像素藝術，請忽略目前 sprite 的細節品質。
           </div>
