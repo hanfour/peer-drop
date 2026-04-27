@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "import-species": "node ../ai-brief/scripts/import-pixellab-species.mjs ../ai-brief/species-zips/"
   },
   "dependencies": {
     "react": "^19.2.5",

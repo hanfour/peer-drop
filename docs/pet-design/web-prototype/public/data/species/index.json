@@ -1,0 +1,178 @@
+{
+  "version": "v3",
+  "note": "PixelLab AI Vadimsadovski-style species pack. All sprites are 48×48 with 6-slot PetPalettes quantization (slots 1..6 = outline/primary/secondary/highlight/accent/pattern). Swap the palette block at runtime to recolour.",
+  "palettes": [
+    {
+      "index": 0,
+      "name": "Orange",
+      "outline": "#5C3A1E",
+      "primary": "#F4A041",
+      "secondary": "#FEDE8A",
+      "highlight": "#FFF5D6",
+      "accent": "#E85D3A",
+      "pattern": "#D4853A"
+    },
+    {
+      "index": 1,
+      "name": "Sky Blue",
+      "outline": "#2A4066",
+      "primary": "#6CB4EE",
+      "secondary": "#B8E0FF",
+      "highlight": "#E8F4FF",
+      "accent": "#3A7BD5",
+      "pattern": "#4A90D9"
+    },
+    {
+      "index": 2,
+      "name": "Lavender",
+      "outline": "#4A3560",
+      "primary": "#B08CD8",
+      "secondary": "#D8C0F0",
+      "highlight": "#F0E8FF",
+      "accent": "#8B5FC7",
+      "pattern": "#9B70D0"
+    },
+    {
+      "index": 3,
+      "name": "Fresh Green",
+      "outline": "#2D5A1E",
+      "primary": "#7EC850",
+      "secondary": "#B8E890",
+      "highlight": "#E0FFD0",
+      "accent": "#4CAF50",
+      "pattern": "#5DBF60"
+    },
+    {
+      "index": 4,
+      "name": "Cherry Pink",
+      "outline": "#6B3040",
+      "primary": "#F08080",
+      "secondary": "#FFB8C0",
+      "highlight": "#FFE8EC",
+      "accent": "#E85080",
+      "pattern": "#E86888"
+    },
+    {
+      "index": 5,
+      "name": "Caramel",
+      "outline": "#4A2810",
+      "primary": "#C87830",
+      "secondary": "#E8B878",
+      "highlight": "#FFF0D8",
+      "accent": "#A05828",
+      "pattern": "#B06838"
+    },
+    {
+      "index": 6,
+      "name": "Slate Gray",
+      "outline": "#2A2A3A",
+      "primary": "#7888A0",
+      "secondary": "#A8B8C8",
+      "highlight": "#D8E0E8",
+      "accent": "#5068A0",
+      "pattern": "#6078A8"
+    },
+    {
+      "index": 7,
+      "name": "Lemon Yellow",
+      "outline": "#5A5020",
+      "primary": "#E8D44A",
+      "secondary": "#F0E888",
+      "highlight": "#FFFFF0",
+      "accent": "#C8A830",
+      "pattern": "#D0B838"
+    }
+  ],
+  "species": [
+    {
+      "species": "cat",
+      "displayEn": "Cat",
+      "displayZh": "貓",
+      "defaultPaletteIndex": 0,
+      "defaultPaletteName": "Orange",
+      "path": "species/cat.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "dog",
+      "displayEn": "Dog",
+      "displayZh": "狗",
+      "defaultPaletteIndex": 0,
+      "defaultPaletteName": "Orange",
+      "path": "species/dog.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "rabbit",
+      "displayEn": "Rabbit",
+      "displayZh": "兔",
+      "defaultPaletteIndex": 6,
+      "defaultPaletteName": "Slate Gray",
+      "path": "species/rabbit.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "bird",
+      "displayEn": "Bird",
+      "displayZh": "鳥",
+      "defaultPaletteIndex": 7,
+      "defaultPaletteName": "Lemon Yellow",
+      "path": "species/bird.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "frog",
+      "displayEn": "Frog",
+      "displayZh": "蛙",
+      "defaultPaletteIndex": 3,
+      "defaultPaletteName": "Fresh Green",
+      "path": "species/frog.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "bear",
+      "displayEn": "Bear",
+      "displayZh": "熊",
+      "defaultPaletteIndex": 5,
+      "defaultPaletteName": "Caramel",
+      "path": "species/bear.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "dragon",
+      "displayEn": "Dragon",
+      "displayZh": "龍",
+      "defaultPaletteIndex": 3,
+      "defaultPaletteName": "Fresh Green",
+      "path": "species/dragon.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "slime",
+      "displayEn": "Slime",
+      "displayZh": "史萊姆",
+      "defaultPaletteIndex": 3,
+      "defaultPaletteName": "Fresh Green",
+      "path": "species/slime.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "ghost",
+      "displayEn": "Ghost",
+      "displayZh": "幽靈",
+      "defaultPaletteIndex": 6,
+      "defaultPaletteName": "Slate Gray",
+      "path": "species/ghost.json",
+      "hasWalkAnimation": false
+    },
+    {
+      "species": "octopus",
+      "displayEn": "Octopus",
+      "displayZh": "章魚",
+      "defaultPaletteIndex": 2,
+      "defaultPaletteName": "Lavender",
+      "path": "species/octopus.json",
+      "hasWalkAnimation": false
+    }
+  ]
+}

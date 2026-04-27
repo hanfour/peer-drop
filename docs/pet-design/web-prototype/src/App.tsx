@@ -19,6 +19,25 @@ const ACCENT: Record<TraitName, string> = {
   independent: 'rgba(220, 220, 230, 0.4)', // neutral gray
 };
 
+// Picker thumbnail emoji per species — keeps the picker readable without
+// having to load and paint 10 separate canvases. The actual sprite
+// renders on the stage.
+function speciesEmoji(species: string): string {
+  switch (species) {
+    case 'cat': return '🐱';
+    case 'dog': return '🐶';
+    case 'rabbit': return '🐰';
+    case 'bird': return '🐤';
+    case 'frog': return '🐸';
+    case 'bear': return '🐻';
+    case 'dragon': return '🐲';
+    case 'slime': return '🟢';
+    case 'ghost': return '👻';
+    case 'octopus': return '🐙';
+    default: return '❓';
+  }
+}
+
 export default function App() {
   const [data, setData] = useState<SpriteData | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
@@ -75,11 +94,108 @@ export default function App() {
   // v1 = 32×32 side-view sprite (cat-v1.json) — Shepardskin CC0, see scripts/import-sprite.mjs.
   // v2 = 32×32 chibi sprite (cat-v2.json) — PixelLab AI image-to-image of v0,
   //      see scripts/import-pixellab.mjs.
-  // Default to v2 so the latest iteration shows first.
-  type SpriteVersion = 'v0' | 'v1' | 'v2';
-  const [spriteVersion, setSpriteVersion] = useState<SpriteVersion>('v2');
+  // v3 = 48×48 PixelLab Vadimsadovski-style species pack (10 species ×
+  //      8 PetPalettes), see scripts/import-pixellab-species.mjs.
+  // Default to v3 so the new species/palette picker is visible first.
+  type SpriteVersion = 'v0' | 'v1' | 'v2' | 'v3';
+  const [spriteVersion, setSpriteVersion] = useState<SpriteVersion>('v3');
 
+  // ---- v3 species index + state -------------------------------------------
+  type SpeciesEntry = {
+    species: string;
+    displayEn: string;
+    displayZh: string;
+    defaultPaletteIndex: number;
+    defaultPaletteName: string;
+    path: string;
+    hasWalkAnimation: boolean;
+  };
+  type PaletteSwatch = {
+    index: number;
+    name: string;
+    outline: string;
+    primary: string;
+    secondary: string;
+    highlight: string;
+    accent: string;
+    pattern: string;
+  };
+  type SpeciesIndex = {
+    version: string;
+    palettes: PaletteSwatch[];
+    species: SpeciesEntry[];
+  };
+
+  const [speciesIndex, setSpeciesIndex] = useState<SpeciesIndex | null>(null);
+  const [selectedSpecies, setSelectedSpecies] = useState<string>('cat');
+  const [selectedPaletteIdx, setSelectedPaletteIdx] = useState<number>(0);
+  // When the user actively picks a palette, treat it as a per-species
+  // override; otherwise picking a new species snaps to that species's
+  // default palette. We track the last manual override so toggling
+  // species doesn't lose the user's intent unless the user *also* didn't
+  // touch the palette since switching.
+  const [paletteUserOverride, setPaletteUserOverride] = useState<boolean>(false);
+  // Peer pet's species/palette — chosen at "Connect peer" time so the
+  // peer reads as a different friend each time. Falls back to a fixed
+  // alt species ("dog") on first render.
+  const [peerSpecies, setPeerSpecies] = useState<string>('dog');
+  const [peerPaletteIdx, setPeerPaletteIdx] = useState<number>(0);
+  // Loaded sprite data for the peer (v3 only). When v3 is active and the
+  // peer species differs from the local species, we need a second
+  // SpriteData so the two pets can render different shapes simultaneously.
+  const [peerData, setPeerData] = useState<SpriteData | null>(null);
+
+  // Build a runtime palette `{0:'transparent', 1:outline, ..., 6:pattern}`
+  // from a PaletteSwatch entry. This is the live remap target — we never
+  // rewrite the species JSON; we only swap which palette block is fed to
+  // SpriteCanvas, which preserves the underlying quantised pixel grid.
+  const swatchToPalette = (s: PaletteSwatch): Palette => ({
+    0: 'transparent',
+    1: s.outline,
+    2: s.primary,
+    3: s.secondary,
+    4: s.highlight,
+    5: s.accent,
+    6: s.pattern,
+  });
+
+  // Load the v3 species index once (on first v3 mount).
   useEffect(() => {
+    if (spriteVersion !== 'v3') return;
+    if (speciesIndex) return;
+    fetch('/data/species/index.json')
+      .then((r) => r.json())
+      .then((j: SpeciesIndex) => {
+        setSpeciesIndex(j);
+        const cat = j.species.find((s) => s.species === 'cat');
+        if (cat) setSelectedPaletteIdx(cat.defaultPaletteIndex);
+        const dog = j.species.find((s) => s.species === 'dog');
+        if (dog) {
+          setPeerSpecies(dog.species);
+          setPeerPaletteIdx(dog.defaultPaletteIndex);
+        }
+      })
+      .catch(console.error);
+  }, [spriteVersion, speciesIndex]);
+
+  // Load the local pet sprite based on the active version + (for v3)
+  // the selected species.
+  useEffect(() => {
+    if (spriteVersion === 'v3') {
+      // Wait until species index is loaded so we know the path.
+      if (!speciesIndex) return;
+      const entry = speciesIndex.species.find((s) => s.species === selectedSpecies);
+      if (!entry) return;
+      loadSprite(`/data/${entry.path}`)
+        .then((d) => {
+          setData(d);
+          // Palette comes from the picker, not the JSON's inline palette.
+          const swatch = speciesIndex.palettes[selectedPaletteIdx];
+          if (swatch) setPalette(swatchToPalette(swatch));
+        })
+        .catch(console.error);
+      return;
+    }
     const url =
       spriteVersion === 'v2'
         ? '/data/cat-v2.json'
@@ -104,7 +220,30 @@ export default function App() {
         }
       })
       .catch(console.error);
-  }, [spriteVersion]);
+  }, [spriteVersion, selectedSpecies, selectedPaletteIdx, speciesIndex]);
+
+  // Load peer sprite data for v3. Triggered when peerSpecies changes.
+  useEffect(() => {
+    if (spriteVersion !== 'v3') {
+      setPeerData(null);
+      return;
+    }
+    if (!speciesIndex) return;
+    const entry = speciesIndex.species.find((s) => s.species === peerSpecies);
+    if (!entry) return;
+    loadSprite(`/data/${entry.path}`)
+      .then(setPeerData)
+      .catch(console.error);
+  }, [spriteVersion, peerSpecies, speciesIndex]);
+
+  // When the user re-picks a palette in v3, update only the local
+  // palette without re-fetching the sprite JSON (Task 3 step 3).
+  useEffect(() => {
+    if (spriteVersion !== 'v3') return;
+    if (!speciesIndex) return;
+    const swatch = speciesIndex.palettes[selectedPaletteIdx];
+    if (swatch) setPalette(swatchToPalette(swatch));
+  }, [selectedPaletteIdx, spriteVersion, speciesIndex]);
 
   // Re-roll the idle action whenever traits change so the user immediately
   // sees the effect of moving a slider, then re-roll again every 5s for
@@ -235,7 +374,27 @@ export default function App() {
   }, [peerPhase]);
 
   const onTogglePeer = () => {
-    setPeerPhase((p) => (p === 'absent' ? 'walking-in' : 'absent'));
+    setPeerPhase((p) => {
+      const next = p === 'absent' ? 'walking-in' : 'absent';
+      // When the peer enters from offscreen on v3, randomly pick a
+      // species different from the local pet (so the two pets visibly
+      // differ) and roll a random palette. This keeps the demo feeling
+      // social rather than mirror-image.
+      if (next === 'walking-in' && spriteVersion === 'v3' && speciesIndex) {
+        const others = speciesIndex.species.filter((s) => s.species !== selectedSpecies);
+        if (others.length > 0) {
+          const pick = others[Math.floor(Math.random() * others.length)];
+          setPeerSpecies(pick.species);
+          // 70% chance use species default palette, 30% chance random other.
+          if (Math.random() < 0.7) {
+            setPeerPaletteIdx(pick.defaultPaletteIndex);
+          } else {
+            setPeerPaletteIdx(Math.floor(Math.random() * speciesIndex.palettes.length));
+          }
+        }
+      }
+      return next;
+    });
   };
 
   // Ambient idle dialogue: every ~10s, if neither pet is in a beat,
@@ -345,13 +504,25 @@ export default function App() {
 
   const peerAction: string =
     peerForceAction ?? (peerPhase === 'walking-in' ? 'walking' : 'idle');
+  // For v3, the peer can be a different species — use peerData.baby
+  // when available, else fall back to the local sprite (v0/v1/v2 share
+  // the same single cat).
+  const peerSourceData = spriteVersion === 'v3' && peerData ? peerData : data;
   const peerFrames =
-    (data?.baby[peerAction] && data.baby[peerAction].length > 0
-      ? data.baby[peerAction]
-      : data?.baby.idle) ?? [];
+    (peerSourceData?.baby[peerAction] && peerSourceData.baby[peerAction].length > 0
+      ? peerSourceData.baby[peerAction]
+      : peerSourceData?.baby.idle) ?? [];
   // Slightly faster fps for the walking sprite reads better at speed.
   const peerFrameIdx = useFrameAnimation(peerFrames.length, peerAction === 'walking' ? 8 : 6);
   const safePeerIdx = peerFrames.length > 0 ? Math.min(peerFrameIdx, peerFrames.length - 1) : 0;
+
+  // Peer's effective palette — for v3 we compose it from peerPaletteIdx
+  // against the index.json swatch table; for v0/v1/v2 the peer shares
+  // the local palette (same cat).
+  const peerPalette: Palette | null =
+    spriteVersion === 'v3' && speciesIndex
+      ? swatchToPalette(speciesIndex.palettes[peerPaletteIdx])
+      : palette;
 
   const ready = data && palette && localFrames.length > 0;
 
@@ -397,10 +568,11 @@ export default function App() {
     }, 1500);
   };
 
-  // Derive scale from the sprite size so v0 (16×16) and v1 (32×32) both
-  // render at the same on-stage display size (~128px).
+  // Derive scale from the sprite size so v0 (16×16), v1/v2 (32×32) and
+  // v3 (48×48) all land in roughly the same on-stage display size
+  // (≈128–144px). 48×3 = 144; 32×4 = 128; 16×8 = 128.
   const spriteSize = data?.baby.idle?.[0]?.length ?? 16;
-  const renderScale = spriteSize <= 16 ? 8 : 4;
+  const renderScale = spriteSize <= 16 ? 8 : spriteSize <= 32 ? 4 : 3;
 
   // Scope-framing banner state. Persists per-tab via sessionStorage so
   // it stays out of the way once the reviewer has acknowledged it, but
@@ -428,12 +600,16 @@ export default function App() {
       onClick: onLocalPetTap,
     };
     pets = [localPet];
-    if (peerPhase !== 'absent' && peerFrames.length > 0) {
+    if (peerPhase !== 'absent' && peerFrames.length > 0 && peerPalette) {
+      // Peer scale derived from its own sprite size (peer may be a
+      // different-sized species in v3).
+      const peerSize = peerSourceData?.baby.idle?.[0]?.length ?? spriteSize;
+      const peerScale = peerSize <= 16 ? 8 : peerSize <= 32 ? 4 : 3;
       pets.push({
         id: 'peer',
         frame: peerFrames[safePeerIdx],
-        palette,
-        scale: renderScale,
+        palette: peerPalette,
+        scale: peerScale,
         xPercent: peerXPercent,
         flipped: true,
       });
@@ -463,11 +639,13 @@ export default function App() {
             PeerDrop Pet Prototype
           </h1>
           <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
-            {spriteVersion === 'v2'
-              ? 'v2 — PixelLab AI chibi (image-to-image of v0, 32×32)'
-              : spriteVersion === 'v1'
-                ? 'v1 — Cat sprites (Shepardskin, CC0) imported as 32×32 side-view placeholder'
-                : 'v0 — production 16×16 sprite baseline'}
+            {spriteVersion === 'v3'
+              ? 'v3 — PixelLab Vadimsadovski-style 10 species (48×48, palette-swappable)'
+              : spriteVersion === 'v2'
+                ? 'v2 — PixelLab AI chibi (image-to-image of v0, 32×32)'
+                : spriteVersion === 'v1'
+                  ? 'v1 — Cat sprites (Shepardskin, CC0) imported as 32×32 side-view placeholder'
+                  : 'v0 — production 16×16 sprite baseline'}
           </p>
         </div>
         <div
@@ -481,48 +659,141 @@ export default function App() {
             fontSize: 13,
           }}
         >
-          <button
-            onClick={() => setSpriteVersion('v0')}
-            style={{
-              background:
-                spriteVersion === 'v0' ? '#1976d2' : 'rgba(0,0,0,0.05)',
-              color: spriteVersion === 'v0' ? 'white' : 'inherit',
-              padding: '6px 14px',
-              borderRadius: 0,
-              fontWeight: spriteVersion === 'v0' ? 600 : 400,
-            }}
-          >
-            v0 (16×16)
-          </button>
-          <button
-            onClick={() => setSpriteVersion('v1')}
-            style={{
-              background:
-                spriteVersion === 'v1' ? '#1976d2' : 'rgba(0,0,0,0.05)',
-              color: spriteVersion === 'v1' ? 'white' : 'inherit',
-              padding: '6px 14px',
-              borderRadius: 0,
-              fontWeight: spriteVersion === 'v1' ? 600 : 400,
-            }}
-          >
-            v1 (Shepardskin CC0)
-          </button>
-          <button
-            onClick={() => setSpriteVersion('v2')}
-            style={{
-              background:
-                spriteVersion === 'v2' ? '#1976d2' : 'rgba(0,0,0,0.05)',
-              color: spriteVersion === 'v2' ? 'white' : 'inherit',
-              padding: '6px 14px',
-              borderRadius: 0,
-              fontWeight: spriteVersion === 'v2' ? 600 : 400,
-            }}
-            title="PixelLab chibi (image-to-image of v0)"
-          >
-            v2 (PixelLab chibi)
-          </button>
+          {(['v0', 'v1', 'v2', 'v3'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setSpriteVersion(v)}
+              style={{
+                background: spriteVersion === v ? '#1976d2' : 'rgba(0,0,0,0.05)',
+                color: spriteVersion === v ? 'white' : 'inherit',
+                padding: '6px 12px',
+                borderRadius: 0,
+                fontWeight: spriteVersion === v ? 600 : 400,
+              }}
+              title={
+                v === 'v0'
+                  ? 'Production 16×16 sprite'
+                  : v === 'v1'
+                    ? 'Shepardskin CC0 32×32 side-view placeholder'
+                    : v === 'v2'
+                      ? 'PixelLab chibi cat (image-to-image of v0)'
+                      : 'PixelLab Vadimsadovski 10-species pack with palette picker'
+              }
+            >
+              {v === 'v0'
+                ? 'v0 (16×16)'
+                : v === 'v1'
+                  ? 'v1 (Shepardskin)'
+                  : v === 'v2'
+                    ? 'v2 (chibi)'
+                    : 'v3 (10 species)'}
+            </button>
+          ))}
         </div>
       </header>
+
+      {/* v3: species + palette pickers. Only visible when v3 is active and
+          the species index has loaded. */}
+      {spriteVersion === 'v3' && speciesIndex && (
+        <div
+          aria-label="物種與配色選擇器"
+          style={{
+            marginBottom: 20,
+            display: 'grid',
+            gap: 12,
+            padding: '14px 18px',
+            border: '1px solid rgba(0,0,0,0.08)',
+            borderRadius: 8,
+            background: 'rgba(0,0,0,0.02)',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              物種（Species）
+            </div>
+            <div role="radiogroup" aria-label="Species picker" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {speciesIndex.species.map((s) => {
+                const swatch = speciesIndex.palettes[selectedPaletteIdx] ?? speciesIndex.palettes[s.defaultPaletteIndex];
+                const active = s.species === selectedSpecies;
+                return (
+                  <button
+                    key={s.species}
+                    onClick={() => {
+                      setSelectedSpecies(s.species);
+                      // Snap to this species's default palette unless the
+                      // user has explicitly overridden the palette in the
+                      // current session.
+                      if (!paletteUserOverride) {
+                        setSelectedPaletteIdx(s.defaultPaletteIndex);
+                      }
+                    }}
+                    aria-pressed={active}
+                    title={`${s.displayEn} / ${s.displayZh}`}
+                    style={{
+                      width: 56,
+                      height: 56,
+                      padding: 4,
+                      border: active ? '2px solid #1976d2' : '2px solid rgba(0,0,0,0.1)',
+                      borderRadius: 8,
+                      background: active ? 'rgba(25,118,210,0.08)' : 'white',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'column',
+                      gap: 2,
+                      // Tint the chip with the active palette's primary so the
+                      // user can preview "what does <Orange> look like for this
+                      // species?" before committing.
+                      boxShadow: active ? `inset 0 -3px 0 ${swatch.primary}` : 'none',
+                    }}
+                  >
+                    <span style={{ fontSize: 18, lineHeight: 1 }}>
+                      {speciesEmoji(s.species)}
+                    </span>
+                    <span style={{ fontSize: 10, color: '#666' }}>{s.displayZh}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              配色（Palette）
+            </div>
+            <div role="radiogroup" aria-label="Palette picker" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {speciesIndex.palettes.map((p) => {
+                const active = p.index === selectedPaletteIdx;
+                return (
+                  <button
+                    key={p.index}
+                    onClick={() => {
+                      setSelectedPaletteIdx(p.index);
+                      setPaletteUserOverride(true);
+                    }}
+                    aria-pressed={active}
+                    title={p.name}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      padding: 0,
+                      borderRadius: '50%',
+                      border: active ? '3px solid #1976d2' : `3px solid ${p.outline}`,
+                      background: `linear-gradient(135deg, ${p.primary} 0%, ${p.primary} 50%, ${p.secondary} 50%, ${p.secondary} 100%)`,
+                      cursor: 'pointer',
+                      boxShadow: active ? '0 0 0 2px rgba(25,118,210,0.25)' : 'none',
+                    }}
+                  />
+                );
+              })}
+              <span style={{ alignSelf: 'center', fontSize: 12, color: '#888', marginLeft: 6 }}>
+                {speciesIndex.palettes[selectedPaletteIdx]?.name}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       {!scopeBannerDismissed && (
         <div
           role="note"
@@ -545,7 +816,7 @@ export default function App() {
             <strong style={{ display: 'block', marginBottom: 4 }}>
               本原型聚焦於互動設計討論
             </strong>
-            Sprite 美術為占位 — 目前提供三個版本切換：v0（production 16×16）／
+            Sprite 美術為占位 — 目前提供四個版本切換：v0（production 16×16）／
             v1（
             <a
               href="https://opengameart.org/content/cat-sprites"
@@ -564,7 +835,7 @@ export default function App() {
             >
               PixelLab AI
             </a>
-            以 v0 為 reference 生成的 chibi）。本原型聚焦於互動設計討論。Production 階段美術將另行決定。
+            以 v0 為 reference 生成的 chibi）／<strong>v3</strong>（PixelLab Vadimsadovski 風格 10 物種包：貓、狗、兔、鳥、蛙、熊、龍、史萊姆、幽靈、章魚；可即時切換 8 種 PetPalettes 配色）。連線時對方寵物會隨機選擇其他物種。Production 階段美術將另行決定。
           </div>
           <button
             onClick={dismissScopeBanner}
