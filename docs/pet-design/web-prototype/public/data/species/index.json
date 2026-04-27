@@ -91,7 +91,7 @@
       "defaultPaletteIndex": 0,
       "defaultPaletteName": "Orange",
       "path": "species/cat.json",
-      "hasWalkAnimation": false
+      "hasWalkAnimation": true
     },
     {
       "species": "dog",
