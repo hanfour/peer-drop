@@ -199,6 +199,15 @@ function quantizeBufferToGrid(buf, lookup) {
   return grid;
 }
 
+// PixelLab generates West-direction frames facing left. The prototype's
+// flip logic was designed against v1 Shepardskin's East-facing baseline
+// (frames face right; flipped: true mirrors them to face left). Mirror
+// every output grid horizontally so v2 matches the East-facing convention
+// and the prototype's flipped flag does the right thing.
+function mirrorGridHorizontal(grid) {
+  return grid.map((row) => row.slice().reverse());
+}
+
 async function main() {
   const inputArg = process.argv[2];
   if (!inputArg) {
@@ -267,8 +276,9 @@ async function main() {
       console.log(`  ${idx}: ${hex}`);
     }
 
-    // Quantize each frame.
-    const quantize = (p) => quantizeBufferToGrid(buffersByPath.get(p), lookup);
+    // Quantize each frame, then mirror horizontally to East-facing baseline
+    // (see mirrorGridHorizontal docs).
+    const quantize = (p) => mirrorGridHorizontal(quantizeBufferToGrid(buffersByPath.get(p), lookup));
 
     const idleGrid = quantize(swPath);
     const walkingGrids = walkingPaths.map(quantize);
@@ -306,6 +316,7 @@ async function main() {
         skippedSources: [
           'rotations/south.png and rotations/east.png — PixelLab echoed back trimmed copies of our v0 reference (323 and 317 bytes) rather than generating new South/East views. Re-run with stricter prompts to fill these.',
         ],
+        mirrored: 'All frames mirrored horizontally during import to face East (right) — matches v1 Shepardskin convention so the prototype’s flipped flag works consistently across sprite versions.',
       },
       palette,
       baby: {
