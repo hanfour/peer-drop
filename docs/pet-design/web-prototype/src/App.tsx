@@ -8,6 +8,7 @@ import { defaultTraits, dominantTrait, type TraitName, type Traits } from './tra
 import { selectIdleAction, type IdleAction } from './traits/idleSelector';
 import type { GreetingBeat } from './scenarios/greeting';
 import { Particles, type Particle } from './render/Particles';
+import { PATTERNS, findPattern } from './render/patterns';
 import { ProgressBar, useTransfer } from './scenarios/Transfer';
 import { selectLine } from './dialogue/select';
 import type { DialogueContext } from './dialogue/types';
@@ -129,6 +130,11 @@ export default function App() {
   const [speciesIndex, setSpeciesIndex] = useState<SpeciesIndex | null>(null);
   const [selectedSpecies, setSelectedSpecies] = useState<string>('cat');
   const [selectedPaletteIdx, setSelectedPaletteIdx] = useState<number>(0);
+  // Pattern overlay selection (v3 only). Defaults to 'plain' so the
+  // picker change is opt-in and doesn't disturb the default first-load
+  // appearance.
+  const [patternId, setPatternId] = useState<string>('plain');
+  const activePattern = findPattern(patternId);
   // When the user actively picks a palette, treat it as a per-species
   // override; otherwise picking a new species snaps to that species's
   // default palette. We track the last manual override so toggling
@@ -590,6 +596,10 @@ export default function App() {
 
   let pets: StagePet[] = [];
   if (ready) {
+    // Pattern only applies in v3 (where palette slot 6 is meaningful).
+    // For v0/v1/v2 we leave it undefined so the renderer falls back to
+    // the legacy unpatterned path.
+    const petPattern = spriteVersion === 'v3' ? activePattern : undefined;
     const localPet: StagePet = {
       id: 'local',
       frame: localFrames[safeLocalIdx],
@@ -598,6 +608,7 @@ export default function App() {
       xPercent: localXPercent,
       flipped: false,
       onClick: onLocalPetTap,
+      pattern: petPattern,
     };
     pets = [localPet];
     if (peerPhase !== 'absent' && peerFrames.length > 0 && peerPalette) {
@@ -612,6 +623,7 @@ export default function App() {
         scale: peerScale,
         xPercent: peerXPercent,
         flipped: true,
+        pattern: petPattern,
       });
     }
   }
@@ -792,6 +804,49 @@ export default function App() {
               </span>
             </div>
           </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              花紋（Pattern）
+            </div>
+            <div role="radiogroup" aria-label="Pattern picker" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {PATTERNS.map((pat) => {
+                const active = pat.id === patternId;
+                const swatch = speciesIndex.palettes[selectedPaletteIdx];
+                return (
+                  <button
+                    key={pat.id}
+                    onClick={() => setPatternId(pat.id)}
+                    aria-pressed={active}
+                    title={pat.label}
+                    data-pattern-id={pat.id}
+                    style={{
+                      width: 56,
+                      height: 56,
+                      padding: 4,
+                      border: active ? '2px solid #1976d2' : '2px solid rgba(0,0,0,0.1)',
+                      borderRadius: 8,
+                      background: active ? 'rgba(25,118,210,0.08)' : 'white',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 2,
+                      boxShadow: active ? `inset 0 -3px 0 ${swatch?.pattern ?? '#888'}` : 'none',
+                    }}
+                  >
+                    <PatternPreview
+                      primary={swatch?.primary ?? '#cccccc'}
+                      patternColor={swatch?.pattern ?? '#888888'}
+                      pattern={pat}
+                    />
+                    <span style={{ fontSize: 10, color: '#666' }}>{pat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
       {!scopeBannerDismissed && (
@@ -835,7 +890,7 @@ export default function App() {
             >
               PixelLab AI
             </a>
-            以 v0 為 reference 生成的 chibi）／<strong>v3</strong>（PixelLab Vadimsadovski 風格 10 物種包：貓、狗、兔、鳥、蛙、熊、龍、史萊姆、幽靈、章魚；可即時切換 8 種 PetPalettes 配色）。連線時對方寵物會隨機選擇其他物種。Production 階段美術將另行決定。
+            以 v0 為 reference 生成的 chibi）／<strong>v3</strong>（PixelLab Vadimsadovski 風格 10 物種包：貓、狗、兔、鳥、蛙、熊、龍、史萊姆、幽靈、章魚；可即時切換 8 種 PetPalettes 配色 + 5 種花紋（Plain／條紋／斑點／雙色／星印））。連線時對方寵物會隨機選擇其他物種。Production 階段美術將另行決定。
           </div>
           <button
             onClick={dismissScopeBanner}
@@ -893,5 +948,60 @@ export default function App() {
         <code>docs/plans/2026-04-25-pet-companion-redesign-design.md</code> for context.
       </footer>
     </div>
+  );
+}
+
+/**
+ * Tiny inline preview for the pattern picker buttons. Renders a 16×16
+ * canvas where every pixel starts as `primary`, then any pixel that
+ * matches `pattern.shouldOverlay(x, y)` is recoloured to `patternColor`.
+ *
+ * The preview uses the same source-frame coordinate space as the live
+ * sprite, but scaled to 16 — patterns calibrated against a 48×48 grid
+ * (e.g. the star) intentionally render off-frame at 16, in which case
+ * the preview shows just the primary fill (still helpful as a "this is
+ * the colour pair" signal).
+ */
+function PatternPreview({
+  primary,
+  patternColor,
+  pattern,
+}: {
+  primary: string;
+  patternColor: string;
+  pattern: import('./render/patterns').Pattern;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  // We render in 48×48 source-space and then DOM-scale down to 32px so
+  // the picker thumbnail reflects the same pattern frequencies the live
+  // sprite would show.
+  const SRC = 48;
+  const PIX = 32 / SRC;
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (let y = 0; y < SRC; y++) {
+      for (let x = 0; x < SRC; x++) {
+        const isPattern = pattern.shouldOverlay(x, y);
+        ctx.fillStyle = isPattern ? patternColor : primary;
+        ctx.fillRect(Math.floor(x * PIX), Math.floor(y * PIX), Math.ceil(PIX), Math.ceil(PIX));
+      }
+    }
+  }, [primary, patternColor, pattern, PIX]);
+  return (
+    <canvas
+      ref={ref}
+      width={32}
+      height={32}
+      style={{
+        imageRendering: 'pixelated',
+        borderRadius: 4,
+        border: '1px solid rgba(0,0,0,0.08)',
+      }}
+    />
   );
 }

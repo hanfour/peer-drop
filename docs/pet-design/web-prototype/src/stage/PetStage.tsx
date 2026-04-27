@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { SpriteCanvas } from '../render/SpriteCanvas';
 import { DialogueBubble } from '../dialogue/DialogueBubble';
+import type { Pattern } from '../render/patterns';
 import type { Frame, Palette } from '../sprite/types';
 
 export type StagePet = {
@@ -12,6 +13,8 @@ export type StagePet = {
   /** Horizontal position on the stage, 0..100 (clamped is the caller's job). */
   xPercent: number;
   onClick?: () => void;
+  /** Optional pattern overlay applied at render time. */
+  pattern?: Pattern;
 };
 
 const STAGE_W = 480;
@@ -182,6 +185,7 @@ export function PetStage({
             palette={p.palette}
             scale={p.scale}
             flipped={p.flipped}
+            pattern={p.pattern}
           />
           {dialogueByPet?.[p.id] && (
             <DialogueBubble key={dialogueByPet[p.id]} text={dialogueByPet[p.id]} />
