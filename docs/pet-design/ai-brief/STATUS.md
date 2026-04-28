@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 3 — hedgehog → sloth done, only red panda remains for mammals)
+**Last updated:** 2026-04-28 (session 3 — **ALL 18 MAMMALS DONE**, ready to start 鳥類)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -244,9 +244,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 三趾 stages have visible darker eye-mask stripes (best identity differentiator).
   - 二趾 vs 三趾 toe-count detail does NOT render at 32px — claws appear as standard short arms.
   - Same small-feature limitation as flying squirrel patagium / raccoon arctic mask.
+- ✅ **red panda 2 子品種 × 3 stages = 6 zips** (standard rusty / chinese snow-frosted × baby / adult / elder) — **last mammal!**
+  - Skeleton: cat. All 6 read clearly as red pandas.
+  - 標準 stages have iconic rusty-red coat + white-tipped ears + ringed bushy tail.
+  - 雪松 (snow-frosted) variant has paler/whiter accents but same red panda silhouette — clearly distinct from 標準.
 
-Session 3 quota burned: 107 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 12 pig + 9 sheep + 9 deer + 9 squirrel + 9 horse + 6 sloth + 2 retries).
-Cumulative on subscription: ~183 / 2000.
+🎉 **MAMMALS COMPLETE: 18/18 species, 113 zips total in session 3.** 🎉
+
+Session 3 quota burned: 113 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 12 pig + 9 sheep + 9 deer + 9 squirrel + 9 horse + 6 sloth + 6 red panda + 2 retries).
+Cumulative on subscription: ~189 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
@@ -269,16 +275,22 @@ Cumulative on subscription: ~183 / 2000.
 
 ## 8. Recommended New-Session Entry Points
 
-### Continue Batch 2 (RECOMMENDED — pick up here)
-Last completed: **sloth 2×3 = 6 zips** (session 3, not yet committed). Next on the list:
+### Continue Batch 2 — Mammals DONE, Birds / Reptiles / Fantasy next
+Last completed: **red panda 2×3 = 6 zips** (session 3, mammals batch complete).
 
-1. **red panda** 2 sub-varieties × 3 stages = 6 generations — **last mammal!**
-   - 標準 (standard rusty-red) / 雪松鼠版 (snow-frosted / chinese variant)
-   - Skeleton: cat (small mammal)
-2. **MAMMALS COMPLETE.** Move to:
-   - 鳥類 (6 breeds × 3 stages = 18) — chicken (already done as bird/hen/rooster), duck, owl, penguin, parrot, pigeon
-   - 兩棲爬蟲 (4 breeds × 3 stages = 12) — frog (legacy adult done), turtle, lizard, snake
-   - 奇幻 (5 breeds × 3 stages = 15) — dragon (some done), slime (some done), totoro (some done), phoenix, unicorn
+🎉 **Mammals (Batch 2): 18/18 done, 113 zips. ~189/2000 quota.**
+
+Next phase — Birds 6 breeds × 3 stages (≈ 18 generations):
+1. **chicken (bird)** — bird-rooster + bird-hen + bird-elder already exist; baby chick stage may need adding
+2. **duck** 3×3 = 9 (綠頭 / 鴛鴦 / 黃鴨子) — skeleton: ?
+3. **owl** 3×3 = 9 (雪鴞 / 草鴞 / 角鴞)
+4. **penguin** 3×3 = 9 (帝企鵝 / 國王 / 冠企鵝)
+5. **parrot** 3×3 = 9 (金剛 / 玄鳳 / 虎皮)
+6. **pigeon** 3×3 = 9 (灰鴿 / 白鴿 / 信鴿)
+
+⚠️ Birds need a different skeleton. The 5 quadruped skeletons (Bear/Cat/Dog/Horse/Lion) won't fit. May need to **switch to Humanoid character type** for birds since they stand on 2 legs — or use a different PixelLab template entirely. **Confirm approach with user before starting birds.**
+
+After birds: 兩棲爬蟲 (4 breeds × 3 stages = 12) and 奇幻 (5 breeds × 3 stages = 15).
 
 **Operational notes for next session:**
 - Open `/create-character` in Playwright (kill any stale Chrome on `mcp-chrome-84ff974` first if browser-already-in-use error appears).
@@ -287,7 +299,7 @@ Last completed: **sloth 2×3 = 6 zips** (session 3, not yet committed). Next on 
 - Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 - Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
 
-**Cumulative quota: ~183 / 2000.** Plenty left.
+**Cumulative quota: ~189 / 2000.** Plenty left for birds + reptiles + fantasy.
 
 **Session 3 confirmed wizard flow (works end-to-end):**
 - `/create-character` page → click "Create" button (top of form area) → redirects to `/create-character/new` (the wizard).
