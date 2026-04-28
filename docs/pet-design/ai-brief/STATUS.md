@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 2 — paused mid-Batch 2)
+**Last updated:** 2026-04-28 (session 3 — hedgehog batch done, paused before bear)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -189,7 +189,15 @@ quad.click();
 - ✅ **fox 3 子品種 × 3 stages = 9 zips** (red / arctic / silver × baby / adult / elder)
 
 Session 2 quota burned: ~75 / 2000 (4 stuck + 15 cat + 15 dog + 12 rabbit + 12 hamster + 9 fox + ~8 retries).
-Cumulative on subscription: ~76 / 2000.
+Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of session 3).
+
+### Batch 2 progress (2026-04-28 session 3)
+- ✅ **hedgehog 3 子品種 × 3 stages = 9 zips** (brown / white / chocolate × baby / adult / elder)
+  - Note: 白刺 (white) variety has weak spine definition (white-on-white low contrast); looks more like a soft round albino mammal than clearly a hedgehog. Acceptable, similar trade-off to rabbit-lionhead.
+  - 棕刺 + 巧克力 stages clearly read as hedgehog with visible spine pattern.
+
+Session 3 quota burned: 9 generations.
+Cumulative on subscription: ~85 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
@@ -213,19 +221,16 @@ Cumulative on subscription: ~76 / 2000.
 ## 8. Recommended New-Session Entry Points
 
 ### Continue Batch 2 (RECOMMENDED — pick up here)
-Last completed: **fox 3×3 = 9 zips** (commit `4ffbb1a`). Next on the list:
+Last completed: **hedgehog 3×3 = 9 zips** (session 3, not yet committed). Next on the list:
 
-1. **hedgehog** 3 sub-varieties × 3 stages = 9 generations
-   - 棕刺 (brown) / 白刺 (white) / 巧克力色 (chocolate)
-   - Skeleton: cat (small mammal)
-2. **bear** 4 sub-varieties × 3 stages = 12 generations
+1. **bear** 4 sub-varieties × 3 stages = 12 generations
    - 棕熊 (brown) / 黑熊 (black / asiatic) / 北極熊 (polar) / 熊貓 (panda)
    - Skeleton: bear
-3. **raccoon** 2×3 = 6
-4. **otter** 2×3 = 6
-5. **wolf** 3×3 = 9
-6. … (see §4 list for full mammals: 13 breeds remaining ≈ 76 more generations)
-7. After mammals: 鳥類 (6 breeds), 兩棲爬蟲 (4 breeds), 奇幻 (5 breeds)
+2. **raccoon** 2×3 = 6 (skeleton: cat)
+3. **otter** 2×3 = 6 (skeleton: cat)
+4. **wolf** 3×3 = 9 (skeleton: dog)
+5. … (see §4 list for full mammals: 12 breeds remaining ≈ 67 more generations)
+6. After mammals: 鳥類 (6 breeds), 兩棲爬蟲 (4 breeds), 奇幻 (5 breeds)
 
 **Operational notes for next session:**
 - Open `/create-character` in Playwright (kill any stale Chrome on `mcp-chrome-84ff974` first if browser-already-in-use error appears).
@@ -234,7 +239,20 @@ Last completed: **fox 3×3 = 9 zips** (commit `4ffbb1a`). Next on the list:
 - Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 - Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
 
-**Cumulative quota: ~76 / 2000.** Plenty left.
+**Cumulative quota: ~85 / 2000.** Plenty left.
+
+**Session 3 confirmed wizard flow (works end-to-end):**
+- `/create-character` page → click "Create" button (top of form area) → redirects to `/create-character/new` (the wizard).
+- The legacy URL `/create-character/new?prompt=...` redirects to signin for some reason — go via the Create button instead.
+- Wizard structure: Quadruped button reveals 4 dropdowns (skeleton / outline / shading / detail). Set via React-aware setter:
+  ```js
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, val); sel.dispatchEvent(new Event('change', { bubbles: true }));
+  ```
+- Quick presets used: **Chibi** for baby + elder, **Cartoon** for adult. Slider direct-manipulation skipped.
+- After Generate → "Continue in background" appears within ~3-5s; click via `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Continue in background').click()`.
+- Each card on `/create-character` has `button[aria-label="Export character as ZIP"]` — bulk-download via JS loop with 800ms gap.
+- Download filenames truncate prompt to ~50 chars with hyphens; rename map: prompt-prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 
 ### If switching to implementation
 1. Read `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`
