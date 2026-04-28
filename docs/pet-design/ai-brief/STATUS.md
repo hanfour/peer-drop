@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 3 — hedgehog + bear + raccoon + otter + wolf + cow + pig + sheep done, paused before deer)
+**Last updated:** 2026-04-28 (session 3 — hedgehog + bear + raccoon + otter + wolf + cow + pig + sheep + deer done, paused before squirrel)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -225,9 +225,14 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 綿羊 stages classic fluffy white wool with black face; elder yellowed nicely.
   - 山羊 adult has iconic backward-curving horns + long white beard — strong goat identity.
   - 美利奴 reads as chunky thick-fleece sheep, slightly pink-cream tone (stands out from 綿羊).
+- ✅ **deer 3 子品種 × 3 stages = 9 zips** (sika / white-tailed / moose × baby / adult / elder)
+  - Skeleton: horse (slender ungulate body — the right shape for deer/moose).
+  - 梅花鹿 stages have iconic tan + white spots (baby/adult/elder all show spotting).
+  - 白尾鹿 adult has clear branching antlers + white tail flag.
+  - 麋鹿 adult shows characteristic palmate paddle-shaped antlers + droopy nose + dewlap.
 
-Session 3 quota burned: 74 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 12 pig + 9 sheep + 2 retries).
-Cumulative on subscription: ~150 / 2000.
+Session 3 quota burned: 83 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 12 pig + 9 sheep + 9 deer + 2 retries).
+Cumulative on subscription: ~159 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
@@ -251,14 +256,14 @@ Cumulative on subscription: ~150 / 2000.
 ## 8. Recommended New-Session Entry Points
 
 ### Continue Batch 2 (RECOMMENDED — pick up here)
-Last completed: **sheep 3×3 = 9 zips** (session 3, not yet committed). Next on the list:
+Last completed: **deer 3×3 = 9 zips** (session 3, not yet committed). Next on the list:
 
-1. **deer** 3 sub-varieties × 3 stages = 9 generations
-   - 梅花鹿 (sika deer with white spots) / 白尾鹿 (white-tailed) / 麋鹿 (moose-style large antlered)
-   - Skeleton: horse (slender ungulate body)
-2. **squirrel** 3×3 = 9 (skeleton: cat — small mammal)
-3. **horse** 3×3 = 9 (skeleton: horse)
-4. … (see §4 list for full mammals: 5 breeds remaining ≈ 16 more generations)
+1. **squirrel** 3 sub-varieties × 3 stages = 9 generations
+   - 紅松鼠 (red squirrel) / 灰松鼠 (grey squirrel) / 飛鼠 (flying squirrel with skin flaps)
+   - Skeleton: cat (small mammal)
+2. **horse** 3×3 = 9 (skeleton: horse)
+3. **sloth** 2×3 = 6 (skeleton: ?)
+4. … (see §4 list for full mammals: 4 breeds remaining ≈ 21 more generations: squirrel + horse + sloth + red panda)
 5. After mammals: 鳥類 (6 breeds), 兩棲爬蟲 (4 breeds), 奇幻 (5 breeds)
 
 **Operational notes for next session:**
@@ -268,7 +273,7 @@ Last completed: **sheep 3×3 = 9 zips** (session 3, not yet committed). Next on 
 - Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 - Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
 
-**Cumulative quota: ~150 / 2000.** Plenty left.
+**Cumulative quota: ~159 / 2000.** Plenty left.
 
 **Session 3 confirmed wizard flow (works end-to-end):**
 - `/create-character` page → click "Create" button (top of form area) → redirects to `/create-character/new` (the wizard).
