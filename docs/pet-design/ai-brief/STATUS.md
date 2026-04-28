@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-29 (session 3 — All mammals + duck + owl done, paused before penguin)
+**Last updated:** 2026-04-29 (session 3 ended — autonomous-run handoff doc for new session, see §8)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -287,15 +287,41 @@ Cumulative on subscription: ~207 / 2000.
 
 ## 8. Recommended New-Session Entry Points
 
-### Continue Batch 2 — Birds (chicken legacy + duck + owl done, penguin next)
-Last completed: **owl 3×3 = 9 zips** (session 3).
+### 🚨 AUTONOMOUS RUN INSTRUCTIONS (next session — do NOT pause between batches) 🚨
 
-Birds remaining (3 breeds × 3 sub × 3 stages = 27 generations):
-1. **penguin** 3×3 = 9 (帝企鵝 / 國王 / 冠企鵝)
-2. **parrot** 3×3 = 9 (金剛 / 玄鳳 / 虎皮)
-3. **pigeon** 3×3 = 9 (灰鴿 / 白鴿 / 信鴿)
+**User has authorized continuous execution. Do NOT stop to ask "繼續嗎?" between batches. Plough through everything below in one go, committing each batch as it completes. Only pause for blocking errors (subscription expired, real 429 backoff, broken wizard flow).**
 
-After birds: 兩棲爬蟲 (4 breeds × 3 stages = 12) and 奇幻 (5 breeds × 3 stages = 15).
+Last completed: **owl 3×3 = 9 zips** (session 3, 2eabc58).
+Skeleton convention: **all birds use Quadruped + Cat skeleton** (confirmed working). Reptiles likely the same (cat for small, bear for large). Fantasy will need case-by-case decisions but default to bear for large/round and cat for small.
+
+**Execution queue — run all of these in order, commit per species:**
+
+1. **penguin** 3×3 = 9 — 帝企鵝 (Emperor, large with orange chest patch) / 國王 (King, similar but smaller) / 冠企鵝 (Crested with yellow eyebrow tufts) — skeleton: cat
+2. **parrot** 3×3 = 9 — 金剛 (Macaw, vibrant red/blue) / 玄鳳 (Cockatiel grey + orange cheek) / 虎皮 (Budgie green/yellow striped) — skeleton: cat
+3. **pigeon** 3×3 = 9 — 灰鴿 (grey city pigeon) / 白鴿 (white dove) / 信鴿 (homing pigeon, mottled grey-brown) — skeleton: cat
+4. **turtle** 3×3 = 9 — 陸龜 (tortoise, dome shell) / 水龜 (red-eared slider, green) / 海龜 (sea turtle with flippers) — skeleton: cat
+5. **lizard** 3×3 = 9 — 鬃獅蜥 (bearded dragon, spiky chin) / 變色龍 (chameleon, curled tail + zigzag eyes) / 守宮 (gecko, sticky toe pads, light) — skeleton: cat
+6. **snake** 3×3 = 9 — 球蟒 (ball python, brown patterns) / 玉米蛇 (corn snake, orange+red) / 牛奶蛇 (milk snake, red-black-yellow bands) — skeleton: cat
+7. **dragon** 4×3 = 12 — 西方 (western with bat wings) / 東方 (eastern long serpentine) / 火 (fire/red) / 冰 (ice/blue) — skeleton: bear (legacy `dragon-elder` / `dragon-hatchling` / `dragon` exist as starting reference; new variants use those as style anchor)
+8. **slime** 5×3 = 15 — 普通綠 (standard green) / 透明 (transparent) / 火 (fire-orange) / 水 (water-blue) / 金屬 (metallic-silver) — skeleton: bear (legacy `slime` adult + `slime-baby` + `slime-elder` exist)
+9. **totoro** 4×3 = 12 — 白 (white small) / 灰 (grey medium) / 大 (large dark) / 小 (chibi tiny) — skeleton: bear (legacy `totoro` adult + `totoro-baby` + `totoro-elder` exist)
+10. **phoenix** 3×3 = 9 — 火 (fire red-orange flame body) / 冰 (ice blue crystalline) / 光 (light yellow with halo) — skeleton: cat (mythical bird, treat like owl)
+11. **unicorn** 3×3 = 9 — 白 (classic white with golden horn) / 彩虹 (rainbow mane) / 黑暗 (dark/cursed black with red eyes) — skeleton: horse
+
+**Total remaining: 81 generations × 180s ≈ 4.5 hours.** Quota allows it (~207 used / 2000 budget).
+
+**Operational protocol per batch:**
+- Create N tasks (TaskCreate) for the breed × stages
+- For each task: TaskUpdate in_progress → click Create → wizard JS (Quadruped + skeleton + flat shading + low detail + Sidescroller + 32px + Chibi for baby/elder, Cartoon for adult) → fill prompt → Generate → wait 180s → next
+- After all N submitted: wait 240s, reload, batch-export via `button[aria-label="Export character as ZIP"]`
+- Rename `.playwright-mcp/` → `species-zips-stages/{species}-{variety}-{stage}.zip`
+- Build `unzip -p east.png` → magick scale 4× → 3×N grid for visual check
+- Read grid, write 3-line variety quality summary
+- TaskUpdate completed for the N tasks
+- Update STATUS.md (move species to "done", update cumulative quota)
+- Commit: `feat(pet-design): add {species} N sub-varieties × 3 stages (M zips)` with co-author trailer
+
+**After all 11 batches:** Update STATUS to declare Batch 2 fully complete (mammals + birds + reptiles + fantasy = 33 species, ~440 zips total cumulative).
 
 **Operational notes for next session:**
 - Open `/create-character` in Playwright (kill any stale Chrome on `mcp-chrome-84ff974` first if browser-already-in-use error appears).
