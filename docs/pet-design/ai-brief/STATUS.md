@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 3 — hedgehog + bear + raccoon + otter + wolf + cow + pig + sheep + deer + squirrel + horse done, paused before sloth)
+**Last updated:** 2026-04-28 (session 3 — hedgehog → sloth done, only red panda remains for mammals)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -239,9 +239,14 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - Skeleton: horse. Strong batch — all 9 read clearly with distinct identity.
   - 棕馬 chestnut coat + dark mane visible; 黑馬 sleek jet-black with flowing mane.
   - 斑馬 black-and-white stripe pattern preserved across all 3 stages — strongest horse-batch identity.
+- ✅ **sloth 2 子品種 × 3 stages = 6 zips** (two-toed / three-toed × baby / adult / elder)
+  - Skeleton: bear. Round chunky body + cream face + smile reads as sloth across all 6.
+  - 三趾 stages have visible darker eye-mask stripes (best identity differentiator).
+  - 二趾 vs 三趾 toe-count detail does NOT render at 32px — claws appear as standard short arms.
+  - Same small-feature limitation as flying squirrel patagium / raccoon arctic mask.
 
-Session 3 quota burned: 101 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 12 pig + 9 sheep + 9 deer + 9 squirrel + 9 horse + 2 retries).
-Cumulative on subscription: ~177 / 2000.
+Session 3 quota burned: 107 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 12 pig + 9 sheep + 9 deer + 9 squirrel + 9 horse + 6 sloth + 2 retries).
+Cumulative on subscription: ~183 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
@@ -265,14 +270,15 @@ Cumulative on subscription: ~177 / 2000.
 ## 8. Recommended New-Session Entry Points
 
 ### Continue Batch 2 (RECOMMENDED — pick up here)
-Last completed: **horse 3×3 = 9 zips** (session 3, not yet committed). Next on the list:
+Last completed: **sloth 2×3 = 6 zips** (session 3, not yet committed). Next on the list:
 
-1. **sloth** 2 sub-varieties × 3 stages = 6 generations
-   - 二趾 (two-toed) / 三趾 (three-toed)
-   - Skeleton: bear (slow large round body) — or cat
-2. **red panda** 2×3 = 6 (skeleton: cat)
-   - 標準 / 雪松鼠版 (snow-frosted variant)
-3. After mammals (2 breeds remaining ≈ 12 generations): 鳥類 (6 breeds), 兩棲爬蟲 (4 breeds), 奇幻 (5 breeds)
+1. **red panda** 2 sub-varieties × 3 stages = 6 generations — **last mammal!**
+   - 標準 (standard rusty-red) / 雪松鼠版 (snow-frosted / chinese variant)
+   - Skeleton: cat (small mammal)
+2. **MAMMALS COMPLETE.** Move to:
+   - 鳥類 (6 breeds × 3 stages = 18) — chicken (already done as bird/hen/rooster), duck, owl, penguin, parrot, pigeon
+   - 兩棲爬蟲 (4 breeds × 3 stages = 12) — frog (legacy adult done), turtle, lizard, snake
+   - 奇幻 (5 breeds × 3 stages = 15) — dragon (some done), slime (some done), totoro (some done), phoenix, unicorn
 
 **Operational notes for next session:**
 - Open `/create-character` in Playwright (kill any stale Chrome on `mcp-chrome-84ff974` first if browser-already-in-use error appears).
@@ -281,7 +287,7 @@ Last completed: **horse 3×3 = 9 zips** (session 3, not yet committed). Next on 
 - Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 - Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
 
-**Cumulative quota: ~177 / 2000.** Plenty left.
+**Cumulative quota: ~183 / 2000.** Plenty left.
 
 **Session 3 confirmed wizard flow (works end-to-end):**
 - `/create-character` page → click "Create" button (top of form area) → redirects to `/create-character/new` (the wizard).
