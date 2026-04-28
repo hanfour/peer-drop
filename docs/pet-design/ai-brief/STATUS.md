@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28
+**Last updated:** 2026-04-28 (session 2)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -19,20 +19,19 @@
 
 ---
 
-## 2. Stuck-Item Resubmission Status
-
-The 6 items submitted on free tier before subscription still show loading spinners and never complete. Plan: resubmit each on fast tier (cost: 6 of 2000 quota).
+## 2. Stuck-Item Resubmission Status — ✅ ALL DONE (2026-04-28 session 2)
 
 | # | Item | Status | Output |
 |---|---|---|---|
-| 1 | totoro baby | ⏳ in-progress (resubmitted) | pending — verify completion + export to `species-zips-stages/totoro-baby.zip` |
-| 2 | hamster baby | ✅ done (~1 min on fast tier) | `species-zips-stages/hamster-baby.zip` |
-| 3 | hamster adult | ⏳ pending resubmit | → `species-zips-stages/hamster-adult.zip` |
-| 4 | fox baby | ⏳ pending resubmit | → `species-zips-stages/fox-baby.zip` |
-| 5 | fox adult | ⏳ pending resubmit | → `species-zips-stages/fox-adult.zip` |
-| 6 | totoro elder | ⏳ pending resubmit | → `species-zips-stages/totoro-elder.zip` |
+| 1 | totoro baby | ✅ done | `species-zips-stages/totoro-baby.zip` (8 dir × 96px) |
+| 2 | hamster baby | ✅ done | `species-zips-stages/hamster-baby.zip` |
+| 3 | hamster adult | ✅ done | `species-zips-stages/hamster-adult.zip` |
+| 4 | fox baby | ✅ done | `species-zips-stages/fox-baby.zip` |
+| 5 | fox adult | ✅ done | `species-zips-stages/fox-adult.zip` |
+| 6 | totoro elder | ✅ done | `species-zips-stages/totoro-elder.zip` |
+| bonus | fox elder | ✅ done (earlier) | `species-zips-stages/fox-elder.zip` |
 
-**Bonus already done:** `species-zips-stages/fox-elder.zip` (fast-tier test, ~3.5 min).
+Quota burned this session: 4 generations (hamster adult / fox baby / fox adult / totoro elder).
 
 ---
 
@@ -104,12 +103,9 @@ User approved on 2026-04-28 (`great`). Each breed has 3–5 sub-varieties × 3 s
 | 27 | 蜥蜴 (lizard) | 鬃獅蜥 / 變色龍 / 守宮 |
 | 28 | 蛇 (snake) | 球蟒 / 玉米蛇 / 牛奶蛇 |
 
-### 🌊 水族 (3 — ⚠️ re-confirm)
-| # | Breed | Sub-varieties |
-|---|---|---|
-| 29 | 章魚 (octopus) | 紫 / 紅 / 藍環（保留 legacy） |
-| 30 | 螃蟹 (crab) | 寄居蟹 / 招潮蟹 / 帝王蟹 |
-| 31 | 水母 (jellyfish) | 月亮 / 箱子 / 螢光 |
+### 🌊 水族 (排除 — 2026-04-28 session 2 確認)
+使用者再次確認「海中生物先不出現」。章魚 legacy adult 保留，但**不**生成新的章魚子品種、螃蟹、水母。
+36 breeds 實際執行範圍縮減為 33 breeds（哺乳 18 + 鳥 6 + 兩棲爬蟲 4 + 奇幻 5）。
 
 ### 🪄 奇幻 (5)
 | # | Breed | Sub-varieties |
@@ -185,7 +181,7 @@ quad.click();
 
 ## 7. Open Decisions
 
-1. **水族類 inclusion** — user previously said "海中生物先不出現" but approved list includes 章魚 / 螃蟹 / 水母. Re-confirm before generating.
+1. ~~**水族類 inclusion**~~ — ✅ resolved 2026-04-28: exclude 水族, keep legacy octopus only.
 2. **鳥類 sub-variant UX** — nested submenu vs flat 4-button picker (currently rooster/hen handled as separate cards). Deferred until UI work begins.
 3. **v4.0 production migration** — 5.5–7 week project, design doc done, no plan doc yet.
 4. **Production octopus + totoro coexistence** — both must remain; species data needs additive change, not replacement.
