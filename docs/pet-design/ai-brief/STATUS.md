@@ -179,7 +179,10 @@ quad.click();
 
 ### Batch 1 progress (2026-04-28 session 2)
 - ✅ **cat 5 子品種 × 3 stages = 15 zips** (persian / bengal / tabby / calico / siamese × baby / adult / elder)
-- ⏳ dog 5 子品種 × 3 stages: 柴犬 / 牧羊犬 / 臘腸犬 / 拉布拉多 / 哈士奇
+- ✅ **dog 5 子品種 × 3 stages = 15 zips** (shiba / collie / dachshund / labrador / husky × baby / adult / elder)
+
+Session 2 quota burned: ~35 / 2000 (4 stuck-item resubmits + 15 cat + 15 dog + 1 husky-adult retry).
+Cumulative on subscription: ~36 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
