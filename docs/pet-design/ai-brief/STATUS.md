@@ -184,9 +184,11 @@ quad.click();
 ### Batch 2 progress (2026-04-28 session 2 cont.)
 - ✅ **rabbit 4 子品種 × 3 stages = 12 zips** (dutch / angora / lop / lionhead × baby / adult / elder)
   - Note: lionhead variety leans more lion-like than rabbit-like; prompt "lion mane" was too dominant. Acceptable for now.
+- ✅ **hamster 4 子品種 × 3 stages = 12 zips** (golden / winterwhite / campbell / white × baby / adult / elder)
+  - Note: winterwhite adult/elder shows red color artifacts where stripes were prompted. Acceptable structure.
 
-Session 2 quota burned: ~50 / 2000 (4 stuck + 15 cat + 15 dog + 1 husky retry + 12 rabbit + 2 angora retry).
-Cumulative on subscription: ~51 / 2000.
+Session 2 quota burned: ~64 / 2000 (4 stuck + 15 cat + 15 dog + 12 rabbit + 12 hamster + ~6 retries).
+Cumulative on subscription: ~65 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
