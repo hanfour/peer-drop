@@ -181,8 +181,12 @@ quad.click();
 - ✅ **cat 5 子品種 × 3 stages = 15 zips** (persian / bengal / tabby / calico / siamese × baby / adult / elder)
 - ✅ **dog 5 子品種 × 3 stages = 15 zips** (shiba / collie / dachshund / labrador / husky × baby / adult / elder)
 
-Session 2 quota burned: ~35 / 2000 (4 stuck-item resubmits + 15 cat + 15 dog + 1 husky-adult retry).
-Cumulative on subscription: ~36 / 2000.
+### Batch 2 progress (2026-04-28 session 2 cont.)
+- ✅ **rabbit 4 子品種 × 3 stages = 12 zips** (dutch / angora / lop / lionhead × baby / adult / elder)
+  - Note: lionhead variety leans more lion-like than rabbit-like; prompt "lion mane" was too dominant. Acceptable for now.
+
+Session 2 quota burned: ~50 / 2000 (4 stuck + 15 cat + 15 dog + 1 husky retry + 12 rabbit + 2 angora retry).
+Cumulative on subscription: ~51 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
