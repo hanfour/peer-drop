@@ -177,6 +177,18 @@ quad.click();
 | 74 | 擴張 14 種新 species (hamster/fox/etc) | 🔄 in-progress |
 | 75 | 36 breeds 擴張規劃 + 執行 | 🔄 in-progress |
 
+### Batch 1 progress (2026-04-28 session 2)
+- ✅ **cat 5 子品種 × 3 stages = 15 zips** (persian / bengal / tabby / calico / siamese × baby / adult / elder)
+- ⏳ dog 5 子品種 × 3 stages: 柴犬 / 牧羊犬 / 臘腸犬 / 拉布拉多 / 哈士奇
+
+### PixelLab fast tier behavior observed
+- **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
+- **Pacing**: 120s between submissions reliably stays under cap; 75s sometimes hits 429.
+- **Wizard URL**: `/create-character/new?prompt=...` (advanced editor surfaces here, not on `/editor` which is Pixelorama painter).
+- **Form fields**: Quadruped → reveals skeleton dropdown (Bear/Cat/Dog/Horse/Lion). Use Cat for small mammals (cat/fox/hamster), Bear for large round (totoro).
+- **Quick presets**: Chibi (head 1.0, hip 1.0?) for baby/elder; Cartoon for adult.
+- **Sliders**: drag/click events on Chakra slider track unreliable — quick presets are more reliable than direct slider manipulation.
+
 ---
 
 ## 7. Open Decisions
