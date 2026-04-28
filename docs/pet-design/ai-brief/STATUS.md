@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 3 — hedgehog + bear + raccoon + otter + wolf done, paused before cow)
+**Last updated:** 2026-04-28 (session 3 — hedgehog + bear + raccoon + otter + wolf + cow done, paused before pig)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -211,9 +211,13 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - Strongest batch in session 3 — all 9 read clearly as wolves with proper canine silhouette + ear shape + yellow/blue eyes.
   - Skeleton: dog (canid). Worked great with the husky/timber-wolf prompt mix.
   - Black variety reads slightly charcoal-grey rather than pure jet-black, but identity is preserved.
+- ✅ **cow 3 子品種 × 3 stages = 9 zips** (Holstein dairy / yellow Taiwan / Scottish Highland × baby / adult / elder)
+  - Skeleton: bear (large quadruped from the 5 available skeletons).
+  - All 9 read clearly as cattle with distinct variety identity.
+  - Holstein 3 stages have iconic black-and-white spots; yellow Taiwan stages have warm tan coats with red collar bell; Highland stages have shaggy ginger-red bangs and curved horns visible from adult.
 
-Session 3 quota burned: 44 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 2 retries).
-Cumulative on subscription: ~120 / 2000.
+Session 3 quota burned: 53 generations (9 hedgehog + 12 bear + 6 raccoon + 6 otter + 9 wolf + 9 cow + 2 retries).
+Cumulative on subscription: ~129 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
@@ -237,14 +241,14 @@ Cumulative on subscription: ~120 / 2000.
 ## 8. Recommended New-Session Entry Points
 
 ### Continue Batch 2 (RECOMMENDED — pick up here)
-Last completed: **wolf 3×3 = 9 zips** (session 3, not yet committed). Next on the list:
+Last completed: **cow 3×3 = 9 zips** (session 3, not yet committed). Next on the list:
 
-1. **cow** 3 sub-varieties × 3 stages = 9 generations
-   - 乳牛 (Holstein dairy) / 黃牛 (yellow Taiwan cattle) / 高地牛 (Highland cattle)
-   - Skeleton: bear (large quadruped) — only 5 options available (Bear/Cat/Dog/Horse/Lion); horse may also work
-2. **pig** 4×3 = 12 (skeleton: bear?)
-3. **sheep** 3×3 = 9 (skeleton: bear?)
-4. … (see §4 list for full mammals: 8 breeds remaining ≈ 34 more generations)
+1. **pig** 4 sub-varieties × 3 stages = 12 generations
+   - 粉豬 (pink domestic) / 黑豬 (black) / 麝香豬 (musk pig / Vietnamese pot-bellied) / 野豬 (wild boar with tusks)
+   - Skeleton: bear (large quadruped)
+2. **sheep** 3×3 = 9 (skeleton: bear)
+3. **deer** 3×3 = 9 (skeleton: horse)
+4. … (see §4 list for full mammals: 7 breeds remaining ≈ 25 more generations)
 5. After mammals: 鳥類 (6 breeds), 兩棲爬蟲 (4 breeds), 奇幻 (5 breeds)
 
 **Operational notes for next session:**
@@ -254,7 +258,7 @@ Last completed: **wolf 3×3 = 9 zips** (session 3, not yet committed). Next on t
 - Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 - Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
 
-**Cumulative quota: ~120 / 2000.** Plenty left.
+**Cumulative quota: ~129 / 2000.** Plenty left.
 
 **Session 3 confirmed wizard flow (works end-to-end):**
 - `/create-character` page → click "Create" button (top of form area) → redirects to `/create-character/new` (the wizard).
