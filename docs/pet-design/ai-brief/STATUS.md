@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 2)
+**Last updated:** 2026-04-28 (session 2 — paused mid-Batch 2)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -212,15 +212,33 @@ Cumulative on subscription: ~76 / 2000.
 
 ## 8. Recommended New-Session Entry Points
 
-**If continuing asset generation:**
-1. Open PixelLab editor in Playwright
-2. Verify totoro baby resubmit completed → export to `species-zips-stages/totoro-baby.zip`
-3. Resubmit remaining 4 stuck items (hamster adult, fox baby, fox adult, totoro elder) using §5 pattern
-4. Begin 36-breed Batch 1 (recommend 哺乳類 cat/dog sub-varieties first — highest user value)
+### Continue Batch 2 (RECOMMENDED — pick up here)
+Last completed: **fox 3×3 = 9 zips** (commit `4ffbb1a`). Next on the list:
 
-**If switching to implementation:**
+1. **hedgehog** 3 sub-varieties × 3 stages = 9 generations
+   - 棕刺 (brown) / 白刺 (white) / 巧克力色 (chocolate)
+   - Skeleton: cat (small mammal)
+2. **bear** 4 sub-varieties × 3 stages = 12 generations
+   - 棕熊 (brown) / 黑熊 (black / asiatic) / 北極熊 (polar) / 熊貓 (panda)
+   - Skeleton: bear
+3. **raccoon** 2×3 = 6
+4. **otter** 2×3 = 6
+5. **wolf** 3×3 = 9
+6. … (see §4 list for full mammals: 13 breeds remaining ≈ 76 more generations)
+7. After mammals: 鳥類 (6 breeds), 兩棲爬蟲 (4 breeds), 奇幻 (5 breeds)
+
+**Operational notes for next session:**
+- Open `/create-character` in Playwright (kill any stale Chrome on `mcp-chrome-84ff974` first if browser-already-in-use error appears).
+- Submit one breed at a time with 180s pacing between submissions; 120s sometimes hits 429.
+- After Generate, inline JS waits for "Continue in background" button (≤30s) and clicks it.
+- Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
+- Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
+
+**Cumulative quota: ~76 / 2000.** Plenty left.
+
+### If switching to implementation
 1. Read `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`
 2. Use `superpowers:writing-plans` to convert design doc → step-by-step plan
 3. Then `superpowers:subagent-driven-development` to execute
 
-**If addressing open decisions:** Ask user to confirm §7 items 1–4 before committing more quota or code.
+**If addressing open decisions:** Ask user to confirm §7 items 2–4 before committing more code (item 1 已 resolved).
