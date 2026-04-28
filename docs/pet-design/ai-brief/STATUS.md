@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-28 (session 3 — All mammals + duck done, paused before owl)
+**Last updated:** 2026-04-29 (session 3 — All mammals + duck + owl done, paused before penguin)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -258,9 +258,13 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 鴛鴦 mandarin adult shows iconic orange crest + colorful pattern (most striking)
   - 黃鴨子 stages classic rubber-duck yellow
   - **Cat skeleton confirmed working for birds** — no need to switch to humanoid
+- ✅ **owl 3 子品種 × 3 stages = 9 zips** (snowy / barn heart-face / horned eagle × baby / adult / elder)
+  - Skeleton: cat. All 9 read clearly as owls.
+  - 雪鴞 pure white + yellow eyes; 草鴞 tan body + iconic heart-shaped white face;
+  - 角鴞 mottled brown + prominent ear tufts (most distinctive variety).
 
-Session 3 quota burned: 122 generations (113 mammals + 9 duck + 2 retries already counted).
-Cumulative on subscription: ~198 / 2000.
+Session 3 quota burned: 131 generations (113 mammals + 9 duck + 9 owl + 2 retries already counted).
+Cumulative on subscription: ~207 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
@@ -283,17 +287,13 @@ Cumulative on subscription: ~198 / 2000.
 
 ## 8. Recommended New-Session Entry Points
 
-### Continue Batch 2 — Birds (chicken legacy + duck done, owl next)
-Last completed: **duck 3×3 = 9 zips** (session 3).
-**Confirmed: cat skeleton works for birds** — keep using Quadruped + Cat.
+### Continue Batch 2 — Birds (chicken legacy + duck + owl done, penguin next)
+Last completed: **owl 3×3 = 9 zips** (session 3).
 
-Birds remaining (4 breeds × 3 sub × 3 stages = 36 generations):
-1. **owl** 3×3 = 9 (雪鴞 / 草鴞 / 角鴞)
-2. **penguin** 3×3 = 9 (帝企鵝 / 國王 / 冠企鵝)
-3. **parrot** 3×3 = 9 (金剛 / 玄鳳 / 虎皮)
-4. **pigeon** 3×3 = 9 (灰鴿 / 白鴿 / 信鴿)
-
-Chicken legacy (bird-rooster + bird-hen + bird-elder) is sufficient — skipping new chicken stages.
+Birds remaining (3 breeds × 3 sub × 3 stages = 27 generations):
+1. **penguin** 3×3 = 9 (帝企鵝 / 國王 / 冠企鵝)
+2. **parrot** 3×3 = 9 (金剛 / 玄鳳 / 虎皮)
+3. **pigeon** 3×3 = 9 (灰鴿 / 白鴿 / 信鴿)
 
 After birds: 兩棲爬蟲 (4 breeds × 3 stages = 12) and 奇幻 (5 breeds × 3 stages = 15).
 
@@ -304,7 +304,7 @@ After birds: 兩棲爬蟲 (4 breeds × 3 stages = 12) and 奇幻 (5 breeds × 3 
 - Each download lands in `.playwright-mcp/`; renames map prompt prefix → `species-zips-stages/{species}-{variety}-{stage}.zip`.
 - Visual check: `unzip -j` rotations/east.png from each zip into a tmp dir, compose 3-col grid for review.
 
-**Cumulative quota: ~198 / 2000.** Plenty left for birds + reptiles + fantasy.
+**Cumulative quota: ~207 / 2000.** Plenty left.
 
 **Session 3 confirmed wizard flow (works end-to-end):**
 - `/create-character` page → click "Create" button (top of form area) → redirects to `/create-character/new` (the wizard).
