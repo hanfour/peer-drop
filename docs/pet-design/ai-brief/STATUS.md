@@ -310,9 +310,17 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 火 (fire) vivid red with flame-tipped tail; baby has visible head flame.
   - 冰 (ice) pale icy-blue with frost-tone wings — clean ice dragon identity.
   - All 12 successfully landed on first attempt — increased delays (1500ms post-Quadruped, 2000ms pre-Generate) appear to have eliminated silent fails.
+- ✅ **slime 5 子品種 × 3 stages = 15 zips** (green / clear / fire / water / metal × baby / adult / elder)
+  - Skeleton: bear. All 15 read clearly as slimes with distinct elemental identity.
+  - 普通綠 (green) classic green dome blob across stages.
+  - 透明 (clear) pale blue translucent glassy texture.
+  - 火 (fire) vivid red-orange with flame tongues on top — **strongest variety identity** (flame element renders well at 32px).
+  - 水 (water) bright blue water blob with bubble accents.
+  - 金屬 (metal) silver chrome shine; elder shows nice tarnished bronze-rust patina.
+  - "no legs no arms" prompt produced clean blob silhouettes; 5 baby/adult/elder forms all distinct.
 
-Session 4 quota burned: 69 generations (penguin/parrot/pigeon/turtle/lizard/snake all 9× + dragon 12 + 3 retries).
-Cumulative on subscription: ~276 / 2000.
+Session 4 quota burned: 84 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + 3 retries).
+Cumulative on subscription: ~291 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
