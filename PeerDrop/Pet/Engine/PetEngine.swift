@@ -239,13 +239,35 @@ class PetEngine: ObservableObject {
     }
 
     // MARK: - Evolution
+    //
+    // v4.0 lifecycle model:
+    //   egg   → baby   : experience-based via EvolutionRequirement (24h + 100 XP, unchanged)
+    //   baby  → adult  : age-only at 8 days from birthDate (was: 3 days + 500 XP in v3.x)
+    //   adult → elder  : age-only at 14 days from birthDate (new in v4.0)
+    //   elder          : terminal
+    //
+    // The baby→adult shift from experience-driven to age-only is intentional: v4.0
+    // emphasises graceful aging over grinding. Legacy pets that were stuck at .baby
+    // with insufficient XP will simply age into .adult on the first interaction
+    // after their 8-day mark.
     private func checkEvolution() {
-        guard let req = EvolutionRequirement.for(pet.level) else { return }
-        let age = Date().timeIntervalSince(pet.birthDate)
-        let multiplier = hasSocialRecently ? req.socialBonus : 1.0
-        let effectiveExp = Double(pet.experience) * multiplier
-        if effectiveExp >= Double(req.requiredExperience) && age >= req.minimumAge {
-            evolve(to: req.targetLevel)
+        let ageInDays = Date().timeIntervalSince(pet.birthDate) / 86400
+
+        switch pet.level {
+        case .egg:
+            guard let req = EvolutionRequirement.for(.egg) else { return }
+            let multiplier = hasSocialRecently ? req.socialBonus : 1.0
+            let effectiveExp = Double(pet.experience) * multiplier
+            let ageInSeconds = Date().timeIntervalSince(pet.birthDate)
+            if effectiveExp >= Double(req.requiredExperience) && ageInSeconds >= req.minimumAge {
+                evolve(to: req.targetLevel)
+            }
+        case .baby:
+            if ageInDays >= 8 { evolve(to: .adult) }
+        case .adult:
+            if ageInDays >= 14 { evolve(to: .elder) }
+        case .elder:
+            return
         }
     }
 

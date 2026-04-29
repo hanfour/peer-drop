@@ -4,17 +4,18 @@ import XCTest
 @MainActor
 final class PetEvolutionTests: XCTestCase {
     func testBabyEvolvesToAdultAtThreshold() {
+        // v4.0: baby→adult is age-only at 8 days (was 3 days + 500 XP).
         var pet = PetState.newEgg()
         pet.level = .baby
         pet.genome.body = .cat
-        pet.experience = 499
-        pet.birthDate = Date().addingTimeInterval(-259201)
+        pet.birthDate = Date().addingTimeInterval(-(8 * 86400 + 1))
         let engine = PetEngine(pet: pet)
         engine.handleInteraction(.tap)
         XCTAssertEqual(engine.pet.level, .adult)
     }
 
     func testBabyDoesNotEvolveWithoutEnoughTime() {
+        // Even with high experience, age (<8 days) gates baby→adult promotion in v4.0.
         var pet = PetState.newEgg()
         pet.level = .baby
         pet.genome.body = .cat
