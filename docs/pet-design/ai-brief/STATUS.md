@@ -269,9 +269,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 帝企鵝 (emperor) baby grey downy fluff; adult shows orange chest patch (small but present); elder faded properly.
   - 國王 (king) baby brown downy (most distinct baby variety); adult shows iconic teardrop orange ear patches + chest gradient; elder retains identity.
   - 冠企鵝 (crested) baby yellow tufts visible; adult prominent yellow eyebrow tufts + red eyes are iconic; elder thinning crest.
+- ✅ **parrot 3 子品種 × 3 stages = 9 zips** (macaw / cockatiel / budgie × baby / adult / elder)
+  - Skeleton: cat. All 9 read clearly as parrots with distinct varieties.
+  - 金剛 (macaw) iconic vivid red body with blue + yellow wing accents — strongest variety identity.
+  - 玄鳳 (cockatiel) adult yellow head crest + orange cheek patch unmistakable; elder skews more cockatoo-pale.
+  - 虎皮 (budgie) bright green-and-yellow body across stages, faded olive in elder.
+  - Note: macaw-elder silently failed first submission (UI returned success but card never appeared); 1× retry needed. **Possible cause: post-Generate page transition swallowed the request.** Retry succeeded.
 
-Session 4 quota burned: 9 generations (penguin batch).
-Cumulative on subscription: ~216 / 2000.
+Session 4 quota burned: 19 generations (penguin 9 + parrot 9 + 1 macaw-elder retry).
+Cumulative on subscription: ~226 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
