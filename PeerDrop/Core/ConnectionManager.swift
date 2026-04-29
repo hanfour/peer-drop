@@ -2204,6 +2204,10 @@ final class ConnectionManager: ObservableObject {
                 inviteError = error.localizedDescription
                 invitingDeviceId = nil
             }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            await MainActor.run {
+                if inviteError == error.localizedDescription { inviteError = nil }
+            }
         }
     }
 

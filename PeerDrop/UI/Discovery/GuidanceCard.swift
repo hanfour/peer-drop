@@ -15,8 +15,21 @@ struct GuidanceCard: View {
     @ScaledMetric private var pillVPadding: CGFloat = 6
 
     var body: some View {
-        card(for: context.primaryRecommendation)
-            .padding(.horizontal, outerHPadding).padding(.vertical, outerVPadding)
+        VStack(alignment: .leading, spacing: 4) {
+            card(for: context.primaryRecommendation)
+            if let err = connectionManager.inviteError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2).foregroundStyle(.orange)
+                    Text(err).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, hPadding)
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, outerHPadding).padding(.vertical, outerVPadding)
+        .animation(.easeInOut(duration: 0.2), value: connectionManager.inviteError)
     }
 
     @ViewBuilder

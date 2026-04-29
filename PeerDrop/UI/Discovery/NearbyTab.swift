@@ -60,10 +60,16 @@ struct NearbyTab: View {
     }
 
     /// Show the recommendation card only when it's contextually useful.
-    /// `useInviteKnownDevice` is suppressed when local peers exist —
-    /// inviting a remote relay device is irrelevant if you already see local options.
+    /// - `useInviteKnownDevice` suppressed when local peers exist (local route preferred)
+    ///   or when already in an active session (recommending what you're doing makes no sense).
+    /// - All recommendations suppressed during active connection/transfer/voice call.
     private var shouldShowGuidance: Bool {
         guard isOnline else { return false }
+        switch connectionManager.state {
+        case .connected, .transferring, .voiceCall, .connecting, .requesting, .incomingRequest:
+            return false
+        default: break
+        }
         switch connectionContext.primaryRecommendation {
         case .useInviteKnownDevice:
             return connectionManager.discoveredPeers.isEmpty
