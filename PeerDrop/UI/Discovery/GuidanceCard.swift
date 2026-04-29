@@ -26,8 +26,11 @@ struct GuidanceCard: View {
             primaryCard(icon: "person.crop.circle.fill.badge.checkmark",
                         title: String(localized: "Connect again with \(device.displayName)"),
                         primaryLabel: String(localized: "Invite"),
-                        primaryAction: { connectionManager.shouldShowRelayConnect = true },
-                        subtitle: device.relativeLastConnected)
+                        primaryAction: {
+                            Task { await connectionManager.inviteKnownDevice(device) }
+                        },
+                        subtitle: device.relativeLastConnected,
+                        primaryBusy: connectionManager.invitingDeviceId == device.id)
         case .useTailnet:
             primaryCard(icon: "network.badge.shield.half.filled",
                         title: String(localized: "Found a Tailscale device nearby"),
@@ -51,7 +54,8 @@ struct GuidanceCard: View {
     }
 
     private func primaryCard(icon: String, title: String, primaryLabel: String,
-                             primaryAction: @escaping () -> Void, subtitle: String? = nil) -> some View {
+                             primaryAction: @escaping () -> Void, subtitle: String? = nil,
+                             primaryBusy: Bool = false) -> some View {
         HStack(spacing: rowSpacing) {
             Image(systemName: icon).font(.title2).foregroundStyle(.white)
             VStack(alignment: .leading, spacing: 2) {
@@ -65,10 +69,18 @@ struct GuidanceCard: View {
             .layoutPriority(1)
             Spacer(minLength: 0)
             Button(action: primaryAction) {
-                Text(primaryLabel).font(.caption.bold())
-                    .padding(.horizontal, pillHPadding).padding(.vertical, pillVPadding)
-                    .background(.white, in: Capsule()).foregroundStyle(.blue)
+                if primaryBusy {
+                    ProgressView()
+                        .tint(.blue)
+                        .padding(.horizontal, pillHPadding).padding(.vertical, pillVPadding)
+                        .background(.white, in: Capsule())
+                } else {
+                    Text(primaryLabel).font(.caption.bold())
+                        .padding(.horizontal, pillHPadding).padding(.vertical, pillVPadding)
+                        .background(.white, in: Capsule()).foregroundStyle(.blue)
+                }
             }
+            .disabled(primaryBusy)
             Button(action: onMoreOptions) {
                 Image(systemName: "ellipsis.circle").font(.caption).foregroundStyle(.white.opacity(0.9))
             }
