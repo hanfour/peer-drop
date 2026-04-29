@@ -263,8 +263,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 雪鴞 pure white + yellow eyes; 草鴞 tan body + iconic heart-shaped white face;
   - 角鴞 mottled brown + prominent ear tufts (most distinctive variety).
 
-Session 3 quota burned: 131 generations (113 mammals + 9 duck + 9 owl + 2 retries already counted).
-Cumulative on subscription: ~207 / 2000.
+### Birds phase continued (session 4 — autonomous run)
+- ✅ **penguin 3 子品種 × 3 stages = 9 zips** (emperor / king / crested rockhopper × baby / adult / elder)
+  - Skeleton: cat. All 9 read clearly as penguins with proper bird silhouette.
+  - 帝企鵝 (emperor) baby grey downy fluff; adult shows orange chest patch (small but present); elder faded properly.
+  - 國王 (king) baby brown downy (most distinct baby variety); adult shows iconic teardrop orange ear patches + chest gradient; elder retains identity.
+  - 冠企鵝 (crested) baby yellow tufts visible; adult prominent yellow eyebrow tufts + red eyes are iconic; elder thinning crest.
+
+Session 4 quota burned: 9 generations (penguin batch).
+Cumulative on subscription: ~216 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
