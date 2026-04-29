@@ -93,6 +93,7 @@ targets:
       - PeerDropTests
     dependencies:
       - target: PeerDrop
+      - package: ZIPFoundation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.tests
@@ -125,6 +126,20 @@ targets:
         group: Shared
       - path: PeerDrop/Pet/Sprites
         group: Shared
+        # Widget only needs legacy sprite data (compiled into the extension).
+        # New PNG-pipeline files (SpikeLoader, SpriteService, etc.) live alongside
+        # but must NOT be linked into the widget — they pull in ZIPFoundation
+        # which the widget doesn't need.
+        excludes:
+          - "SpikeLoader.swift"
+          - "SpeciesID.swift"
+          - "SpeciesCatalog.swift"
+          - "SpeciesCatalog.json"
+          - "SpriteRequest.swift"
+          - "SpriteAssetResolver.swift"
+          - "SpriteDecoder.swift"
+          - "SpriteCache.swift"
+          - "SpriteService.swift"
       - path: PeerDrop/Pet/Model/PetGenome.swift
         group: Shared
       - path: PeerDrop/Pet/Model/PetLevel.swift
