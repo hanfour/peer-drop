@@ -287,6 +287,7 @@
 		BC36880D49020290230785A6 /* MediaMessagePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90A00FA64ADA77E29D17065 /* MediaMessagePayload.swift */; };
 		BC6156CC6CA44233F862B5A6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */; };
 		BD7FA62F6682F65AF321BCAD /* PetGenome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91D9B2343FE5F8E807D1765F /* PetGenome.swift */; };
+		BDC78AF7F36123EE19BFBE0F /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = D2B442B92A45CC1B46325B9A /* ZIPFoundation */; };
 		BE6AFDDC48D6E8991CE97DB7 /* BearBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83469B778451248945B64577 /* BearBehavior.swift */; };
 		BE89FFAEA896985BDDEB4E89 /* PetBehaviorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E421866DB4CEFF89A391E29 /* PetBehaviorProvider.swift */; };
 		BEAC6B0E1BEB6CCD74DA0C37 /* TailnetPeerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D0867DAE29BDA07261CF4A /* TailnetPeerStoreTests.swift */; };
@@ -521,7 +522,6 @@
 		2BA47165FC60DE16D51823B6 /* FileResumePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileResumePayload.swift; sourceTree = "<group>"; };
 		2E188F98137CC86BA3F87F9E /* ConnectionTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionTimeoutTests.swift; sourceTree = "<group>"; };
 		2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRecordListView.swift; sourceTree = "<group>"; };
-		2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		31BC90B0DD263ECCA4A12DE7 /* PreKeyStoreTransactionalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTransactionalTests.swift; sourceTree = "<group>"; };
 		31EC0B7D4092FB9BB364440F /* PetLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLiveActivity.swift; sourceTree = "<group>"; };
 		325AF5B8F87E9729F5782A22 /* TrustedContactStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedContactStore.swift; sourceTree = "<group>"; };
@@ -688,6 +688,7 @@
 		91D9B2343FE5F8E807D1765F /* PetGenome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PetGenome.swift; path = PeerDrop/Pet/Model/PetGenome.swift; sourceTree = "<group>"; };
 		9213B13A8B9B9DF21664EA58 /* PerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceTests.swift; sourceTree = "<group>"; };
 		923FD5FA87FD257ADB28D0D2 /* ConsentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentSheet.swift; sourceTree = "<group>"; };
+		9302583F72C89E345886DAE9 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		931B479F1EE7DDCA9BA41340 /* RelaySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelaySessionTests.swift; sourceTree = "<group>"; };
 		946255B9AFD4BF54EA5B71F2 /* PetSnapshotTestsDark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotTestsDark.swift; sourceTree = "<group>"; };
 		94A0AF4FEF462DB76CC4FD9C /* ProofOfWorkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofOfWorkTests.swift; sourceTree = "<group>"; };
@@ -841,6 +842,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F422276653E0728E859B9BC9 /* WebRTC in Frameworks */,
+				BDC78AF7F36123EE19BFBE0F /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -850,12 +852,12 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
+				E05D42A3FC66BBA5FE87122C /* peer-drop-v4 */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
 				348FC413895A2131299A9250 /* PeerDropWidget */,
 				A7818433838A4B7AEF968F11 /* Shared */,
-				F5ABB9F9CC717D153374B0B7 /* peer-drop */,
 				B852FD7C848E2615AF9BF284 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1470,6 +1472,15 @@
 			path = Transfer;
 			sourceTree = "<group>";
 		};
+		E05D42A3FC66BBA5FE87122C /* peer-drop-v4 */ = {
+			isa = PBXGroup;
+			children = (
+				9302583F72C89E345886DAE9 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop-v4";
+			path = .;
+			sourceTree = "<group>";
+		};
 		E6038ACFC552B088D5EA02E6 /* Engine */ = {
 			isa = PBXGroup;
 			children = (
@@ -1560,15 +1571,6 @@
 			path = Connection;
 			sourceTree = "<group>";
 		};
-		F5ABB9F9CC717D153374B0B7 /* peer-drop */ = {
-			isa = PBXGroup;
-			children = (
-				2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */,
-			);
-			name = "peer-drop";
-			path = .;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1589,6 +1591,7 @@
 			name = PeerDrop;
 			packageProductDependencies = (
 				4C17EA9E6BE4797FC20EBBBC /* WebRTC */,
+				D2B442B92A45CC1B46325B9A /* ZIPFoundation */,
 			);
 			productName = PeerDrop;
 			productReference = F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */;
@@ -1686,6 +1689,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */,
+				49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -2277,7 +2281,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */;
+			baseConfigurationReference = 9302583F72C89E345886DAE9 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2300,7 +2304,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2F56BD61C93C61A1DCCADF35 /* Secrets.xcconfig */;
+			baseConfigurationReference = 9302583F72C89E345886DAE9 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2495,6 +2499,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.19;
+			};
+		};
 		6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stasel/WebRTC";
@@ -2510,6 +2522,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		D2B442B92A45CC1B46325B9A /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
