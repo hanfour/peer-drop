@@ -275,9 +275,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 玄鳳 (cockatiel) adult yellow head crest + orange cheek patch unmistakable; elder skews more cockatoo-pale.
   - 虎皮 (budgie) bright green-and-yellow body across stages, faded olive in elder.
   - Note: macaw-elder silently failed first submission (UI returned success but card never appeared); 1× retry needed. **Possible cause: post-Generate page transition swallowed the request.** Retry succeeded.
+- ✅ **pigeon 3 子品種 × 3 stages = 9 zips** (grey city / white dove / brown homing × baby / adult / elder)
+  - Skeleton: cat. All 9 read clearly as pigeons / doves with distinct varieties.
+  - 灰鴿 (grey city) classic urban pigeon look with iridescent purple-pink neck collar visible in adult.
+  - 白鴿 (white dove) pristine snow-white across baby/adult; elder shows yellowing-cream tint as prompted.
+  - 信鴿 (brown homing) mottled grey-brown plumage distinct from grey variety; baby a touch sparrow-like but identifiable.
+  - Increased post-Quadruped delay 800ms→1000ms and post-prompt delay 500ms→700ms based on macaw-elder lesson; no silent fails this batch.
 
-Session 4 quota burned: 19 generations (penguin 9 + parrot 9 + 1 macaw-elder retry).
-Cumulative on subscription: ~226 / 2000.
+Session 4 quota burned: 28 generations (penguin 9 + parrot 9 + 1 retry + pigeon 9).
+Cumulative on subscription: ~235 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
