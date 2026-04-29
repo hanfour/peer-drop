@@ -288,9 +288,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 陸龜 (tortoise) iconic brown dome shell + sturdy stubby legs.
   - 水龜 (red-eared slider) green-shelled with flat body; **red ear stripe small-feature did NOT render at 32px** (same limitation as raccoon-arctic mask, sloth toes, flying squirrel patagium). Acceptable — silhouette + green color preserves identity.
   - 海龜 (sea turtle) flat oval shell + slight flipper-shape legs + blue-tinted skin reading.
+- ✅ **lizard 3 子品種 × 3 stages = 9 zips** (bearded dragon / chameleon / leopard gecko × baby / adult / elder)
+  - Skeleton: cat. All 9 read clearly as lizards with distinct varieties.
+  - 鬃獅蜥 (bearded dragon) tan/yellow desert-colored with subtle spiky scales along back.
+  - 變色龍 (chameleon) **curled spiral tail rendered well — strongest variety identity feature.** Vivid green-blue-yellow patterning across stages.
+  - 守宮 (leopard gecko) cream-yellow body; leopard spots small-feature did NOT render at 32px (rendered as stripes instead). Acceptable.
+  - Note: gecko-elder silently failed first submission (3rd silent fail this session); 1× retry needed. **Pattern emerging: elders submitted last in batch are most prone to silent fails.** Increased post-Quadruped delay to 1200ms for retry.
 
-Session 4 quota burned: 37 generations (penguin 9 + parrot 9 + 1 retry + pigeon 9 + turtle 9).
-Cumulative on subscription: ~244 / 2000.
+Session 4 quota burned: 47 generations (penguin 9 + parrot 9 + 1 retry + pigeon 9 + turtle 9 + lizard 9 + 1 retry).
+Cumulative on subscription: ~254 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
