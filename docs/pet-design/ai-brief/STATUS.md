@@ -318,9 +318,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 水 (water) bright blue water blob with bubble accents.
   - 金屬 (metal) silver chrome shine; elder shows nice tarnished bronze-rust patina.
   - "no legs no arms" prompt produced clean blob silhouettes; 5 baby/adult/elder forms all distinct.
+- ✅ **totoro 4 子品種 × 3 stages = 12 zips** (white / grey / large dark / mini brown × baby / adult / elder)
+  - Skeleton: bear. All 12 read as round fluffy chibi forest creatures.
+  - 白 (small white) classic small kogarashi-style white spirit silhouette.
+  - 灰 (medium grey) mid-grey plump round creature.
+  - 大 (large dark) iconic dark grey body with white V-chevron belly markings — **strongest variety identity** (canonical totoro look).
+  - 小 (mini brown) "warm chestnut brown fur" pushed model towards shiba-dog look rather than totoro spirit. Color distinct but identity fuzzy. Acceptable.
 
-Session 4 quota burned: 84 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + 3 retries).
-Cumulative on subscription: ~291 / 2000.
+Session 4 quota burned: 96 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + totoro 12 + 3 retries).
+Cumulative on subscription: ~303 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
