@@ -1,10 +1,14 @@
+// TODO(M3): delete this file once SpriteService supersedes it.
+// Spike-only loader that proves the zip → PNG → CGImage pipeline. Production
+// code should go through SpriteService (M3.5), not this.
 import Foundation
 import ImageIO
 import ZIPFoundation
 
 enum SpikeLoaderError: Error {
     case entryNotFound(String)
-    case decodeFailed
+    case imageSourceCreationFailed
+    case imageDecodeFailed
 }
 
 enum SpikeLoader {
@@ -15,9 +19,11 @@ enum SpikeLoader {
         }
         var data = Data()
         _ = try archive.extract(entry) { chunk in data.append(chunk) }
-        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
-              let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
-            throw SpikeLoaderError.decodeFailed
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else {
+            throw SpikeLoaderError.imageSourceCreationFailed
+        }
+        guard let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
+            throw SpikeLoaderError.imageDecodeFailed
         }
         return cg
     }
