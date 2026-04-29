@@ -204,6 +204,7 @@
 		8685EB1F6658650B6B97A528 /* ReconnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BE45F7EE204F6F3E38ACB4A /* ReconnectTests.swift */; };
 		874F53371173F39758963EA1 /* ArchiveManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5ABCC55FDF18BE085B2AC3 /* ArchiveManager.swift */; };
 		87BA8CAA57B997254D5000FA /* SpriteCompositorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C858E8695A54E3D0474B8BC /* SpriteCompositorTests.swift */; };
+		87CFA34BE623FC0FB555AE1C /* SpeciesIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */; };
 		88DEFED6EF2E7F1872648030 /* TLSConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5488BDB916346C1C0D52034F /* TLSConfiguration.swift */; };
 		899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D66F32C1146402F70397940 /* RetryPolicyTests.swift */; };
 		8AC1D27408D667B99802D3CF /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FEB4731FDC3D68845A758F3 /* SnapshotHelper.swift */; };
@@ -332,6 +333,7 @@
 		CFAFFDAD4C33AA2BFBE1A74D /* PetBehaviorProviderFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95BBD9D307E8B689ADB9F991 /* PetBehaviorProviderFactory.swift */; };
 		CFBBC9337F89BB8008EFC26E /* ClipboardSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D98B12AB60B5E1D3E29D971 /* ClipboardSyncManager.swift */; };
 		D0675553BFE32A1539A3E61F /* PetActionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8419E06C5E5140DF440694BF /* PetActionTests.swift */; };
+		D0B36A62630FB1EACC746EE3 /* SpeciesID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3062C325AC7AB93063F9B2E8 /* SpeciesID.swift */; };
 		D0C7491ECED0CFEACCADCB25 /* ProofOfWorkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A0AF4FEF462DB76CC4FD9C /* ProofOfWorkTests.swift */; };
 		D26E7E86AE786FAC829ABAE4 /* PetLifeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C268A0C1963AF7348AA876 /* PetLifeState.swift */; };
 		D2D66422C311F0DAEECE29CF /* ComprehensiveVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */; };
@@ -529,6 +531,7 @@
 		2BA47165FC60DE16D51823B6 /* FileResumePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileResumePayload.swift; sourceTree = "<group>"; };
 		2E188F98137CC86BA3F87F9E /* ConnectionTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionTimeoutTests.swift; sourceTree = "<group>"; };
 		2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRecordListView.swift; sourceTree = "<group>"; };
+		3062C325AC7AB93063F9B2E8 /* SpeciesID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeciesID.swift; sourceTree = "<group>"; };
 		31BC90B0DD263ECCA4A12DE7 /* PreKeyStoreTransactionalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTransactionalTests.swift; sourceTree = "<group>"; };
 		31EC0B7D4092FB9BB364440F /* PetLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLiveActivity.swift; sourceTree = "<group>"; };
 		325AF5B8F87E9729F5782A22 /* TrustedContactStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedContactStore.swift; sourceTree = "<group>"; };
@@ -747,6 +750,7 @@
 		B82E68F372C25BA8254CFA36 /* FrogBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrogBehavior.swift; sourceTree = "<group>"; };
 		B89BD71945BA764EC9C6B8A9 /* TrustedContactStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedContactStoreTests.swift; sourceTree = "<group>"; };
 		B8D0867DAE29BDA07261CF4A /* TailnetPeerStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerStoreTests.swift; sourceTree = "<group>"; };
+		B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeciesIDTests.swift; sourceTree = "<group>"; };
 		B9B620D00284A700C480C5E5 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		BA07F3586A1F9F14F8BDF179 /* PreKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStore.swift; sourceTree = "<group>"; };
 		BA137F066528B6AB98E71424 /* ReactionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPickerView.swift; sourceTree = "<group>"; };
@@ -1115,6 +1119,7 @@
 				A5C3B3F5C9E0143AED707C6E /* PatternSpriteData.swift */,
 				BCEB8F58DD3A17AE0E87862A /* RabbitSpriteData.swift */,
 				9FB87A392E4530E49CD216CB /* SlimeSpriteData.swift */,
+				3062C325AC7AB93063F9B2E8 /* SpeciesID.swift */,
 				5A02F5ED6C7587AE62AC9E57 /* SpikeLoader.swift */,
 				0CACE77F48AE3D60B46842BF /* SpriteDataRegistry.swift */,
 			);
@@ -1422,6 +1427,7 @@
 			children = (
 				9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */,
 				075AF882FE67177B700BCDDC /* PetLevelPromotionTests.swift */,
+				B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */,
 				97A8385C99B6769202906D9E /* SpikeLoaderTests.swift */,
 				E748156B79B6A1C1DE0C2AB6 /* Fixtures */,
 			);
@@ -1931,6 +1937,7 @@
 				F5CCE99629FF1B1F7BE70261 /* SessionKeyManagerTests.swift in Sources */,
 				FF96565D0CE33F0793FF2076 /* SharedPetStateTests.swift in Sources */,
 				C1BB9FCDE5745E9A4F258094 /* SlimeSpriteDataTests.swift in Sources */,
+				87CFA34BE623FC0FB555AE1C /* SpeciesIDTests.swift in Sources */,
 				72DE0B37C8F153B9FE730A85 /* SpikeLoaderTests.swift in Sources */,
 				1DBAD86759194AC3B39CB6EE /* SpriteCacheTests.swift in Sources */,
 				87BA8CAA57B997254D5000FA /* SpriteCompositorTests.swift in Sources */,
@@ -2177,6 +2184,7 @@
 				72EEA148818F1CACB188EFFF /* SlimeBehavior.swift in Sources */,
 				5F05578BC3709EF7DCA99577 /* SlimeSpriteData.swift in Sources */,
 				8E6B351D5F26FEE0DBB4612F /* SocialEntry.swift in Sources */,
+				D0B36A62630FB1EACC746EE3 /* SpeciesID.swift in Sources */,
 				CB864DDE4AB0613CF0324777 /* SpikeLoader.swift in Sources */,
 				A57846A4BAFDA2C46FCC2868 /* SpriteCache.swift in Sources */,
 				F78818B22557E1555A5F8443 /* SpriteCompositor.swift in Sources */,
