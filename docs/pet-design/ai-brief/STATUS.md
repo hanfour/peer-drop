@@ -282,8 +282,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 信鴿 (brown homing) mottled grey-brown plumage distinct from grey variety; baby a touch sparrow-like but identifiable.
   - Increased post-Quadruped delay 800ms→1000ms and post-prompt delay 500ms→700ms based on macaw-elder lesson; no silent fails this batch.
 
-Session 4 quota burned: 28 generations (penguin 9 + parrot 9 + 1 retry + pigeon 9).
-Cumulative on subscription: ~235 / 2000.
+### Reptiles phase started (session 4 cont.)
+- ✅ **turtle 3 子品種 × 3 stages = 9 zips** (tortoise / water turtle / sea turtle × baby / adult / elder)
+  - Skeleton: cat. All 9 read clearly as turtles with distinct varieties.
+  - 陸龜 (tortoise) iconic brown dome shell + sturdy stubby legs.
+  - 水龜 (red-eared slider) green-shelled with flat body; **red ear stripe small-feature did NOT render at 32px** (same limitation as raccoon-arctic mask, sloth toes, flying squirrel patagium). Acceptable — silhouette + green color preserves identity.
+  - 海龜 (sea turtle) flat oval shell + slight flipper-shape legs + blue-tinted skin reading.
+
+Session 4 quota burned: 37 generations (penguin 9 + parrot 9 + 1 retry + pigeon 9 + turtle 9).
+Cumulative on subscription: ~244 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
