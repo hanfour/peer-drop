@@ -255,8 +255,8 @@ class PetEngine: ObservableObject {
             showNamingDialog = true
         }
         currentAction = .evolving
-        // 10% mutation chance on baby→child evolution
-        if level == .child && Double.random(in: 0...1) < 0.1 {
+        // 10% mutation chance on baby→adult evolution
+        if level == .adult && Double.random(in: 0...1) < 0.1 {
             pet.genome.mutate(trigger: .evolution)
         }
         // Spawn 5 star particles

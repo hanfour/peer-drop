@@ -5,7 +5,7 @@ enum SpriteDataRegistry {
         switch stage {
         case .egg: return nil
         case .baby: return babySprites(for: body)
-        case .child: return childSprites(for: body)
+        case .adult, .elder: return childSprites(for: body)  // legacy data only has child art; .elder reuses adult sprites until M3 PNG pipeline
         }
     }
 

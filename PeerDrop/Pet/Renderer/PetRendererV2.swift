@@ -24,7 +24,7 @@ class PetRendererV2 {
             let f = frame % max(eggFrames.count, 1)
             indices = eggFrames[f]
 
-        case .baby, .child:
+        case .baby, .adult, .elder:
             guard let bodyFrames = spriteData(for: genome.body, stage: level, action: action) else {
                 return nil
             }

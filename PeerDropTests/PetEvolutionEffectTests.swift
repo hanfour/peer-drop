@@ -11,7 +11,7 @@ final class PetEvolutionEffectTests: XCTestCase {
         pet.birthDate = Date().addingTimeInterval(-259201)
         let engine = PetEngine(pet: pet)
         engine.handleInteraction(.tap)
-        XCTAssertEqual(engine.pet.level, .child)
+        XCTAssertEqual(engine.pet.level, .adult)
         XCTAssertTrue(engine.showEvolutionFlash)
     }
 }

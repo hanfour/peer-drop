@@ -10,7 +10,7 @@ enum PetSnapshotRenderer {
         switch level {
         case .egg:
             indices = EggSpriteData.idle[0]
-        case .baby, .child:
+        case .baby, .adult, .elder:
             guard let bodyFrames = SpriteDataRegistry.sprites(for: body, stage: level)?[.idle],
                   !bodyFrames.isEmpty else { return nil }
             let meta = SpriteDataRegistry.meta(for: body)

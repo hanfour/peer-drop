@@ -19,7 +19,7 @@ final class PetSnapshotRendererTests: XCTestCase {
 
     func testRenderScaled128() {
         let image = PetSnapshotRenderer.render(
-            body: .dog, level: .child, mood: .sleepy,
+            body: .dog, level: .adult, mood: .sleepy,
             eyes: .round, pattern: .stripe, paletteIndex: 3, scale: 8)
         XCTAssertEqual(image?.width, 128)
     }

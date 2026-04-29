@@ -11,11 +11,11 @@ final class SpriteDataRegistryTests: XCTestCase {
         }
     }
 
-    func testAllBodyTypesHaveChildSprites() {
+    func testAllBodyTypesHaveAdultSprites() {
         for body in BodyGene.allCases {
-            let sprites = SpriteDataRegistry.sprites(for: body, stage: .child)
-            XCTAssertNotNil(sprites, "\(body) missing child sprites")
-            XCTAssertNotNil(sprites?[.idle], "\(body) child missing idle")
+            let sprites = SpriteDataRegistry.sprites(for: body, stage: .adult)
+            XCTAssertNotNil(sprites, "\(body) missing adult sprites")
+            XCTAssertNotNil(sprites?[.idle], "\(body) adult missing idle")
         }
     }
 

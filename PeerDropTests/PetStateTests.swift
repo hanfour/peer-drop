@@ -17,7 +17,7 @@ final class PetStateTests: XCTestCase {
     }
 
     func testPetLevelCaseIterable() {
-        XCTAssertEqual(PetLevel.allCases.count, 3)
+        XCTAssertEqual(PetLevel.allCases.count, 4)
     }
 
     // MARK: - PetGenome
@@ -132,7 +132,7 @@ final class PetStateTests: XCTestCase {
     func testEvolutionRequirementForBaby() {
         let req = EvolutionRequirement.for(.baby)
         XCTAssertNotNil(req)
-        XCTAssertEqual(req?.targetLevel, .child)
+        XCTAssertEqual(req?.targetLevel, .adult)
         XCTAssertEqual(req?.requiredExperience, 500)
     }
 

@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class PetEvolutionTests: XCTestCase {
-    func testBabyEvolvesToChildAtThreshold() {
+    func testBabyEvolvesToAdultAtThreshold() {
         var pet = PetState.newEgg()
         pet.level = .baby
         pet.genome.body = .cat
@@ -11,7 +11,7 @@ final class PetEvolutionTests: XCTestCase {
         pet.birthDate = Date().addingTimeInterval(-259201)
         let engine = PetEngine(pet: pet)
         engine.handleInteraction(.tap)
-        XCTAssertEqual(engine.pet.level, .child)
+        XCTAssertEqual(engine.pet.level, .adult)
     }
 
     func testBabyDoesNotEvolveWithoutEnoughTime() {
