@@ -124,22 +124,42 @@ targets:
         group: Shared
       - path: PeerDrop/Pet/Renderer/PetPalettes.swift
         group: Shared
-      - path: PeerDrop/Pet/Sprites
+      # Widget shares legacy sprite data with the app but must NOT pull in the
+      # new PNG pipeline (SpikeLoader / SpriteService / etc.) — those depend on
+      # ZIPFoundation which the extension doesn't need. List legacy files
+      # explicitly: this set is closed (M8 deletes all of it) and any new file
+      # added to PeerDrop/Pet/Sprites/ defaults to "not in widget" rather than
+      # "silently linked into widget then breaks at link time".
+      - path: PeerDrop/Pet/Sprites/BodyMeta.swift
         group: Shared
-        # Widget only needs legacy sprite data (compiled into the extension).
-        # New PNG-pipeline files (SpikeLoader, SpriteService, etc.) live alongside
-        # but must NOT be linked into the widget — they pull in ZIPFoundation
-        # which the widget doesn't need.
-        excludes:
-          - "SpikeLoader.swift"
-          - "SpeciesID.swift"
-          - "SpeciesCatalog.swift"
-          - "SpeciesCatalog.json"
-          - "SpriteRequest.swift"
-          - "SpriteAssetResolver.swift"
-          - "SpriteDecoder.swift"
-          - "SpriteCache.swift"
-          - "SpriteService.swift"
+      - path: PeerDrop/Pet/Sprites/SpriteDataRegistry.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/EggSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/EyeSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/PatternSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/CatSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/DogSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/RabbitSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/BirdSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/FrogSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/BearSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/DragonSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/OctopusSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/GhostSpriteData.swift
+        group: Shared
+      - path: PeerDrop/Pet/Sprites/SlimeSpriteData.swift
+        group: Shared
       - path: PeerDrop/Pet/Model/PetGenome.swift
         group: Shared
       - path: PeerDrop/Pet/Model/PetLevel.swift
