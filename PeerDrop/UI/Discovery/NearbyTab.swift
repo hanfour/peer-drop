@@ -62,6 +62,11 @@ struct NearbyTab: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
+            // Always-visible recommendation row (relay invite, tailnet, etc.)
+            // GuidanceCard self-hides for waitForDiscovery / useQRScan recommendations.
+            if isOnline {
+                GuidanceCard(trigger: .emptyState, onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
+            }
             Group {
                 if !isOnline {
                     VStack(spacing: 12) {
@@ -82,8 +87,6 @@ struct NearbyTab: View {
                         ProgressView()
                         Text("Searching for nearby devices...")
                             .foregroundStyle(.secondary)
-                        GuidanceCard(trigger: .emptyState, onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
-                            .padding(.top, 8)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if isGridMode {
