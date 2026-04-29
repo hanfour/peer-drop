@@ -125,6 +125,10 @@ final class ConnectionManager: ObservableObject {
     @Published var pendingRelayJoinCode: String?
     /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
     @Published var shouldShowRelayConnect = false
+    /// Device ID currently being invited via `inviteKnownDevice` (for UI loading state).
+    @Published var invitingDeviceId: String?
+    /// Surface invite errors to the UI (transient; auto-cleared on next success or 5s).
+    @Published var inviteError: String?
     /// Pending key change alert for a contact whose key has changed
     @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
     /// Pending first-contact verification: an envelope from an unknown peer
@@ -2156,6 +2160,56 @@ final class ConnectionManager: ObservableObject {
 
     /// Stores the current invite-accept task so it can be cancelled if superseded.
     private var activeInviteTask: Task<Void, Never>?
+
+    /// Initiate a relay invite to a known device. Creates a room, pushes the invite via
+    /// the worker (WS inbox or APNs fallback), and starts the relay session as creator.
+    /// The peer side receives a `RelayInvite` and can one-tap accept — no manual code.
+    func inviteKnownDevice(_ device: DeviceRecord) async {
+        guard let peerDeviceId = device.peerDeviceId else {
+            await MainActor.run { inviteError = String(localized: "Device ID not yet known") }
+            return
+        }
+        await MainActor.run {
+            invitingDeviceId = device.id
+            inviteError = nil
+        }
+        do {
+            let signaling = WorkerSignaling()
+            let room = try await signaling.createRoom()
+            guard let roomToken = room.roomToken else {
+                await MainActor.run {
+                    inviteError = String(localized: "Server did not return room token")
+                    invitingDeviceId = nil
+                }
+                return
+            }
+            let senderName = await MainActor.run { UIDevice.current.name }
+            try await signaling.sendInvite(
+                toDeviceId: peerDeviceId,
+                roomCode: room.roomCode,
+                roomToken: roomToken,
+                senderName: senderName,
+                senderId: DeviceIdentity.deviceId
+            )
+            await MainActor.run {
+                invitingDeviceId = nil
+                startWorkerRelayAsCreator(
+                    roomCode: room.roomCode,
+                    roomToken: roomToken,
+                    signaling: signaling
+                )
+            }
+        } catch {
+            await MainActor.run {
+                inviteError = error.localizedDescription
+                invitingDeviceId = nil
+            }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            await MainActor.run {
+                if inviteError == error.localizedDescription { inviteError = nil }
+            }
+        }
+    }
 
     /// Accept a relay invite — creates signaling and joins as the answerer.
     /// Dedups concurrent delivery from WebSocket inbox + APNs within a 60s window.

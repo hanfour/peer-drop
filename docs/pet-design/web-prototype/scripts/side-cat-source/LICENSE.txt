@@ -1,0 +1,12 @@
+Cat sprites by Shepardskin
+Source: https://opengameart.org/content/cat-sprites
+License: CC0 1.0 Universal (Public Domain Dedication)
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+The original ZIP archive (shepardskin-cat-sprite.zip) is preserved alongside
+the extracted GIF sheet (catspritesoriginal.gif) so anyone can verify the
+provenance of the source asset offline.
+
+The author waived all rights — no attribution is legally required. We credit
+Shepardskin in the prototype's README and in the JSON `_credit` field anyway
+because it's good practice.

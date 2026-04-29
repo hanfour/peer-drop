@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct DevicePickerView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
@@ -61,35 +60,14 @@ struct DevicePickerView: View {
     }
 
     private func invite(_ device: DeviceRecord) async {
-        guard let peerDeviceId = device.peerDeviceId else { return }
         busyDeviceId = device.id
         errorText = nil
         defer { busyDeviceId = nil }
-        do {
-            let signaling = WorkerSignaling()
-            let room = try await signaling.createRoom()
-            guard let roomToken = room.roomToken else {
-                errorText = String(localized: "Server did not return room token")
-                return
-            }
-            let senderName = UIDevice.current.name
-            try await signaling.sendInvite(
-                toDeviceId: peerDeviceId,
-                roomCode: room.roomCode,
-                roomToken: roomToken,
-                senderName: senderName,
-                senderId: DeviceIdentity.deviceId
-            )
-            await MainActor.run {
-                connectionManager.startWorkerRelayAsCreator(
-                    roomCode: room.roomCode,
-                    roomToken: roomToken,
-                    signaling: signaling
-                )
-                dismiss()
-            }
-        } catch {
-            errorText = error.localizedDescription
+        await connectionManager.inviteKnownDevice(device)
+        if let err = connectionManager.inviteError {
+            errorText = err
+        } else {
+            dismiss()
         }
     }
 }

@@ -59,9 +59,33 @@ struct NearbyTab: View {
         filteredPeers.filter { $0.source == .bluetooth }
     }
 
+    /// Show the recommendation card only when it's contextually useful.
+    /// - `useInviteKnownDevice` suppressed when local peers exist (local route preferred)
+    ///   or when already in an active session (recommending what you're doing makes no sense).
+    /// - All recommendations suppressed during active connection/transfer/voice call.
+    private var shouldShowGuidance: Bool {
+        guard isOnline else { return false }
+        switch connectionManager.state {
+        case .connected, .transferring, .voiceCall, .connecting, .requesting, .incomingRequest:
+            return false
+        default: break
+        }
+        switch connectionContext.primaryRecommendation {
+        case .useInviteKnownDevice:
+            return connectionManager.discoveredPeers.isEmpty
+        case .useTailnet, .useRelayCode, .configureTailscale:
+            return true
+        case .useQRScan, .waitForDiscovery:
+            return false
+        }
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
+            if shouldShowGuidance {
+                GuidanceCard(onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
+            }
             Group {
                 if !isOnline {
                     VStack(spacing: 12) {
@@ -82,8 +106,6 @@ struct NearbyTab: View {
                         ProgressView()
                         Text("Searching for nearby devices...")
                             .foregroundStyle(.secondary)
-                        GuidanceCard(trigger: .emptyState, onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
-                            .padding(.top, 8)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if isGridMode {
