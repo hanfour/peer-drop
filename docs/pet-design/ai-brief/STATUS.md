@@ -1,6 +1,6 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-29 (session 3 ended — autonomous-run handoff doc for new session, see §8)
+**Last updated:** 2026-04-29 (session 4 — autonomous run completed, Batch 2 fully done, see §6)
 **Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
 
 > **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
@@ -330,9 +330,23 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 冰 (ice) pale icy-blue with frost crystal accents — distinct from fire variety.
   - 光 (light) golden-yellow with **iconic divine halo ring above head rendered well** at 32px (small-feature exception — halo is large/circular enough to render).
   - All 9 successfully landed first attempt; long delays continue to eliminate silent fails.
+- ✅ **unicorn 3 子品種 × 3 stages = 9 zips** (white / rainbow / dark cursed × baby / adult / elder)
+  - Skeleton: horse (per user instruction). Horse silhouette + horn render perfectly at 32px.
+  - 白 (classic white) snow-white body with golden spiral horn + pastel mane.
+  - 彩虹 (rainbow) iconic rainbow-banded mane and tail — **strongest variety identity** (vibrant red/orange/yellow/green/blue/purple stripes preserved across stages).
+  - 黑暗 (dark cursed) jet-black body with crimson red horn + glowing red eyes — sinister evil unicorn.
+  - All 9 landed first attempt — last batch fully clean run.
 
-Session 4 quota burned: 105 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + totoro 12 + phoenix 9 + 3 retries).
-Cumulative on subscription: ~312 / 2000.
+🎉 **BATCH 2 COMPLETE: 33 species, ~440 zips total cumulative.** 🎉
+
+Final breakdown of Batch 2 (this expansion plan):
+- 哺乳類 18 (cat/dog/rabbit/hamster/fox/hedgehog/bear/raccoon/otter/wolf/cow/pig/sheep/deer/squirrel/horse/sloth/red panda)
+- 鳥類 6 (chicken*/duck/owl/penguin/parrot/pigeon) — *chicken handled as legacy bird/hen/rooster
+- 兩棲爬蟲 4 (frog*/turtle/lizard/snake) — *frog handled as legacy frog/tadpole/elder
+- 奇幻 5 (dragon/slime/totoro/phoenix/unicorn)
+
+Session 4 quota burned: 114 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + totoro 12 + phoenix 9 + unicorn 9 + 3 retries).
+Cumulative on subscription: ~321 / 2000. Plenty of quota left for refinement passes if needed.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
