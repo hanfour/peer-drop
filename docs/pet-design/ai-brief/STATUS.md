@@ -302,8 +302,17 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - Bear skeleton + Sidescroller + "coiled in spiral" prompt produced excellent compact coiled snake silhouettes.
   - Note: milk-elder silently failed first submission (4th silent fail — confirms elder-last pattern); 1× retry needed.
 
-Session 4 quota burned: 57 generations (penguin 9 + parrot 9 + pigeon 9 + turtle 9 + lizard 9 + snake 9 + 3 retries).
-Cumulative on subscription: ~264 / 2000.
+### Fantasy phase started (session 4 cont.)
+- ✅ **dragon 4 子品種 × 3 stages = 12 zips** (western / eastern / fire / ice × baby / adult / elder)
+  - Skeleton: bear. All 12 read clearly as dragons.
+  - 西方 (western) green-toned bat-winged classic dragon silhouette — strongest "dragon" identity.
+  - 東方 (eastern) red/orange with iconic deer-like antlers visible from adult stage. **Note: prompt "no wings" did NOT prevent wings from rendering — model defaulted to winged dragon shape regardless.** Antlers + serpentine body still distinguishes from western.
+  - 火 (fire) vivid red with flame-tipped tail; baby has visible head flame.
+  - 冰 (ice) pale icy-blue with frost-tone wings — clean ice dragon identity.
+  - All 12 successfully landed on first attempt — increased delays (1500ms post-Quadruped, 2000ms pre-Generate) appear to have eliminated silent fails.
+
+Session 4 quota burned: 69 generations (penguin/parrot/pigeon/turtle/lizard/snake all 9× + dragon 12 + 3 retries).
+Cumulative on subscription: ~276 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
