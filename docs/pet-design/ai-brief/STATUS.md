@@ -324,9 +324,15 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 灰 (medium grey) mid-grey plump round creature.
   - 大 (large dark) iconic dark grey body with white V-chevron belly markings — **strongest variety identity** (canonical totoro look).
   - 小 (mini brown) "warm chestnut brown fur" pushed model towards shiba-dog look rather than totoro spirit. Color distinct but identity fuzzy. Acceptable.
+- ✅ **phoenix 3 子品種 × 3 stages = 9 zips** (fire / ice / light × baby / adult / elder)
+  - Skeleton: cat (mythical bird, treated as bird per user instruction).
+  - 火 (fire) vivid red-orange with flame plumes/crest — strongest mythical bird identity.
+  - 冰 (ice) pale icy-blue with frost crystal accents — distinct from fire variety.
+  - 光 (light) golden-yellow with **iconic divine halo ring above head rendered well** at 32px (small-feature exception — halo is large/circular enough to render).
+  - All 9 successfully landed first attempt; long delays continue to eliminate silent fails.
 
-Session 4 quota burned: 96 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + totoro 12 + 3 retries).
-Cumulative on subscription: ~303 / 2000.
+Session 4 quota burned: 105 generations (penguin/parrot/pigeon/turtle/lizard/snake 9× + dragon 12 + slime 15 + totoro 12 + phoenix 9 + 3 retries).
+Cumulative on subscription: ~312 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
