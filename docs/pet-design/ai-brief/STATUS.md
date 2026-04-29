@@ -294,9 +294,16 @@ Cumulative on subscription: ~76 / 2000 (server showed 70/2000 at start of sessio
   - 變色龍 (chameleon) **curled spiral tail rendered well — strongest variety identity feature.** Vivid green-blue-yellow patterning across stages.
   - 守宮 (leopard gecko) cream-yellow body; leopard spots small-feature did NOT render at 32px (rendered as stripes instead). Acceptable.
   - Note: gecko-elder silently failed first submission (3rd silent fail this session); 1× retry needed. **Pattern emerging: elders submitted last in batch are most prone to silent fails.** Increased post-Quadruped delay to 1200ms for retry.
+- ✅ **snake 3 子品種 × 3 stages = 9 zips** (ball python / corn snake / milk snake × baby / adult / elder)
+  - Skeleton: bear (per user instruction for large reptile). "no legs" prompt worked great.
+  - 球蟒 (ball python) brown camouflage with iconic irregular blotch pattern; coiled compact ball shape — strongest variety.
+  - 玉米蛇 (corn snake) vivid orange-red checkered pattern across stages.
+  - 牛奶蛇 (milk snake) red-black-yellow banded pattern wraps around body — distinctive tricolor identity.
+  - Bear skeleton + Sidescroller + "coiled in spiral" prompt produced excellent compact coiled snake silhouettes.
+  - Note: milk-elder silently failed first submission (4th silent fail — confirms elder-last pattern); 1× retry needed.
 
-Session 4 quota burned: 47 generations (penguin 9 + parrot 9 + 1 retry + pigeon 9 + turtle 9 + lizard 9 + 1 retry).
-Cumulative on subscription: ~254 / 2000.
+Session 4 quota burned: 57 generations (penguin 9 + parrot 9 + pigeon 9 + turtle 9 + lizard 9 + snake 9 + 3 retries).
+Cumulative on subscription: ~264 / 2000.
 
 ### PixelLab fast tier behavior observed
 - **Concurrent limit: 3 background jobs (Tier 1)**. 4th + returns HTTP 429.
