@@ -59,13 +59,26 @@ struct NearbyTab: View {
         filteredPeers.filter { $0.source == .bluetooth }
     }
 
+    /// Show the recommendation card only when it's contextually useful.
+    /// `useInviteKnownDevice` is suppressed when local peers exist —
+    /// inviting a remote relay device is irrelevant if you already see local options.
+    private var shouldShowGuidance: Bool {
+        guard isOnline else { return false }
+        switch connectionContext.primaryRecommendation {
+        case .useInviteKnownDevice:
+            return connectionManager.discoveredPeers.isEmpty
+        case .useTailnet, .useRelayCode, .configureTailscale:
+            return true
+        case .useQRScan, .waitForDiscovery:
+            return false
+        }
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-            // Always-visible recommendation row (relay invite, tailnet, etc.)
-            // GuidanceCard self-hides for waitForDiscovery / useQRScan recommendations.
-            if isOnline {
-                GuidanceCard(trigger: .emptyState, onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
+            if shouldShowGuidance {
+                GuidanceCard(onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
             }
             Group {
                 if !isOnline {

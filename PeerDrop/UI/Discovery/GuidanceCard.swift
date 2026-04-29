@@ -3,7 +3,6 @@ import SwiftUI
 struct GuidanceCard: View {
     @EnvironmentObject var context: ConnectionContext
     @EnvironmentObject var connectionManager: ConnectionManager
-    let trigger: Trigger
     let onMoreOptions: () -> Void
     let onDismiss: (() -> Void)?
 
@@ -14,8 +13,6 @@ struct GuidanceCard: View {
     @ScaledMetric private var outerVPadding: CGFloat = 8
     @ScaledMetric private var pillHPadding: CGFloat = 12
     @ScaledMetric private var pillVPadding: CGFloat = 6
-
-    enum Trigger { case emptyState; case failure(reason: String) }
 
     var body: some View {
         card(for: context.primaryRecommendation)
