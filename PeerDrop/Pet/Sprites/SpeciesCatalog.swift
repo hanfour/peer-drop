@@ -96,4 +96,11 @@ enum SpeciesCatalog {
     }
 
     private static let knownIDSet: Set<SpeciesID> = Set(allIDs)
+
+    /// Ordered list of sub-variety strings for a family. First element is the
+    /// family default. Empty for single-variety legacy families and unknown
+    /// families.
+    static func variants(for family: String) -> [String] {
+        families[family]?.variants ?? []
+    }
 }

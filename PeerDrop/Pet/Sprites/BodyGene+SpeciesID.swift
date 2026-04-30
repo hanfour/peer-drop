@@ -26,3 +26,32 @@ extension BodyGene {
         }
     }
 }
+
+extension PetGenome {
+    /// Resolves the v4.0 SpeciesID for this pet using the priority chain:
+    ///   1. `subVariety` pinned → use it directly (`body-subVariety`)
+    ///   2. `seed` set + family has variants → deterministic pick by `seed % count`
+    ///   3. fallback → `body.defaultSpeciesID`
+    var resolvedSpeciesID: SpeciesID {
+        let family = body.rawValue
+
+        if let subVariety = subVariety {
+            return SpeciesID("\(family)-\(subVariety)")
+        }
+
+        if let seed = seed {
+            let variants = SpeciesCatalog.variants(for: family)
+            if !variants.isEmpty {
+                let index = Int(seed % UInt32(variants.count))
+                return SpeciesID("\(family)-\(variants[index])")
+            }
+            // Single-variety legacy family (bird/frog/octopus): the bare family
+            // ID is the only option. Returning it here directly rather than
+            // falling through to `body.defaultSpeciesID` makes the contract
+            // explicit and decouples this branch from the BodyGene mapping table.
+            return SpeciesID(family)
+        }
+
+        return body.defaultSpeciesID
+    }
+}

@@ -99,6 +99,14 @@ struct PetGenome: Codable, Equatable {
     var pattern: PatternGene
     /// Master personality seed, 0.0~1.0
     var personalityGene: Double
+    /// v4.0: pinned sub-variety string (e.g. "tabby" for body=.cat → "cat-tabby").
+    /// Optional: legacy v3.x JSON decodes as nil, then PetStore migration (M7.2)
+    /// assigns a default. Once set, takes precedence over the seed-based pick.
+    var subVariety: String?
+    /// v4.0: per-pet deterministic seed for sub-variety re-rolls and future
+    /// stochastic genome features. Optional: legacy pets get a seed assigned by
+    /// PetStore migration (M7.2) via hash(petId + petName).
+    var seed: UInt32?
 
     /// Derives five personality traits from the single personality gene seed.
     var personalityTraits: PersonalityTraits {
@@ -115,6 +123,10 @@ struct PetGenome: Codable, Equatable {
     }
 
     /// Mutates a random gene. 30% chance normally, 100% for `.evolution`.
+    /// `subVariety` and `seed` are intentionally NOT mutation candidates: sub-variety
+    /// is stable visual identity (set once at hatch / migration), and seed governs
+    /// the deterministic re-roll path used by M7.2 — re-rolling either at evolution
+    /// would change the pet's species mid-life, which is not a v4.0 design goal.
     mutating func mutate(trigger: InteractionType) {
         let shouldMutate = trigger == .evolution || Double.random(in: 0...1) < 0.3
         guard shouldMutate else { return }
@@ -136,13 +148,17 @@ struct PetGenome: Codable, Equatable {
     }
 
     /// Creates a genome with random genes using personality gene to determine body.
+    /// Also assigns a random `seed` so the v4.0 sub-variety resolver picks one
+    /// of the family's variants — without a seed, every freshly-hatched cat would
+    /// render as cat-tabby and the species catalog would be unreachable for new pets.
     static func random() -> PetGenome {
         let pg = Double.random(in: 0...1)
         return PetGenome(
             body: BodyGene.from(personalityGene: pg),
             eyes: EyeGene.allCases.randomElement()!,
             pattern: PatternGene.allCases.randomElement()!,
-            personalityGene: pg
+            personalityGene: pg,
+            seed: UInt32.random(in: UInt32.min...UInt32.max)
         )
     }
 }

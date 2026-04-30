@@ -25,6 +25,7 @@
 		0EA206190D6C15E8362C65F6 /* PeerDropWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E58E671AF75C790526DDCDB /* PeerDropWidgetBundle.swift */; };
 		0EB449EE2838A44505508B07 /* DataChannelTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CF2ADC56F3918BA1B6A59B /* DataChannelTransport.swift */; };
 		0EC22A6A34B1DBCC1F58A721 /* BodyMeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B5508CC637CCC9A71A0575 /* BodyMeta.swift */; };
+		0F583BCCB1AD0B9CD7DD3B31 /* PetGenomeSpeciesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */; };
 		0FC5D9230D4D2179ADC0C958 /* TrustBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4DE23F4DC70DE5619071BA /* TrustBadgeView.swift */; };
 		10874DE80E5950BD74255894 /* SpeciesCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2021539898896A9A26B2F9E6 /* SpeciesCatalog.swift */; };
 		108EADB923B64158D93DEC6A /* FirstContactVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A44B4BE21C89356292B4D0 /* FirstContactVerificationTests.swift */; };
@@ -766,6 +767,7 @@
 		BB785F2E159A543F61378FB2 /* AcceptConnectionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptConnectionHelper.swift; sourceTree = "<group>"; };
 		BCEB8F58DD3A17AE0E87862A /* RabbitSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RabbitSpriteData.swift; path = PeerDrop/Pet/Sprites/RabbitSpriteData.swift; sourceTree = "<group>"; };
 		BD44DD0CD9A7014B98365F3B /* SessionKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
+		BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetGenomeSpeciesTests.swift; sourceTree = "<group>"; };
 		BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadata.swift; sourceTree = "<group>"; };
 		BF554150AAF6288377FCA57C /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
 		BFF6954BED36B5DD0A9937D1 /* PetStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetStoreTests.swift; sourceTree = "<group>"; };
@@ -1436,6 +1438,7 @@
 			isa = PBXGroup;
 			children = (
 				9F880440625FA202B9D8F73C /* BodyGeneMappingTests.swift */,
+				BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */,
 				9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */,
 				075AF882FE67177B700BCDDC /* PetLevelPromotionTests.swift */,
 				0E5998CF743055DF9A9596FF /* SpeciesCatalogTests.swift */,
@@ -1915,6 +1918,7 @@
 				F4F4293A5A8616CB1AE18CF7 /* PetEvolutionTests.swift in Sources */,
 				CA763E76568A505F360C3E49 /* PetExitEnterTests.swift in Sources */,
 				4133DCC23F3984CC9048905E /* PetFeedingTests.swift in Sources */,
+				0F583BCCB1AD0B9CD7DD3B31 /* PetGenomeSpeciesTests.swift in Sources */,
 				992800DD86566FCA0284C1FA /* PetGenomeV2Tests.swift in Sources */,
 				CD6EA11772868CF69BA5286F /* PetIntegrationTests.swift in Sources */,
 				00CFD959EDD837574FE0F487 /* PetInteractionTests.swift in Sources */,
