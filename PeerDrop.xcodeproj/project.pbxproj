@@ -59,11 +59,13 @@
 		1DBAD86759194AC3B39CB6EE /* SpriteCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4BD6EB7D09BF1ACA6B8381 /* SpriteCacheTests.swift */; };
 		1E37EA87EE616891140B943C /* BodyMeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B5508CC637CCC9A71A0575 /* BodyMeta.swift */; };
 		1EA6328B53F8E3CB67E0D401 /* PeerTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */; };
+		1ED854B7E26F365F457DC276 /* BodyGene+SpeciesID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ADED9CD12A8556762E899C0 /* BodyGene+SpeciesID.swift */; };
 		1F91DF18EB139081A02E6519 /* PeerActionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */; };
 		202AEE36D66263D6678979B4 /* LibraryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */; };
 		2078B7690C0DCDCAA83118BB /* SpriteSheetLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E29EC77ADD9F60FE69C40C0D /* SpriteSheetLoader.swift */; };
 		20790589AF70549A2AD0380D /* CertificateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07C0E24C95366B78FAFC44E /* CertificateManagerTests.swift */; };
 		208295A89E6A1DA82C9D7856 /* LaunchScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A69B497E85725EA8A5E9C1D /* LaunchScreen.swift */; };
+		2113B06506AE015896A1D76C /* BodyGeneMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F880440625FA202B9D8F73C /* BodyGeneMappingTests.swift */; };
 		22FCB8EB780E97DE1674CB72 /* ChatManagerGroupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB5476BBC66A9EA04119567 /* ChatManagerGroupTests.swift */; };
 		23049AA320595802D640748B /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A979FF3DD437916760AAC312 /* DiscoveryView.swift */; };
 		239DB398541A3E45203962AF /* TypingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09172CEE390C95A62A857CDD /* TypingIndicatorView.swift */; };
@@ -480,6 +482,7 @@
 		09E6D1AB82AE388169BE0266 /* TailnetPeerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerStore.swift; sourceTree = "<group>"; };
 		09FE9642235E04A824571838 /* NearbyInteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyInteractionManager.swift; sourceTree = "<group>"; };
 		0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteBanner.swift; sourceTree = "<group>"; };
+		0ADED9CD12A8556762E899C0 /* BodyGene+SpeciesID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BodyGene+SpeciesID.swift"; sourceTree = "<group>"; };
 		0CACE77F48AE3D60B46842BF /* SpriteDataRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SpriteDataRegistry.swift; path = PeerDrop/Pet/Sprites/SpriteDataRegistry.swift; sourceTree = "<group>"; };
 		0CAFB8158864904095728B39 /* DragonBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragonBehavior.swift; sourceTree = "<group>"; };
 		0CB9C675EFD739621740F9F9 /* DiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryService.swift; sourceTree = "<group>"; };
@@ -718,6 +721,7 @@
 		9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLevelMigrationTests.swift; sourceTree = "<group>"; };
 		9E58E671AF75C790526DDCDB /* PeerDropWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropWidgetBundle.swift; sourceTree = "<group>"; };
 		9E59D8ABA2AA136E95FA5CDE /* ChatPetOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPetOverlay.swift; sourceTree = "<group>"; };
+		9F880440625FA202B9D8F73C /* BodyGeneMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyGeneMappingTests.swift; sourceTree = "<group>"; };
 		9FB87A392E4530E49CD216CB /* SlimeSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SlimeSpriteData.swift; path = PeerDrop/Pet/Sprites/SlimeSpriteData.swift; sourceTree = "<group>"; };
 		9FCCD3E23DDC39D4F37D598C /* BLESignaling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLESignaling.swift; sourceTree = "<group>"; };
 		9FEB4731FDC3D68845A758F3 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
@@ -1111,6 +1115,7 @@
 			children = (
 				25CA05C14ED0C0D0AAF07185 /* BearSpriteData.swift */,
 				552A2319622F9E4E38BBE4AB /* BirdSpriteData.swift */,
+				0ADED9CD12A8556762E899C0 /* BodyGene+SpeciesID.swift */,
 				87B5508CC637CCC9A71A0575 /* BodyMeta.swift */,
 				F935F08E8D8F38B24AD33387 /* CatSpriteData.swift */,
 				1C1DCEAE6AEBE1D9EF22B06D /* DogSpriteData.swift */,
@@ -1430,6 +1435,7 @@
 		B0644EC4965DB3988D2FEDC1 /* Pet */ = {
 			isa = PBXGroup;
 			children = (
+				9F880440625FA202B9D8F73C /* BodyGeneMappingTests.swift */,
 				9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */,
 				075AF882FE67177B700BCDDC /* PetLevelPromotionTests.swift */,
 				0E5998CF743055DF9A9596FF /* SpeciesCatalogTests.swift */,
@@ -1840,6 +1846,7 @@
 				CF3EDCDA7F93B7D7FDCD6020 /* BLESignalingTests.swift in Sources */,
 				3246BD8F401F20D5D4978804 /* BearSpriteDataTests.swift in Sources */,
 				19AC2E55314BC6A919F3ABC7 /* BirdSpriteDataTests.swift in Sources */,
+				2113B06506AE015896A1D76C /* BodyGeneMappingTests.swift in Sources */,
 				AD554883FB85D0A83F8480BC /* CatSpriteDataTests.swift in Sources */,
 				20790589AF70549A2AD0380D /* CertificateManagerTests.swift in Sources */,
 				5E80D5077A36825757B36CDA /* ChatIntegrationTests.swift in Sources */,
@@ -2016,6 +2023,7 @@
 				379F466505E12A1741A87C29 /* BearSpriteData.swift in Sources */,
 				D3BB7BFB878967377BD1B167 /* BirdBehavior.swift in Sources */,
 				A1B46B0291F37EDC0CD262B7 /* BirdSpriteData.swift in Sources */,
+				1ED854B7E26F365F457DC276 /* BodyGene+SpeciesID.swift in Sources */,
 				0EC22A6A34B1DBCC1F58A721 /* BodyMeta.swift in Sources */,
 				DF24681F486E8AF718E5875D /* BodyTemplate.swift in Sources */,
 				F906D35D0D3CD0586BC5B046 /* BonjourDiscovery.swift in Sources */,
