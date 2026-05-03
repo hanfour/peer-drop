@@ -4,6 +4,12 @@ import Foundation
 
 /// Data exchanged between two devices when their pets meet.
 struct PetGreeting: Codable {
+    /// Bumped when the wire format gains a forward-incompatible field. v4.0
+    /// is at 2 (PetLevel.elder is the v4.0-only addition). Single source of
+    /// truth — production senders, tests, and `downgraded(toProtocolVersion:)`
+    /// all read this constant.
+    static let currentProtocolVersion = 2
+
     let petID: UUID
     let name: String?
     let level: PetLevel
@@ -11,9 +17,43 @@ struct PetGreeting: Codable {
     let genome: PetGenome
     /// Sender's pet-protocol version. v3.x peers don't include this field, so
     /// it decodes as nil — receivers should treat nil as v1. v4.0 senders set
-    /// it to 2 (default). Receivers use this to clamp v4.0-only PetLevel
-    /// values (.elder) before forwarding back to v1 peers.
-    var protocolVersion: Int? = 2
+    /// it to `currentProtocolVersion`.
+    let protocolVersion: Int?
+
+    /// Explicit init so all stored properties stay `let` (preserves PetGreeting's
+    /// immutability across the wire) while still letting callers omit
+    /// `protocolVersion` (defaults to currentProtocolVersion).
+    init(
+        petID: UUID,
+        name: String?,
+        level: PetLevel,
+        mood: PetMood,
+        genome: PetGenome,
+        protocolVersion: Int? = PetGreeting.currentProtocolVersion
+    ) {
+        self.petID = petID
+        self.name = name
+        self.level = level
+        self.mood = mood
+        self.genome = genome
+        self.protocolVersion = protocolVersion
+    }
+
+    /// Custom encode that omits a nil `protocolVersion` instead of emitting
+    /// `"protocolVersion": null`. Keeps a re-encoded v3.x-decoded greeting
+    /// byte-identical (modulo key ordering) to the original — useful for any
+    /// downstream tooling that does decode-then-re-encode roundtrips.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(petID, forKey: .petID)
+        try c.encode(name, forKey: .name)
+        try c.encode(level, forKey: .level)
+        try c.encode(mood, forKey: .mood)
+        try c.encode(genome, forKey: .genome)
+        if let protocolVersion {
+            try c.encode(protocolVersion, forKey: .protocolVersion)
+        }
+    }
 }
 
 extension PetGreeting {
@@ -22,19 +62,25 @@ extension PetGreeting {
     var effectiveProtocolVersion: Int { protocolVersion ?? 1 }
 
     /// Returns a copy of this greeting safe to wire-encode for a peer running
-    /// the given protocol version. The only v4.0 → v1 incompatibility is
-    /// PetLevel.elder (rawValue 4) — v3.x's enum has no case for it and would
-    /// fail decoding. Clamp to .adult (rawValue 3) which v3.x reads as
-    /// .child — same visual stage in both worlds.
+    /// `targetVersion`. Forward-incompatible v4.0 fields are downgraded:
+    ///   • PetLevel.elder (rawValue 4) → .adult (rawValue 3); v3.x reads
+    ///     rawValue 3 as its `.child` case — same visual stage in both worlds.
     ///
-    /// PetGenome's optional subVariety/seed fields don't need clamping;
+    /// PetGenome's optional subVariety/seed fields don't need downgrading;
     /// v3.x's permissive Codable ignores unknown nested keys.
-    func clamped(forPeerProtocolVersion peerVersion: Int) -> PetGreeting {
-        guard peerVersion < 2, level == .elder else { return self }
+    ///
+    /// Future v4.x cases that add forward-incompat fields (new PetMood case,
+    /// new BodyGene case) extend this method with their own downgrade clauses.
+    func downgraded(toProtocolVersion targetVersion: Int) -> PetGreeting {
+        guard targetVersion < Self.currentProtocolVersion else { return self }
+        var newLevel = level
+        if targetVersion < 2 && level == .elder {
+            newLevel = .adult
+        }
         return PetGreeting(
             petID: petID,
             name: name,
-            level: .adult,
+            level: newLevel,
             mood: mood,
             genome: genome,
             protocolVersion: protocolVersion
