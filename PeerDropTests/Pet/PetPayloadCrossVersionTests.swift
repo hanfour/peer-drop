@@ -142,9 +142,11 @@ final class PetPayloadCrossVersionTests: XCTestCase {
                 _ = error
             }
         }
-        // Crash-free is the contract. The count itself is a soft signal; v4.0
-        // valid frames should mostly decode. Hard cap at 5% failure rate.
-        XCTAssertLessThan(decodeFailures, 50,
+        // Crash-free is the contract. The count itself is a soft signal —
+        // observed actual rate on the current generators is 0, so we keep
+        // the cap tight at 1% (10 / 1000). A regression that fails 4% would
+        // have silently passed under the original 5% cap.
+        XCTAssertLessThan(decodeFailures, 10,
                           "Decode failure rate too high: \(decodeFailures)/1000 — fuzz generators may be malformed")
     }
 
