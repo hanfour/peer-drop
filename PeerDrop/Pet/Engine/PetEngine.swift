@@ -25,6 +25,7 @@ class PetEngine: ObservableObject {
     private let feedCooldown: TimeInterval = 1800
 
     private let rendererV3: PetRendererV3
+    private let sharedRenderedPet: SharedRenderedPet
     /// Most recently dispatched render task. Cancelled when a new
     /// updateRenderedImage() call comes in so out-of-order completions can't
     /// overwrite renderedImage with a stale frame.
@@ -61,13 +62,21 @@ class PetEngine: ObservableObject {
         pet.socialLog.contains { Date().timeIntervalSince($0.date) < 86400 }
     }
 
-    init(pet: PetState = .newEgg(), rendererV3: PetRendererV3? = nil) {
+    init(
+        pet: PetState = .newEgg(),
+        rendererV3: PetRendererV3? = nil,
+        sharedRenderedPet: SharedRenderedPet? = nil
+    ) {
         self.pet = pet
         self.behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
         // PetRendererV3.init is @MainActor isolated, so we can't put it in a
         // default parameter expression (those evaluate outside isolation).
         // Build it here in the @MainActor init body when no override is given.
         self.rendererV3 = rendererV3 ?? PetRendererV3()
+        // SharedRenderedPet bridges to the App Group container so the widget
+        // and Live Activity can read the latest rendered pet without re-running
+        // the v4.0 PNG pipeline themselves (M8 phase 2 wire-up).
+        self.sharedRenderedPet = sharedRenderedPet ?? SharedRenderedPet()
         setupAnimationObserver()
     }
 
@@ -325,13 +334,21 @@ class PetEngine: ObservableObject {
         let direction: SpriteDirection = physicsState.facingRight ? .east : .west
 
         renderTask?.cancel()
-        renderTask = Task { @MainActor [weak self, rendererV3] in
+        renderTask = Task { @MainActor [weak self, rendererV3, sharedRenderedPet] in
             let img = try? await rendererV3.render(
                 genome: genome, level: level, mood: mood, direction: direction)
             // If a newer updateRenderedImage() call cancelled us between the
             // await and resumption, drop this frame on the floor.
             guard !Task.isCancelled else { return }
             self?.renderedImage = img
+            // Mirror the rendered image into the App Group container so the
+            // widget + Live Activity (which can't run the PNG pipeline
+            // themselves) display the same frame the host app sees. nil
+            // images (assetNotFound, ghost pets, missing-stage) intentionally
+            // skip the write — the widget falls back to its placeholder.
+            if let img = img {
+                sharedRenderedPet.write(img)
+            }
         }
     }
 
