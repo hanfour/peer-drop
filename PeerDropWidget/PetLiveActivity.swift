@@ -8,11 +8,7 @@ struct PetLiveActivity: Widget {
         ActivityConfiguration(for: PetActivityAttributes.self) { context in
             // Lock Screen / Banner
             HStack(spacing: 12) {
-                petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood,
-                          eyes: context.attributes.eyeType,
-                          pattern: context.attributes.patternType,
-                          paletteIndex: context.attributes.paletteIndex, scale: 4)
+                petSprite()
                     .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.attributes.petName).font(.headline)
@@ -26,11 +22,7 @@ struct PetLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    petSprite(body: context.attributes.bodyType, level: context.state.level,
-                              mood: context.state.mood,
-                              eyes: context.attributes.eyeType,
-                              pattern: context.attributes.patternType,
-                              paletteIndex: context.attributes.paletteIndex, scale: 4)
+                    petSprite()
                         .frame(width: 48, height: 48)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -47,32 +39,24 @@ struct PetLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood,
-                          eyes: context.attributes.eyeType,
-                          pattern: context.attributes.patternType,
-                          paletteIndex: context.attributes.paletteIndex, scale: 2)
+                petSprite()
                     .frame(width: 24, height: 24)
             } compactTrailing: {
                 Text(moodEmoji(context.state.mood)).font(.caption)
             } minimal: {
-                petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood,
-                          eyes: context.attributes.eyeType,
-                          pattern: context.attributes.patternType,
-                          paletteIndex: context.attributes.paletteIndex, scale: 2)
+                petSprite()
                     .frame(width: 24, height: 24)
             }
         }
     }
 
+    /// Reads the pre-rendered pet from the App Group bridge written by the
+    /// main app's PetEngine.updateRenderedImage. SwiftUI scales the single
+    /// loaded CGImage to each callsite's .frame() size — no per-scale render
+    /// is needed (unlike the legacy PetSnapshotRenderer path).
     @ViewBuilder
-    private func petSprite(body: BodyGene, level: PetLevel, mood: PetMood,
-                           eyes: EyeGene, pattern: PatternGene, paletteIndex: Int,
-                           scale: Int) -> some View {
-        if let image = PetSnapshotRenderer.render(
-            body: body, level: level, mood: mood,
-            eyes: eyes, pattern: pattern, paletteIndex: paletteIndex, scale: scale) {
+    private func petSprite() -> some View {
+        if let image = SharedRenderedPet().read() {
             Image(decorative: image, scale: 1.0)
                 .interpolation(.none).resizable().aspectRatio(contentMode: .fit)
         } else {

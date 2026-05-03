@@ -15,25 +15,38 @@ private extension View {
 
 struct PetWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> PetWidgetEntry {
-        PetWidgetEntry(date: Date(), snapshot: nil)
+        PetWidgetEntry(date: Date(), snapshot: nil, renderedImage: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (PetWidgetEntry) -> Void) {
-        let snapshot = SharedPetState().read()
-        completion(PetWidgetEntry(date: Date(), snapshot: snapshot))
+        completion(currentEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PetWidgetEntry>) -> Void) {
-        let snapshot = SharedPetState().read()
-        let entry = PetWidgetEntry(date: Date(), snapshot: snapshot)
+        let entry = currentEntry()
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+    }
+
+    /// Builds the current entry by reading both the metadata snapshot and the
+    /// pre-rendered CGImage from the App Group container. The main app writes
+    /// the image via SharedRenderedPet during PetEngine.updateRenderedImage;
+    /// the widget never runs the v4.0 PNG pipeline itself.
+    private func currentEntry() -> PetWidgetEntry {
+        let snapshot = SharedPetState().read()
+        let renderedImage = SharedRenderedPet().read()
+        return PetWidgetEntry(date: Date(), snapshot: snapshot, renderedImage: renderedImage)
     }
 }
 
 struct PetWidgetEntry: TimelineEntry {
     let date: Date
     let snapshot: PetSnapshot?
+    /// Pre-rendered pet image from the main app's PetRendererV3 (PNG sprite
+    /// + mood SF Symbol overlay), shipped via SharedRenderedPet App Group
+    /// bridge. nil when the main app hasn't rendered yet (first install) or
+    /// the bridge file isn't readable — view falls back to placeholder.
+    let renderedImage: CGImage?
 }
 
 struct PetWidgetSmallView: View {
@@ -42,13 +55,15 @@ struct PetWidgetSmallView: View {
     var body: some View {
         if let snapshot = entry.snapshot {
             VStack(spacing: 4) {
-                if let image = PetSnapshotRenderer.render(
-                    body: snapshot.bodyType, level: snapshot.level, mood: snapshot.mood,
-                    eyes: snapshot.eyeType, pattern: snapshot.patternType,
-                    paletteIndex: snapshot.paletteIndex, scale: 8) {
+                if let image = entry.renderedImage {
                     Image(decorative: image, scale: 1.0)
                         .interpolation(.none)
                         .resizable()
+                        .frame(width: 80, height: 80)
+                } else {
+                    // Pre-render not yet available — show metadata-only fallback.
+                    Image(systemName: "pawprint.fill")
+                        .font(.largeTitle)
                         .frame(width: 80, height: 80)
                 }
                 if let name = snapshot.name {
@@ -75,11 +90,7 @@ struct PetWidgetCircularView: View {
     let entry: PetWidgetEntry
 
     var body: some View {
-        if let snapshot = entry.snapshot,
-           let image = PetSnapshotRenderer.render(
-            body: snapshot.bodyType, level: snapshot.level, mood: snapshot.mood,
-            eyes: snapshot.eyeType, pattern: snapshot.patternType,
-            paletteIndex: snapshot.paletteIndex, scale: 4) {
+        if let _ = entry.snapshot, let image = entry.renderedImage {
             Image(decorative: image, scale: 1.0)
                 .interpolation(.none)
                 .resizable()
