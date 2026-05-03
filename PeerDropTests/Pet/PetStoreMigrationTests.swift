@@ -53,11 +53,33 @@ final class PetStoreMigrationTests: XCTestCase {
     }
 
     func test_deterministicSeed_handlesNilName() {
-        // nil name shouldn't crash; should be distinct from a pet named "".
+        // nil and "" intentionally hash identically (both map to "" before
+        // concat). Pets without names are rare and the collision is harmless.
         let id = UUID()
-        let s1 = PetStore.deterministicSeed(petID: id, petName: nil)
-        let s2 = PetStore.deterministicSeed(petID: id, petName: nil)
-        XCTAssertEqual(s1, s2)
+        XCTAssertEqual(
+            PetStore.deterministicSeed(petID: id, petName: nil),
+            PetStore.deterministicSeed(petID: id, petName: nil))
+        XCTAssertEqual(
+            PetStore.deterministicSeed(petID: id, petName: nil),
+            PetStore.deterministicSeed(petID: id, petName: ""),
+            "nil and empty string are intentionally equivalent — see deterministicSeed docstring")
+    }
+
+    func test_deterministicSeed_normalisesUnicodeNames() {
+        // "café" can be encoded as composed (U+00E9) or decomposed
+        // (U+0065 U+0301). FNV operates on UTF-8 bytes which differ between
+        // the two forms — the production code normalises to NFC first so
+        // both forms produce the same seed.
+        let id = UUID()
+        let composed   = "caf\u{00E9}"           // é as one code point
+        let decomposed = "cafe\u{0301}"          // e + combining acute
+        XCTAssertNotEqual(composed.unicodeScalars.count,
+                          decomposed.unicodeScalars.count,
+                          "test setup sanity: forms must differ at the scalar level")
+        XCTAssertEqual(
+            PetStore.deterministicSeed(petID: id, petName: composed),
+            PetStore.deterministicSeed(petID: id, petName: decomposed),
+            "different Unicode normalisation forms must hash to the same seed")
     }
 
     // MARK: - applyV4Migration (pure)
@@ -96,18 +118,40 @@ final class PetStoreMigrationTests: XCTestCase {
         XCTAssertNotNil(migrated.migrationDoneAt)
     }
 
-    func test_applyV4Migration_alreadyMigrated_isNoOp() {
+    func test_applyV4Migration_alreadyMigrated_earlyReturns() {
+        // When migrationDoneAt is set, the function early-returns regardless
+        // of the other fields — verifies the gate, not field-level merge.
         var pet = PetState.newEgg()
         pet.genome.body = .cat
-        pet.genome.subVariety = "persian"     // user/runtime pinned earlier
-        pet.genome.seed = 9999
-        let originalDate = Date(timeIntervalSince1970: 1700000000)
+        pet.genome.subVariety = nil
+        pet.genome.seed = nil
+        let originalDate = Date(timeIntervalSince1970: 1_700_000_000)
         pet.migrationDoneAt = originalDate
 
         let migrated = PetStore.applyV4Migration(to: pet)
-        XCTAssertEqual(migrated.genome.subVariety, "persian", "should not overwrite user pin")
-        XCTAssertEqual(migrated.genome.seed, 9999)
-        XCTAssertEqual(migrated.migrationDoneAt, originalDate, "should not bump migrationDoneAt")
+        // Early-return contract: nothing is modified, even nil fields.
+        XCTAssertNil(migrated.genome.subVariety)
+        XCTAssertNil(migrated.genome.seed)
+        XCTAssertEqual(migrated.migrationDoneAt, originalDate)
+    }
+
+    func test_applyV4Migration_pinnedSubVariety_isNotOverwritten() {
+        // When migrationDoneAt is nil but subVariety is already set (e.g.
+        // user picked one explicitly before the migration sweep got a chance
+        // to run), the migration must respect the existing pin and only fill
+        // in genuinely missing fields. Tighter than the "early-return" test
+        // above — this exercises the per-field guards inside applyV4Migration.
+        var pet = PetState.newEgg()
+        pet.genome.body = .cat                   // would map to "tabby" by default
+        pet.genome.subVariety = "persian"        // user pin
+        pet.genome.seed = nil
+        pet.migrationDoneAt = nil
+
+        let migrated = PetStore.applyV4Migration(to: pet)
+        XCTAssertEqual(migrated.genome.subVariety, "persian",
+                       "user pin must survive migration")
+        XCTAssertNotNil(migrated.genome.seed, "missing seed should be filled in")
+        XCTAssertNotNil(migrated.migrationDoneAt, "migrationDoneAt should now be set")
     }
 
     func test_applyV4Migration_partialState_fillsOnlyMissingFields() {

@@ -110,8 +110,19 @@ class PetStore {
     /// sync may re-run migration on a different device for the same pet,
     /// and we want both devices to land on the same seed (otherwise their
     /// seed-derived sub-variety picks would diverge).
+    ///
+    /// The name is normalised to NFC (`precomposedStringWithCanonicalMapping`)
+    /// before hashing so a pet named "café" hashes the same regardless of
+    /// whether the source string used the composed (U+00E9) or decomposed
+    /// (U+0065 U+0301) representation. iOS UITextField produces NFC by
+    /// default, but cloud-synced or future Android-source names might not.
+    ///
+    /// Nil names and empty-string names hash identically (both map to ""
+    /// before concat). This is intentional — pets without names are rare and
+    /// the harmless collision keeps the API simple.
     static func deterministicSeed(petID: UUID, petName: String?) -> UInt32 {
-        let key = "\(petID.uuidString)|\(petName ?? "")"
+        let normalisedName = (petName ?? "").precomposedStringWithCanonicalMapping
+        let key = "\(petID.uuidString)|\(normalisedName)"
         var hash: UInt32 = 2_166_136_261   // FNV-1a 32-bit offset basis
         for byte in key.utf8 {
             hash ^= UInt32(byte)
