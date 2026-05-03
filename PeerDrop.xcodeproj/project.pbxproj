@@ -369,10 +369,12 @@
 		DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F68921A1EFE5717EFF8690 /* PeerMessage.swift */; };
 		DAF0872294A78635ED2BD12A /* TimeoutConsentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */; };
 		DB0AFCFF5E049E2BA0B83B2C /* PetAnimationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829734910FC0A9179C752C30 /* PetAnimationLifecycleTests.swift */; };
+		DB4F37B564729FC0C5194D00 /* MoodOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C01274A5C117761FFDD094 /* MoodOverlayTests.swift */; };
 		DB9F13A8597DFF80A5947F32 /* PetBehaviorProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0D5CB4C84E2B9D9B7ED45B /* PetBehaviorProviderTests.swift */; };
 		DC0421157A0A3E37E504D457 /* SpriteDataRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CACE77F48AE3D60B46842BF /* SpriteDataRegistry.swift */; };
 		DC36D0D22B9764100D164C35 /* TypingIndicatorPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 808A9F64C76046B0B42E2472 /* TypingIndicatorPayload.swift */; };
 		DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */; };
+		DD516AF5FE361FE721713A70 /* MoodOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CE631931D4651DFB306C78 /* MoodOverlay.swift */; };
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
 		DF24681F486E8AF718E5875D /* BodyTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34290A3B298585384BF81AE5 /* BodyTemplate.swift */; };
 		DF96C1C5C2F3A91E44F79C66 /* MailboxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F993BA6D5384B7F944865C /* MailboxClient.swift */; };
@@ -770,6 +772,7 @@
 		B1A5F174279BDB3232734FF4 /* NearbyInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyInteractionTests.swift; sourceTree = "<group>"; };
 		B1CF2ADC56F3918BA1B6A59B /* DataChannelTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransport.swift; sourceTree = "<group>"; };
 		B338F5E319B87708D60DCA19 /* PetRendererV2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetRendererV2Tests.swift; sourceTree = "<group>"; };
+		B3C01274A5C117761FFDD094 /* MoodOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodOverlayTests.swift; sourceTree = "<group>"; };
 		B4BE9C8291174DB9D2A8627E /* MediaMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaMessageTests.swift; sourceTree = "<group>"; };
 		B5A7A24E192618BE5D8716A7 /* TailnetPeersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeersView.swift; sourceTree = "<group>"; };
 		B67AD588AE5B03D2A0DE399F /* DiscoveryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryServiceTests.swift; sourceTree = "<group>"; };
@@ -820,6 +823,7 @@
 		D06AC783121D682F8E46DA1D /* PetIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetIntegrationTests.swift; sourceTree = "<group>"; };
 		D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReplyTests.swift; sourceTree = "<group>"; };
 		D1154746BAA9972114FA8C15 /* PetDialogEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetDialogEngine.swift; sourceTree = "<group>"; };
+		D1CE631931D4651DFB306C78 /* MoodOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodOverlay.swift; sourceTree = "<group>"; };
 		D27C1CF30674B0A0E504D127 /* PreKeyBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyBundle.swift; sourceTree = "<group>"; };
 		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
@@ -1348,6 +1352,7 @@
 			isa = PBXGroup;
 			children = (
 				34290A3B298585384BF81AE5 /* BodyTemplate.swift */,
+				D1CE631931D4651DFB306C78 /* MoodOverlay.swift */,
 				DE0DC6FCDFB08A5E2B4BCB09 /* PaletteSwapRenderer.swift */,
 				3F5A5A4F2AA8CCB19B5623D8 /* PetAnimationController.swift */,
 				8E40BB49EFF6A5BF904D15A8 /* PetPalettes.swift */,
@@ -1468,6 +1473,7 @@
 			isa = PBXGroup;
 			children = (
 				9F880440625FA202B9D8F73C /* BodyGeneMappingTests.swift */,
+				B3C01274A5C117761FFDD094 /* MoodOverlayTests.swift */,
 				BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */,
 				9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */,
 				075AF882FE67177B700BCDDC /* PetLevelPromotionTests.swift */,
@@ -1931,6 +1937,7 @@
 				C9B70AA2CD7DC0FEBB1D3ECE /* MessageReplyTests.swift in Sources */,
 				6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */,
 				EE390C95FDFF883F3922C30D /* MockTransport.swift in Sources */,
+				DB4F37B564729FC0C5194D00 /* MoodOverlayTests.swift in Sources */,
 				177679DC77E50364286524D4 /* NearbyInteractionTests.swift in Sources */,
 				EDD43CFF5EC727F0F3696DF5 /* NetworkFingerprintTests.swift in Sources */,
 				17B027387373FBF95242F08F /* OctopusSpriteDataTests.swift in Sources */,
@@ -2167,6 +2174,7 @@
 				9F91E409FC12B0F37B21F566 /* MessageFramer.swift in Sources */,
 				313D171E903E165B5BC87B12 /* MessageReceiptPayload.swift in Sources */,
 				791E5E35499FE4796FFDB4B8 /* MessageType.swift in Sources */,
+				DD516AF5FE361FE721713A70 /* MoodOverlay.swift in Sources */,
 				6BC209FDB9F4AA0CED375FA9 /* NWConnection+Async.swift in Sources */,
 				F377575793BC39A79422CA05 /* NearbyInteractionManager.swift in Sources */,
 				3FC7000ACFFA0923AA0AE460 /* NearbyTab.swift in Sources */,
