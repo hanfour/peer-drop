@@ -9,6 +9,37 @@ struct PetGreeting: Codable {
     let level: PetLevel
     let mood: PetMood
     let genome: PetGenome
+    /// Sender's pet-protocol version. v3.x peers don't include this field, so
+    /// it decodes as nil — receivers should treat nil as v1. v4.0 senders set
+    /// it to 2 (default). Receivers use this to clamp v4.0-only PetLevel
+    /// values (.elder) before forwarding back to v1 peers.
+    var protocolVersion: Int? = 2
+}
+
+extension PetGreeting {
+    /// Effective protocol version of the sender. Defaults to 1 for v3.x peers
+    /// whose JSON lacks the field.
+    var effectiveProtocolVersion: Int { protocolVersion ?? 1 }
+
+    /// Returns a copy of this greeting safe to wire-encode for a peer running
+    /// the given protocol version. The only v4.0 → v1 incompatibility is
+    /// PetLevel.elder (rawValue 4) — v3.x's enum has no case for it and would
+    /// fail decoding. Clamp to .adult (rawValue 3) which v3.x reads as
+    /// .child — same visual stage in both worlds.
+    ///
+    /// PetGenome's optional subVariety/seed fields don't need clamping;
+    /// v3.x's permissive Codable ignores unknown nested keys.
+    func clamped(forPeerProtocolVersion peerVersion: Int) -> PetGreeting {
+        guard peerVersion < 2, level == .elder else { return self }
+        return PetGreeting(
+            petID: petID,
+            name: name,
+            level: .adult,
+            mood: mood,
+            genome: genome,
+            protocolVersion: protocolVersion
+        )
+    }
 }
 
 // MARK: - PetSocialEngine
