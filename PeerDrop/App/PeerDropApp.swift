@@ -71,10 +71,14 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropWorkerURLMigrated")
                 }
 
-                // Load pet (mock for screenshots, saved for normal)
+                // Load pet (mock for screenshots, saved for normal). For real
+                // pets we call loadAndMigrate so v3.x → v4.0 upgrades fill in
+                // subVariety / seed / migrationDoneAt at first launch.
+                // Idempotent — subsequent launches early-return without
+                // re-applying.
                 if ScreenshotModeProvider.shared.isActive {
                     petEngine.pet = ScreenshotModeProvider.shared.mockPetState
-                } else if let saved = try? PetStore().load() {
+                } else if let saved = try? PetStore().loadAndMigrate() {
                     petEngine.pet = saved
                 }
 

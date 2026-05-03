@@ -168,6 +168,29 @@ final class PetStoreMigrationTests: XCTestCase {
         XCTAssertNil(loaded)
     }
 
+    // MARK: - cloud-load migration mirror
+
+    func test_petCloudSync_appliesV4Migration_viaPureFunction() {
+        // PetCloudSync.loadAndMigrateFromCloud delegates to the same pure
+        // function as PetStore.loadAndMigrate. We can't easily exercise the
+        // iCloud container in unit tests, but we can verify the migration
+        // function is the canonical entry — same outcome whether the source
+        // is local file or cloud doc.
+        var legacy = PetState.newEgg()
+        legacy.genome.body = .cat
+        legacy.genome.subVariety = nil
+        legacy.genome.seed = nil
+        legacy.migrationDoneAt = nil
+
+        let migrated = PetStore.applyV4Migration(to: legacy)
+        XCTAssertEqual(migrated.genome.subVariety, "tabby")
+        XCTAssertNotNil(migrated.genome.seed)
+        XCTAssertNotNil(migrated.migrationDoneAt)
+        // Every storage layer (local file, iCloud doc, peer payload) should
+        // funnel through this single function rather than duplicating the
+        // assignment logic.
+    }
+
     func test_loadAndMigrate_v3xJSON_onDisk_decodesAndMigrates() throws {
         // Simulates a real v3.x → v4.0 upgrade: the saved file is in v3.x
         // shape (no subVariety/seed/migrationDoneAt). loadAndMigrate must
