@@ -24,7 +24,11 @@ class PetEngine: ObservableObject {
     @Published var foodTarget: DroppedFood?
     private let feedCooldown: TimeInterval = 1800
 
-    private let rendererV2 = PetRendererV2()
+    private let rendererV3: PetRendererV3
+    /// Most recently dispatched render task. Cancelled when a new
+    /// updateRenderedImage() call comes in so out-of-order completions can't
+    /// overwrite renderedImage with a stale frame.
+    private var renderTask: Task<Void, Never>?
     let animator = PetAnimationController()
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
@@ -57,9 +61,13 @@ class PetEngine: ObservableObject {
         pet.socialLog.contains { Date().timeIntervalSince($0.date) < 86400 }
     }
 
-    init(pet: PetState = .newEgg()) {
+    init(pet: PetState = .newEgg(), rendererV3: PetRendererV3? = nil) {
         self.pet = pet
         self.behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
+        // PetRendererV3.init is @MainActor isolated, so we can't put it in a
+        // default parameter expression (those evaluate outside isolation).
+        // Build it here in the @MainActor init body when no override is given.
+        self.rendererV3 = rendererV3 ?? PetRendererV3()
         setupAnimationObserver()
     }
 
@@ -300,12 +308,31 @@ class PetEngine: ObservableObject {
 
     // MARK: - Rendering
     func updateRenderedImage() {
-        let scale = 8
-        let pal: ColorPalette = pet.level == .egg ? PetPalettes.egg : PetPalettes.palette(for: pet.genome)
-        renderedImage = rendererV2.render(
-            genome: pet.genome, level: pet.level, action: currentAction, mood: pet.mood,
-            frame: animator.currentFrame, palette: pal, scale: scale,
-            facingRight: physicsState.facingRight)
+        // V3 path: PNG sprite via SpriteService + mood SF Symbol overlay.
+        // SpriteService is an actor, so the call is async and dispatched as a
+        // Task. We cancel any in-flight Task before queuing the next one —
+        // otherwise rapid facingRight flips (or evolution + interaction in
+        // the same frame) could see a slow earlier render complete after a
+        // fast later one and overwrite renderedImage with a stale frame.
+        //
+        // The animator-driven per-frame trigger is preserved — repeated calls
+        // with the same arguments hit the SpriteService cache cheaply, and
+        // PetRendererV3's own composite memoization (M4 fix) skips the
+        // UIGraphicsImageRenderer pass when the inputs haven't changed.
+        let genome = pet.genome
+        let level = pet.level
+        let mood = pet.mood
+        let direction: SpriteDirection = physicsState.facingRight ? .east : .west
+
+        renderTask?.cancel()
+        renderTask = Task { @MainActor [weak self, rendererV3] in
+            let img = try? await rendererV3.render(
+                genome: genome, level: level, mood: mood, direction: direction)
+            // If a newer updateRenderedImage() call cancelled us between the
+            // await and resumption, drop this frame on the floor.
+            guard !Task.isCancelled else { return }
+            self?.renderedImage = img
+        }
     }
 
     private func setupAnimationObserver() {

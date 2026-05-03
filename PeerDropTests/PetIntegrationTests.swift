@@ -4,22 +4,12 @@ import XCTest
 @MainActor
 final class PetIntegrationTests: XCTestCase {
 
-    func testEggRenders128px() {
-        let engine = PetEngine(pet: .newEgg())
-        engine.updateRenderedImage()
-        XCTAssertNotNil(engine.renderedImage)
-        XCTAssertEqual(engine.renderedImage?.width, 128)
-    }
-
-    func testBabyRenders128px() {
-        var pet = PetState.newEgg()
-        pet.level = .baby
-        pet.genome.body = .cat
-        let engine = PetEngine(pet: pet)
-        engine.updateRenderedImage()
-        XCTAssertNotNil(engine.renderedImage)
-        XCTAssertEqual(engine.renderedImage?.width, 128)
-    }
+    // testEggRenders128px and testBabyRenders128px were removed by the M4.4
+    // V2→V3 migration — they asserted V2-specific behavior (scale=8 → 128px
+    // synchronous output) that doesn't apply to the v4.0 PNG pipeline (raw
+    // PNG dimensions, async via SpriteService, requires assets bundled into
+    // the main app bundle which is pending M5). M11 will write fresh
+    // integration tests against the v4.0 contract once M5 lands assets.
 
     func testTapInteractionUpdatesState() {
         var pet = PetState.newEgg()

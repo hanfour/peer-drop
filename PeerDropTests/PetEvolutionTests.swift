@@ -47,8 +47,7 @@ final class PetEvolutionTests: XCTestCase {
             pet.genome.body = .cat
             pet.genome.eyes = .dot
             pet.genome.pattern = .none
-            pet.experience = 499
-            pet.birthDate = Date().addingTimeInterval(-259201)
+            pet.birthDate = Date().addingTimeInterval(-(8 * 86400 + 1))
             let engine = PetEngine(pet: pet)
             engine.handleInteraction(.tap)
             if engine.pet.genome.eyes != .dot || engine.pet.genome.pattern != .none {
