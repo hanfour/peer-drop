@@ -98,11 +98,86 @@ final class PetRendererV3Tests: XCTestCase {
         }
     }
 
+    // MARK: - mood overlay (M4b.2)
+
+    func test_render_introducesPixelDifference_inTopRightOverlayRegion() async throws {
+        // The composited image's top-right region (where the mood icon is
+        // drawn) should differ from the same region of the raw base PNG;
+        // pixels outside the overlay box should be unchanged.
+        let cache = PNGSpriteCache(countLimit: 30)
+        let service = SpriteService(cache: cache, bundle: testBundle)
+        let renderer = PetRendererV3(service: service)
+
+        let basePNG = try await service.image(
+            for: SpriteRequest(species: SpeciesID("cat-tabby"), stage: .adult, direction: .east))
+        let composited = try await renderer.render(
+            genome: catTabbyGenome(), level: .adult, mood: .happy, direction: .east)
+
+        XCTAssertEqual(composited.width, basePNG.width)
+        XCTAssertEqual(composited.height, basePNG.height)
+
+        // Sample a 6×6 region inside the overlay box.
+        let overlayBoxOrigin = (x: composited.width - 12, y: 4)
+        let baseInOverlayRegion = averageRGB(in: basePNG,
+            x: overlayBoxOrigin.x, y: overlayBoxOrigin.y, w: 6, h: 6)
+        let compInOverlayRegion = averageRGB(in: composited,
+            x: overlayBoxOrigin.x, y: overlayBoxOrigin.y, w: 6, h: 6)
+
+        let overlayDiff = colorDistance(baseInOverlayRegion, compInOverlayRegion)
+        XCTAssertGreaterThan(overlayDiff, 10,
+            "overlay region (\(overlayBoxOrigin)) should differ from base — got base=\(baseInOverlayRegion), comp=\(compInOverlayRegion)")
+    }
+
+    func test_render_mood_changesPixelsInOverlayRegion() async throws {
+        // Different moods should produce different overlay pixels (different
+        // tint colors). Same base sprite, two different moods.
+        let cache = PNGSpriteCache(countLimit: 30)
+        let service = SpriteService(cache: cache, bundle: testBundle)
+        let renderer = PetRendererV3(service: service)
+
+        let happy = try await renderer.render(
+            genome: catTabbyGenome(), level: .adult, mood: .happy, direction: .east)
+        let sleepy = try await renderer.render(
+            genome: catTabbyGenome(), level: .adult, mood: .sleepy, direction: .east)
+
+        let happyOverlay = averageRGB(in: happy, x: happy.width - 16, y: 0, w: 16, h: 16)
+        let sleepyOverlay = averageRGB(in: sleepy, x: sleepy.width - 16, y: 0, w: 16, h: 16)
+        XCTAssertGreaterThan(colorDistance(happyOverlay, sleepyOverlay), 10,
+            "different moods should produce visibly different overlays")
+    }
+
     // MARK: - helpers
 
     private func cgImagesIdentical(_ a: CGImage, _ b: CGImage) -> Bool {
         guard a.width == b.width, a.height == b.height else { return false }
         guard let dataA = a.dataProvider?.data, let dataB = b.dataProvider?.data else { return false }
         return CFEqual(dataA, dataB)
+    }
+
+    /// Average RGB (alpha-premultiplied, 0–255) over a region of the image.
+    private func averageRGB(in image: CGImage, x: Int, y: Int, w: Int, h: Int) -> (r: Int, g: Int, b: Int) {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let info = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8,
+                             bytesPerRow: w * 4, space: cs, bitmapInfo: info)!
+        // Position the source image so that (x, y) lands at (0, 0) in the context.
+        ctx.draw(image,
+                 in: CGRect(x: -x, y: -(image.height - y - h), width: image.width, height: image.height))
+        var rSum = 0, gSum = 0, bSum = 0
+        for i in stride(from: 0, to: bytes.count, by: 4) {
+            rSum += Int(bytes[i])
+            gSum += Int(bytes[i + 1])
+            bSum += Int(bytes[i + 2])
+        }
+        let count = w * h
+        return (rSum / count, gSum / count, bSum / count)
+    }
+
+    private func colorDistance(_ a: (r: Int, g: Int, b: Int), _ b: (r: Int, g: Int, b: Int)) -> Double {
+        let dr = Double(a.r - b.r)
+        let dg = Double(a.g - b.g)
+        let db = Double(a.b - b.b)
+        return (dr * dr + dg * dg + db * db).squareRoot()
     }
 }
