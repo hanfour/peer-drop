@@ -67,6 +67,59 @@ class PetStore {
         }
     }
 
+    // MARK: - v4.0 first-launch migration
+
+    /// Loads pet state and applies the v4.0 first-launch migration sweep
+    /// if the stored record is from v3.x (lacks `migrationDoneAt`). The
+    /// migrated state is persisted before being returned. Idempotent — once
+    /// `migrationDoneAt` is set, subsequent calls return the stored state
+    /// without re-running the sweep.
+    func loadAndMigrate() throws -> PetState? {
+        guard let pet = try load() else { return nil }
+        let migrated = PetStore.applyV4Migration(to: pet)
+        if migrated.migrationDoneAt != pet.migrationDoneAt {
+            try save(migrated)
+        }
+        return migrated
+    }
+
+    /// Pure migration function. Idempotent: pets that already carry
+    /// `migrationDoneAt` are returned unchanged. For legacy v3.x pets:
+    ///   • subVariety ← BodyGene.defaultSpeciesID.variant if nil (legacy
+    ///     single-variety bodies like .octopus get nil — defaultSpeciesID is
+    ///     bare and has no variant token)
+    ///   • seed ← deterministicSeed(petID, name) if nil — same input on any
+    ///     device produces the same seed, so cloud-sync re-migration is stable
+    ///   • migrationDoneAt ← now()
+    static func applyV4Migration(to pet: PetState) -> PetState {
+        guard pet.migrationDoneAt == nil else { return pet }
+        var p = pet
+        if p.genome.subVariety == nil,
+           let variant = p.genome.body.defaultSpeciesID.variant {
+            p.genome.subVariety = variant
+        }
+        if p.genome.seed == nil {
+            p.genome.seed = deterministicSeed(petID: p.id, petName: p.name)
+        }
+        p.migrationDoneAt = Date()
+        return p
+    }
+
+    /// Stable 32-bit hash of (petID, name). Uses FNV-1a so the result is
+    /// deterministic across processes and devices — important because cloud
+    /// sync may re-run migration on a different device for the same pet,
+    /// and we want both devices to land on the same seed (otherwise their
+    /// seed-derived sub-variety picks would diverge).
+    static func deterministicSeed(petID: UUID, petName: String?) -> UInt32 {
+        let key = "\(petID.uuidString)|\(petName ?? "")"
+        var hash: UInt32 = 2_166_136_261   // FNV-1a 32-bit offset basis
+        for byte in key.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16_777_619     // FNV prime
+        }
+        return hash
+    }
+
     /// Remove entire directory (for testing cleanup).
     func deleteAll() throws {
         let fm = FileManager.default
