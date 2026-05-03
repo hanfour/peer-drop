@@ -51,7 +51,12 @@ class PetStore {
         logger.debug("Saved evolution snapshot: \(filename)")
     }
 
-    /// Load all evolution snapshots.
+    /// Load all evolution snapshots. Snapshots are intentionally NOT migrated
+    /// by the v4.0 sweep — they're append-only historical records that should
+    /// reflect the pet's state at evolution time, not its current shape. If a
+    /// future feature renders snapshots through the v4.0 PNG pipeline, the
+    /// caller should apply PetStore.applyV4Migration to each loaded snapshot
+    /// in-memory rather than rewriting the on-disk file.
     func loadSnapshots() throws -> [PetState] {
         guard FileManager.default.fileExists(atPath: snapshotsDir.path) else {
             return []
@@ -78,7 +83,15 @@ class PetStore {
         guard let pet = try load() else { return nil }
         let migrated = PetStore.applyV4Migration(to: pet)
         if migrated.migrationDoneAt != pet.migrationDoneAt {
-            try save(migrated)
+            do {
+                try save(migrated)
+            } catch {
+                // Save failure is non-fatal: the in-memory migration is
+                // returned to the caller and the next loadAndMigrate call
+                // will re-run the (deterministic) sweep. Logging here makes
+                // the silent retry visible if it ever cascades.
+                logger.error("loadAndMigrate: failed to persist migrated pet: \(error.localizedDescription, privacy: .public)")
+            }
         }
         return migrated
     }

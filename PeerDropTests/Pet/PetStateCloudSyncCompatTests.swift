@@ -119,6 +119,110 @@ final class PetStateCloudSyncCompatTests: XCTestCase {
 
     // MARK: - round-trip stability (M7.1 plan step 4)
 
+    // MARK: - fuzz: random v3.x ↔ v4.0 records decode crash-free
+
+    /// 1000-frame fuzz mirroring PetPayloadCrossVersionTests's pattern but
+    /// for the persistence wire format. Catches future Codable additions
+    /// that accidentally break legacy record decoding (e.g. a new required
+    /// non-Optional field added to PetState).
+    func test_fuzz_1000RandomPetStateRecords_neverCrashes() {
+        var rng = SplitMixRNG(seed: 0x1234_5678_9ABC_DEF0)
+        var failures = 0
+
+        for _ in 0..<1000 {
+            let json = rng.nextBool() ? randomV4PetJSON(&rng) : randomV3xPetJSON(&rng)
+            do {
+                _ = try JSONDecoder().decode(PetState.self, from: json)
+            } catch {
+                failures += 1
+            }
+        }
+        // 1% threshold matches the M6.1 PetPayload fuzz cap. Observed actual
+        // rate on these generators is 0.
+        XCTAssertLessThan(failures, 10,
+                          "Decode failure rate too high: \(failures)/1000 — fuzz generators may be malformed")
+    }
+
+    private struct SplitMixRNG: RandomNumberGenerator {
+        var state: UInt64
+        init(seed: UInt64) { self.state = seed }
+        mutating func next() -> UInt64 {
+            state &+= 0x9E37_79B9_7F4A_7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return z ^ (z >> 31)
+        }
+        mutating func nextBool() -> Bool { next() & 1 == 1 }
+        mutating func nextDouble01() -> Double { Double(next() >> 11) / Double(1 << 53) }
+    }
+
+    private let bodies = ["cat", "dog", "rabbit", "bird", "frog", "bear", "dragon", "octopus", "ghost", "slime"]
+    private let v3Levels = [1, 2, 3]
+    private let v4Levels = [1, 2, 3, 4]
+    private let moods    = ["happy", "curious", "sleepy", "lonely", "excited", "startled"]
+    private let lifeStates = ["idle", "eating", "digesting", "sleeping", "active"]
+    private let eyes     = ["dot", "round", "line", "dizzy"]
+    private let patterns = ["none", "stripe", "spot"]
+
+    private func randomV3xPetJSON(_ rng: inout SplitMixRNG) -> Data {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "name": \(rng.nextBool() ? "\"v3pet\"" : "null"),
+          "birthDate": \(rng.nextDouble01() * 1_000_000_000 + 700_000_000),
+          "level": \(v3Levels.randomElement(using: &rng)!),
+          "experience": \(rng.next() % 1000),
+          "genome": {
+            "body": "\(bodies.randomElement(using: &rng)!)",
+            "eyes": "\(eyes.randomElement(using: &rng)!)",
+            "pattern": "\(patterns.randomElement(using: &rng)!)",
+            "personalityGene": \(rng.nextDouble01())
+          },
+          "mood": "\(moods.randomElement(using: &rng)!)",
+          "socialLog": [],
+          "lastInteraction": \(rng.nextDouble01() * 1_000_000_000 + 700_000_000),
+          "foodInventory": { "items": [] },
+          "lifeState": "\(lifeStates.randomElement(using: &rng)!)",
+          "stats": { "foodsEaten": 0, "poopsCleaned": 0, "totalInteractions": 0, "petsMet": 0 }
+        }
+        """
+        return json.data(using: .utf8)!
+    }
+
+    private func randomV4PetJSON(_ rng: inout SplitMixRNG) -> Data {
+        let subVarietyClause = rng.nextBool() ? "\"subVariety\": \"tabby\"," : ""
+        let seedClause = rng.nextBool() ? "\"seed\": \(rng.next() & 0xFFFF_FFFF)," : ""
+        let migDoneClause = rng.nextBool() ? "\"migrationDoneAt\": \(rng.nextDouble01() * 100_000_000 + 700_000_000)," : ""
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "name": "v4pet",
+          "birthDate": \(rng.nextDouble01() * 1_000_000_000 + 700_000_000),
+          "level": \(v4Levels.randomElement(using: &rng)!),
+          "experience": \(rng.next() % 1000),
+          "genome": {
+            "body": "\(bodies.randomElement(using: &rng)!)",
+            "eyes": "\(eyes.randomElement(using: &rng)!)",
+            "pattern": "\(patterns.randomElement(using: &rng)!)",
+            "personalityGene": \(rng.nextDouble01()),
+            \(subVarietyClause)
+            \(seedClause)
+            "_v5Padding": null
+          },
+          "mood": "\(moods.randomElement(using: &rng)!)",
+          "socialLog": [],
+          "lastInteraction": \(rng.nextDouble01() * 1_000_000_000 + 700_000_000),
+          "foodInventory": { "items": [] },
+          "lifeState": "\(lifeStates.randomElement(using: &rng)!)",
+          "stats": { "foodsEaten": 0, "poopsCleaned": 0, "totalInteractions": 0, "petsMet": 0 },
+          \(migDoneClause)
+          "_v5RootPadding": null
+        }
+        """
+        return json.data(using: .utf8)!
+    }
+
     func test_loadDecodeReEncodeDecode_isStable() throws {
         var original = PetState.newEgg()
         original.level = .adult
