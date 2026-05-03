@@ -6,7 +6,7 @@ final class SpriteDecoderTests: XCTestCase {
 
     private var testBundle: Bundle { Bundle(for: type(of: self)) }
     private var catTabbyAdultZip: URL {
-        testBundle.url(forResource: "cat-tabby-adult", withExtension: "zip")!
+        testBundle.url(forResource: "cat-tabby-adult", withExtension: "zip", subdirectory: "Pets")!
     }
 
     func test_decode_catTabbyAdult_returnsAll8Directions() throws {

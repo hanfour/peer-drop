@@ -18,4 +18,17 @@ enum PetLevel: Int, Codable, Comparable, CaseIterable {
         case .elder: return "老年"
         }
     }
+
+    /// Lowercase ASCII slug used in the asset filename convention
+    /// `<species-id>-<assetSlug>.zip` (e.g. `cat-tabby-adult.zip`). Shared
+    /// between the production resolver and test helpers — avoids per-call-site
+    /// duplication of the same switch.
+    var assetSlug: String {
+        switch self {
+        case .egg: return "egg"
+        case .baby: return "baby"
+        case .adult: return "adult"
+        case .elder: return "elder"
+        }
+    }
 }

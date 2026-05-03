@@ -140,6 +140,7 @@
 		55354112F7209861BD1216F1 /* FirstContactVerificationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */; };
 		5671C51DDFC869D7C249A544 /* PetTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8153A2193E408C3F30B049DD /* PetTabView.swift */; };
 		5675BD6D590DF7AEF6F44A22 /* DataChannelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A90A886C2B08F97C6ED3F42 /* DataChannelClient.swift */; };
+		570B08562B257A657E92CD6E /* Pets in Resources */ = {isa = PBXBuildFile; fileRef = F3369C6D619A47A28F3F58EA /* Pets */; };
 		5713965727FDCA8344E376B8 /* SpriteDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67986A5CC21164CB51CE9FBE /* SpriteDecoder.swift */; };
 		576B501BA221A9FAD6309E7B /* VoicePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DECB18745BF9BF19F554D57 /* VoicePlayer.swift */; };
 		57D71CDA3778DBF7A5CA2AE5 /* RelayAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */; };
@@ -320,6 +321,7 @@
 		C1B15C98CAFFB74D7883071B /* InviteAcceptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */; };
 		C1BB9FCDE5745E9A4F258094 /* SlimeSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A98C447090CA6B5E431F8CF /* SlimeSpriteDataTests.swift */; };
 		C23703D3233423E7B97BF640 /* PerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9213B13A8B9B9DF21664EA58 /* PerformanceTests.swift */; };
+		C36E3ABFC3796BBA2D00C42C /* Pets in Resources */ = {isa = PBXBuildFile; fileRef = 3823673D5A46544596C830A9 /* Pets */; };
 		C3C0C03588C1886421B97385 /* DeviceRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246752F17DF326BC833C33C1 /* DeviceRecordStore.swift */; };
 		C4A1EF54C15B9C11604C8857 /* TypingIndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */; };
 		C4FA861151792673711B032B /* TailnetPeerEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58E46F49381937D21F420B9 /* TailnetPeerEntryTests.swift */; };
@@ -429,7 +431,6 @@
 		FB69D4FCF15EAB14357A009F /* ConnectionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4250293A9FCF52B7ABA87AC /* ConnectionContext.swift */; };
 		FBC6D70D3726C8241696C977 /* PetNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8DBDFDC85944C7C017EED97 /* PetNamingTests.swift */; };
 		FBE541E91C5A872CE1B3029F /* DragonSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093CB8D661315EF3FEAC6C7A /* DragonSpriteDataTests.swift */; };
-		FC3FE5F65F9C91C3E957A790 /* cat-tabby-adult.zip in Resources */ = {isa = PBXBuildFile; fileRef = E428BAC0735EBCE3CCB4A130 /* cat-tabby-adult.zip */; };
 		FD7F1C498E9D7490143A4CAD /* PetWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A5D1E09D940BB3954B8CF4 /* PetWidget.swift */; };
 		FDE37459844B074486ABFD8D /* DoubleRatchetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D1742C065D8E0995E1931A /* DoubleRatchetTests.swift */; };
 		FECC436462D44B46C141039A /* PetMood.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6F0E5B9A84993467707D72 /* PetMood.swift */; };
@@ -565,6 +566,7 @@
 		36E1878253B14C0D4CE9B21E /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		371D9C8BCBFCD1265F54D339 /* RelayAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticator.swift; sourceTree = "<group>"; };
 		37D3096AC5F3A6FEA67284EC /* SDPSignaling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDPSignaling.swift; sourceTree = "<group>"; };
+		3823673D5A46544596C830A9 /* Pets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Pets; path = PeerDropTests/Resources/Pets; sourceTree = SOURCE_ROOT; };
 		38C2478F20C10D5FB383E756 /* TransferProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferProgressView.swift; sourceTree = "<group>"; };
 		395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		3A4BD6EB7D09BF1ACA6B8381 /* SpriteCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteCacheTests.swift; sourceTree = "<group>"; };
@@ -849,7 +851,6 @@
 		E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCardSnapshotTests.swift; sourceTree = "<group>"; };
 		E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteServiceTests.swift; sourceTree = "<group>"; };
 		E4250293A9FCF52B7ABA87AC /* ConnectionContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionContext.swift; sourceTree = "<group>"; };
-		E428BAC0735EBCE3CCB4A130 /* cat-tabby-adult.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = "cat-tabby-adult.zip"; sourceTree = "<group>"; };
 		E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTests.swift; sourceTree = "<group>"; };
 		E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSearchView.swift; sourceTree = "<group>"; };
@@ -871,6 +872,7 @@
 		F15558483B16C63DDF73CC01 /* KeyExchangeMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyExchangeMessageTests.swift; sourceTree = "<group>"; };
 		F1E0326F5D9180F9D6580BC1 /* TrustedContactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedContactTests.swift; sourceTree = "<group>"; };
 		F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F3369C6D619A47A28F3F58EA /* Pets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Pets; path = PeerDrop/Resources/Pets; sourceTree = SOURCE_ROOT; };
 		F3BD4AA727465183ED9D10FC /* MessageEditPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageEditPayload.swift; sourceTree = "<group>"; };
 		F4EDE654A552D9511140C884 /* TrustLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustLevel.swift; sourceTree = "<group>"; };
 		F54D0BBEF964AFC6DD1DEAE2 /* ImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCache.swift; sourceTree = "<group>"; };
@@ -913,6 +915,8 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
+				F3369C6D619A47A28F3F58EA /* Pets */,
+				3823673D5A46544596C830A9 /* Pets */,
 				E05D42A3FC66BBA5FE87122C /* peer-drop-v4 */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
@@ -1114,6 +1118,7 @@
 				88918D3F2CE1EE17919B8C32 /* X3DHTests.swift */,
 				A66FD4290A348E85E7D37D0F /* Mocks */,
 				B0644EC4965DB3988D2FEDC1 /* Pet */,
+				771A4035E486A6711A2C6705 /* Resources */,
 			);
 			path = PeerDropTests;
 			sourceTree = "<group>";
@@ -1181,6 +1186,7 @@
 				EE90AC247CF9EF1486B5CAD0 /* Extensions */,
 				EA3B126C9C8CB89B7AE9B2B1 /* Pet */,
 				1CA06EF41717621E8FFA387D /* Protocol */,
+				86FB5FB7C6AB5DE16D960E48 /* Resources */,
 				BA213164A62E9FAD2ECC8336 /* Security */,
 				647C5D035A2DE94FCA21D357 /* Transport */,
 				6BEDEDA3BDAB0A9589800AD6 /* UI */,
@@ -1285,6 +1291,13 @@
 			path = Security;
 			sourceTree = "<group>";
 		};
+		771A4035E486A6711A2C6705 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		7987B664786336C54930C91D /* Discovery */ = {
 			isa = PBXGroup;
 			children = (
@@ -1296,6 +1309,13 @@
 				F5D979E35021B42ECC2F105F /* TailscalePeer.swift */,
 			);
 			path = Discovery;
+			sourceTree = "<group>";
+		};
+		86FB5FB7C6AB5DE16D960E48 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		8CB461E3E2856C98EE1988A5 /* Protocol */ = {
@@ -1486,7 +1506,6 @@
 				4E9F8793914905C74E5A28D3 /* SpriteDecoderTests.swift */,
 				A99D2181233A53DB4F388DA3 /* SpriteRequestTests.swift */,
 				E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */,
-				E748156B79B6A1C1DE0C2AB6 /* Fixtures */,
 			);
 			path = Pet;
 			sourceTree = "<group>";
@@ -1601,14 +1620,6 @@
 				67D9769012AD6DB0704DCDBF /* PetSocialEngine.swift */,
 			);
 			path = Engine;
-			sourceTree = "<group>";
-		};
-		E748156B79B6A1C1DE0C2AB6 /* Fixtures */ = {
-			isa = PBXGroup;
-			children = (
-				E428BAC0735EBCE3CCB4A130 /* cat-tabby-adult.zip */,
-			);
-			path = Fixtures;
 			sourceTree = "<group>";
 		};
 		EA3B126C9C8CB89B7AE9B2B1 /* Pet */ = {
@@ -1827,7 +1838,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FC3FE5F65F9C91C3E957A790 /* cat-tabby-adult.zip in Resources */,
+				C36E3ABFC3796BBA2D00C42C /* Pets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1845,6 +1856,7 @@
 			files = (
 				8FB470518247A3ABB9341C15 /* Assets.xcassets in Resources */,
 				8BBBA409C0EF6B832DA6F848 /* Localizable.xcstrings in Resources */,
+				570B08562B257A657E92CD6E /* Pets in Resources */,
 				BC6156CC6CA44233F862B5A6 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

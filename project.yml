@@ -25,7 +25,14 @@ targets:
     type: application
     platform: iOS
     sources:
-      - PeerDrop
+      - path: PeerDrop
+        # Pets/ is registered separately as a folder reference below — exclude
+        # it from the default per-file scan so we don't get 324 PBXFileReference
+        # entries cluttering the project file.
+        excludes:
+          - "Resources/Pets/**"
+      - path: PeerDrop/Resources/Pets
+        type: folder
     dependencies:
       - package: WebRTC
       - package: ZIPFoundation
@@ -90,7 +97,15 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - PeerDropTests
+      - path: PeerDropTests
+        # Same folder-reference treatment as the main app for the test fixtures
+        # at PeerDropTests/Resources/Pets/. M0's spike loader and M3.3's decoder
+        # tests load via subdirectory: "Pets" (matching the production layout).
+        excludes:
+          - "Resources/Pets/**"
+          - "Pet/Fixtures/**"
+      - path: PeerDropTests/Resources/Pets
+        type: folder
     dependencies:
       - target: PeerDrop
       - package: ZIPFoundation
