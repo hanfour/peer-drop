@@ -130,6 +130,7 @@
 		4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D5D787B4A7EA3EBCFA8015 /* ScreenshotModeProvider.swift */; };
 		4FDC73C86C9E8B30EBD9858A /* InboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11F0174539415CEC21987D6 /* InboxService.swift */; };
 		5122137663EE951E29F1CC52 /* TailnetPeerEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7276A2479267623395CFB13B /* TailnetPeerEntry.swift */; };
+		513B6BC7ED1184B82275C4E8 /* PNGSpriteCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCC450E627F7FD3DBE61A598 /* PNGSpriteCache.swift */; };
 		52EB95A8BD63A5F520C46183 /* RabbitSpriteDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21324660C0F9DA0A4FC2D4F0 /* RabbitSpriteDataTests.swift */; };
 		53255114E616A92CCA95B695 /* RabbitSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEB8F58DD3A17AE0E87862A /* RabbitSpriteData.swift */; };
 		53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */; };
@@ -396,6 +397,7 @@
 		EF397F7C55CD03C40EB060CC /* StatusToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8522C558C3B5DDC867FCE801 /* StatusToastView.swift */; };
 		EF4CFC9180E25C15F1F95713 /* DeviceRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED61426A4AA5BA587AA09CE9 /* DeviceRecord.swift */; };
 		F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90A9DA5F16B00839A9012834 /* FileTransferTests.swift */; };
+		F064FE48A1327301EB258461 /* PNGSpriteCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE6F4656693BBE16D4E7C0E /* PNGSpriteCacheTests.swift */; };
 		F197E8CFA4067CF49BC85B16 /* DeviceRecordStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */; };
 		F21394B4FF3FCF7E66AE4035 /* PeerIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */; };
 		F377575793BC39A79422CA05 /* NearbyInteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FE9642235E04A824571838 /* NearbyInteractionManager.swift */; };
@@ -798,6 +800,7 @@
 		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
 		CAED5F8373D498D847E54328 /* ChatBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
 		CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordRow.swift; sourceTree = "<group>"; };
+		CCC450E627F7FD3DBE61A598 /* PNGSpriteCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PNGSpriteCache.swift; sourceTree = "<group>"; };
 		CD26CBA615E045C381EC2019 /* PetStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetStatsTests.swift; sourceTree = "<group>"; };
 		CD3861D6EB13D47D188BBB05 /* DataChannelTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportTests.swift; sourceTree = "<group>"; };
 		CDC27C08D925E5F4763695E7 /* PetPhysicsState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPhysicsState.swift; sourceTree = "<group>"; };
@@ -850,6 +853,7 @@
 		ED61426A4AA5BA587AA09CE9 /* DeviceRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecord.swift; sourceTree = "<group>"; };
 		EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullFeatureVerificationTests.swift; sourceTree = "<group>"; };
 		EED3725529064EC164D81F20 /* SharedPetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPetState.swift; sourceTree = "<group>"; };
+		EFE6F4656693BBE16D4E7C0E /* PNGSpriteCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PNGSpriteCacheTests.swift; sourceTree = "<group>"; };
 		F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PeerDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1547C59857B7BD88CF8516D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F15558483B16C63DDF73CC01 /* KeyExchangeMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyExchangeMessageTests.swift; sourceTree = "<group>"; };
@@ -1140,6 +1144,7 @@
 				2236E77ADB31C8E66055D3C8 /* GhostSpriteData.swift */,
 				458B63CFAAB7440E15BB221C /* OctopusSpriteData.swift */,
 				A5C3B3F5C9E0143AED707C6E /* PatternSpriteData.swift */,
+				CCC450E627F7FD3DBE61A598 /* PNGSpriteCache.swift */,
 				BCEB8F58DD3A17AE0E87862A /* RabbitSpriteData.swift */,
 				9FB87A392E4530E49CD216CB /* SlimeSpriteData.swift */,
 				2021539898896A9A26B2F9E6 /* SpeciesCatalog.swift */,
@@ -1456,6 +1461,7 @@
 				BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */,
 				9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */,
 				075AF882FE67177B700BCDDC /* PetLevelPromotionTests.swift */,
+				EFE6F4656693BBE16D4E7C0E /* PNGSpriteCacheTests.swift */,
 				0E5998CF743055DF9A9596FF /* SpeciesCatalogTests.swift */,
 				B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */,
 				97A8385C99B6769202906D9E /* SpikeLoaderTests.swift */,
@@ -1916,6 +1922,7 @@
 				177679DC77E50364286524D4 /* NearbyInteractionTests.swift in Sources */,
 				EDD43CFF5EC727F0F3696DF5 /* NetworkFingerprintTests.swift in Sources */,
 				17B027387373FBF95242F08F /* OctopusSpriteDataTests.swift in Sources */,
+				F064FE48A1327301EB258461 /* PNGSpriteCacheTests.swift in Sources */,
 				EC619EE7C1A8D81571523362 /* PairingPayloadTests.swift in Sources */,
 				7C9D8C96759E6A6793AD4BE4 /* PaletteSwapRendererTests.swift in Sources */,
 				06528AA9160E9CF2F6DC7F90 /* PeerIdentitySecurityTests.swift in Sources */,
@@ -2155,6 +2162,7 @@
 				38EF9AED742473062E63089F /* OctopusSpriteData.swift in Sources */,
 				F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */,
 				1603007083612F74127C38CE /* PINVerificationView.swift in Sources */,
+				513B6BC7ED1184B82275C4E8 /* PNGSpriteCache.swift in Sources */,
 				F466FB89CB8672F3E104263B /* PairingPayload.swift in Sources */,
 				BF7650CAF851C79D3D893DB0 /* PaletteSwapRenderer.swift in Sources */,
 				9A50EBB1807FDFDC49429D2A /* PatternSpriteData.swift in Sources */,
