@@ -209,6 +209,7 @@
 		85804F312615EC7ECE8E13E2 /* RelayConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */; };
 		860A9E7198B33274E2060533 /* TailnetPeerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E6D1AB82AE388169BE0266 /* TailnetPeerStore.swift */; };
 		8685EB1F6658650B6B97A528 /* ReconnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BE45F7EE204F6F3E38ACB4A /* ReconnectTests.swift */; };
+		8723210212488C3CD5A580F4 /* SpriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A66627015EA72FE3A1E350F5 /* SpriteService.swift */; };
 		874F53371173F39758963EA1 /* ArchiveManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5ABCC55FDF18BE085B2AC3 /* ArchiveManager.swift */; };
 		87BA8CAA57B997254D5000FA /* SpriteCompositorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C858E8695A54E3D0474B8BC /* SpriteCompositorTests.swift */; };
 		87CFA34BE623FC0FB555AE1C /* SpeciesIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */; };
@@ -216,6 +217,7 @@
 		899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D66F32C1146402F70397940 /* RetryPolicyTests.swift */; };
 		8AC1D27408D667B99802D3CF /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FEB4731FDC3D68845A758F3 /* SnapshotHelper.swift */; };
 		8AFFC7E3BD6EE4BC5CB0A613 /* PetSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65ADAF51BA3374DFEA836F17 /* PetSurface.swift */; };
+		8B2A9EC970F186EEC1910490 /* SpriteServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */; };
 		8BBBA409C0EF6B832DA6F848 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */; };
 		8BE1535ED710AB6D345593DA /* PetMood.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6F0E5B9A84993467707D72 /* PetMood.swift */; };
 		8C0B6332EAA91748BDDD0D91 /* MessageEditPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3BD4AA727465183ED9D10FC /* MessageEditPayload.swift */; };
@@ -748,6 +750,7 @@
 		A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifierTests.swift; sourceTree = "<group>"; };
 		A58E46F49381937D21F420B9 /* TailnetPeerEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntryTests.swift; sourceTree = "<group>"; };
 		A5C3B3F5C9E0143AED707C6E /* PatternSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PatternSpriteData.swift; path = PeerDrop/Pet/Sprites/PatternSpriteData.swift; sourceTree = "<group>"; };
+		A66627015EA72FE3A1E350F5 /* SpriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteService.swift; sourceTree = "<group>"; };
 		A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A797F52BD91FBE6E972D6EBF /* DragonSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DragonSpriteData.swift; path = PeerDrop/Pet/Sprites/DragonSpriteData.swift; sourceTree = "<group>"; };
 		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -836,6 +839,7 @@
 		E037612CE594D0990C235B8F /* PetDialogEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetDialogEngineTests.swift; sourceTree = "<group>"; };
 		E29EC77ADD9F60FE69C40C0D /* SpriteSheetLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteSheetLoader.swift; sourceTree = "<group>"; };
 		E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCardSnapshotTests.swift; sourceTree = "<group>"; };
+		E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteServiceTests.swift; sourceTree = "<group>"; };
 		E4250293A9FCF52B7ABA87AC /* ConnectionContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionContext.swift; sourceTree = "<group>"; };
 		E428BAC0735EBCE3CCB4A130 /* cat-tabby-adult.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = "cat-tabby-adult.zip"; sourceTree = "<group>"; };
 		E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTests.swift; sourceTree = "<group>"; };
@@ -1154,6 +1158,7 @@
 				0CACE77F48AE3D60B46842BF /* SpriteDataRegistry.swift */,
 				67986A5CC21164CB51CE9FBE /* SpriteDecoder.swift */,
 				6CF54628E54C6E7D408BA87C /* SpriteRequest.swift */,
+				A66627015EA72FE3A1E350F5 /* SpriteService.swift */,
 			);
 			path = Sprites;
 			sourceTree = "<group>";
@@ -1468,6 +1473,7 @@
 				8E0AAEF46FA7A4B374D47578 /* SpriteAssetResolverTests.swift */,
 				4E9F8793914905C74E5A28D3 /* SpriteDecoderTests.swift */,
 				A99D2181233A53DB4F388DA3 /* SpriteRequestTests.swift */,
+				E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */,
 				E748156B79B6A1C1DE0C2AB6 /* Fixtures */,
 			);
 			path = Pet;
@@ -1988,6 +1994,7 @@
 				3C620F54242E4C3456F2C7E0 /* SpriteDataRegistryTests.swift in Sources */,
 				79875531CF0B123E5192F890 /* SpriteDecoderTests.swift in Sources */,
 				A3B987CAB585F49F31D395F2 /* SpriteRequestTests.swift in Sources */,
+				8B2A9EC970F186EEC1910490 /* SpriteServiceTests.swift in Sources */,
 				1A21B12D1705107B2E33514D /* SpriteSheetLoaderTests.swift in Sources */,
 				DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */,
 				C4FA861151792673711B032B /* TailnetPeerEntryTests.swift in Sources */,
@@ -2241,6 +2248,7 @@
 				DC0421157A0A3E37E504D457 /* SpriteDataRegistry.swift in Sources */,
 				5713965727FDCA8344E376B8 /* SpriteDecoder.swift in Sources */,
 				9F50A0892C20EA28451CC2AF /* SpriteRequest.swift in Sources */,
+				8723210212488C3CD5A580F4 /* SpriteService.swift in Sources */,
 				2078B7690C0DCDCAA83118BB /* SpriteSheetLoader.swift in Sources */,
 				B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */,
 				EF397F7C55CD03C40EB060CC /* StatusToastView.swift in Sources */,
