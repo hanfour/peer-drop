@@ -142,6 +142,24 @@ final class PetRendererV3Tests: XCTestCase {
             "different moods should produce visibly different overlays")
     }
 
+    // MARK: - overlay scales with base width (Fix #5)
+
+    func test_overlaySidePixels_scalesWithBaseWidth_andClamps() {
+        // 68 px is the v4.0 PixelLab shape; the legacy hardcoded 16 px must
+        // still be the resolved value so existing pixel-comparison tests
+        // (test_render_introducesPixelDifference_inTopRightOverlayRegion etc.)
+        // keep passing without adjustment.
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 68), 16)
+
+        // Larger / smaller hypothetical assets scale proportionally.
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 96), 23) // 96 * 16/68 ≈ 22.59 → 23
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 32), 8)  // 32 * 16/68 ≈ 7.53 → clamped to 8
+
+        // Pathological extremes hit the clamp.
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 16), 8)
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 256), 32)
+    }
+
     // MARK: - helpers
 
     private func cgImagesIdentical(_ a: CGImage, _ b: CGImage) -> Bool {

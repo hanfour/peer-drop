@@ -35,12 +35,22 @@ final class PetRendererV3 {
     ///   `test_updateRenderedImage_writesPlaceholder_whenSpeciesAssetMissing`
     static let ultimateFallback = SpeciesID("cat-tabby")
 
-    /// Side length of the overlay icon in pixels of the base sprite. Coupled
-    /// to the current asset shape (68×68 PixelLab output → 16 px ≈ 23% width).
-    /// If M5 ships assets at different dimensions per stage, this constant
-    /// will need to be either rescaled relative to the base PNG width or made
-    /// per-stage. Plan §M4b.2 specified 16 px, which we honour for v4.0.
-    static let overlaySidePixels: CGFloat = 16
+    /// Fraction of the base sprite's width consumed by the mood overlay.
+    /// 16/68 ≈ 0.235 was chosen visually for the v4.0 PixelLab 68×68 output
+    /// (Plan §M4b.2). Encoding the fraction instead of a pixel count keeps the
+    /// overlay proportional if M5 ever ships assets at different dimensions
+    /// (e.g. a 96×96 hero shot would scale the icon to ~22 px instead of
+    /// staying stuck at 16 px and looking lost).
+    static let overlayWidthFraction: CGFloat = 16.0 / 68.0
+
+    /// Resolves the overlay side length for a given base sprite width. Clamped
+    /// to [8, 32] so very small / very large hypothetical assets still render
+    /// a recognizable SF Symbol — below 8 the glyph stops being legible, above
+    /// 32 it dominates the sprite.
+    static func overlaySidePixels(forBaseWidth width: CGFloat) -> CGFloat {
+        let target = (width * overlayWidthFraction).rounded()
+        return min(max(target, 8), 32)
+    }
 
     /// Single-entry memoization of the last composite result. Repeated renders
     /// with identical inputs (extremely common — animator ticks at ~12 Hz with
@@ -131,11 +141,12 @@ final class PetRendererV3 {
         let composited = renderer.image { _ in
             UIImage(cgImage: basePNG).draw(in: CGRect(origin: .zero, size: size))
 
+            let side = Self.overlaySidePixels(forBaseWidth: size.width)
             let iconRect = CGRect(
-                x: size.width - Self.overlaySidePixels,
+                x: size.width - side,
                 y: 0,
-                width: Self.overlaySidePixels,
-                height: Self.overlaySidePixels
+                width: side,
+                height: side
             )
             let iconName = MoodOverlay.iconName(mood)
             let tint = MoodOverlay.tintColor(mood)
