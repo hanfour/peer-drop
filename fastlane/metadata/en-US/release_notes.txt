@@ -1,21 +1,19 @@
-PeerDrop 3.4.0 — Security & Reliability
+PeerDrop 4.0.0 — Pet Companion Reimagined
 
-Security
-- First-contact verification: when a peer messages you for the first time, you'll be asked to compare a fingerprint before establishing an encrypted session — preventing silent man-in-the-middle attacks.
-- Decryption alerts: if PeerDrop can't decrypt three messages in a row from the same peer (usually because their identity key changed), a banner now tells you to verify their fingerprint instead of failing silently.
-- Hardened the message reassembly path: caps message size at 256 MB, rejects malformed chunk indices, and detects conflicting duplicate chunks.
+Pet System
+- 33 brand-new species across cats, dogs, dragons, slimes, mythical creatures and more — each with unique sub-varieties (5 cat breeds, 5 dog breeds, 5 slime types, and so on).
+- 3-stage lifecycle: baby → adult → elder. Your pet ages naturally over weeks — 8 days to adulthood, 14 days to elder.
+- 6 distinct mood expressions shown as overlay icons: happy, curious, sleepy, lonely, excited, startled.
 
-Reliability
-- Major rework of the relay connection lifecycle. The class of bug that caused the recent v3.3.0 hotfix is now structurally impossible — the relay session enforces socket cleanup automatically, instead of relying on every code path remembering to do it.
+Existing Pets
+- Your v3.x pet migrates automatically: new look, same identity. Name, level progress, social log, and stats are all preserved.
+- The first time you open v4.0, a one-time welcome screen previews your refreshed pet.
 
-Accessibility & polish
-- Dynamic Type now scales the discovery, invite, and security UI without clipping — even at the largest accessibility text sizes.
-- 55+ additional UI strings localized in 5 languages.
+Cross-Version Friends
+- Pet meetings between v4.0 devices show the new sprites. Meetings with friends still on v3.x degrade gracefully — they receive the basic pet info their version understands.
+- iCloud sync continues to work across versions; older devices on your account see your pet's last v3.x-shape state until they update.
 
-Battery
-- Pet animation timer now pauses when the app is backgrounded.
-
-Under the hood
-- One-time pre-keys are persisted as consumed before being removed, so a crash mid-handshake can't re-expose them for replay.
-- Every identity-key rotation is recorded in a per-contact audit trail.
-- Pet/widget shared state now writes atomically — no more partial-state reads from the widget during a foreground update.
+Performance & Polish
+- Sprite rendering is lazy and cached, keeping the app responsive even with the larger asset library.
+- Widget and Live Activity read pre-rendered images from a shared bridge instead of re-rendering — no extra work across processes.
+- 21,000 lines of legacy palette-swap rendering code retired in this release.
