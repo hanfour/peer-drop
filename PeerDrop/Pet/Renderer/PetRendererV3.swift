@@ -23,6 +23,16 @@ final class PetRendererV3 {
     /// `octopus-adult`). The fallback target MUST have all 3 stages bundled —
     /// `cat-tabby` was chosen because it's the legacy `BodyGene.cat` default
     /// and the most coverage-tested asset in the bundle.
+    ///
+    /// Contract history: M4 review locked `test_render_ghost_throwsAssetNotFound`
+    /// with the strict-error contract on the assumption that a nil image was
+    /// preferable to a wrong placeholder. M8 phase 5 reversed this — once the
+    /// legacy widget path was removed, every consumer needed SOME image to
+    /// avoid blank UI on legacy pets, and SpriteService keeps the strict
+    /// assetNotFound contract for its own diagnostic value. Renderer-layer
+    /// fallback is the right surface to absorb the gap. Tests updated:
+    ///   `test_render_ghostBody_fallsBackToUltimatePlaceholder`
+    ///   `test_updateRenderedImage_writesPlaceholder_whenSpeciesAssetMissing`
     static let ultimateFallback = SpeciesID("cat-tabby")
 
     /// Side length of the overlay icon in pixels of the base sprite. Coupled
@@ -45,6 +55,15 @@ final class PetRendererV3 {
 
     init(service: SpriteService = .shared) {
         self.service = service
+        #if DEBUG
+        // Defensive: if someone refactors the catalog and removes cat-tabby
+        // (or sets ultimateFallback to a bogus ID), every legacy pet would
+        // fall through to a now-failing fallback and the bug would only show
+        // up at first user render. This precondition trips at first init
+        // instead.
+        precondition(SpeciesCatalog.allIDs.contains(Self.ultimateFallback),
+                     "PetRendererV3.ultimateFallback (\(Self.ultimateFallback.rawValue)) must be in SpeciesCatalog")
+        #endif
     }
 
     func render(
