@@ -2,24 +2,25 @@ import Foundation
 import CoreGraphics
 import OSLog
 
-private let cacheLogger = Logger(subsystem: "com.hanfour.peerdrop", category: "PNGSpriteCache")
+private let cacheLogger = Logger(subsystem: "com.hanfour.peerdrop", category: "SpriteCache")
 
 /// LRU cache for the v4.0 PNG sprite pipeline. Backed by NSCache, keyed by
 /// SpriteRequest, holds decoded CGImages.
 ///
-/// Class name disambiguates from the legacy `SpriteCache` in `Pet/Renderer/`,
-/// which feeds PetRendererV2 with palette-swapped UInt8 sprites. The legacy
-/// class dies in M8; we'll rename PNGSpriteCache → SpriteCache then.
-///
 /// Default count limit is 30 (per plan §M3.4). NSCache also evicts under memory
 /// pressure, which is desirable on the iPhone-8 deploy floor.
+///
+/// Until M8 phase 5 deletion, this class lived as `PNGSpriteCache` to avoid
+/// colliding with the legacy `Pet/Renderer/SpriteCache.swift` (which fed
+/// PetRendererV2 with palette-swapped UInt8 sprites). With that legacy file
+/// gone the simpler name is reclaimed.
 ///
 /// Thread-safety: NSCache itself is thread-safe. The hit/miss counters use an
 /// NSLock so the metric is consistent when accessed from the M3.5 SpriteService
 /// actor and from prod telemetry readers.
-final class PNGSpriteCache {
+final class SpriteCache {
 
-    static let shared = PNGSpriteCache()
+    static let shared = SpriteCache()
 
     private let cache = NSCache<NSString, CGImageBox>()
     private let lock = NSLock()
@@ -80,7 +81,7 @@ final class PNGSpriteCache {
         let snapshotRate = totalNow == 0 ? 0.0 : Double(_hits) / Double(totalNow)
         lock.unlock()
         if totalNow.isMultiple(of: 100) {
-            cacheLogger.debug("PNGSpriteCache: hitRate=\(snapshotRate, privacy: .public) after \(totalNow) requests")
+            cacheLogger.debug("SpriteCache: hitRate=\(snapshotRate, privacy: .public) after \(totalNow) requests")
         }
     }
 

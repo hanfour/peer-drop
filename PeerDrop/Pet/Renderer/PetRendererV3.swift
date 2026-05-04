@@ -17,6 +17,14 @@ final class PetRendererV3 {
 
     private let service: SpriteService
 
+    /// Ultimate fallback species when a pet's resolved SpeciesID has no
+    /// shipping assets (e.g. legacy `BodyGene.ghost` whose v4.0 assets weren't
+    /// generated, or stages where some species are missing entries like
+    /// `octopus-adult`). The fallback target MUST have all 3 stages bundled —
+    /// `cat-tabby` was chosen because it's the legacy `BodyGene.cat` default
+    /// and the most coverage-tested asset in the bundle.
+    static let ultimateFallback = SpeciesID("cat-tabby")
+
     /// Side length of the overlay icon in pixels of the base sprite. Coupled
     /// to the current asset shape (68×68 PixelLab output → 16 px ≈ 23% width).
     /// If M5 ships assets at different dimensions per stage, this constant
@@ -51,11 +59,38 @@ final class PetRendererV3 {
             return cached.image
         }
 
-        let request = SpriteRequest(species: species, stage: level, direction: direction)
-        let basePNG = try await service.image(for: request)
+        let basePNG = try await loadBasePNG(species: species, stage: level, direction: direction)
         let composited = composite(basePNG: basePNG, mood: mood)
         lastComposite = (key, composited)
         return composited
+    }
+
+    /// Fetches the base sprite, falling back to `ultimateFallback` when the
+    /// requested species×stage has no shipping zip. Without this, legacy
+    /// `BodyGene.ghost` pets and incomplete species (e.g. `octopus-adult`,
+    /// `bird-baby/adult`) would crash the renderer instead of showing the
+    /// safe cat-tabby placeholder. SpriteService deliberately keeps the
+    /// strict `assetNotFound` contract (its tests pin it), so the fallback
+    /// has to live at the renderer layer.
+    private func loadBasePNG(
+        species: SpeciesID,
+        stage: PetLevel,
+        direction: SpriteDirection
+    ) async throws -> CGImage {
+        let request = SpriteRequest(species: species, stage: stage, direction: direction)
+        do {
+            return try await service.image(for: request)
+        } catch SpriteServiceError.assetNotFound {
+            if species == Self.ultimateFallback {
+                throw SpriteServiceError.assetNotFound(request)
+            }
+            rendererLogger.warning("Asset missing for species=\(species.rawValue, privacy: .public) stage=\(stage.rawValue); falling back to \(Self.ultimateFallback.rawValue, privacy: .public)")
+            let fallbackRequest = SpriteRequest(
+                species: Self.ultimateFallback,
+                stage: stage,
+                direction: direction)
+            return try await service.image(for: fallbackRequest)
+        }
     }
 
     /// Draws the mood overlay icon at the top-right corner of the base PNG.

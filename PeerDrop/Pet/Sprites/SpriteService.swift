@@ -8,7 +8,7 @@ enum SpriteServiceError: Error {
 
 /// Public façade for the v4.0 PNG sprite pipeline.
 ///
-/// Wires SpriteAssetResolver → SpriteDecoder → PNGSpriteCache. The actor
+/// Wires SpriteAssetResolver → SpriteDecoder → SpriteCache. The actor
 /// guarantees thread-safe state; in-flight task dedup ensures concurrent
 /// requests for the same key trigger exactly one decode.
 ///
@@ -20,12 +20,12 @@ actor SpriteService {
 
     static let shared = SpriteService()
 
-    private let cache: PNGSpriteCache
+    private let cache: SpriteCache
     private let bundle: Bundle
     private var inflightTasks: [SpriteRequest: Task<CGImage, Error>] = [:]
     private(set) var decodeCount: Int = 0
 
-    init(cache: PNGSpriteCache = .shared, bundle: Bundle = .main) {
+    init(cache: SpriteCache = .shared, bundle: Bundle = .main) {
         self.cache = cache
         self.bundle = bundle
     }
@@ -51,7 +51,7 @@ actor SpriteService {
     private func decodeAndCache(
         request: SpriteRequest,
         bundle: Bundle,
-        cache: PNGSpriteCache
+        cache: SpriteCache
     ) async throws -> CGImage {
         guard let zipURL = SpriteAssetResolver.url(for: request, in: bundle) else {
             throw SpriteServiceError.assetNotFound(request)

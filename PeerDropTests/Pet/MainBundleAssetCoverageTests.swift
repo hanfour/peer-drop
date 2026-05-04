@@ -83,7 +83,7 @@ final class MainBundleAssetCoverageTests: XCTestCase {
     // MARK: - end-to-end render via main bundle
 
     func test_mainBundle_endToEnd_decodesCatTabbyAdultEast() async throws {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: mainBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: mainBundle)
         let req = SpriteRequest(species: SpeciesID("cat-tabby"), stage: .adult, direction: .east)
         let cg = try await service.image(for: req)
         XCTAssertEqual(cg.width, 68)
@@ -98,7 +98,7 @@ final class MainBundleAssetCoverageTests: XCTestCase {
     /// so wall-clock cost is N × ~5–20 ms per zip ≈ 1–2 seconds for 100+
     /// species.
     func test_mainBundle_endToEnd_decodesEveryMultiVarietySpecies_adultEast() async throws {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 8), bundle: mainBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 8), bundle: mainBundle)
         var failures: [(id: String, error: String)] = []
 
         for id in SpeciesCatalog.allIDs where !Self.partialCoverageIDs.contains(id) {

@@ -17,7 +17,7 @@ final class PetRendererV3Tests: XCTestCase {
     }
 
     private func makeRenderer() -> PetRendererV3 {
-        PetRendererV3(service: SpriteService(cache: PNGSpriteCache(countLimit: 30),
+        PetRendererV3(service: SpriteService(cache: SpriteCache(countLimit: 30),
                                               bundle: testBundle))
     }
 
@@ -74,28 +74,24 @@ final class PetRendererV3Tests: XCTestCase {
         }
     }
 
-    // MARK: - ghost: no v4.0 asset
+    // MARK: - ghost: no v4.0 asset → falls back to cat-tabby placeholder
 
-    func test_render_ghostBody_throwsAssetNotFound() async {
+    func test_render_ghostBody_fallsBackToUltimatePlaceholder() async throws {
         // BodyGene.ghost maps to SpeciesID("ghost"), which isn't in the
-        // catalog (M2.3) and has no bundled asset. Pinning this contract so
-        // any future change (e.g. someone adds ghost to the catalog without
-        // also bundling assets) trips the assertion instead of silently
-        // shipping nil-image pets.
+        // catalog (M2.3) and has no bundled asset. The renderer's
+        // ultimateFallback (cat-tabby) kicks in so users with legacy ghost
+        // pets see a placeholder pet instead of a blank rectangle. Pin both
+        // the success outcome and the fallback identity by checking the
+        // dimensions match cat-tabby's 68×68 output.
         let renderer = makeRenderer()
         var ghost = PetGenome.random()
         ghost.body = .ghost
         ghost.subVariety = nil
         ghost.seed = nil
-        do {
-            _ = try await renderer.render(
-                genome: ghost, level: .adult, mood: .happy, direction: .east)
-            XCTFail("expected assetNotFound for ghost (no v4.0 asset)")
-        } catch SpriteServiceError.assetNotFound {
-            // expected
-        } catch {
-            XCTFail("expected assetNotFound, got \(error)")
-        }
+        let cg = try await renderer.render(
+            genome: ghost, level: .adult, mood: .happy, direction: .east)
+        XCTAssertEqual(cg.width, 68, "ghost should render via the cat-tabby placeholder (68×68)")
+        XCTAssertEqual(cg.height, 68)
     }
 
     // MARK: - mood overlay (M4b.2)
@@ -104,7 +100,7 @@ final class PetRendererV3Tests: XCTestCase {
         // The composited image's top-right region (where the mood icon is
         // drawn) should differ from the same region of the raw base PNG;
         // pixels outside the overlay box should be unchanged.
-        let cache = PNGSpriteCache(countLimit: 30)
+        let cache = SpriteCache(countLimit: 30)
         let service = SpriteService(cache: cache, bundle: testBundle)
         let renderer = PetRendererV3(service: service)
 
@@ -131,7 +127,7 @@ final class PetRendererV3Tests: XCTestCase {
     func test_render_mood_changesPixelsInOverlayRegion() async throws {
         // Different moods should produce different overlay pixels (different
         // tint colors). Same base sprite, two different moods.
-        let cache = PNGSpriteCache(countLimit: 30)
+        let cache = SpriteCache(countLimit: 30)
         let service = SpriteService(cache: cache, bundle: testBundle)
         let renderer = PetRendererV3(service: service)
 

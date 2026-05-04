@@ -2,24 +2,24 @@ import XCTest
 import CoreGraphics
 @testable import PeerDrop
 
-final class PNGSpriteCacheTests: XCTestCase {
+final class SpriteCacheTests: XCTestCase {
 
     // MARK: - basic set/get
 
     func test_setThenGet_returnsImage() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         let key = catTabbyAdultEast
         cache.setImage(makeStubImage(), for: key)
         XCTAssertNotNil(cache.image(for: key))
     }
 
     func test_get_missingKey_returnsNil() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         XCTAssertNil(cache.image(for: catTabbyAdultEast))
     }
 
     func test_clear_evictsAllEntries() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         cache.setImage(makeStubImage(), for: catTabbyAdultEast)
         cache.clear()
         XCTAssertNil(cache.image(for: catTabbyAdultEast))
@@ -28,7 +28,7 @@ final class PNGSpriteCacheTests: XCTestCase {
     // MARK: - keys
 
     func test_distinctRequests_haveDistinctSlots() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         let east = catTabbyAdultEast
         let west = SpriteRequest(species: SpeciesID("cat-tabby"), stage: .adult, direction: .west)
         cache.setImage(makeStubImage(red: true), for: east)
@@ -40,12 +40,12 @@ final class PNGSpriteCacheTests: XCTestCase {
     // MARK: - hit rate metric
 
     func test_hitRate_zeroForFreshCache() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         XCTAssertEqual(cache.hitRate, 0.0)
     }
 
     func test_hitRate_reflectsHitsOverTotal() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         cache.setImage(makeStubImage(), for: catTabbyAdultEast)
         _ = cache.image(for: catTabbyAdultEast)              // hit
         _ = cache.image(for: catTabbyAdultEast)              // hit
@@ -58,7 +58,7 @@ final class PNGSpriteCacheTests: XCTestCase {
     }
 
     func test_clear_resetsHitRateMetric() {
-        let cache = PNGSpriteCache(countLimit: 10)
+        let cache = SpriteCache(countLimit: 10)
         cache.setImage(makeStubImage(), for: catTabbyAdultEast)
         _ = cache.image(for: catTabbyAdultEast)
         cache.clear()
@@ -70,7 +70,7 @@ final class PNGSpriteCacheTests: XCTestCase {
     // MARK: - shared singleton
 
     func test_shared_returnsSameInstance() {
-        XCTAssertTrue(PNGSpriteCache.shared === PNGSpriteCache.shared)
+        XCTAssertTrue(SpriteCache.shared === SpriteCache.shared)
     }
 
     // NOTE on eviction: NSCache may discard objects on memory pressure or when

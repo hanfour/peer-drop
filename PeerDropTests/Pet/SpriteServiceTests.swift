@@ -12,7 +12,7 @@ final class SpriteServiceTests: XCTestCase {
     // MARK: - happy path
 
     func test_image_returnsCGImage_forBundledZip() async throws {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         let cg = try await service.image(for: catTabbyAdultEast)
         XCTAssertEqual(cg.width, 68)
         XCTAssertEqual(cg.height, 68)
@@ -21,7 +21,7 @@ final class SpriteServiceTests: XCTestCase {
     // MARK: - bulk fill (1 decode populates all 8 directions)
 
     func test_decodeOnce_populatesAll8Directions_inCache() async throws {
-        let cache = PNGSpriteCache(countLimit: 30)
+        let cache = SpriteCache(countLimit: 30)
         let service = SpriteService(cache: cache, bundle: testBundle)
 
         // First request decodes the zip and bulk-fills 8 entries.
@@ -42,7 +42,7 @@ final class SpriteServiceTests: XCTestCase {
     // MARK: - concurrent dedup
 
     func test_concurrent_sameRequest_decodedOnce() async throws {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
 
         await withTaskGroup(of: Void.self) { group in
             for _ in 0..<10 {
@@ -60,7 +60,7 @@ final class SpriteServiceTests: XCTestCase {
     // MARK: - catalog fallback
 
     func test_unknownVariant_resolvesToFamilyDefault() async throws {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         // cat-imaginary not in catalog → falls back to cat-tabby (which IS bundled)
         let req = SpriteRequest(species: SpeciesID("cat-imaginary"), stage: .adult, direction: .east)
         let cg = try await service.image(for: req)
@@ -72,7 +72,7 @@ final class SpriteServiceTests: XCTestCase {
         // requested across multiple directions used to re-decode per direction
         // because bulk-fill only cached the first direction under the original
         // ID. Now bulk-fill iterates all 8 under both resolved and original.
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         for direction in SpriteDirection.allCases {
             let req = SpriteRequest(species: SpeciesID("cat-imaginary"),
                                     stage: .adult, direction: direction)
@@ -85,7 +85,7 @@ final class SpriteServiceTests: XCTestCase {
     // MARK: - error paths
 
     func test_unknownFamily_throwsAssetNotFound() async {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         let req = SpriteRequest(species: SpeciesID("madeup-anything"), stage: .adult, direction: .east)
         do {
             _ = try await service.image(for: req)
@@ -98,7 +98,7 @@ final class SpriteServiceTests: XCTestCase {
     }
 
     func test_knownSpeciesButMissingStage_throwsAssetNotFound() async {
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         // cat-tabby is in catalog, only adult zip is bundled in tests.
         let req = SpriteRequest(species: SpeciesID("cat-tabby"), stage: .baby, direction: .east)
         do {

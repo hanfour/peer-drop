@@ -23,7 +23,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
     /// SharedRenderedPet bridge.
     private func makeEngine(pet: PetState) -> PetEngine {
         let testBundle = Bundle(for: type(of: self))
-        let service = SpriteService(cache: PNGSpriteCache(countLimit: 30), bundle: testBundle)
+        let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         let renderer = PetRendererV3(service: service)
         return PetEngine(pet: pet, rendererV3: renderer, sharedRenderedPet: bridge)
     }
@@ -48,9 +48,11 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
         XCTAssertEqual(shared?.height, engine.renderedImage?.height)
     }
 
-    func test_updateRenderedImage_doesNotWrite_whenRenderFails() async throws {
-        // Body=.ghost has no v4.0 asset → renderer throws → renderedImage nil
-        // → bridge skipped.
+    func test_updateRenderedImage_writesPlaceholder_whenSpeciesAssetMissing() async throws {
+        // Body=.ghost has no v4.0 asset, but PetRendererV3.loadBasePNG falls
+        // back to cat-tabby (ultimateFallback). So a ghost pet renders + writes
+        // the placeholder image to the bridge — UX preference is "show
+        // placeholder" over "show nothing".
         var pet = PetState.newEgg()
         pet.level = .adult
         pet.genome.body = .ghost
@@ -59,11 +61,11 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
         let engine = makeEngine(pet: pet)
 
         engine.updateRenderedImage()
-        // Give the Task a chance to complete (failure path is fast — no decode).
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await waitForRenderedImage(engine: engine, timeout: 2.0)
 
-        XCTAssertNil(engine.renderedImage)
-        XCTAssertNil(bridge.read(), "Bridge should not get a stale write when render fails")
+        XCTAssertNotNil(engine.renderedImage, "ghost should render via the placeholder fallback")
+        XCTAssertNotNil(bridge.read(), "Bridge should get the placeholder image")
+        XCTAssertEqual(bridge.read()?.width, 68, "placeholder is cat-tabby 68×68")
     }
 
     func test_consecutiveRenders_overwriteSharedRenderedPet() async throws {

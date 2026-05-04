@@ -91,14 +91,9 @@ final class PetSpeciesIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(state2.velocity.dy, 0, "Cat with 800 gravity should accelerate down")
     }
 
-    func testSpriteRegistryFallbackIntegration() {
-        // All species unique actions should have fallback sprite frame counts
-        for body in BodyGene.allCases {
-            let provider = PetBehaviorProviderFactory.create(for: body)
-            for action in provider.profile.uniqueActions {
-                let frames = SpriteDataRegistry.frameCount(for: body, stage: .baby, action: action)
-                XCTAssertGreaterThan(frames, 0, "\(body).\(action) should have fallback frames")
-            }
-        }
-    }
+    // testSpriteRegistryFallbackIntegration removed in M8 phase 5 — the legacy
+    // SpriteDataRegistry / [[UInt8]] action-frame system is gone. v4.0 ships
+    // idle-only per direction (plan §4 cross-ref note); per-action frame counts
+    // are no longer a meaningful contract. Action animation expansion is
+    // deferred to v4.1.
 }
