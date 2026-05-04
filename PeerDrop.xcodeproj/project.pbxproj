@@ -116,6 +116,7 @@
 		55354112F7209861BD1216F1 /* FirstContactVerificationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */; };
 		5671C51DDFC869D7C249A544 /* PetTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8153A2193E408C3F30B049DD /* PetTabView.swift */; };
 		5675BD6D590DF7AEF6F44A22 /* DataChannelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A90A886C2B08F97C6ED3F42 /* DataChannelClient.swift */; };
+		56FD21C7860AFB666E3019A0 /* V4UpgradeOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6AFFD57A9FA50E4F4109A25 /* V4UpgradeOnboarding.swift */; };
 		570B08562B257A657E92CD6E /* Pets in Resources */ = {isa = PBXBuildFile; fileRef = F3369C6D619A47A28F3F58EA /* Pets */; };
 		5713965727FDCA8344E376B8 /* SpriteDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67986A5CC21164CB51CE9FBE /* SpriteDecoder.swift */; };
 		576B501BA221A9FAD6309E7B /* VoicePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DECB18745BF9BF19F554D57 /* VoicePlayer.swift */; };
@@ -370,6 +371,7 @@
 		F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
 		F466FB89CB8672F3E104263B /* PairingPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06B83396F6C34EDDDD268A60 /* PairingPayload.swift */; };
 		F4F4293A5A8616CB1AE18CF7 /* PetEvolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76246879247CD18F2ABD6E1 /* PetEvolutionTests.swift */; };
+		F515C26C8D07196F4AA8D239 /* V4UpgradeOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 674960103D286E03D524A8CF /* V4UpgradeOnboardingTests.swift */; };
 		F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C82AECE1F936949B5184F8 /* OnboardingView.swift */; };
 		F5CCE99629FF1B1F7BE70261 /* SessionKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190A50E1CBA99B173EC8B908 /* SessionKeyManagerTests.swift */; };
 		F5DE5ECD32C2EA2C806D4044 /* PetStateCloudSyncCompatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20DA3B652914D8CEE8844CE7 /* PetStateCloudSyncCompatTests.swift */; };
@@ -593,6 +595,7 @@
 		67210E79F5C319F8257C0204 /* InboxServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxServiceTests.swift; sourceTree = "<group>"; };
 		672E9AB36C23F92699EEFCD8 /* NetworkFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkFingerprint.swift; sourceTree = "<group>"; };
 		673CA4547FC92F153E75739C /* WebRTCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCClient.swift; sourceTree = "<group>"; };
+		674960103D286E03D524A8CF /* V4UpgradeOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V4UpgradeOnboardingTests.swift; sourceTree = "<group>"; };
 		67986A5CC21164CB51CE9FBE /* SpriteDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteDecoder.swift; sourceTree = "<group>"; };
 		67D9769012AD6DB0704DCDBF /* PetSocialEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSocialEngine.swift; sourceTree = "<group>"; };
 		68F68921A1EFE5717EFF8690 /* PeerMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerMessage.swift; sourceTree = "<group>"; };
@@ -692,6 +695,7 @@
 		A58E46F49381937D21F420B9 /* TailnetPeerEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntryTests.swift; sourceTree = "<group>"; };
 		A66627015EA72FE3A1E350F5 /* SpriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteService.swift; sourceTree = "<group>"; };
 		A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A6AFFD57A9FA50E4F4109A25 /* V4UpgradeOnboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V4UpgradeOnboarding.swift; sourceTree = "<group>"; };
 		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A7F5664B8F455DF7F83AB815 /* SharedRenderedPet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedRenderedPet.swift; sourceTree = "<group>"; };
 		A8034F4F86233093A4E36905 /* FilePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerView.swift; sourceTree = "<group>"; };
@@ -1385,6 +1389,7 @@
 				4E9F8793914905C74E5A28D3 /* SpriteDecoderTests.swift */,
 				A99D2181233A53DB4F388DA3 /* SpriteRequestTests.swift */,
 				E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */,
+				674960103D286E03D524A8CF /* V4UpgradeOnboardingTests.swift */,
 			);
 			path = Pet;
 			sourceTree = "<group>";
@@ -1432,6 +1437,7 @@
 				5D7E4A6EE9C506EDF235ED18 /* PetSecretChatRow.swift */,
 				8153A2193E408C3F30B049DD /* PetTabView.swift */,
 				7BE30BAD21DDB022E0E0F577 /* PixelView.swift */,
+				A6AFFD57A9FA50E4F4109A25 /* V4UpgradeOnboarding.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -1900,6 +1906,7 @@
 				B9549AC149F44480D7D0A855 /* TrustedContactStoreTests.swift in Sources */,
 				47056B1FA7FC87FFA1E97DCE /* TrustedContactTests.swift in Sources */,
 				C4A1EF54C15B9C11604C8857 /* TypingIndicatorTests.swift in Sources */,
+				F515C26C8D07196F4AA8D239 /* V4UpgradeOnboardingTests.swift in Sources */,
 				A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */,
 				9CAA195089A2102D816EF96F /* X3DHTests.swift in Sources */,
 			);
@@ -2135,6 +2142,7 @@
 				A74847A67B418445595E82AF /* URL+Zip.swift in Sources */,
 				AC282EF4C7E2C8E7F1A87ABE /* UserProfile.swift in Sources */,
 				BB0A876963F26D7D52EECB7A /* UserProfileView.swift in Sources */,
+				56FD21C7860AFB666E3019A0 /* V4UpgradeOnboarding.swift in Sources */,
 				ED6ED0806FBF2005C1037FBC /* VerificationView.swift in Sources */,
 				4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */,
 				E18567293F69BFFD0F2A4C12 /* VoiceCallSession.swift in Sources */,

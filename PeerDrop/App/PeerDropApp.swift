@@ -12,6 +12,7 @@ struct PeerDropApp: App {
     @State private var showLaunch = true
     @State private var pendingInvite: InvitePayload?
     @State private var showInviteAccept = false
+    @State private var showV4UpgradeOnboarding = false
 
     var body: some Scene {
         WindowGroup {
@@ -80,6 +81,12 @@ struct PeerDropApp: App {
                     petEngine.pet = ScreenshotModeProvider.shared.mockPetState
                 } else if let saved = try? PetStore().loadAndMigrate() {
                     petEngine.pet = saved
+                    // M10 — show the v4.0 upgrade screen once for users
+                    // whose pet just got migrated from v3.x. Brand-new v4.0
+                    // installs (no migrationDoneAt) skip this.
+                    if V4UpgradeOnboarding.shouldPresent(for: petEngine.pet) {
+                        showV4UpgradeOnboarding = true
+                    }
                 }
 
                 // Wire pet callbacks
@@ -109,6 +116,14 @@ struct PeerDropApp: App {
                         showInviteAccept = false
                         pendingInvite = nil
                     }
+                }
+            }
+            .sheet(isPresented: $showV4UpgradeOnboarding) {
+                V4UpgradeOnboarding(
+                    petImage: petEngine.renderedImage,
+                    petName: petEngine.pet.name
+                ) {
+                    showV4UpgradeOnboarding = false
                 }
             }
         }
