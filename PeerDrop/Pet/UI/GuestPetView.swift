@@ -4,7 +4,11 @@ struct GuestPetView: View {
     let greeting: PetGreeting
     @State private var position: CGPoint
     @State private var renderedImage: CGImage?
-    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+    /// View-lifetime renderer instance — lets PetRendererV3.lastComposite
+    /// memoization survive across renders. Per-call allocation lost the memo
+    /// (the SpriteService.shared cache still helped, but the composite step
+    /// re-ran every tick).
+    @State private var renderer = PetRendererV3()
 
     init(greeting: PetGreeting, initialPosition: CGPoint) {
         self.greeting = greeting
@@ -16,17 +20,15 @@ struct GuestPetView: View {
             .opacity(0.8)
             .position(position)
             .task { await renderSnapshot() }
-            .onReceive(timer) { _ in
-                Task { await renderSnapshot() }
-            }
     }
 
-    /// Renders the peer's pet directly via the v4.0 PNG pipeline. Each call
-    /// hits the SpriteService cache (warmed by the host app's own renders),
-    /// so per-tick cost after first render is sub-millisecond.
+    /// Renders the peer's pet via the v4.0 PNG pipeline. The peer's
+    /// (genome, level, mood, direction) is fixed for the lifetime of this
+    /// view (greeting is `let`), so a single render at .task time is enough
+    /// — the previous 0.5 s timer was a v3.x carryover for the legacy
+    /// `frame: Int` cycle that this view no longer has.
     @MainActor
     private func renderSnapshot() async {
-        let renderer = PetRendererV3()
         renderedImage = try? await renderer.render(
             genome: greeting.genome,
             level: greeting.level,

@@ -3,6 +3,11 @@ import SwiftUI
 struct PetSecretChatRow: View {
     let entry: SocialEntry
     @State private var partnerImage: CGImage?
+    /// View-lifetime renderer instance — lets the lastComposite memo survive
+    /// across renders. SocialEntry is immutable so the input never changes
+    /// after first render; with the memo, repeated body evaluations skip the
+    /// composite work entirely.
+    @State private var renderer = PetRendererV3()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -35,7 +40,6 @@ struct PetSecretChatRow: View {
     @MainActor
     private func renderPartner() async {
         guard let genome = entry.partnerGenome else { return }
-        let renderer = PetRendererV3()
         partnerImage = try? await renderer.render(
             genome: genome,
             level: .baby,
