@@ -1,7 +1,10 @@
 import Foundation
 import CoreGraphics
 import ImageIO
+import OSLog
 import UniformTypeIdentifiers
+
+private let bridgeLogger = Logger(subsystem: "com.hanfour.peerdrop", category: "SharedRenderedPet")
 
 /// App Group bridge for the rendered pet CGImage. Mirrors SharedPetState's
 /// NSFileCoordinator pattern but carries binary PNG bytes instead of JSON.
@@ -44,6 +47,10 @@ final class SharedRenderedPet {
     /// Coordinated so the widget never reads a half-written file.
     func write(_ image: CGImage) {
         guard let data = Self.pngData(from: image) else {
+            // Release-safe diagnostic — assertionFailure alone is debug-only,
+            // so a prod encode failure would silently freeze the widget at
+            // its previous frame with no signal in Console.
+            bridgeLogger.error("PNG encode failed for \(image.width)×\(image.height) CGImage; bridge write skipped")
             assertionFailure("Failed to encode CGImage as PNG")
             return
         }
@@ -56,7 +63,14 @@ final class SharedRenderedPet {
             // .atomic writes to a temp location and renames into place — a
             // concurrent reader either sees the previous file or the new
             // one, never a partial write.
-            try? data.write(to: url, options: .atomic)
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                bridgeLogger.error("PNG write failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        if let coordinatorError {
+            bridgeLogger.error("NSFileCoordinator write coordination failed: \(coordinatorError.localizedDescription, privacy: .public)")
         }
     }
 
@@ -76,6 +90,9 @@ final class SharedRenderedPet {
                   let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return }
             result = cg
         }
+        if let coordinatorError {
+            bridgeLogger.error("NSFileCoordinator read coordination failed: \(coordinatorError.localizedDescription, privacy: .public)")
+        }
         return result
     }
 
@@ -87,6 +104,9 @@ final class SharedRenderedPet {
             error: &coordinatorError
         ) { url in
             try? FileManager.default.removeItem(at: url)
+        }
+        if let coordinatorError {
+            bridgeLogger.error("NSFileCoordinator clear coordination failed: \(coordinatorError.localizedDescription, privacy: .public)")
         }
     }
 
