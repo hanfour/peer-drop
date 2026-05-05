@@ -8,8 +8,9 @@ final class V4UpgradeOnboardingTests: XCTestCase {
     override func setUp() {
         super.setUp()
         // Per-test ephemeral defaults suite so flag changes don't leak.
+        // The fresh UUID-suffixed suite name is itself the isolation
+        // mechanism — no extra cleanup needed.
         defaults = UserDefaults(suiteName: "V4UpgradeOnboardingTests-\(UUID())")
-        defaults.removePersistentDomain(forName: defaults.dictionaryRepresentation().description)
     }
 
     override func tearDown() {

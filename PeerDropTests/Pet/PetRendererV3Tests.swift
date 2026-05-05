@@ -152,12 +152,12 @@ final class PetRendererV3Tests: XCTestCase {
         XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 68), 16)
 
         // Larger / smaller hypothetical assets scale proportionally.
-        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 96), 23) // 96 * 16/68 ≈ 22.59 → 23
-        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 32), 8)  // 32 * 16/68 ≈ 7.53 → clamped to 8
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 96), 23) // 96 * 16/68 ≈ 22.59 → 23 (rounding)
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 32), 8)  // 32 * 16/68 ≈ 7.53 → 8 (rounding, not clamp)
 
         // Pathological extremes hit the clamp.
-        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 16), 8)
-        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 256), 32)
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 16), 8)   // → 4 → clamped to 8
+        XCTAssertEqual(PetRendererV3.overlaySidePixels(forBaseWidth: 256), 32) // → 60 → clamped to 32
     }
 
     // MARK: - helpers
