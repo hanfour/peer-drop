@@ -1,9 +1,14 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-**Last updated:** 2026-04-29 (session 4 — autonomous run completed, Batch 2 fully done, see §6)
-**Purpose:** Authoritative tracking doc for the v4.0 pet redesign asset pipeline. New sessions pick up from here.
+> **🏁 v4.0 SHIPPED — workstream frozen.** Batch 2 (33 species, ~440 zips) integrated via PR #28 (M0–M12); 324 zips bundled into `PeerDrop/Resources/Pets/` (M5.1 commit `176f079`); v4.0.0 build 1 uploaded to TestFlight 2026-05-04, awaiting soak. Day 0 baseline at `4036e4c`. This file is preserved as **technical reference** for: PixelLab subscription/quota lessons (§1), zip naming convention (§3), submission JS pattern (§5), and per-breed visual-quality field notes (§6 batch logs).
+>
+> **Active workstream signals to find elsewhere:**
+> - v4.0 ship status / soak: `docs/release/v4.0-soak-log.md`
+> - v4.0 reviewer notes: `docs/release/v4.0-reviewer-notes.md`
+> - v4.0 submission gates: `docs/pet-design/v4-submission-checklist.md`
 
-> **For Claude (new session):** Start by reading this file, then `docs/plans/2026-04-27-v4.0-pet-redesign-design.md`. The 36-breed expansion is currently the active workstream. Use the existing PixelLab batch submission pattern documented below — do NOT re-derive it from scratch.
+**Last updated:** 2026-05-05 (frozen post-v4.0 ship; previously 2026-04-29 session 4 autonomous run completed)
+**Purpose:** Historical record of the v4.0 pet redesign asset pipeline + technical reference for any future asset gen.
 
 ---
 
@@ -166,16 +171,16 @@ quad.click();
 
 ---
 
-## 6. Active Tasks (TaskList state — refresh in new session)
+## 6. Tasks — Final Status (frozen 2026-05-05)
 
 | # | Task | Status |
 |---|---|---|
 | 70 | Phase 2 整合 + grounding fix | ✅ completed |
-| 71 | Phase 3: 章魚 → 龍貓 改造 (production keep both) | ⏳ pending |
+| 71 | Phase 3: 章魚 → 龍貓 改造 (production keep both) | ❌ **obsolete** — PR #28 used `SpeciesCatalog` additive design; both species shipped without "改造" step |
 | 72 | Write v4.0 production 升級 design doc | ✅ completed (committed `2f8be96`) |
-| 73 | Phase 3 prototype: 跑 3 個龍貓 stages | ⏳ pending |
-| 74 | 擴張 14 種新 species (hamster/fox/etc) | 🔄 in-progress |
-| 75 | 36 breeds 擴張規劃 + 執行 | 🔄 in-progress |
+| 73 | Phase 3 prototype: 跑 3 個龍貓 stages | ❌ **obsolete** — direct ship via PR #28 skipped this prototype phase |
+| 74 | 擴張 14 種新 species (hamster/fox/etc) | ✅ **completed** — subsumed into #75; all 14 done in Batch 1 |
+| 75 | 36 breeds 擴張規劃 + 執行 | ✅ **completed** — 33 species shipped (3 水族 excluded per §4); 324 zips bundled M5.1 |
 
 ### Batch 1 progress (2026-04-28 session 2)
 - ✅ **cat 5 子品種 × 3 stages = 15 zips** (persian / bengal / tabby / calico / siamese × baby / adult / elder)
@@ -358,22 +363,24 @@ Cumulative on subscription: ~321 / 2000. Plenty of quota left for refinement pas
 
 ---
 
-## 7. Open Decisions
+## 7. Decisions — Final Status (frozen 2026-05-05)
 
 1. ~~**水族類 inclusion**~~ — ✅ resolved 2026-04-28: exclude 水族, keep legacy octopus only.
-2. **鳥類 sub-variant UX** — nested submenu vs flat 4-button picker (currently rooster/hen handled as separate cards). Deferred until UI work begins.
-3. **v4.0 production migration** — 5.5–7 week project, design doc done, no plan doc yet.
-4. **Production octopus + totoro coexistence** — both must remain; species data needs additive change, not replacement.
+2. **鳥類 sub-variant UX** — nested submenu vs flat 4-button picker. Still deferred; v4.0 ships without this UI rework (no blocker for ship). Revisit when post-v4.0 UI iteration begins.
+3. ~~**v4.0 production migration**~~ — ✅ shipped via PR #28 (M0–M12), v4.0.0 build 1 in TestFlight.
+4. ~~**Production octopus + totoro coexistence**~~ — ✅ resolved via `SpeciesCatalog` additive design (M2.2 commit `70ced2c`); both species coexist as flat-string SpeciesIDs.
 
 ---
 
-## 8. Recommended New-Session Entry Points
+## 8. Historical Run Notes (workstream complete)
 
-### 🚨 AUTONOMOUS RUN INSTRUCTIONS (next session — do NOT pause between batches) 🚨
+> **🏁 Queue fully executed.** All 11 batches below shipped between session 3–4 (2026-04-28 → 2026-04-29). No further runs scheduled. The JS submission pattern + per-batch operational protocol are preserved here as reference for any future asset gen project (v4.1 sub-variant additions, v5.0 species, etc.).
 
-**User has authorized continuous execution. Do NOT stop to ask "繼續嗎?" between batches. Plough through everything below in one go, committing each batch as it completes. Only pause for blocking errors (subscription expired, real 429 backoff, broken wizard flow).**
+### 🗄️ Original autonomous run instructions (preserved verbatim — completed)
 
-Last completed: **owl 3×3 = 9 zips** (session 3, 2eabc58).
+**(Originally:** User has authorized continuous execution. Do NOT stop to ask "繼續嗎?" between batches. Plough through everything below in one go, committing each batch as it completes. Only pause for blocking errors (subscription expired, real 429 backoff, broken wizard flow).**)**
+
+Last completed at the time of this instruction: **owl 3×3 = 9 zips** (session 3, 2eabc58). All 11 below subsequently completed in session 4 (commits `9d677f1` → `d58b5ca`).
 Skeleton convention: **all birds use Quadruped + Cat skeleton** (confirmed working). Reptiles likely the same (cat for small, bear for large). Fantasy will need case-by-case decisions but default to bear for large/round and cat for small.
 
 **Execution queue — run all of these in order, commit per species:**
