@@ -127,7 +127,9 @@ Submit an already-uploaded TestFlight build for review (no rebuild)
 
 Defaults: phased rollout + manual release — safe for major versions.
 
-Args: version:X.Y.Z build:N [auto_release:true] [phased:false]
+Auto-loads reviewer notes from docs/release/v<major.minor>-reviewer-notes.md.
+
+Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]
 
 Example: fastlane submit_only version:4.0.0 build:1
 

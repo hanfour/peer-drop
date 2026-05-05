@@ -241,7 +241,8 @@ platform :ios do
 
   desc "Submit an already-uploaded TestFlight build for review (no rebuild)"
   desc "Defaults: phased rollout + manual release — safe for major versions."
-  desc "Args: version:X.Y.Z build:N [auto_release:true] [phased:false]"
+  desc "Auto-loads reviewer notes from docs/release/v<major.minor>-reviewer-notes.md."
+  desc "Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]"
   desc "Example: fastlane submit_only version:4.0.0 build:1"
   lane :submit_only do |options|
     # Default both ON (safer for major versions). Override with
@@ -251,6 +252,27 @@ platform :ios do
     automatic_release = options[:auto_release] == "true"
 
     UI.message("Submission strategy: phased=#{phased_release}, automatic=#{automatic_release}")
+
+    review_info = nil
+    unless options[:no_review_notes] == "true"
+      version = options[:version]
+      UI.user_error!("version: required when auto-loading reviewer notes (or pass no_review_notes:true)") unless version
+
+      major_minor = version[/^\d+\.\d+/]
+      UI.user_error!("Could not parse major.minor from version '#{version}'") unless major_minor
+
+      notes_path = File.expand_path("../docs/release/v#{major_minor}-reviewer-notes.md", __dir__)
+      UI.user_error!("Reviewer notes not found: #{notes_path}") unless File.exist?(notes_path)
+
+      raw = File.read(notes_path)
+      match = raw.match(/<!-- BEGIN_PASTE.*?-->(.*?)<!-- END_PASTE -->/m)
+      UI.user_error!("BEGIN_PASTE / END_PASTE markers not found in #{notes_path}") unless match
+
+      notes = match[1].gsub(/^#+\s*/, "").strip
+      UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
+      UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
+      review_info = { notes: notes }
+    end
 
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
@@ -265,6 +287,7 @@ platform :ios do
       phased_release: phased_release,
       force: true,
       precheck_include_in_app_purchases: false,
+      app_review_information: review_info,
       submission_information: {
         add_id_info_uses_idfa: false,
         export_compliance_uses_encryption: true,
