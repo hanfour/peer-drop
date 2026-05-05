@@ -125,11 +125,11 @@ Build and submit to App Store review
 
 Submit an already-uploaded TestFlight build for review (no rebuild)
 
-Pass version: + build: to target a specific build (e.g.
+Defaults: phased rollout + manual release — safe for major versions.
 
-`fastlane submit_only version:4.0.0 build:1`). Without args,
+Args: version:X.Y.Z build:N [auto_release:true] [phased:false]
 
-fastlane submits the latest build of the editable version.
+Example: fastlane submit_only version:4.0.0 build:1
 
 ----
 

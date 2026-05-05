@@ -240,10 +240,18 @@ platform :ios do
   end
 
   desc "Submit an already-uploaded TestFlight build for review (no rebuild)"
-  desc "Pass version: + build: to target a specific build (e.g."
-  desc "`fastlane submit_only version:4.0.0 build:1`). Without args,"
-  desc "fastlane submits the latest build of the editable version."
+  desc "Defaults: phased rollout + manual release — safe for major versions."
+  desc "Args: version:X.Y.Z build:N [auto_release:true] [phased:false]"
+  desc "Example: fastlane submit_only version:4.0.0 build:1"
   lane :submit_only do |options|
+    # Default both ON (safer for major versions). Override with
+    # `phased:false` for instant 100% rollout, `auto_release:true`
+    # to skip the "Pending Developer Release" gate.
+    phased_release    = options[:phased] != "false"
+    automatic_release = options[:auto_release] == "true"
+
+    UI.message("Submission strategy: phased=#{phased_release}, automatic=#{automatic_release}")
+
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
       app_version: options[:version],
@@ -253,7 +261,8 @@ platform :ios do
       skip_metadata: false,
       metadata_path: "./fastlane/metadata",
       submit_for_review: true,
-      automatic_release: true,
+      automatic_release: automatic_release,
+      phased_release: phased_release,
       force: true,
       precheck_include_in_app_purchases: false,
       submission_information: {
