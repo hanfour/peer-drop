@@ -79,6 +79,20 @@ Download existing metadata from App Store Connect
 
 Upload metadata to App Store Connect
 
+Pass version: parameter (e.g. `fastlane upload_metadata version:4.0.0`)
+
+if the target version doesn't exist on ASC yet (otherwise omit and
+
+fastlane uses whatever's currently editable).
+
+### ios check_status
+
+```sh
+[bundle exec] fastlane ios check_status
+```
+
+Print ASC review status: live + in-flight versions + recent builds
+
 ### ios build
 
 ```sh
@@ -102,6 +116,20 @@ Build and upload to TestFlight (no review submission)
 ```
 
 Build and submit to App Store review
+
+### ios submit_only
+
+```sh
+[bundle exec] fastlane ios submit_only
+```
+
+Submit an already-uploaded TestFlight build for review (no rebuild)
+
+Pass version: + build: to target a specific build (e.g.
+
+`fastlane submit_only version:4.0.0 build:1`). Without args,
+
+fastlane submits the latest build of the editable version.
 
 ----
 

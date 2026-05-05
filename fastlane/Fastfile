@@ -77,6 +77,79 @@ platform :ios do
   end
 
   # -------------------------------------------------------------------------
+  # Diagnostics — read-only ASC queries.
+  # -------------------------------------------------------------------------
+
+  desc "Print ASC review status: live + in-flight versions + recent builds"
+  lane :check_status do
+    require "spaceship"
+    require "json"
+
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+
+    # fastlane's app_store_connect_api_key action doesn't accept JSON dumps
+    # directly, so destructure and feed the fields. set_spaceship_token
+    # defaults to true → Spaceship is auth'd after this call.
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    data["duration"] || 1200,
+      in_house:    data["in_house"] || false
+    )
+
+    bundle_id = "com.hanfour.peerdrop"
+    app = Spaceship::ConnectAPI::App.find(bundle_id)
+    UI.user_error!("App not found: #{bundle_id}") unless app
+
+    UI.success("App: #{app.name} (#{bundle_id}) — id #{app.id}")
+    UI.message("")
+
+    live = app.get_live_app_store_version
+    if live
+      UI.success("=== Live (on App Store) ===")
+      UI.message("  v#{live.version_string} — #{live.app_store_state}")
+      UI.message("  Released: #{live.created_date}")
+      UI.message("")
+    end
+
+    edit = app.get_edit_app_store_version
+    if edit
+      UI.success("=== In Flight (draft / in review / rejected) ===")
+      UI.message("  v#{edit.version_string} — #{edit.app_store_state}")
+      UI.message("  Release type: #{edit.release_type}")
+      UI.message("  Created:      #{edit.created_date}")
+      if (b = edit.build)
+        UI.message("  Build:        #{b.version} (uploaded #{b.uploaded_date})")
+      end
+      UI.message("")
+    else
+      UI.message("(no edit version — nothing in flight)")
+      UI.message("")
+    end
+
+    recent = app.get_app_store_versions(limit: 10)
+    if recent.any?
+      UI.success("=== Recent Versions ===")
+      recent.each do |v|
+        UI.message("  v#{v.version_string.ljust(8)} #{v.app_store_state.to_s.ljust(28)} #{v.created_date}")
+      end
+      UI.message("")
+    end
+
+    builds = app.get_builds(limit: 5, includes: "preReleaseVersion")
+    if builds.any?
+      UI.success("=== Recent Builds (TestFlight) ===")
+      builds.each do |b|
+        v = b.pre_release_version&.version || "?"
+        UI.message("  build #{b.version.to_s.ljust(4)} → v#{v.ljust(8)} #{b.processing_state.to_s.ljust(12)} uploaded #{b.uploaded_date}")
+      end
+    end
+  end
+
+  # -------------------------------------------------------------------------
   # Release lanes — build archive + upload to App Store Connect.
   # Uses api_key.json for non-interactive authentication.
   # -------------------------------------------------------------------------
@@ -151,6 +224,31 @@ platform :ios do
     )
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
+      skip_screenshots: true,
+      skip_metadata: false,
+      metadata_path: "./fastlane/metadata",
+      submit_for_review: true,
+      automatic_release: true,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: true,
+        export_compliance_is_exempt: true
+      }
+    )
+  end
+
+  desc "Submit an already-uploaded TestFlight build for review (no rebuild)"
+  desc "Pass version: + build: to target a specific build (e.g."
+  desc "`fastlane submit_only version:4.0.0 build:1`). Without args,"
+  desc "fastlane submits the latest build of the editable version."
+  lane :submit_only do |options|
+    upload_to_app_store(
+      api_key_path: "./fastlane/api_key.json",
+      app_version: options[:version],
+      build_number: options[:build],
+      skip_binary_upload: true,
       skip_screenshots: true,
       skip_metadata: false,
       metadata_path: "./fastlane/metadata",
