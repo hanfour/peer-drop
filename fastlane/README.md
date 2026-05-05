@@ -79,6 +79,30 @@ Download existing metadata from App Store Connect
 
 Upload metadata to App Store Connect
 
+### ios build
+
+```sh
+[bundle exec] fastlane ios build
+```
+
+Build Release archive (no upload) — useful for inspection
+
+### ios beta
+
+```sh
+[bundle exec] fastlane ios beta
+```
+
+Build and upload to TestFlight (no review submission)
+
+### ios release
+
+```sh
+[bundle exec] fastlane ios release
+```
+
+Build and submit to App Store review
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
