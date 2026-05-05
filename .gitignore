@@ -90,6 +90,9 @@ Gemfile.lock
 # Fastlane screenshot backups
 fastlane/screenshots_framed_backup/
 
+# Pet design research scratch (PNGs at repo root only)
+/*.png
+
 # Secrets
 Secrets.xcconfig
 private_keys/
