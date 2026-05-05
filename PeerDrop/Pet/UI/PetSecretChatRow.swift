@@ -2,14 +2,17 @@ import SwiftUI
 
 struct PetSecretChatRow: View {
     let entry: SocialEntry
+    @State private var partnerImage: CGImage?
+    /// View-lifetime renderer instance — lets the lastComposite memo survive
+    /// across renders. SocialEntry is immutable so the input never changes
+    /// after first render; with the memo, repeated body evaluations skip the
+    /// composite work entirely.
+    @State private var renderer = PetRendererV3()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                if let genome = entry.partnerGenome,
-                   let image = PetSnapshotRenderer.render(
-                       body: genome.body, level: .baby, mood: .happy,
-                       eyes: genome.eyes, pattern: genome.pattern,
-                       paletteIndex: genome.paletteIndex, scale: 4) {
+                if let image = partnerImage {
                     Image(decorative: image, scale: 1.0)
                         .interpolation(.none)
                         .resizable()
@@ -27,5 +30,20 @@ struct PetSecretChatRow: View {
             }
         }
         .padding(.vertical, 2)
+        .task { await renderPartner() }
+    }
+
+    /// Renders the chat partner's pet via the v4.0 PNG pipeline. Synthesises
+    /// stage = .baby, mood = .happy because SocialEntry only carries the
+    /// partner's PetGenome (their level/mood at meeting time wasn't persisted
+    /// in v3.x). The cache makes per-row cost negligible after first decode.
+    @MainActor
+    private func renderPartner() async {
+        guard let genome = entry.partnerGenome else { return }
+        partnerImage = try? await renderer.render(
+            genome: genome,
+            level: .baby,
+            mood: .happy,
+            direction: .east)
     }
 }

@@ -1,0 +1,9 @@
+# symlink to ../web-prototype/node_modules (sharp is reused from there)
+node_modules
+
+# AI tool outputs are checked in only when finalised; keep raw drafts local.
+raw-output/
+
+# generated v2 sprite JSON is created by import-ai-sprite.mjs once user runs
+# the AI pipeline; not tracked until first real import.
+cat-v2.json

@@ -51,7 +51,12 @@ class PetStore {
         logger.debug("Saved evolution snapshot: \(filename)")
     }
 
-    /// Load all evolution snapshots.
+    /// Load all evolution snapshots. Snapshots are intentionally NOT migrated
+    /// by the v4.0 sweep — they're append-only historical records that should
+    /// reflect the pet's state at evolution time, not its current shape. If a
+    /// future feature renders snapshots through the v4.0 PNG pipeline, the
+    /// caller should apply PetStore.applyV4Migration to each loaded snapshot
+    /// in-memory rather than rewriting the on-disk file.
     func loadSnapshots() throws -> [PetState] {
         guard FileManager.default.fileExists(atPath: snapshotsDir.path) else {
             return []
@@ -65,6 +70,78 @@ class PetStore {
             let data = try Data(contentsOf: url)
             return try decoder.decode(PetState.self, from: data)
         }
+    }
+
+    // MARK: - v4.0 first-launch migration
+
+    /// Loads pet state and applies the v4.0 first-launch migration sweep
+    /// if the stored record is from v3.x (lacks `migrationDoneAt`). The
+    /// migrated state is persisted before being returned. Idempotent — once
+    /// `migrationDoneAt` is set, subsequent calls return the stored state
+    /// without re-running the sweep.
+    func loadAndMigrate() throws -> PetState? {
+        guard let pet = try load() else { return nil }
+        let migrated = PetStore.applyV4Migration(to: pet)
+        if migrated.migrationDoneAt != pet.migrationDoneAt {
+            do {
+                try save(migrated)
+            } catch {
+                // Save failure is non-fatal: the in-memory migration is
+                // returned to the caller and the next loadAndMigrate call
+                // will re-run the (deterministic) sweep. Logging here makes
+                // the silent retry visible if it ever cascades.
+                logger.error("loadAndMigrate: failed to persist migrated pet: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return migrated
+    }
+
+    /// Pure migration function. Idempotent: pets that already carry
+    /// `migrationDoneAt` are returned unchanged. For legacy v3.x pets:
+    ///   • subVariety ← BodyGene.defaultSpeciesID.variant if nil (legacy
+    ///     single-variety bodies like .octopus get nil — defaultSpeciesID is
+    ///     bare and has no variant token)
+    ///   • seed ← deterministicSeed(petID, name) if nil — same input on any
+    ///     device produces the same seed, so cloud-sync re-migration is stable
+    ///   • migrationDoneAt ← now()
+    static func applyV4Migration(to pet: PetState) -> PetState {
+        guard pet.migrationDoneAt == nil else { return pet }
+        var p = pet
+        if p.genome.subVariety == nil,
+           let variant = p.genome.body.defaultSpeciesID.variant {
+            p.genome.subVariety = variant
+        }
+        if p.genome.seed == nil {
+            p.genome.seed = deterministicSeed(petID: p.id, petName: p.name)
+        }
+        p.migrationDoneAt = Date()
+        return p
+    }
+
+    /// Stable 32-bit hash of (petID, name). Uses FNV-1a so the result is
+    /// deterministic across processes and devices — important because cloud
+    /// sync may re-run migration on a different device for the same pet,
+    /// and we want both devices to land on the same seed (otherwise their
+    /// seed-derived sub-variety picks would diverge).
+    ///
+    /// The name is normalised to NFC (`precomposedStringWithCanonicalMapping`)
+    /// before hashing so a pet named "café" hashes the same regardless of
+    /// whether the source string used the composed (U+00E9) or decomposed
+    /// (U+0065 U+0301) representation. iOS UITextField produces NFC by
+    /// default, but cloud-synced or future Android-source names might not.
+    ///
+    /// Nil names and empty-string names hash identically (both map to ""
+    /// before concat). This is intentional — pets without names are rare and
+    /// the harmless collision keeps the API simple.
+    static func deterministicSeed(petID: UUID, petName: String?) -> UInt32 {
+        let normalisedName = (petName ?? "").precomposedStringWithCanonicalMapping
+        let key = "\(petID.uuidString)|\(normalisedName)"
+        var hash: UInt32 = 2_166_136_261   // FNV-1a 32-bit offset basis
+        for byte in key.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16_777_619     // FNV prime
+        }
+        return hash
     }
 
     /// Remove entire directory (for testing cleanup).

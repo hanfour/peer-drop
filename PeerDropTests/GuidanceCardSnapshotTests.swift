@@ -4,13 +4,13 @@ import SwiftUI
 
 @MainActor
 final class GuidanceCardSnapshotTests: XCTestCase {
-    func test_useInviteKnownDevice_rendersNonEmpty() {
+    func test_rendersNonEmpty_whenContextHasKnownDevice() {
         let ctx = ConnectionContext()
         let rec = DeviceRecord(id: "a", displayName: "Alice",
                                 sourceType: "relay", lastConnected: Date(),
                                 connectionCount: 1, peerDeviceId: "d")
         ctx.setKnownDeviceSample(rec)
-        let card = GuidanceCard(trigger: .emptyState, onMoreOptions: {}, onDismiss: nil)
+        let card = GuidanceCard(onMoreOptions: {}, onDismiss: nil)
             .environmentObject(ctx)
             .environmentObject(ConnectionManager())
         let host = UIHostingController(rootView: card)
@@ -19,10 +19,10 @@ final class GuidanceCardSnapshotTests: XCTestCase {
         XCTAssertGreaterThan(host.view.intrinsicContentSize.height, 0)
     }
 
-    func test_useTailnet_rendersNonEmpty() {
+    func test_rendersNonEmpty_whenContextHasTailnetPeers() {
         let ctx = ConnectionContext()
         ctx.setTailscaleState(hasTailscale: true, tailnetPeerCount: 2)
-        let card = GuidanceCard(trigger: .emptyState, onMoreOptions: {}, onDismiss: nil)
+        let card = GuidanceCard(onMoreOptions: {}, onDismiss: nil)
             .environmentObject(ctx)
             .environmentObject(ConnectionManager())
         let host = UIHostingController(rootView: card)
@@ -31,9 +31,9 @@ final class GuidanceCardSnapshotTests: XCTestCase {
         XCTAssertGreaterThan(host.view.intrinsicContentSize.height, 0)
     }
 
-    func test_useRelayCode_rendersNonEmpty() {
+    func test_rendersNonEmpty_inEmptyContext() {
         let ctx = ConnectionContext()
-        let card = GuidanceCard(trigger: .emptyState, onMoreOptions: {}, onDismiss: nil)
+        let card = GuidanceCard(onMoreOptions: {}, onDismiss: nil)
             .environmentObject(ctx)
             .environmentObject(ConnectionManager())
         let host = UIHostingController(rootView: card)
@@ -42,10 +42,10 @@ final class GuidanceCardSnapshotTests: XCTestCase {
         XCTAssertGreaterThan(host.view.intrinsicContentSize.height, 0)
     }
 
-    func test_configureTailscale_rendersNonEmpty() {
+    func test_rendersNonEmpty_whenContextHasHighFailureRate() {
         let ctx = ConnectionContext()
         ctx.setRecentFailureRate(0.5)
-        let card = GuidanceCard(trigger: .emptyState, onMoreOptions: {}, onDismiss: nil)
+        let card = GuidanceCard(onMoreOptions: {}, onDismiss: nil)
             .environmentObject(ctx)
             .environmentObject(ConnectionManager())
         let host = UIHostingController(rootView: card)

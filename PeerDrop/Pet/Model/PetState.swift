@@ -16,6 +16,9 @@ struct PetState: Codable {
     var digestEndTime: Date?
     var stats: PetStats = PetStats()
     var lastLoginDate: Date?
+    /// Set once the v4.0 first-launch promotion sweep has run for this pet (M7.2 wires
+    /// the actual sweep). Optional + new in v4.0 → legacy v3.x JSON decodes as nil.
+    var migrationDoneAt: Date?
 
     var ageInDays: Int {
         Int(Date().timeIntervalSince(birthDate) / 86400)

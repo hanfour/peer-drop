@@ -24,7 +24,12 @@ class PetEngine: ObservableObject {
     @Published var foodTarget: DroppedFood?
     private let feedCooldown: TimeInterval = 1800
 
-    private let rendererV2 = PetRendererV2()
+    private let rendererV3: PetRendererV3
+    private let sharedRenderedPet: SharedRenderedPet
+    /// Most recently dispatched render task. Cancelled when a new
+    /// updateRenderedImage() call comes in so out-of-order completions can't
+    /// overwrite renderedImage with a stale frame.
+    private var renderTask: Task<Void, Never>?
     let animator = PetAnimationController()
     private let tracker = InteractionTracker()
     private let dialogEngine = PetDialogEngine()
@@ -57,9 +62,21 @@ class PetEngine: ObservableObject {
         pet.socialLog.contains { Date().timeIntervalSince($0.date) < 86400 }
     }
 
-    init(pet: PetState = .newEgg()) {
+    init(
+        pet: PetState = .newEgg(),
+        rendererV3: PetRendererV3? = nil,
+        sharedRenderedPet: SharedRenderedPet? = nil
+    ) {
         self.pet = pet
         self.behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
+        // PetRendererV3.init is @MainActor isolated, so we can't put it in a
+        // default parameter expression (those evaluate outside isolation).
+        // Build it here in the @MainActor init body when no override is given.
+        self.rendererV3 = rendererV3 ?? PetRendererV3()
+        // SharedRenderedPet bridges to the App Group container so the widget
+        // and Live Activity can read the latest rendered pet without re-running
+        // the v4.0 PNG pipeline themselves (M8 phase 2 wire-up).
+        self.sharedRenderedPet = sharedRenderedPet ?? SharedRenderedPet()
         setupAnimationObserver()
     }
 
@@ -239,13 +256,35 @@ class PetEngine: ObservableObject {
     }
 
     // MARK: - Evolution
+    //
+    // v4.0 lifecycle model:
+    //   egg   → baby   : experience-based via EvolutionRequirement (24h + 100 XP, unchanged)
+    //   baby  → adult  : age-only at 8 days from birthDate (was: 3 days + 500 XP in v3.x)
+    //   adult → elder  : age-only at 14 days from birthDate (new in v4.0)
+    //   elder          : terminal
+    //
+    // The baby→adult shift from experience-driven to age-only is intentional: v4.0
+    // emphasises graceful aging over grinding. Legacy pets that were stuck at .baby
+    // with insufficient XP will simply age into .adult on the first interaction
+    // after their 8-day mark.
     private func checkEvolution() {
-        guard let req = EvolutionRequirement.for(pet.level) else { return }
-        let age = Date().timeIntervalSince(pet.birthDate)
-        let multiplier = hasSocialRecently ? req.socialBonus : 1.0
-        let effectiveExp = Double(pet.experience) * multiplier
-        if effectiveExp >= Double(req.requiredExperience) && age >= req.minimumAge {
-            evolve(to: req.targetLevel)
+        let ageInDays = Date().timeIntervalSince(pet.birthDate) / 86400
+
+        switch pet.level {
+        case .egg:
+            guard let req = EvolutionRequirement.for(.egg) else { return }
+            let multiplier = hasSocialRecently ? req.socialBonus : 1.0
+            let effectiveExp = Double(pet.experience) * multiplier
+            let ageInSeconds = Date().timeIntervalSince(pet.birthDate)
+            if effectiveExp >= Double(req.requiredExperience) && ageInSeconds >= req.minimumAge {
+                evolve(to: req.targetLevel)
+            }
+        case .baby:
+            if ageInDays >= 8 { evolve(to: .adult) }
+        case .adult:
+            if ageInDays >= 14 { evolve(to: .elder) }
+        case .elder:
+            return
         }
     }
 
@@ -255,8 +294,8 @@ class PetEngine: ObservableObject {
             showNamingDialog = true
         }
         currentAction = .evolving
-        // 10% mutation chance on baby→child evolution
-        if level == .child && Double.random(in: 0...1) < 0.1 {
+        // 10% mutation chance on baby→adult evolution
+        if level == .adult && Double.random(in: 0...1) < 0.1 {
             pet.genome.mutate(trigger: .evolution)
         }
         // Spawn 5 star particles
@@ -278,12 +317,39 @@ class PetEngine: ObservableObject {
 
     // MARK: - Rendering
     func updateRenderedImage() {
-        let scale = 8
-        let pal: ColorPalette = pet.level == .egg ? PetPalettes.egg : PetPalettes.palette(for: pet.genome)
-        renderedImage = rendererV2.render(
-            genome: pet.genome, level: pet.level, action: currentAction, mood: pet.mood,
-            frame: animator.currentFrame, palette: pal, scale: scale,
-            facingRight: physicsState.facingRight)
+        // V3 path: PNG sprite via SpriteService + mood SF Symbol overlay.
+        // SpriteService is an actor, so the call is async and dispatched as a
+        // Task. We cancel any in-flight Task before queuing the next one —
+        // otherwise rapid facingRight flips (or evolution + interaction in
+        // the same frame) could see a slow earlier render complete after a
+        // fast later one and overwrite renderedImage with a stale frame.
+        //
+        // The animator-driven per-frame trigger is preserved — repeated calls
+        // with the same arguments hit the SpriteService cache cheaply, and
+        // PetRendererV3's own composite memoization (M4 fix) skips the
+        // UIGraphicsImageRenderer pass when the inputs haven't changed.
+        let genome = pet.genome
+        let level = pet.level
+        let mood = pet.mood
+        let direction: SpriteDirection = physicsState.facingRight ? .east : .west
+
+        renderTask?.cancel()
+        renderTask = Task { @MainActor [weak self, rendererV3, sharedRenderedPet] in
+            let img = try? await rendererV3.render(
+                genome: genome, level: level, mood: mood, direction: direction)
+            // If a newer updateRenderedImage() call cancelled us between the
+            // await and resumption, drop this frame on the floor.
+            guard !Task.isCancelled else { return }
+            self?.renderedImage = img
+            // Mirror the rendered image into the App Group container so the
+            // widget + Live Activity (which can't run the PNG pipeline
+            // themselves) display the same frame the host app sees. nil
+            // images (assetNotFound, ghost pets, missing-stage) intentionally
+            // skip the write — the widget falls back to its placeholder.
+            if let img = img {
+                sharedRenderedPet.write(img)
+            }
+        }
     }
 
     private func setupAnimationObserver() {

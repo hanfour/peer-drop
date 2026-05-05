@@ -20,9 +20,9 @@ final class PetGenomeV2Tests: XCTestCase {
         XCTAssertTrue((0..<8).contains(g2.paletteIndex))
     }
 
-    func testLevelHasChildCase() {
-        XCTAssertEqual(PetLevel.child.rawValue, 3)
-        XCTAssertTrue(PetLevel.baby < PetLevel.child)
+    func testLevelHasAdultCase() {
+        XCTAssertEqual(PetLevel.adult.rawValue, 3)
+        XCTAssertTrue(PetLevel.baby < PetLevel.adult)
     }
 
     func testPetSurfaceCases() {

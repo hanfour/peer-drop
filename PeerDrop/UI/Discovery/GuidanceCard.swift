@@ -3,7 +3,6 @@ import SwiftUI
 struct GuidanceCard: View {
     @EnvironmentObject var context: ConnectionContext
     @EnvironmentObject var connectionManager: ConnectionManager
-    let trigger: Trigger
     let onMoreOptions: () -> Void
     let onDismiss: (() -> Void)?
 
@@ -15,11 +14,22 @@ struct GuidanceCard: View {
     @ScaledMetric private var pillHPadding: CGFloat = 12
     @ScaledMetric private var pillVPadding: CGFloat = 6
 
-    enum Trigger { case emptyState; case failure(reason: String) }
-
     var body: some View {
-        card(for: context.primaryRecommendation)
-            .padding(.horizontal, outerHPadding).padding(.vertical, outerVPadding)
+        VStack(alignment: .leading, spacing: 4) {
+            card(for: context.primaryRecommendation)
+            if let err = connectionManager.inviteError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2).foregroundStyle(.orange)
+                    Text(err).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, hPadding)
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, outerHPadding).padding(.vertical, outerVPadding)
+        .animation(.easeInOut(duration: 0.2), value: connectionManager.inviteError)
     }
 
     @ViewBuilder
@@ -29,8 +39,11 @@ struct GuidanceCard: View {
             primaryCard(icon: "person.crop.circle.fill.badge.checkmark",
                         title: String(localized: "Connect again with \(device.displayName)"),
                         primaryLabel: String(localized: "Invite"),
-                        primaryAction: { connectionManager.shouldShowRelayConnect = true },
-                        subtitle: device.relativeLastConnected)
+                        primaryAction: {
+                            Task { await connectionManager.inviteKnownDevice(device) }
+                        },
+                        subtitle: device.relativeLastConnected,
+                        primaryBusy: connectionManager.invitingDeviceId == device.id)
         case .useTailnet:
             primaryCard(icon: "network.badge.shield.half.filled",
                         title: String(localized: "Found a Tailscale device nearby"),
@@ -54,7 +67,8 @@ struct GuidanceCard: View {
     }
 
     private func primaryCard(icon: String, title: String, primaryLabel: String,
-                             primaryAction: @escaping () -> Void, subtitle: String? = nil) -> some View {
+                             primaryAction: @escaping () -> Void, subtitle: String? = nil,
+                             primaryBusy: Bool = false) -> some View {
         HStack(spacing: rowSpacing) {
             Image(systemName: icon).font(.title2).foregroundStyle(.white)
             VStack(alignment: .leading, spacing: 2) {
@@ -68,10 +82,18 @@ struct GuidanceCard: View {
             .layoutPriority(1)
             Spacer(minLength: 0)
             Button(action: primaryAction) {
-                Text(primaryLabel).font(.caption.bold())
-                    .padding(.horizontal, pillHPadding).padding(.vertical, pillVPadding)
-                    .background(.white, in: Capsule()).foregroundStyle(.blue)
+                if primaryBusy {
+                    ProgressView()
+                        .tint(.blue)
+                        .padding(.horizontal, pillHPadding).padding(.vertical, pillVPadding)
+                        .background(.white, in: Capsule())
+                } else {
+                    Text(primaryLabel).font(.caption.bold())
+                        .padding(.horizontal, pillHPadding).padding(.vertical, pillVPadding)
+                        .background(.white, in: Capsule()).foregroundStyle(.blue)
+                }
             }
+            .disabled(primaryBusy)
             Button(action: onMoreOptions) {
                 Image(systemName: "ellipsis.circle").font(.caption).foregroundStyle(.white.opacity(0.9))
             }

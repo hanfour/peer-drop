@@ -19,13 +19,16 @@ struct EvolutionRequirement {
             )
         case .baby:
             return EvolutionRequirement(
-                targetLevel: .child,
+                targetLevel: .adult,
                 requiredExperience: 500,
                 socialBonus: 1.5,
                 minimumAge: 259200 // 3 days
             )
-        case .child:
-            // Not yet implemented
+        case .adult:
+            // Adult→elder is age-driven (handled in PetEngine, not via experience).
+            return nil
+        case .elder:
+            // Final stage.
             return nil
         }
     }

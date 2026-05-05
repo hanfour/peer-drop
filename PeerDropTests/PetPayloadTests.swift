@@ -46,6 +46,33 @@ final class PetPayloadTests: XCTestCase {
         XCTAssertEqual(decoded.name, "Buddy")
     }
 
+    func test_payloadGreeting_forV1Peer_downgradesElder() throws {
+        let elder = PetGreeting(
+            petID: UUID(),
+            name: "Methuselah",
+            level: .elder,
+            mood: .lonely,
+            genome: makeGenome()
+        )
+        let payload = try PetPayload.greeting(elder, forPeerProtocolVersion: 1)
+        let decoded = try payload.decodeGreeting()
+        XCTAssertEqual(decoded.level, .adult,
+                       "v1 peer payload must downgrade .elder to .adult so the wire frame round-trips")
+    }
+
+    func test_payloadGreeting_forV2Peer_preservesElder() throws {
+        let elder = PetGreeting(
+            petID: UUID(),
+            name: "Methuselah",
+            level: .elder,
+            mood: .lonely,
+            genome: makeGenome()
+        )
+        let payload = try PetPayload.greeting(elder, forPeerProtocolVersion: 2)
+        let decoded = try payload.decodeGreeting()
+        XCTAssertEqual(decoded.level, .elder)
+    }
+
     // MARK: - PetPayload SocialChat
 
     func testPetPayloadSocialChat() throws {

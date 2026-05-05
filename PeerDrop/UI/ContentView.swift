@@ -40,7 +40,6 @@ struct ContentView: View {
     @State private var showStatusToast = false
     @State private var statusToastMessage: String?
     @State private var showReportSentToast = false
-    @State private var failureCardReason: String?
     @State private var currentInvite: RelayInvite?
     @State private var processedInviteIDs: [String: Date] = [:] // id → timestamp, 60s TTL
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -162,8 +161,8 @@ struct ContentView: View {
             case .connected, .transferring, .voiceCall:
                 selectedTab = 1
             case .failed(let reason):
-                failureCardReason = reason
-                // Only show alert if not suppressed (e.g., ChatView handles it locally)
+                // Only show alert if not suppressed (e.g., ChatView handles it locally).
+                // Recommendation card is now persistent in NearbyTab.
                 if !connectionManager.suppressErrorAlert {
                     errorMessage = reason
                     showError = true
@@ -251,10 +250,8 @@ struct ContentView: View {
                     .zIndex(2)
             }
 
-            // Failure guidance overlay
-            if let reason = failureCardReason {
-                failureGuidanceCard(reason: reason)
-            }
+            // Failure recommendation is now surfaced via NearbyTab's persistent GuidanceCard;
+            // failure-specific alert is still shown above (showError).
         }
         .onChange(of: showReportSentToast) { newValue in
             if newValue {
@@ -266,19 +263,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    // MARK: - Failure Guidance Card
-
-    @ViewBuilder
-    private func failureGuidanceCard(reason: String) -> some View {
-        let trigger = GuidanceCard.Trigger.failure(reason: reason)
-        let dismissAction: () -> Void = { withAnimation { failureCardReason = nil } }
-        let moreAction: () -> Void = { activeSheet = .connectionOptions }
-        GuidanceCard(trigger: trigger, onMoreOptions: moreAction, onDismiss: dismissAction)
-            .transition(AnyTransition.move(edge: .top).combined(with: .opacity))
-            .padding(Edge.Set.top, 8)
-            .zIndex(4)
     }
 
     // MARK: - Invite dedup helpers (60s TTL)

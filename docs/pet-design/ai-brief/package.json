@@ -1,0 +1,11 @@
+{
+  "name": "peerdrop-ai-brief",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "AI-assisted sprite generation brief for PeerDrop pet companion. Reuses sharp from ../web-prototype via node_modules symlink.",
+  "scripts": {
+    "render": "node scripts/render-v0-references.mjs",
+    "import": "node scripts/import-ai-sprite.mjs"
+  }
+}

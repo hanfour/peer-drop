@@ -6,13 +6,15 @@ import SwiftUI
 struct PetLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PetActivityAttributes.self) { context in
+            // Read the pre-rendered bridge file ONCE per top-level closure.
+            // The previous per-region helper was called from up to 4 region
+            // builders — each invocation allocated a SharedRenderedPet and
+            // hit NSFileCoordinator coordination, multiplying cross-process
+            // sync overhead per render.
+            let renderedImage = SharedRenderedPet().read()
             // Lock Screen / Banner
             HStack(spacing: 12) {
-                petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood,
-                          eyes: context.attributes.eyeType,
-                          pattern: context.attributes.patternType,
-                          paletteIndex: context.attributes.paletteIndex, scale: 4)
+                petSprite(image: renderedImage)
                     .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.attributes.petName).font(.headline)
@@ -24,13 +26,12 @@ struct PetLiveActivity: Widget {
             .padding()
             .activityBackgroundTint(.black.opacity(0.8))
         } dynamicIsland: { context in
-            DynamicIsland {
+            // Same once-per-closure read for the dynamic island — its 4
+            // region builders all see the same hoisted image.
+            let renderedImage = SharedRenderedPet().read()
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    petSprite(body: context.attributes.bodyType, level: context.state.level,
-                              mood: context.state.mood,
-                              eyes: context.attributes.eyeType,
-                              pattern: context.attributes.patternType,
-                              paletteIndex: context.attributes.paletteIndex, scale: 4)
+                    petSprite(image: renderedImage)
                         .frame(width: 48, height: 48)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -47,32 +48,24 @@ struct PetLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood,
-                          eyes: context.attributes.eyeType,
-                          pattern: context.attributes.patternType,
-                          paletteIndex: context.attributes.paletteIndex, scale: 2)
+                petSprite(image: renderedImage)
                     .frame(width: 24, height: 24)
             } compactTrailing: {
                 Text(moodEmoji(context.state.mood)).font(.caption)
             } minimal: {
-                petSprite(body: context.attributes.bodyType, level: context.state.level,
-                          mood: context.state.mood,
-                          eyes: context.attributes.eyeType,
-                          pattern: context.attributes.patternType,
-                          paletteIndex: context.attributes.paletteIndex, scale: 2)
+                petSprite(image: renderedImage)
                     .frame(width: 24, height: 24)
             }
         }
     }
 
+    /// Renders the supplied pre-rendered CGImage (read from the App Group
+    /// bridge) at the caller's .frame() size, or a placeholder if the bridge
+    /// file isn't available yet. SwiftUI handles the per-region resize from
+    /// one source CGImage — no per-scale render is needed.
     @ViewBuilder
-    private func petSprite(body: BodyGene, level: PetLevel, mood: PetMood,
-                           eyes: EyeGene, pattern: PatternGene, paletteIndex: Int,
-                           scale: Int) -> some View {
-        if let image = PetSnapshotRenderer.render(
-            body: body, level: level, mood: mood,
-            eyes: eyes, pattern: pattern, paletteIndex: paletteIndex, scale: scale) {
+    private func petSprite(image: CGImage?) -> some View {
+        if let image {
             Image(decorative: image, scale: 1.0)
                 .interpolation(.none).resizable().aspectRatio(contentMode: .fit)
         } else {
