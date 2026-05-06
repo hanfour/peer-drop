@@ -1,0 +1,8 @@
+# GitHub Pages Jekyll config
+#
+# Exclude files that contain JSX/template-literal `{{ ... }}` syntax that
+# Jekyll's Liquid pre-processor (Jekyll 3.x via github-pages gem) cannot
+# parse. The newer `render_with_liquid: false` front-matter directive only
+# works in Jekyll 4+, which github-pages gem doesn't ship.
+exclude:
+  - plans/2026-04-25-pet-companion-redesign-plan.md

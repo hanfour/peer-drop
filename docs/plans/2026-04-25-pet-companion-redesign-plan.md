@@ -1,7 +1,3 @@
----
-render_with_liquid: false
----
-
 # Pet Companion Redesign — Web Prototype Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Implementer subagents should invoke **frontend-design:frontend-design** when designing the visual surfaces.
