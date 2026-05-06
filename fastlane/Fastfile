@@ -149,6 +149,130 @@ platform :ios do
     end
   end
 
+  desc "Poll ASC for state changes; alert via macOS Notification + iMessage + log"
+  desc "Notifies on: edit-version state change, build processing-state change,"
+  desc "live-version replacement (a release went out)."
+  desc "State persisted in .asc-monitor-state.json (gitignored)."
+  desc "Run via: while true; do fastlane monitor; sleep 3600; done"
+  lane :monitor do
+    require "spaceship"
+    require "json"
+    require "time"
+
+    bundle_id    = "com.hanfour.peerdrop"
+    state_file   = File.expand_path("../.asc-monitor-state.json", __dir__)
+    log_file     = File.expand_path("monitor.log", __dir__)
+    imessage_to  = ["+886972995958", "hanfour.huang@icloud.com"]
+
+    # Auth
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    data["duration"] || 1200,
+      in_house:    data["in_house"] || false
+    )
+
+    log = ->(msg) {
+      line = "[#{Time.now.iso8601}] #{msg}"
+      File.open(log_file, "a") { |f| f.puts line }
+      UI.message(line)
+    }
+
+    notify_macos = ->(title, msg) {
+      esc = ->(s) { s.to_s.gsub("\\", "\\\\").gsub('"', '\\"') }
+      system("osascript", "-e", %(display notification "#{esc.(msg)}" with title "#{esc.(title)}" sound name "Glass"))
+    }
+
+    notify_imessage = ->(text) {
+      imessage_to.each do |addr|
+        # Escape AppleScript string literal
+        msg = text.to_s.gsub("\\", "\\\\").gsub('"', '\\"').gsub("\n", "\\n")
+        script = %(
+          tell application "Messages"
+            set targetService to 1st service whose service type = iMessage
+            set targetBuddy to buddy "#{addr}" of targetService
+            send "#{msg}" to targetBuddy
+          end tell
+        )
+        system("osascript", "-e", script)
+      end
+    }
+
+    alert = ->(title, body) {
+      log.("ALERT #{title} — #{body}")
+      notify_macos.(title, body)
+      notify_imessage.("PeerDrop ASC: #{title}\n#{body}")
+    }
+
+    # Snapshot current state
+    app = Spaceship::ConnectAPI::App.find(bundle_id)
+    UI.user_error!("App not found: #{bundle_id}") unless app
+
+    edit = app.get_edit_app_store_version
+    live = app.get_live_app_store_version
+    builds = app.get_builds(limit: 5, includes: "preReleaseVersion")
+
+    snapshot = {
+      checked_at: Time.now.iso8601,
+      edit_version: edit&.version_string,
+      edit_state:   edit&.app_store_state,
+      edit_release: edit&.release_type,
+      edit_build:   edit&.build&.version,
+      live_version: live&.version_string,
+      live_state:   live&.app_store_state,
+      builds: builds.map { |b|
+        {
+          version: b.version,
+          ver_str: b.pre_release_version&.version,
+          processing_state: b.processing_state.to_s,
+        }
+      }
+    }
+
+    # Compare to previous
+    if File.exist?(state_file)
+      prev = JSON.parse(File.read(state_file))
+
+      if prev["edit_state"] != snapshot[:edit_state]
+        alert.(
+          "v#{snapshot[:edit_version]} → #{snapshot[:edit_state]}",
+          "was #{prev["edit_state"]}; release type=#{snapshot[:edit_release]}; build #{snapshot[:edit_build]}"
+        )
+      end
+
+      if prev["live_version"] != snapshot[:live_version]
+        alert.(
+          "Live version changed",
+          "#{prev["live_version"]} → #{snapshot[:live_version]} (#{snapshot[:live_state]})"
+        )
+      end
+
+      # Build processing state changes
+      prev_builds = (prev["builds"] || []).each_with_object({}) { |b, h| h[[b["version"], b["ver_str"]]] = b["processing_state"] }
+      snapshot[:builds].each do |b|
+        key = [b[:version], b[:ver_str]]
+        old_state = prev_builds[key]
+        if old_state && old_state != b[:processing_state]
+          alert.(
+            "Build #{b[:version]} (v#{b[:ver_str]}) → #{b[:processing_state]}",
+            "was #{old_state}"
+          )
+        end
+      end
+
+      log.("STABLE edit=#{snapshot[:edit_state]} live=#{snapshot[:live_version]}") if prev["edit_state"] == snapshot[:edit_state] && prev["live_version"] == snapshot[:live_version]
+    else
+      log.("INIT edit=v#{snapshot[:edit_version]}/#{snapshot[:edit_state]} live=v#{snapshot[:live_version]}")
+      notify_macos.("PeerDrop monitor started", "Tracking v#{snapshot[:edit_version]} (#{snapshot[:edit_state]})")
+    end
+
+    File.write(state_file, JSON.pretty_generate(snapshot))
+  end
+
   # -------------------------------------------------------------------------
   # Release lanes — build archive + upload to App Store Connect.
   # Uses api_key.json for non-interactive authentication.

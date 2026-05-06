@@ -93,6 +93,10 @@ fastlane/screenshots_framed_backup/
 # Pet design research scratch (PNGs at repo root only)
 /*.png
 
+# ASC monitor runtime state (per-machine; do not commit)
+.asc-monitor-state.json
+fastlane/monitor.log
+
 # Secrets
 Secrets.xcconfig
 private_keys/
