@@ -93,6 +93,22 @@ fastlane uses whatever's currently editable).
 
 Print ASC review status: live + in-flight versions + recent builds
 
+### ios monitor
+
+```sh
+[bundle exec] fastlane ios monitor
+```
+
+Poll ASC for state changes; alert via macOS Notification + iMessage + log
+
+Notifies on: edit-version state change, build processing-state change,
+
+live-version replacement (a release went out).
+
+State persisted in .asc-monitor-state.json (gitignored).
+
+Run via: while true; do fastlane monitor; sleep 3600; done
+
 ### ios build
 
 ```sh
