@@ -43,7 +43,7 @@
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "new",
+            "state": "translated",
             "value": "%1$@/%2$@"
           }
         }
@@ -55,7 +55,7 @@
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "new",
+            "state": "translated",
             "value": "%1$@/%2$@ connected"
           }
         }
@@ -67,7 +67,7 @@
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "new",
+            "state": "translated",
             "value": "%1$@x%2$@ -- %3$@"
           }
         }
@@ -3714,7 +3714,7 @@
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "new",
+            "state": "translated",
             "value": "File %1$@ of %2$@"
           }
         }
