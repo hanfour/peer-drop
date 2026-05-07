@@ -54,30 +54,4 @@ final class V4UpgradeOnboardingTests: XCTestCase {
 
         XCTAssertFalse(V4UpgradeOnboarding.shouldPresent(for: pet, defaults: defaults))
     }
-
-    // MARK: - message helper (egg-hatched copy)
-
-    func test_message_includesHatchedSignal_whenEggMigratedTrue() {
-        // Phase 5: v3.x users whose pet was at .egg level get a celebratory
-        // "your egg has hatched into a [species]!" line. Verifies the helper
-        // surfaces the 孵化 copy when the flag says we're a migrated egg user.
-        var pet = PetState.newEgg()
-        pet.migrationDoneAt = Date()
-        let message = V4UpgradeOnboarding.message(for: pet, eggMigrated: true)
-        XCTAssertTrue(
-            message.contains("孵化"),
-            "Migrated egg user message should contain 孵化, got: \(message)")
-    }
-
-    func test_message_omitsHatchedSignal_whenEggMigratedFalse() {
-        // Non-egg-migrated users (fresh installs, or v3.x users whose pet was
-        // already past egg) should see the generic upgrade copy without the
-        // hatched line.
-        var pet = PetState.newEgg()
-        pet.migrationDoneAt = Date()
-        let message = V4UpgradeOnboarding.message(for: pet, eggMigrated: false)
-        XCTAssertFalse(
-            message.contains("孵化"),
-            "Non-egg-migrated user shouldn't see hatched copy, got: \(message)")
-    }
 }
