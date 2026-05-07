@@ -380,7 +380,7 @@ platform :ios do
 
   desc "Submit an already-uploaded TestFlight build for review (no rebuild)"
   desc "Defaults: phased rollout + manual release — safe for major versions."
-  desc "Auto-loads reviewer notes from docs/release/v<major.minor>-reviewer-notes.md."
+  desc "Auto-loads reviewer notes from docs/release/v<version>-reviewer-notes.md (falls back to v<major.minor>)."
   desc "Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]"
   desc "Example: fastlane submit_only version:4.0.0 build:1"
   lane :submit_only do |options|
@@ -400,8 +400,13 @@ platform :ios do
       major_minor = version[/^\d+\.\d+/]
       UI.user_error!("Could not parse major.minor from version '#{version}'") unless major_minor
 
-      notes_path = File.expand_path("../docs/release/v#{major_minor}-reviewer-notes.md", __dir__)
-      UI.user_error!("Reviewer notes not found: #{notes_path}") unless File.exist?(notes_path)
+      # Prefer patch-version-specific notes (v4.0.1-...) when present, else
+      # fall back to major.minor notes (v4.0-...). Lets hotfixes ship their
+      # own reviewer notes without overwriting the parent release's file.
+      versioned_path  = File.expand_path("../docs/release/v#{version}-reviewer-notes.md", __dir__)
+      base_path       = File.expand_path("../docs/release/v#{major_minor}-reviewer-notes.md", __dir__)
+      notes_path      = File.exist?(versioned_path) ? versioned_path : base_path
+      UI.user_error!("Reviewer notes not found: tried #{versioned_path} and #{base_path}") unless File.exist?(notes_path)
 
       raw = File.read(notes_path)
       match = raw.match(/<!-- BEGIN_PASTE.*?-->(.*?)<!-- END_PASTE -->/m)

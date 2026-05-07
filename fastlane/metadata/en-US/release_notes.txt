@@ -1,19 +1,8 @@
-PeerDrop 4.0.0 — Pet Companion Reimagined
+PeerDrop 4.0.1 — Welcome Reveal
 
-Pet System
-- 33 brand-new species across cats, dogs, dragons, slimes, mythical creatures and more — each with unique sub-varieties (5 cat breeds, 5 dog breeds, 5 slime types, and so on).
-- 3-stage lifecycle: baby → adult → elder. Your pet ages naturally over weeks — 8 days to adulthood, 14 days to elder.
-- 6 distinct mood expressions shown as overlay icons: happy, curious, sleepy, lonely, excited, startled.
+What's new:
+- Pets now appear immediately on first launch with a welcome reveal — no more egg waiting.
+- v3.x users with hatching pets: your egg has hatched! See the species name and welcome screen.
 
-Existing Pets
-- Your v3.x pet migrates automatically: new look, same identity. Name, level progress, social log, and stats are all preserved.
-- The first time you open v4.0, a one-time welcome screen previews your refreshed pet.
-
-Cross-Version Friends
-- Pet meetings between v4.0 devices show the new sprites. Meetings with friends still on v3.x degrade gracefully — they receive the basic pet info their version understands.
-- iCloud sync continues to work across versions; older devices on your account see your pet's last v3.x-shape state until they update.
-
-Performance & Polish
-- Sprite rendering is lazy and cached, keeping the app responsive even with the larger asset library.
-- Widget and Live Activity read pre-rendered images from a shared bridge instead of re-rendering — no extra work across processes.
-- 21,000 lines of legacy palette-swap rendering code retired in this release.
+Bug fixes:
+- Fixed missing pet visuals for v3.x users whose pets were still in egg stage when upgrading.
