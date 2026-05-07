@@ -34,6 +34,16 @@ struct V4UpgradeOnboarding: View {
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
 
+                if UserDefaults.standard.bool(forKey: "v4MigratedFromEgg") {
+                    // Phase 5: v3.x users whose pet was at .egg level get a
+                    // celebratory "孵化" line above the generic subtitle.
+                    Text("v4_upgrade_egg_hatched")
+                        .font(.body.bold())
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
                 Text("v4_upgrade_subtitle")
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -121,5 +131,35 @@ extension V4UpgradeOnboarding {
     ) -> Bool {
         guard pet.migrationDoneAt != nil else { return false }
         return !defaults.bool(forKey: "v4UpgradeShown")
+    }
+
+    /// Pure copy-builder for the upgrade subtitle. When `eggMigrated` is true
+    /// (v3.x user whose pet was at .egg level — see PetStore.loadAndMigrate
+    /// peeking at level=1), prepends a celebratory "孵化" line so the user
+    /// understands the visual change as a hatch event rather than a silent
+    /// promotion. Otherwise returns the generic v3→v4 upgrade copy.
+    ///
+    /// Kept independent of LocalizedStringKey so unit tests can assert on the
+    /// raw character — the SwiftUI view uses the localised xcstrings key
+    /// `v4_upgrade_egg_hatched` directly (Phase 6 wires the catalog entry).
+    /// Until Phase 6 ships, NSLocalizedString falls back to the supplied
+    /// `value:` (zh-Hant) when the key is missing, so the assertion on
+    /// "孵化" passes both before and after the localisation work.
+    static func message(for pet: PetState, eggMigrated: Bool) -> String {
+        // pet param is currently unused — kept on the signature for Phase 6
+        // when the egg-hatched copy will splice in a localised species name
+        // ("你的蛋孵化了，是一隻 [species]！"). Today the species is implied by
+        // the rendered sprite shown above the text.
+        _ = pet
+        let baseSubtitle = NSLocalizedString(
+            "v4_upgrade_subtitle",
+            value: "你的寵物迎來了 v4.0 的全新外觀。",
+            comment: "v3→v4 upgrade subtitle, shown to all migrated users")
+        guard eggMigrated else { return baseSubtitle }
+        let hatched = NSLocalizedString(
+            "v4_upgrade_egg_hatched",
+            value: "你的蛋孵化了！",
+            comment: "Extra line for v3.x users whose pet was at .egg level pre-upgrade")
+        return "\(hatched)\n\n\(baseSubtitle)"
     }
 }

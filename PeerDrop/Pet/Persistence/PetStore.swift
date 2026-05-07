@@ -79,8 +79,28 @@ class PetStore {
     /// migrated state is persisted before being returned. Idempotent — once
     /// `migrationDoneAt` is set, subsequent calls return the stored state
     /// without re-running the sweep.
-    func loadAndMigrate() throws -> PetState? {
-        guard let pet = try load() else { return nil }
+    ///
+    /// Side effect: when the on-disk JSON's `level` field is 1 (legacy
+    /// .egg in v3.x), sets the `v4MigratedFromEgg` UserDefaults key so the
+    /// V4UpgradeOnboarding screen can surface "your egg has hatched"
+    /// copy. The PetLevel decoder silently maps rawValue 1 → .baby
+    /// (Phase 1), so we peek at the raw JSON before Codable swallows the
+    /// signal. The flag is idempotent — re-setting it is harmless.
+    func loadAndMigrate(defaults: UserDefaults = .standard) throws -> PetState? {
+        guard FileManager.default.fileExists(atPath: petFile.path) else {
+            return nil
+        }
+        let data = try Data(contentsOf: petFile)
+
+        // Peek for the v3.x egg-level signal before Codable maps it to .baby.
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let level = json["level"] as? Int,
+           level == 1 {
+            defaults.set(true, forKey: "v4MigratedFromEgg")
+            logger.debug("loadAndMigrate: detected v3.x egg pet (level=1), set v4MigratedFromEgg flag")
+        }
+
+        let pet = try decoder.decode(PetState.self, from: data)
         let migrated = PetStore.applyV4Migration(to: pet)
         if migrated.migrationDoneAt != pet.migrationDoneAt {
             do {

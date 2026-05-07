@@ -62,8 +62,32 @@ class PetCloudSync {
     /// by the most-recent saver across all devices on the iCloud account;
     /// blindly re-saving a migrated copy could clobber a concurrent peer's
     /// write. The next local save() will persist the migration.
-    func loadAndMigrateFromCloud() throws -> PetState? {
-        guard let pet = try loadFromCloud() else { return nil }
+    ///
+    /// Side effect (Phase 5): when the cloud JSON's `level` field is 1
+    /// (legacy .egg in v3.x), sets the `v4MigratedFromEgg` UserDefaults
+    /// key. Mirrors PetStore.loadAndMigrate so a fresh v4.0 install that
+    /// receives a legacy egg pet via iCloud restore also gets the
+    /// celebratory "孵化" copy in V4UpgradeOnboarding.
+    func loadAndMigrateFromCloud(defaults: UserDefaults = .standard) throws -> PetState? {
+        guard let dir = cloudDirectory else {
+            logger.warning("iCloud container not available — cannot load from cloud")
+            return nil
+        }
+        let fileURL = dir.appendingPathComponent("pet.json")
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+        let data = try Data(contentsOf: fileURL)
+
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let level = json["level"] as? Int,
+           level == 1 {
+            defaults.set(true, forKey: "v4MigratedFromEgg")
+            logger.debug("loadAndMigrateFromCloud: detected v3.x egg pet (level=1), set v4MigratedFromEgg flag")
+        }
+
+        let pet = try decoder.decode(PetState.self, from: data)
+        logger.debug("Loaded pet \(pet.id) from iCloud")
         return PetStore.applyV4Migration(to: pet)
     }
 

@@ -235,6 +235,85 @@ final class PetStoreMigrationTests: XCTestCase {
         // assignment logic.
     }
 
+    func test_loadAndMigrate_setsEggMigratedFlag_whenLevelOneOnDisk() throws {
+        // Phase 5: when the v3.x JSON had level=1 (.egg), loadAndMigrate must
+        // set the v4MigratedFromEgg UserDefaults flag so V4UpgradeOnboarding
+        // can show "your egg has hatched into a ..." copy. The PetLevel
+        // decoder silently maps rawValue 1 → .baby, so we peek at the JSON
+        // before Codable swallows the signal.
+        let suiteName = "PetStoreMigrationTests-eggFlag-\(UUID())"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.removeObject(forKey: "v4MigratedFromEgg")
+
+        let v3xEggJSON = """
+        {
+          "id": "66666666-6666-6666-6666-666666666666",
+          "name": "Eggy",
+          "birthDate": 740000000,
+          "level": 1,
+          "experience": 0,
+          "genome": { "body": "cat", "eyes": "dot", "pattern": "none", "personalityGene": 0.3 },
+          "mood": "happy",
+          "socialLog": [],
+          "lastInteraction": 740000000,
+          "foodInventory": { "items": [] },
+          "lifeState": "idle",
+          "stats": {
+            "foodsEaten": 0, "poopsCleaned": 0, "totalInteractions": 0, "petsMet": 0
+          }
+        }
+        """.data(using: .utf8)!
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try v3xEggJSON.write(to: tempDir.appendingPathComponent("pet.json"))
+
+        let migrated = try store.loadAndMigrate(defaults: defaults)
+        XCTAssertEqual(migrated?.level, .baby, "level=1 should decode to .baby (Phase 1 decoder)")
+        XCTAssertTrue(
+            defaults.bool(forKey: "v4MigratedFromEgg"),
+            "loadAndMigrate must set v4MigratedFromEgg flag when source JSON had level=1")
+    }
+
+    func test_loadAndMigrate_doesNotSetEggMigratedFlag_whenLevelHigher() throws {
+        // Sanity inverse: a v3.x pet that was already past egg (level >= 2)
+        // should NOT trigger the egg-hatched flag. Confirms we're peeking at
+        // the field, not unconditionally setting it.
+        let suiteName = "PetStoreMigrationTests-eggFlag-\(UUID())"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.removeObject(forKey: "v4MigratedFromEgg")
+
+        let v3xJSON = """
+        {
+          "id": "77777777-7777-7777-7777-777777777777",
+          "name": "Tom",
+          "birthDate": 740000000,
+          "level": 3,
+          "experience": 100,
+          "genome": { "body": "cat", "eyes": "dot", "pattern": "none", "personalityGene": 0.3 },
+          "mood": "happy",
+          "socialLog": [],
+          "lastInteraction": 740000000,
+          "foodInventory": { "items": [] },
+          "lifeState": "idle",
+          "stats": {
+            "foodsEaten": 0, "poopsCleaned": 0, "totalInteractions": 0, "petsMet": 0
+          }
+        }
+        """.data(using: .utf8)!
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try v3xJSON.write(to: tempDir.appendingPathComponent("pet.json"))
+
+        _ = try store.loadAndMigrate(defaults: defaults)
+        XCTAssertFalse(
+            defaults.bool(forKey: "v4MigratedFromEgg"),
+            "loadAndMigrate must not set v4MigratedFromEgg when source JSON level != 1")
+    }
+
     func test_loadAndMigrate_v3xJSON_onDisk_decodesAndMigrates() throws {
         // Simulates a real v3.x → v4.0 upgrade: the saved file is in v3.x
         // shape (no subVariety/seed/migrationDoneAt). loadAndMigrate must
