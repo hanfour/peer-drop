@@ -9,6 +9,13 @@ import SwiftUI
 /// `GuestPetView`) — no dependency on `FloatingPetView`'s physics/state.
 struct PetWelcomeView: View {
     let pet: PetState
+    /// Optional pre-rendered sprite from the caller (e.g. PetTabView's warm
+    /// cache). When non-nil, the reveal animation runs against this image
+    /// immediately instead of waiting for `renderSnapshot()` (which can take
+    /// 50-200ms on first render). Eliminates the race window where the user
+    /// taps the CTA before async render completes and sees an empty 200x200
+    /// box. Falls back to async render when nil (defensive).
+    let prerenderedImage: CGImage?
     let onDismiss: () -> Void
 
     @State private var revealScale: CGFloat = 0.3
@@ -16,6 +23,15 @@ struct PetWelcomeView: View {
     @State private var celebrationOffset: CGFloat = -20
     @State private var renderedImage: CGImage?
     @State private var renderer = PetRendererV3()
+
+    init(pet: PetState, prerenderedImage: CGImage? = nil, onDismiss: @escaping () -> Void) {
+        self.pet = pet
+        self.prerenderedImage = prerenderedImage
+        self.onDismiss = onDismiss
+        // Seed @State with the pre-rendered image so the very first body
+        // evaluation already has a sprite to display.
+        _renderedImage = State(initialValue: prerenderedImage)
+    }
 
     var body: some View {
         ZStack {
@@ -38,6 +54,8 @@ struct PetWelcomeView: View {
                     .opacity(revealOpacity)
                     .frame(width: 200, height: 200)
 
+                // TODO(Phase 6): replace family.capitalized with localized
+                // species name (e.g. "貓" instead of "Cat") via xcstrings keys.
                 Text(speciesDisplayName)
                     .font(.title2.bold())
                     .foregroundStyle(.white)
@@ -83,6 +101,9 @@ struct PetWelcomeView: View {
 
     @MainActor
     private func renderSnapshot() async {
+        // Skip async render if caller already supplied a warm-cache image —
+        // re-rendering would produce the same sprite.
+        if renderedImage != nil { return }
         renderedImage = try? await renderer.render(
             genome: pet.genome,
             level: pet.level,

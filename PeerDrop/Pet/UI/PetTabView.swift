@@ -93,13 +93,22 @@ struct PetTabView: View {
         } message: {
             Text("輸入寵物的名字")
         }
+        // Welcome reveal fires on first PetTab open. .onAppear runs every
+        // tab return, but markSeen() on dismiss persists, so subsequent
+        // opens are no-op. Users who quit mid-welcome (without tapping CTA)
+        // will see it again on next launch — intentional, since "didn't
+        // finish reading" ≠ "saw the pet".
         .onAppear {
             if welcomeFlag.shouldShow {
                 showWelcome = true
             }
         }
         .fullScreenCover(isPresented: $showWelcome) {
-            PetWelcomeView(pet: engine.pet) {
+            // Pass engine.renderedImage as prerenderedImage: this view is
+            // already mounted (we're presenting from it), so engine's sprite
+            // cache is warm — eliminates the 50-200ms first-render race in
+            // PetWelcomeView.
+            PetWelcomeView(pet: engine.pet, prerenderedImage: engine.renderedImage) {
                 welcomeFlag.markSeen()
                 showWelcome = false
             }
