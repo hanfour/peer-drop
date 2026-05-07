@@ -98,8 +98,14 @@ struct PetTabView: View {
         // opens are no-op. Users who quit mid-welcome (without tapping CTA)
         // will see it again on next launch — intentional, since "didn't
         // finish reading" ≠ "saw the pet".
+        //
+        // I-1 fix: suppress for v3.x migrators (egg or past-egg). They
+        // already see V4UpgradeOnboarding which is the appropriate v3→v4
+        // reveal — PetWelcomeView's "you got a new pet companion" copy is
+        // wrong for users whose pet existed before. Only fresh-install
+        // users (migrationDoneAt == nil → never migrated) see the welcome.
         .onAppear {
-            if welcomeFlag.shouldShow {
+            if PetTabView.shouldPresentWelcome(flag: welcomeFlag, pet: engine.pet) {
                 showWelcome = true
             }
         }
@@ -124,6 +130,20 @@ struct PetTabView: View {
         case .excited: return "star"
         case .startled: return "exclamationmark.triangle"
         }
+    }
+
+    /// Pure decision function for whether the v4.0.1 welcome reveal should
+    /// be presented on PetTab open. Two conditions must hold:
+    ///   • the per-install flag `shouldShow` is true (first PetTab open).
+    ///   • `pet.migrationDoneAt == nil` — i.e. this is a fresh-install pet,
+    ///     not a v3.x migrator. v3.x migrators (egg or past-egg) get
+    ///     `V4UpgradeOnboarding` instead, which is the appropriate
+    ///     v3→v4 reveal; PetWelcomeView's "you got a new pet companion"
+    ///     copy is wrong for users whose pet existed before.
+    /// Pulled out as a static func so the gate logic is unit-testable
+    /// without mounting a SwiftUI view.
+    static func shouldPresentWelcome(flag: PetWelcomeFlag, pet: PetState) -> Bool {
+        flag.shouldShow && pet.migrationDoneAt == nil
     }
 }
 
