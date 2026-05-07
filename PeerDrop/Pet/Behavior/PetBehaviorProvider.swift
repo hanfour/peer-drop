@@ -106,7 +106,7 @@ struct PetBehaviorProfile {
 protocol PetBehaviorProvider {
     var profile: PetBehaviorProfile { get }
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction
 
@@ -122,7 +122,7 @@ protocol PetBehaviorProvider {
 // MARK: - Default Implementations
 
 extension PetBehaviorProvider {
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Chase food

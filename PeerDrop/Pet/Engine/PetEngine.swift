@@ -267,6 +267,7 @@ class PetEngine: ObservableObject {
     // with insufficient XP will simply age into .adult on the first interaction
     // after their 8-day mark.
     private func checkEvolution() {
+        // FIXME(v4.0.x): EvolutionRequirement.for(.baby) thresholds (500 XP / 3 days) don't match checkEvolution()'s age-only 8-day rule. UI evolutionProgress + PetTabView "ready in ~Xh" hint will mislead users. Refactor in v4.0.x polish.
         let ageInDays = Date().timeIntervalSince(pet.birthDate) / 86400
 
         switch pet.level {
@@ -281,9 +282,7 @@ class PetEngine: ObservableObject {
 
     private func evolve(to level: PetLevel) {
         pet.level = level
-        if level == .baby && (pet.name == nil || pet.name?.isEmpty == true) {
-            showNamingDialog = true
-        }
+        // Naming UX moved to PetWelcomeView (Phase 4) — pets are born .baby, not evolved into it.
         currentAction = .evolving
         // 10% mutation chance on baby→adult evolution
         if level == .adult && Double.random(in: 0...1) < 0.1 {

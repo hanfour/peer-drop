@@ -10,7 +10,7 @@ struct OctopusBehavior: PetBehaviorProvider {
             uniqueActions: [.inkSquirt, .tentacleReach, .camouflage, .wallSuction],
             exitStyle: .inkVanish, enterStyle: .inkAppear)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase

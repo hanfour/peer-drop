@@ -4,8 +4,8 @@ final class PetDialogEngine {
 
     // MARK: - Templates
 
-    /// Baby (Lv.2) speech: single syllables / onomatopoeia in Chinese
-    private let babyTemplates: [PetMood: [String]] = [
+    /// Dialogue templates. Currently single shared pool; v4.0.x may add level-specific variations (TODO).
+    private let dialogueTemplates: [PetMood: [String]] = [
         .happy:    ["嘿！", "咿呀～", "嗯嗯！", "哇！", "呀哈！"],
         .curious:  ["嗯？", "呀？", "噢？", "嗯嗯？"],
         .sleepy:   ["呼...嚕...", "嗯...", "呼嚕..."],
@@ -20,7 +20,7 @@ final class PetDialogEngine {
     func generate(level: PetLevel, mood: PetMood) -> String? {
         switch level {
         case .baby, .adult, .elder:
-            guard let pool = babyTemplates[mood], !pool.isEmpty else { return nil }
+            guard let pool = dialogueTemplates[mood], !pool.isEmpty else { return nil }
             return pool.randomElement()
         }
     }
@@ -57,7 +57,7 @@ final class PetDialogEngine {
     private func textForChat(level: PetLevel, mood: PetMood) -> String {
         switch level {
         case .baby, .adult, .elder:
-            return babyTemplates[mood]?.randomElement() ?? "..."
+            return dialogueTemplates[mood]?.randomElement() ?? "..."
         }
     }
 }

@@ -10,7 +10,7 @@ struct GhostBehavior: PetBehaviorProvider {
             uniqueActions: [.phaseThrough, .flicker, .spook, .vanish],
             exitStyle: .fadeOut, enterStyle: .fadeIn)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase

@@ -10,7 +10,7 @@ struct DragonBehavior: PetBehaviorProvider {
             uniqueActions: [.breathFire, .hover, .wingSpread, .roar],
             exitStyle: .skyAscend, enterStyle: .skyDescend)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase

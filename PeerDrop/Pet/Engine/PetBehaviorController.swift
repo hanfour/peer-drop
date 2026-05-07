@@ -4,7 +4,7 @@ import Foundation
 enum PetBehaviorController {
 
     static func nextBehavior(current: PetAction, physics: PetPhysicsState,
-                             level: PetLevel, elapsed: TimeInterval,
+                             level _: PetLevel, elapsed: TimeInterval,
                              foodTarget: CGPoint? = nil,
                              traits: PersonalityTraits? = nil) -> PetAction {
         if let target = foodTarget, physics.surface == .ground {

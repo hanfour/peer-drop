@@ -10,7 +10,7 @@ struct FrogBehavior: PetBehaviorProvider {
             uniqueActions: [.tongueSnap, .croak, .swim, .stickyWall],
             exitStyle: .hopOff, enterStyle: .hopIn)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase

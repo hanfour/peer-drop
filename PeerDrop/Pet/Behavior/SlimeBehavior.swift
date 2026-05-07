@@ -10,7 +10,7 @@ struct SlimeBehavior: PetBehaviorProvider {
             uniqueActions: [.split, .melt, .absorb, .wallStick],
             exitStyle: .meltDown, enterStyle: .reformUp)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase

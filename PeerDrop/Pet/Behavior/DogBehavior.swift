@@ -10,7 +10,7 @@ struct DogBehavior: PetBehaviorProvider {
             uniqueActions: [.dig, .fetchToy, .wagTail, .scratchWall],
             exitStyle: .digDown, enterStyle: .digUp)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase

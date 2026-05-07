@@ -11,6 +11,7 @@ struct EvolutionRequirement {
     static func `for`(_ level: PetLevel) -> EvolutionRequirement? {
         switch level {
         case .baby:
+            // FIXME(v4.0.x): EvolutionRequirement.for(.baby) thresholds (500 XP / 3 days) don't match checkEvolution()'s age-only 8-day rule. UI evolutionProgress + PetTabView "ready in ~Xh" hint will mislead users. Refactor in v4.0.x polish.
             return EvolutionRequirement(
                 targetLevel: .adult,
                 requiredExperience: 500,

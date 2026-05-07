@@ -10,7 +10,7 @@ struct BirdBehavior: PetBehaviorProvider {
             uniqueActions: [.perch, .peck, .preen, .dive, .glide],
             exitStyle: .flyOff, enterStyle: .flyIn)
 
-    func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
+    func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
         // Food chase
