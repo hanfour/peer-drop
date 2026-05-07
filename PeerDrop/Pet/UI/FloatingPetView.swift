@@ -10,7 +10,6 @@ struct FloatingPetView: View {
     @State private var displayLink: CADisplayLink?
     @State private var behaviorTimer: Timer?
     @State private var behaviorElapsed: TimeInterval = 0
-    @State private var namingText = ""
     @State private var isAbsent = false           // pet has left the screen
     @State private var isExiting = false          // currently playing exit animation
     @State private var isEntering = false         // currently playing enter animation
@@ -132,15 +131,6 @@ struct FloatingPetView: View {
             guard let raw = items.first, let foodType = FoodType(rawValue: raw) else { return false }
             engine.dropFood(foodType, at: location)
             return true
-        }
-        .alert("幫寵物取個名字吧！", isPresented: $engine.showNamingDialog) {
-            TextField("名字", text: $namingText)
-            Button("確定") {
-                let trimmed = namingText.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty { engine.pet.name = trimmed }
-            }
-        } message: {
-            Text("你的寵物剛孵化了！")
         }
         .accessibilityIdentifier("floating-pet")
         .accessibilityLabel("Pet")

@@ -4,6 +4,8 @@ struct PetTabView: View {
     @EnvironmentObject var engine: PetEngine
     @State private var showNameAlert = false
     @State private var nameText = ""
+    @State private var showWelcome = false
+    private let welcomeFlag = PetWelcomeFlag()
 
     var body: some View {
         List {
@@ -90,6 +92,17 @@ struct PetTabView: View {
             Button("取消", role: .cancel) { }
         } message: {
             Text("輸入寵物的名字")
+        }
+        .onAppear {
+            if welcomeFlag.shouldShow {
+                showWelcome = true
+            }
+        }
+        .fullScreenCover(isPresented: $showWelcome) {
+            PetWelcomeView(pet: engine.pet) {
+                welcomeFlag.markSeen()
+                showWelcome = false
+            }
         }
     }
 

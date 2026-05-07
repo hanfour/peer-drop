@@ -14,7 +14,6 @@ class PetEngine: ObservableObject {
     @Published var particles: [PetParticle] = []
     @Published var poopState = PoopState()
     @Published var showEvolutionFlash = false
-    @Published var showNamingDialog = false
 
     struct DroppedFood {
         let type: FoodType

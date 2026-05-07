@@ -97,6 +97,7 @@
 		3FFBC03FD91DD4BFB1DFD135 /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 673CA4547FC92F153E75739C /* WebRTCClient.swift */; };
 		401FC8122FEB4D13F9C4A025 /* RelayAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371D9C8BCBFCD1265F54D339 /* RelayAuthenticator.swift */; };
 		402668C766BED0AC8C7E4529 /* E2EIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613B66E2077223EA0560E336 /* E2EIntegrationTests.swift */; };
+		40AE28E8A989BDFC76547990 /* PetWelcomeFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8710FC1E6E5A083ECACA9480 /* PetWelcomeFlag.swift */; };
 		4133DCC23F3984CC9048905E /* PetFeedingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB79B8FB4BA9C025C703233 /* PetFeedingTests.swift */; };
 		417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
 		422B1D0653742266E75E000D /* CatBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 739D02C5763EE45B3BC54940 /* CatBehavior.swift */; };
@@ -252,6 +253,7 @@
 		ADC3A11FF7051AFAD8D48337 /* InviteBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */; };
 		AE598409867401DE1F4D1AA1 /* PetPhysicsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A377C32AF8942AE36D4989 /* PetPhysicsEngine.swift */; };
 		AEE67600A2BEE9B8893E176C /* PetRendererV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082C69D6D5041CA69DD58945 /* PetRendererV3Tests.swift */; };
+		AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
 		B44417BE29FC6CEB9D97B671 /* PreKeyBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27C1CF30674B0A0E504D127 /* PreKeyBundle.swift */; };
 		B4603EC3EFD7CE56D0885E9A /* PetPhysicsState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDC27C08D925E5F4763695E7 /* PetPhysicsState.swift */; };
@@ -347,6 +349,7 @@
 		E3BEAE8F5E0C39C262BB4404 /* ProofOfWork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49CC7711FB8161DA60ECFE19 /* ProofOfWork.swift */; };
 		E55B24C969A12E4905A98F0D /* TransferProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C2478F20C10D5FB383E756 /* TransferProgressView.swift */; };
 		E6A5A1F6F088625901B7665A /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2DCFBCFE70135D56BBFBD9E /* HapticManager.swift */; };
+		E743CD48BADB6E111D3ECFA1 /* PetWelcomeFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCC3B11AF44BE6CC4610FDA /* PetWelcomeFlagTests.swift */; };
 		E7D669E89E90C7BC29F74660 /* BLESignaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FCCD3E23DDC39D4F37D598C /* BLESignaling.swift */; };
 		E88F3F87E73BC8FEE5B7A971 /* PetBehaviorControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 982C0858F44441D64C0F6487 /* PetBehaviorControllerTests.swift */; };
 		EB33CCE006494C0D7838038F /* CertificateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB3DE12412A72AA37C495B3 /* CertificateManager.swift */; };
@@ -640,6 +643,7 @@
 		84D629FA007356EBA90D5F5A /* ConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionState.swift; sourceTree = "<group>"; };
 		8522C558C3B5DDC867FCE801 /* StatusToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusToastView.swift; sourceTree = "<group>"; };
 		86A44B4BE21C89356292B4D0 /* FirstContactVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstContactVerificationTests.swift; sourceTree = "<group>"; };
+		8710FC1E6E5A083ECACA9480 /* PetWelcomeFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeFlag.swift; sourceTree = "<group>"; };
 		875CC6A80A6C3A38571013C5 /* PetBehaviorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetBehaviorController.swift; sourceTree = "<group>"; };
 		883D84FF5E1F966F1CED7BC2 /* MockTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockTransport.swift; sourceTree = "<group>"; };
 		88918D3F2CE1EE17919B8C32 /* X3DHTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X3DHTests.swift; sourceTree = "<group>"; };
@@ -722,6 +726,8 @@
 		BA9DB2DB02DE2DBC2688F727 /* PetPayloadCrossVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPayloadCrossVersionTests.swift; sourceTree = "<group>"; };
 		BB4C89F246265B6840B709C2 /* RemoteMessageEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMessageEnvelope.swift; sourceTree = "<group>"; };
 		BB785F2E159A543F61378FB2 /* AcceptConnectionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptConnectionHelper.swift; sourceTree = "<group>"; };
+		BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeView.swift; sourceTree = "<group>"; };
+		BBCC3B11AF44BE6CC4610FDA /* PetWelcomeFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeFlagTests.swift; sourceTree = "<group>"; };
 		BD44DD0CD9A7014B98365F3B /* SessionKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
 		BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetGenomeSpeciesTests.swift; sourceTree = "<group>"; };
 		BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadata.swift; sourceTree = "<group>"; };
@@ -1364,6 +1370,7 @@
 				082C69D6D5041CA69DD58945 /* PetRendererV3Tests.swift */,
 				20DA3B652914D8CEE8844CE7 /* PetStateCloudSyncCompatTests.swift */,
 				0B2B3E2DAFB2D3FB683CFE7A /* PetStoreMigrationTests.swift */,
+				BBCC3B11AF44BE6CC4610FDA /* PetWelcomeFlagTests.swift */,
 				189868AF3D6A10B4D51AC0A6 /* SharedRenderedPetTests.swift */,
 				0E5998CF743055DF9A9596FF /* SpeciesCatalogTests.swift */,
 				B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */,
@@ -1419,6 +1426,8 @@
 				18F1E75EEFA27967224E035C /* PetParticleView.swift */,
 				5D7E4A6EE9C506EDF235ED18 /* PetSecretChatRow.swift */,
 				8153A2193E408C3F30B049DD /* PetTabView.swift */,
+				8710FC1E6E5A083ECACA9480 /* PetWelcomeFlag.swift */,
+				BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */,
 				7BE30BAD21DDB022E0E0F577 /* PixelView.swift */,
 				A6AFFD57A9FA50E4F4109A25 /* V4UpgradeOnboarding.swift */,
 			);
@@ -1848,6 +1857,7 @@
 				2D823BA1BE66DFA74933934D /* PetStoreMigrationTests.swift in Sources */,
 				00C71861E40FFC5245556578 /* PetStoreTests.swift in Sources */,
 				2F1C78C76EA2EF85DCD15FA6 /* PetTimeOfDayTests.swift in Sources */,
+				E743CD48BADB6E111D3ECFA1 /* PetWelcomeFlagTests.swift in Sources */,
 				1C8E54CC816A78EEB4F60B58 /* Phase2IntegrationTests.swift in Sources */,
 				5404B9ED2402C165C2331399 /* PreKeyBundleTests.swift in Sources */,
 				31D3EBDE917954BDB7B24BC1 /* PreKeyStoreTests.swift in Sources */,
@@ -2056,6 +2066,8 @@
 				B5BAF97238B67C66F4479DA5 /* PetStore.swift in Sources */,
 				8AFFC7E3BD6EE4BC5CB0A613 /* PetSurface.swift in Sources */,
 				5671C51DDFC869D7C249A544 /* PetTabView.swift in Sources */,
+				40AE28E8A989BDFC76547990 /* PetWelcomeFlag.swift in Sources */,
+				AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */,
 				3C5928F07C37607D2B5A64C0 /* PixelView.swift in Sources */,
 				ECB8D45C76EA920EDB363861 /* PoopState.swift in Sources */,
 				B44417BE29FC6CEB9D97B671 /* PreKeyBundle.swift in Sources */,
