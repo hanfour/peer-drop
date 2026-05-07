@@ -12,13 +12,6 @@ final class PetDialogEngineTests: XCTestCase {
 
     // MARK: - generate()
 
-    func testEggReturnsNil() {
-        for mood in PetMood.allCases {
-            XCTAssertNil(engine.generate(level: .egg, mood: mood),
-                         "Egg should return nil for mood \(mood)")
-        }
-    }
-
     func testBabyReturnsText() {
         let result = engine.generate(level: .baby, mood: .happy)
         XCTAssertNotNil(result)
@@ -52,16 +45,4 @@ final class PetDialogEngineTests: XCTestCase {
         }
     }
 
-    func testEggPrivateChatIsMinimal() {
-        for _ in 0..<20 {
-            let lines = engine.generatePrivateChat(
-                myLevel: .egg, partnerLevel: .egg,
-                myMood: .happy, partnerMood: .happy
-            )
-            for line in lines {
-                XCTAssertLessThanOrEqual(line.text.count, 5,
-                    "Egg dialogue '\(line.text)' should be at most 5 characters")
-            }
-        }
-    }
 }

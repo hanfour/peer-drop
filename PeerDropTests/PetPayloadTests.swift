@@ -33,7 +33,7 @@ final class PetPayloadTests: XCTestCase {
         let greeting = PetGreeting(
             petID: UUID(),
             name: "Buddy",
-            level: .egg,
+            level: .baby,
             mood: .curious,
             genome: makeGenome()
         )
@@ -106,7 +106,7 @@ final class PetPayloadTests: XCTestCase {
         let greeting = PetGreeting(
             petID: UUID(),
             name: nil,
-            level: .egg,
+            level: .baby,
             mood: .sleepy,
             genome: makeGenome()
         )

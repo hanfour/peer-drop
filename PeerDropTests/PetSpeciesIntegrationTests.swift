@@ -37,19 +37,6 @@ final class PetSpeciesIntegrationTests: XCTestCase {
         }
     }
 
-    func testEggAlwaysIdle() {
-        let traits = PersonalityTraits(independence: 0.5, curiosity: 0.5, energy: 0.5, timidity: 0.5, mischief: 0.5)
-        let physics = PetPhysicsState(position: CGPoint(x: 200, y: 780), velocity: .zero, surface: .ground)
-        for body in BodyGene.allCases {
-            let provider = PetBehaviorProviderFactory.create(for: body)
-            for _ in 0..<50 {
-                let action = provider.nextBehavior(current: .idle, physics: physics, level: .egg,
-                                                    elapsed: 100, foodTarget: nil, traits: traits)
-                XCTAssertEqual(action, .idle, "\(body) egg should always idle")
-            }
-        }
-    }
-
     func testFlyingSpeciesNeverFall() {
         let flyingBodies: [BodyGene] = [.bird, .dragon]
         let traits = PersonalityTraits(independence: 0.5, curiosity: 0.5, energy: 0.5, timidity: 0.5, mischief: 0.5)

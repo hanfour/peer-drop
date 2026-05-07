@@ -18,7 +18,7 @@ final class PetEngineTests: XCTestCase {
     // MARK: - Initial State
 
     func testInitialState() {
-        XCTAssertEqual(engine.pet.level, .egg)
+        XCTAssertEqual(engine.pet.level, .baby)
         XCTAssertEqual(engine.currentAction, .idle)
     }
 
@@ -47,41 +47,20 @@ final class PetEngineTests: XCTestCase {
     // MARK: - Evolution
 
     func testEvolutionDoesNotOccurBeforeMinimumAge() {
-        // Give lots of XP but pet was just born
+        // Pet was just born — baby→adult requires 8 days in checkEvolution().
+        // Even with lots of XP, age-only rule keeps level at .baby.
         engine.pet.experience = 600
         engine.handleInteraction(.tap)
-        XCTAssertEqual(engine.pet.level, .egg, "Should not evolve before minimum age")
+        XCTAssertEqual(engine.pet.level, .baby, "Should not evolve before minimum age")
     }
 
     func testEvolutionOccursWhenReady() {
-        // Set birthDate to 2 days ago so minimum age (86400s) is met
-        engine.pet.birthDate = Date().addingTimeInterval(-2 * 86400)
-        // Give enough XP: requirement is 100
-        engine.pet.experience = 98
-        // One tap adds 2 XP → total 100
+        // Set birthDate to 9 days ago so age-based rule (8 days) is met.
+        // checkEvolution() is age-only — XP threshold lives in the separate
+        // EvolutionRequirement type used by the UI progress bar.
+        engine.pet.birthDate = Date().addingTimeInterval(-9 * 86400)
         engine.handleInteraction(.tap)
-        XCTAssertEqual(engine.pet.level, .baby, "Should evolve to baby when XP and age requirements are met")
-    }
-
-    func testSocialBonusAcceleratesEvolution() {
-        // Set birthDate to 2 days ago
-        engine.pet.birthDate = Date().addingTimeInterval(-2 * 86400)
-        // Add a recent social log entry so hasSocialRecently == true
-        let socialEntry = SocialEntry(
-            partnerPetID: UUID(),
-            partnerName: "TestPet",
-            date: Date(), // recent
-            interaction: .chat,
-            dialogue: [],
-            isRevealed: false
-        )
-        engine.pet.socialLog.append(socialEntry)
-        // With socialBonus=1.5, we need effectiveExp >= 100
-        // 67 * 1.5 = 100.5 >= 100
-        engine.pet.experience = 66
-        // One tap adds 2 → 68 * 1.5 = 102
-        engine.handleInteraction(.tap)
-        XCTAssertEqual(engine.pet.level, .baby, "Social bonus should accelerate evolution")
+        XCTAssertEqual(engine.pet.level, .adult, "Should evolve to adult when age requirement is met")
     }
 
     // MARK: - Pet Meeting
@@ -151,20 +130,20 @@ final class PetEngineTests: XCTestCase {
     // MARK: - Evolution Progress
 
     func testEvolutionProgress() {
-        // Fresh egg with 0 XP
+        // Fresh baby pet with 0 XP (baby→adult requires 500 XP)
         engine.pet.experience = 0
         XCTAssertEqual(engine.evolutionProgress, 0.0, accuracy: 0.001)
 
-        // 10 XP out of 100 required
-        engine.pet.experience = 10
+        // 50 XP out of 500 required
+        engine.pet.experience = 50
         XCTAssertEqual(engine.evolutionProgress, 0.1, accuracy: 0.001)
 
-        // 100 XP = full
-        engine.pet.experience = 100
+        // 500 XP = full
+        engine.pet.experience = 500
         XCTAssertEqual(engine.evolutionProgress, 1.0, accuracy: 0.001)
 
-        // Over 100 XP should still cap at 1.0
-        engine.pet.experience = 200
+        // Over 500 XP should still cap at 1.0
+        engine.pet.experience = 1000
         XCTAssertEqual(engine.evolutionProgress, 1.0, accuracy: 0.001)
     }
 }

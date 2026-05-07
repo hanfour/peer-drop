@@ -35,7 +35,6 @@ final class PetStatsTests: XCTestCase {
     }
 
     func testPetLevelDisplayName() {
-        XCTAssertEqual(PetLevel.egg.displayName, "蛋")
         XCTAssertEqual(PetLevel.baby.displayName, "幼年")
         XCTAssertEqual(PetLevel.adult.displayName, "成熟")
         XCTAssertEqual(PetLevel.elder.displayName, "老年")

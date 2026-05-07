@@ -20,11 +20,4 @@ final class PetIntegrationTests: XCTestCase {
         engine.handleInteraction(.tap)
         XCTAssertGreaterThan(engine.pet.experience, oldExp)
     }
-
-    func testEggDoesNotMove() {
-        let engine = PetEngine(pet: .newEgg())
-        let action = PetBehaviorController.nextBehavior(
-            current: .idle, physics: engine.physicsState, level: .egg, elapsed: 100)
-        XCTAssertEqual(action, .idle)
-    }
 }

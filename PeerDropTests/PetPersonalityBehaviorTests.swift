@@ -25,12 +25,4 @@ final class PetPersonalityBehaviorTests: XCTestCase {
         }
         XCTAssertGreaterThan(climbCount, 120, "High mischief should climb >60%")
     }
-
-    func testEggIgnoresPersonality() {
-        let state = PetPhysicsState(position: CGPoint(x: 200, y: 780), velocity: .zero, surface: .ground)
-        let hyper = PersonalityTraits(independence: 0, curiosity: 1, energy: 1, timidity: 0, mischief: 1)
-        let action = PetBehaviorController.nextBehavior(
-            current: .idle, physics: state, level: .egg, elapsed: 100, traits: hyper)
-        XCTAssertEqual(action, .idle)
-    }
 }

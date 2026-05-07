@@ -76,7 +76,7 @@ final class PetGreetingProtocolVersionTests: XCTestCase {
     }
 
     func test_downgraded_toV1_nonElder_unchanged() {
-        for stage in [PetLevel.egg, .baby, .adult] {
+        for stage in [PetLevel.baby, .adult] {
             let g = PetGreeting(
                 petID: UUID(),
                 name: nil,

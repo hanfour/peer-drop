@@ -242,26 +242,6 @@ final class PetSpeciesBehaviorTests: XCTestCase {
         }
     }
 
-    // MARK: - Egg Guard
-
-    func testAllSpeciesReturnIdleForEgg() {
-        let allBehaviors: [PetBehaviorProvider] = [
-            CatBehavior(), DogBehavior(), RabbitBehavior(), BirdBehavior(),
-            FrogBehavior(), BearBehavior(), DragonBehavior(), OctopusBehavior(),
-            GhostBehavior(), SlimeBehavior(),
-        ]
-        let traits = makeTraits()
-        let physics = makePhysics(surface: .ground)
-
-        for behavior in allBehaviors {
-            let result = behavior.nextBehavior(current: .walking, physics: physics,
-                                               level: .egg, elapsed: 10.0,
-                                               foodTarget: nil, traits: traits)
-            XCTAssertEqual(result, .idle,
-                           "\(type(of: behavior)) should return .idle for egg level")
-        }
-    }
-
     // MARK: - Chat Behavior Tests
 
     func testCatChatReturnsOnTop() {

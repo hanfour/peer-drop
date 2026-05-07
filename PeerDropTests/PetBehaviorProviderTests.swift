@@ -90,18 +90,6 @@ final class PetBehaviorProviderTests: XCTestCase {
 
     // MARK: - Default nextBehavior
 
-    func testDefaultNextBehaviorReturnsIdleForEggs() {
-        let provider = PetBehaviorProviderFactory.create(for: .cat)
-        let physics = PetPhysicsState(position: .zero, velocity: .zero, surface: .ground)
-        let traits = PersonalityTraits(independence: 0.5, curiosity: 0.5,
-                                       energy: 0.5, timidity: 0.5, mischief: 0.5)
-
-        let result = provider.nextBehavior(current: .walking, physics: physics,
-                                           level: .egg, elapsed: 10.0,
-                                           foodTarget: nil, traits: traits)
-        XCTAssertEqual(result, .idle)
-    }
-
     func testDefaultNextBehaviorReturnsFallForAirborneGroundedPet() {
         let provider = PetBehaviorProviderFactory.create(for: .cat)
         let physics = PetPhysicsState(position: .zero, velocity: .zero, surface: .airborne)

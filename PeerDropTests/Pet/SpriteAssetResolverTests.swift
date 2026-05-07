@@ -15,7 +15,7 @@ final class SpriteAssetResolverTests: XCTestCase {
         XCTAssertEqual(SpriteAssetResolver.filename(for: req), "octopus-baby")
     }
 
-    func test_filename_nonEggStages_emitSpeciesPrefixedSuffix() {
+    func test_filename_allStages_emitSpeciesPrefixedSuffix() {
         let cases: [(PetLevel, String)] = [
             (.baby,  "baby"),
             (.adult, "adult"),
@@ -28,24 +28,7 @@ final class SpriteAssetResolverTests: XCTestCase {
         }
     }
 
-    func test_filename_egg_isSpeciesIndependent() {
-        // Eggs are visually species-agnostic in legacy logic
-        // (EggSpriteData.idle for all pets). The resolver returns a single
-        // global "egg" filename regardless of the request's species, so M5
-        // can ship one egg.zip rather than per-species egg variants.
-        let cat = SpriteRequest(species: SpeciesID("cat-tabby"), stage: .egg, direction: .south)
-        let dog = SpriteRequest(species: SpeciesID("dog-shiba"), stage: .egg, direction: .south)
-        XCTAssertEqual(SpriteAssetResolver.filename(for: cat), "egg")
-        XCTAssertEqual(SpriteAssetResolver.filename(for: dog), "egg")
-    }
-
-    func test_filename_egg_evenForUnknownFamily_returnsEgg() {
-        // Egg path bypasses catalog lookup — even garbage species still gets egg.
-        let req = SpriteRequest(species: SpeciesID("madeup"), stage: .egg, direction: .south)
-        XCTAssertEqual(SpriteAssetResolver.filename(for: req), "egg")
-    }
-
-    func test_filename_unknownFamily_nonEgg_returnsNil() {
+    func test_filename_unknownFamily_returnsNil() {
         // Tightened API contract (was: returned a garbage "madeup-anything-adult"
         // string). Callers can now distinguish "no asset for this request" from
         // a valid filename without redundant catalog lookups.

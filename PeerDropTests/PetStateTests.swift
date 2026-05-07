@@ -6,18 +6,14 @@ final class PetStateTests: XCTestCase {
 
     // MARK: - PetLevel
 
-    func testPetLevelOrdering() {
-        XCTAssertTrue(PetLevel.egg < PetLevel.baby)
-        XCTAssertFalse(PetLevel.baby < PetLevel.egg)
-    }
-
     func testPetLevelRawValues() {
-        XCTAssertEqual(PetLevel.egg.rawValue, 1)
         XCTAssertEqual(PetLevel.baby.rawValue, 2)
+        XCTAssertEqual(PetLevel.adult.rawValue, 3)
+        XCTAssertEqual(PetLevel.elder.rawValue, 4)
     }
 
     func testPetLevelCaseIterable() {
-        XCTAssertEqual(PetLevel.allCases.count, 4)
+        XCTAssertEqual(PetLevel.allCases.count, 3)
     }
 
     // MARK: - PetGenome
@@ -78,9 +74,10 @@ final class PetStateTests: XCTestCase {
 
     // MARK: - PetState
 
-    func testNewEggStartsAsEggWithZeroXP() {
+    func testNewEggStartsAsBabyWithZeroXP() {
+        // v4.0.1 dropped the egg stage; pets start as .baby (factory name kept).
         let pet = PetState.newEgg()
-        XCTAssertEqual(pet.level, .egg)
+        XCTAssertEqual(pet.level, .baby)
         XCTAssertEqual(pet.experience, 0)
         XCTAssertNil(pet.name)
         XCTAssertTrue(pet.socialLog.isEmpty)
@@ -119,15 +116,6 @@ final class PetStateTests: XCTestCase {
     }
 
     // MARK: - EvolutionRequirement
-
-    func testEvolutionRequirementForEgg() {
-        let req = EvolutionRequirement.for(.egg)
-        XCTAssertNotNil(req)
-        XCTAssertEqual(req?.targetLevel, .baby)
-        XCTAssertEqual(req?.requiredExperience, 100)
-        XCTAssertEqual(req?.socialBonus, 1.5)
-        XCTAssertEqual(req?.minimumAge, 86400)
-    }
 
     func testEvolutionRequirementForBaby() {
         let req = EvolutionRequirement.for(.baby)

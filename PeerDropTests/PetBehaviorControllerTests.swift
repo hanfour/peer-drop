@@ -13,14 +13,6 @@ final class PetBehaviorControllerTests: XCTestCase {
         XCTAssertTrue(gotWalk, "Should eventually transition to walk")
     }
 
-    func testEggNeverWanders() {
-        let state = PetPhysicsState(position: CGPoint(x: 200, y: 780), velocity: .zero, surface: .ground)
-        for _ in 0..<100 {
-            let action = PetBehaviorController.nextBehavior(current: .idle, physics: state, level: .egg, elapsed: 100)
-            XCTAssertEqual(action, .idle, "Egg should never wander")
-        }
-    }
-
     func testAirborneReturnsFall() {
         let state = PetPhysicsState(position: CGPoint(x: 200, y: 300), velocity: .zero, surface: .airborne)
         let action = PetBehaviorController.nextBehavior(current: .idle, physics: state, level: .baby, elapsed: 0)

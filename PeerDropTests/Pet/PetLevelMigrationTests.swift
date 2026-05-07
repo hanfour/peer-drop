@@ -8,7 +8,6 @@ private struct LevelHolder: Codable, Equatable {
 final class PetLevelMigrationTests: XCTestCase {
     // MARK: rawValue contract (network/persistence compat)
 
-    func test_egg_rawValue_is1() { XCTAssertEqual(PetLevel.egg.rawValue, 1) }
     func test_baby_rawValue_is2() { XCTAssertEqual(PetLevel.baby.rawValue, 2) }
     func test_adult_rawValue_is3_sameAsLegacyChild() { XCTAssertEqual(PetLevel.adult.rawValue, 3) }
     func test_elder_rawValue_is4() { XCTAssertEqual(PetLevel.elder.rawValue, 4) }
@@ -37,19 +36,11 @@ final class PetLevelMigrationTests: XCTestCase {
         XCTAssertEqual(String(data: data, encoding: .utf8), #"{"level":4}"#)
     }
 
-    // MARK: ordering (Comparable)
-
-    func test_ordering_eggLessThanBabyLessThanAdultLessThanElder() {
-        XCTAssertLessThan(PetLevel.egg, PetLevel.baby)
-        XCTAssertLessThan(PetLevel.baby, PetLevel.adult)
-        XCTAssertLessThan(PetLevel.adult, PetLevel.elder)
-    }
-
     // MARK: CaseIterable (must include elder)
 
     func test_allCases_containsElder() {
         XCTAssertTrue(PetLevel.allCases.contains(.elder))
-        XCTAssertEqual(PetLevel.allCases.count, 4)
+        XCTAssertEqual(PetLevel.allCases.count, 3)
     }
 
     func test_decoder_maps_legacy_egg_rawValue_to_baby() throws {
@@ -71,5 +62,14 @@ final class PetLevelMigrationTests: XCTestCase {
             let decoded = try JSONDecoder().decode(PetLevel.self, from: "\(raw)".data(using: .utf8)!)
             XCTAssertEqual(decoded, expected)
         }
+    }
+
+    func test_legacyEgg_decode_then_encode_writesBaby_rawValue2() throws {
+        // Migration semantics: read v3 rawValue 1, write back as rawValue 2.
+        // Locks in the "no .egg case" decision against accidental re-introduction.
+        let decoded = try JSONDecoder().decode(PetLevel.self, from: "1".data(using: .utf8)!)
+        let reencoded = try JSONEncoder().encode(decoded)
+        XCTAssertEqual(String(data: reencoded, encoding: .utf8), "2",
+                       "v3 egg decoded as .baby must persist back as rawValue 2 (write-once migration)")
     }
 }
