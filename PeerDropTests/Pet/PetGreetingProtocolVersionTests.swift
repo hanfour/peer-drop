@@ -58,6 +58,30 @@ final class PetGreetingProtocolVersionTests: XCTestCase {
         XCTAssertEqual(g.effectiveProtocolVersion, 1, "missing version maps to v1")
     }
 
+    // MARK: - v3.x peer petLevel=1 (legacy .egg) → v4.0.1 .baby
+
+    /// Regression guard for v4.0.1 egg-stage removal: a v3.x peer that still
+    /// has an egg pet (petLevel rawValue=1) must decode silently as .baby on
+    /// a v4.0.1 receiver. Behavior is provided by the PetLevel decoder
+    /// (Phase 1) — this test locks it in against accidental future changes
+    /// like reintroducing `case egg = 1` or making the decoder strict.
+    func test_v3_peer_petLevel_1_decodes_to_baby_on_v4_receiver() throws {
+        let v3xEggJSON = """
+        {
+          "petID": "77777777-7777-7777-7777-777777777777",
+          "name": "egg-pet",
+          "level": 1,
+          "mood": "curious",
+          "genome": { "body": "cat", "eyes": "dot", "pattern": "none", "personalityGene": 0.5 }
+        }
+        """.data(using: .utf8)!
+
+        let g = try JSONDecoder().decode(PetGreeting.self, from: v3xEggJSON)
+        XCTAssertEqual(g.level, .baby,
+                       "v3.x petLevel=1 (.egg) must decode as .baby on v4.0.1 receiver")
+        XCTAssertEqual(g.effectiveProtocolVersion, 1, "missing version maps to v1")
+    }
+
     // MARK: - downgraded() — v1 receiver path
 
     func test_downgraded_toV1_elder_becomes_adult() {
