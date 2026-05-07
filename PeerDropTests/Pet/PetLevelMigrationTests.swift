@@ -51,4 +51,25 @@ final class PetLevelMigrationTests: XCTestCase {
         XCTAssertTrue(PetLevel.allCases.contains(.elder))
         XCTAssertEqual(PetLevel.allCases.count, 4)
     }
+
+    func test_decoder_maps_legacy_egg_rawValue_to_baby() throws {
+        // v3.x persisted PetLevel as rawValue 1 (.egg). v4.0.1 decoder
+        // must map it to .baby silently.
+        let json = "1".data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(PetLevel.self, from: json)
+        XCTAssertEqual(decoded, .baby, "rawValue 1 must decode to .baby (was .egg in v3)")
+    }
+
+    func test_decoder_unknown_rawValue_falls_back_to_baby() throws {
+        let json = "99".data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(PetLevel.self, from: json)
+        XCTAssertEqual(decoded, .baby, "unknown raw values fall back to .baby (forward compat)")
+    }
+
+    func test_decoder_preserves_baby_adult_elder() throws {
+        for (raw, expected) in [(2, PetLevel.baby), (3, .adult), (4, .elder)] {
+            let decoded = try JSONDecoder().decode(PetLevel.self, from: "\(raw)".data(using: .utf8)!)
+            XCTAssertEqual(decoded, expected)
+        }
+    }
 }
