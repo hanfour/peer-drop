@@ -10,13 +10,6 @@ struct EvolutionRequirement {
     /// Returns nil if no evolution is defined for that level yet.
     static func `for`(_ level: PetLevel) -> EvolutionRequirement? {
         switch level {
-        case .egg:
-            return EvolutionRequirement(
-                targetLevel: .baby,
-                requiredExperience: 100,
-                socialBonus: 1.5,
-                minimumAge: 86400 // 24 hours
-            )
         case .baby:
             return EvolutionRequirement(
                 targetLevel: .adult,

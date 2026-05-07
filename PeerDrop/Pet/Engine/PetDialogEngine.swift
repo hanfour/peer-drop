@@ -14,17 +14,11 @@ final class PetDialogEngine {
         .startled: ["呀！！", "嗚哇！", "啊！"]
     ]
 
-    /// Egg sounds — eggs can't speak, but they can emote during private chat
-    private let eggSounds: [String] = ["...", "*震*", "*亮*", "*搖*"]
-
     // MARK: - Public API
 
     /// Generate a single line of dialogue for the given level and mood.
-    /// Eggs return `nil` (they can't speak).
     func generate(level: PetLevel, mood: PetMood) -> String? {
         switch level {
-        case .egg:
-            return nil
         case .baby, .adult, .elder:
             guard let pool = babyTemplates[mood], !pool.isEmpty else { return nil }
             return pool.randomElement()
@@ -62,8 +56,6 @@ final class PetDialogEngine {
 
     private func textForChat(level: PetLevel, mood: PetMood) -> String {
         switch level {
-        case .egg:
-            return eggSounds.randomElement() ?? "..."
         case .baby, .adult, .elder:
             return babyTemplates[mood]?.randomElement() ?? "..."
         }

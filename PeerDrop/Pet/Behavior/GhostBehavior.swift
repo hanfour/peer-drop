@@ -13,8 +13,6 @@ struct GhostBehavior: PetBehaviorProvider {
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
-        guard level != .egg else { return .idle }
-
         // Food chase
         if let target = foodTarget, physics.surface == .ground {
             if hypot(physics.position.x - target.x, physics.position.y - target.y) > 8 { return .run }

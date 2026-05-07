@@ -23,15 +23,8 @@ enum SpriteAssetResolver {
 
     /// Bundle filename (without extension) for the request, after catalog
     /// fallback. Returns nil when no asset filename can be derived — i.e.
-    /// the family is unknown to the catalog (egg requests always succeed
-    /// because they bypass species lookup). Pure function; no I/O.
+    /// the family is unknown to the catalog. Pure function; no I/O.
     static func filename(for request: SpriteRequest) -> String? {
-        // Eggs are visually species-independent (legacy renderer used a single
-        // EggSpriteData asset for all pets). Return a global filename so M5
-        // bundling can ship one egg.zip rather than 100+ species-egg variants.
-        if request.stage == .egg {
-            return "egg"
-        }
         guard let resolved = SpeciesCatalog.resolve(request.species) else {
             return nil
         }

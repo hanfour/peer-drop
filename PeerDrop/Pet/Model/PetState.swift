@@ -24,13 +24,14 @@ struct PetState: Codable {
         Int(Date().timeIntervalSince(birthDate) / 86400)
     }
 
-    /// Creates a new egg with random genome and zero experience.
+    /// Creates a new pet at the baby stage with a random genome and zero experience.
+    /// (v4.0.1 dropped the egg stage; pets start as baby.)
     static func newEgg() -> PetState {
         PetState(
             id: UUID(),
             name: nil,
             birthDate: Date(),
-            level: .egg,
+            level: .baby,
             experience: 0,
             genome: .random(),
             mood: .curious,

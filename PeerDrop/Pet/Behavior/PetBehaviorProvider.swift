@@ -125,8 +125,6 @@ extension PetBehaviorProvider {
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
                       traits: PersonalityTraits) -> PetAction {
-        guard level != .egg else { return .idle }
-
         // Chase food
         if let target = foodTarget, physics.surface == .ground {
             let dist = hypot(physics.position.x - target.x, physics.position.y - target.y)

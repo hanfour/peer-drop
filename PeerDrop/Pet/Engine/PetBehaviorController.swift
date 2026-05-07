@@ -7,8 +7,6 @@ enum PetBehaviorController {
                              level: PetLevel, elapsed: TimeInterval,
                              foodTarget: CGPoint? = nil,
                              traits: PersonalityTraits? = nil) -> PetAction {
-        guard level != .egg else { return .idle }
-
         if let target = foodTarget, physics.surface == .ground {
             let dist = hypot(physics.position.x - target.x, physics.position.y - target.y)
             if dist > 8 { return .run }

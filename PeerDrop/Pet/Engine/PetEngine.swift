@@ -46,7 +46,7 @@ class PetEngine: ObservableObject {
     private var lastBehaviorDate = Date.distantPast
 
     var palette: ColorPalette {
-        pet.level == .egg ? PetPalettes.egg : PetPalettes.palette(for: pet.genome)
+        PetPalettes.palette(for: pet.genome)
     }
 
     var evolutionProgress: Double {
@@ -257,8 +257,7 @@ class PetEngine: ObservableObject {
 
     // MARK: - Evolution
     //
-    // v4.0 lifecycle model:
-    //   egg   → baby   : experience-based via EvolutionRequirement (24h + 100 XP, unchanged)
+    // v4.0.1 lifecycle model (egg stage removed):
     //   baby  → adult  : age-only at 8 days from birthDate (was: 3 days + 500 XP in v3.x)
     //   adult → elder  : age-only at 14 days from birthDate (new in v4.0)
     //   elder          : terminal
@@ -271,14 +270,6 @@ class PetEngine: ObservableObject {
         let ageInDays = Date().timeIntervalSince(pet.birthDate) / 86400
 
         switch pet.level {
-        case .egg:
-            guard let req = EvolutionRequirement.for(.egg) else { return }
-            let multiplier = hasSocialRecently ? req.socialBonus : 1.0
-            let effectiveExp = Double(pet.experience) * multiplier
-            let ageInSeconds = Date().timeIntervalSince(pet.birthDate)
-            if effectiveExp >= Double(req.requiredExperience) && ageInSeconds >= req.minimumAge {
-                evolve(to: req.targetLevel)
-            }
         case .baby:
             if ageInDays >= 8 { evolve(to: .adult) }
         case .adult:
