@@ -238,10 +238,25 @@ platform :ios do
       prev = JSON.parse(File.read(state_file))
 
       if prev["edit_state"] != snapshot[:edit_state]
-        alert.(
-          "v#{snapshot[:edit_version]} → #{snapshot[:edit_state]}",
-          "was #{prev["edit_state"]}; release type=#{snapshot[:edit_release]}; build #{snapshot[:edit_build]}"
-        )
+        # When edit version disappears (nil), it's because the version was
+        # approved + released and is now live-only. Use prev's data for
+        # context since current snapshot's edit fields are all nil.
+        if snapshot[:edit_state].nil? && prev["edit_state"]
+          alert.(
+            "v#{prev["edit_version"]} approved & released",
+            "Was #{prev["edit_state"]}; now off the edit-version list (likely live)"
+          )
+        elsif snapshot[:edit_state] && prev["edit_state"].nil?
+          alert.(
+            "New edit version: v#{snapshot[:edit_version]} — #{snapshot[:edit_state]}",
+            "release type=#{snapshot[:edit_release] || '?'}; build #{snapshot[:edit_build] || '(none)'}"
+          )
+        else
+          alert.(
+            "v#{snapshot[:edit_version]} → #{snapshot[:edit_state]}",
+            "was #{prev["edit_state"]}; release type=#{snapshot[:edit_release] || '?'}; build #{snapshot[:edit_build] || '(none)'}"
+          )
+        end
       end
 
       if prev["live_version"] != snapshot[:live_version]
