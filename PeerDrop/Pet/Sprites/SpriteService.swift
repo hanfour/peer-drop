@@ -169,11 +169,22 @@ actor SpriteService {
             let metadata = try SpriteMetadata.parse(zipURL: zipURL)
             let dirKey = direction.rawValue
 
+            // Open the zip Archive once and reuse for every frame extract —
+            // an 8-frame walk is 8 PNG paths, and re-opening the zip each
+            // time was redundant I/O. ZIPFoundation's Archive struct is
+            // designed for exactly this batched-read pattern.
+            let archive: Archive
+            do {
+                archive = try Archive(url: zipURL, accessMode: .read)
+            } catch {
+                throw SpriteServiceError.framePNGDecodeFailed(zipURL.lastPathComponent)
+            }
+
             if let actionKey = action.animationKey,
                let anim = metadata.animations[actionKey],
                let paths = anim.directions[dirKey],
                !paths.isEmpty {
-                let images = try paths.map { try Self.decodePNG(zipURL: zipURL, path: $0) }
+                let images = try paths.map { try Self.decodePNG(archive: archive, path: $0) }
                 return AnimationFrames(images: images, fps: anim.fps, loops: anim.loops)
             }
 
@@ -192,18 +203,12 @@ actor SpriteService {
             guard let path = metadata.rotations[dirKey] else {
                 throw SpriteServiceError.framePathMissing("rotations/\(dirKey).png")
             }
-            let image = try Self.decodePNG(zipURL: zipURL, path: path)
+            let image = try Self.decodePNG(archive: archive, path: path)
             return AnimationFrames(images: [image], fps: 1, loops: false)
         }.value
     }
 
-    nonisolated private static func decodePNG(zipURL: URL, path: String) throws -> CGImage {
-        let archive: Archive
-        do {
-            archive = try Archive(url: zipURL, accessMode: .read)
-        } catch {
-            throw SpriteServiceError.framePNGDecodeFailed(path)
-        }
+    nonisolated private static func decodePNG(archive: Archive, path: String) throws -> CGImage {
         guard let entry = archive[path] else {
             throw SpriteServiceError.framePathMissing(path)
         }
