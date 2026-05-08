@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-struct GhostBehavior: PetBehaviorProvider {
+final class GhostBehavior: PetBehaviorProvider {
     let profile = PetBehaviorProfile(
             physicsMode: .floating, gravity: 0,
             canClimbWalls: false, canHangCeiling: false, canPassThroughWalls: true,
@@ -9,6 +9,14 @@ struct GhostBehavior: PetBehaviorProvider {
             idleDurationRange: 2.5...5.0, moveDurationRange: 2.0...4.0,
             uniqueActions: [.phaseThrough, .flicker, .spook, .vanish],
             exitStyle: .fadeOut, enterStyle: .fadeIn)
+
+    // Phase 2 of v4.0.2 ghost fix: timestamp-gated flicker/vanish so users see
+    // ghost-specific behavior within 1–2 minutes instead of waiting 30–60s
+    // for the exit/return cycle.
+    private var lastFlickerAt: Date = .distantPast
+    private var lastVanishAt: Date = .distantPast
+
+    init() {}
 
     func nextBehavior(current: PetAction, physics: PetPhysicsState, level _: PetLevel,
                       elapsed: TimeInterval, foodTarget: CGPoint?,
@@ -24,9 +32,33 @@ struct GhostBehavior: PetBehaviorProvider {
         // IMPORTANT: Ghost NEVER falls — floating is normal state
         // Airborne is the ghost's natural habitat
         if physics.surface == .airborne || physics.surface == .ground {
+            // Periodic flicker — every 15-30s when idle (independent of long
+            // idle gate). Gives users visible ghost-specific behavior fast.
+            let now = Date()
+            if current == .idle && elapsed > 2.0 {
+                let flickerCooldown = TimeInterval.random(in: 15...30)
+                if now.timeIntervalSince(lastFlickerAt) > flickerCooldown {
+                    lastFlickerAt = now
+                    return .flicker
+                }
+                // Periodic vanish — every 2-3 minutes when idle.
+                let vanishCooldown = TimeInterval.random(in: 120...180)
+                if now.timeIntervalSince(lastVanishAt) > vanishCooldown {
+                    lastVanishAt = now
+                    return .vanish
+                }
+            }
+
             if current == .idle && elapsed > profile.idleDurationRange.lowerBound {
-                let speciesActions: [PetAction] = [.phaseThrough, .flicker, .spook, .vanish]
-                return speciesActions.randomElement() ?? .idle
+                // Long-idle path: pick from the broader species action set.
+                // Skews toward .phaseThrough (movement) so ghost still drifts
+                // around the screen between flicker/vanish bursts.
+                let speciesActions: [PetAction] = [.phaseThrough, .phaseThrough,
+                                                   .flicker, .spook, .vanish]
+                let pick = speciesActions.randomElement() ?? .idle
+                if pick == .flicker { lastFlickerAt = Date() }
+                if pick == .vanish { lastVanishAt = Date() }
+                return pick
             }
 
             // After species action, return to floating idle

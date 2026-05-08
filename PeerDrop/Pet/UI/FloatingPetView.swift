@@ -18,6 +18,23 @@ struct FloatingPetView: View {
     @State private var idleSinceDate: Date?       // tracks how long pet has been idle
     @State private var returnTask: Task<Void, Never>?
 
+    // Ghost-specific visual modulators (Phase 2 of v4.0.2 ghost fix).
+    // These are multiplicatively combined with exitScale/exitOpacity so the
+    // exit/return fade still works alongside per-action ghost effects.
+    //
+    // Expected user-facing behavior:
+    //   .flicker — 3-cycle opacity pulse 1.0 → 0.4 → 1.0 (~0.9s total).
+    //   .spook   — quick scale punch + opacity dip (1.0→1.3→1.0, ~0.4s).
+    //   .vanish  — fade out → teleport → fade in (~2s).
+    // Bug #2 (no per-frame paw animation) is v4-architecture-wide and out of
+    // v4.0.2 scope — we still render a single ghost PNG, but at least it now
+    // *moves* in ghost-specific ways instead of silently sliding.
+    @State private var flickerOpacity: Double = 1.0
+    @State private var spookScale: CGFloat = 1.0
+    @State private var spookOpacity: Double = 1.0
+    @State private var vanishOpacity: Double = 1.0
+    @State private var ghostActionTask: Task<Void, Never>?
+
     private let displaySize: CGFloat = 128
 
     var body: some View {
@@ -55,8 +72,8 @@ struct FloatingPetView: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            .scaleEffect(exitScale)
-            .opacity(exitOpacity)
+            .scaleEffect(exitScale * spookScale)
+            .opacity(Double(exitOpacity) * flickerOpacity * spookOpacity * vanishOpacity)
             .position(engine.physicsState.position)
             .gesture(
                 DragGesture()
@@ -142,6 +159,10 @@ struct FloatingPetView: View {
             displayLink?.invalidate()
             behaviorTimer?.invalidate()
             returnTask?.cancel()
+            ghostActionTask?.cancel()
+        }
+        .onChange(of: engine.currentAction) { newAction in
+            handleGhostAction(newAction)
         }
     }
 
@@ -402,6 +423,91 @@ struct FloatingPetView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + step.duration) {
             playAnimationSequence(steps, index: index + 1, completion: completion)
         }
+    }
+
+    // MARK: - Ghost-Specific Action Animations (Phase 2 of v4.0.2 ghost fix)
+
+    /// Routes ghost-specific actions to their visual handlers.
+    /// Non-ghost actions (and ghost `.phaseThrough`, which is purely physics-driven)
+    /// fall through with no visual change here — `.phaseThrough` movement is still
+    /// handled in `physicsStep`.
+    private func handleGhostAction(_ action: PetAction) {
+        guard !isAbsent && !isExiting && !isEntering else { return }
+        switch action {
+        case .flicker:
+            ghostActionTask?.cancel()
+            ghostActionTask = Task { @MainActor in
+                await playFlicker()
+            }
+        case .spook:
+            ghostActionTask?.cancel()
+            ghostActionTask = Task { @MainActor in
+                await playSpook()
+            }
+        case .vanish:
+            ghostActionTask?.cancel()
+            ghostActionTask = Task { @MainActor in
+                await playVanish()
+            }
+        default:
+            break
+        }
+    }
+
+    /// 3-cycle opacity pulse: 1.0 → 0.4 → 1.0 over ~0.9s.
+    private func playFlicker() async {
+        for _ in 0..<3 {
+            withAnimation(.easeInOut(duration: 0.15)) { flickerOpacity = 0.4 }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            if Task.isCancelled { flickerOpacity = 1.0; return }
+            withAnimation(.easeInOut(duration: 0.15)) { flickerOpacity = 1.0 }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            if Task.isCancelled { flickerOpacity = 1.0; return }
+        }
+        flickerOpacity = 1.0
+    }
+
+    /// Quick scale punch + opacity dip (~0.5s) — startled-jump effect.
+    private func playSpook() async {
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.4)) {
+            spookScale = 1.3
+            spookOpacity = 0.7
+        }
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        if Task.isCancelled {
+            spookScale = 1.0
+            spookOpacity = 1.0
+            return
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            spookScale = 1.0
+            spookOpacity = 1.0
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        spookScale = 1.0
+        spookOpacity = 1.0
+    }
+
+    /// Fade out → teleport to a random on-screen position → fade in (~2s).
+    private func playVanish() async {
+        withAnimation(.easeIn(duration: 0.6)) { vanishOpacity = 0.0 }
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        if Task.isCancelled { vanishOpacity = 1.0; return }
+
+        // Teleport while invisible.
+        let screen = UIScreen.main.bounds
+        let safeMargin: CGFloat = 60
+        let newX = CGFloat.random(in: safeMargin...(screen.width - safeMargin))
+        let newY = CGFloat.random(in: 120...(screen.height - 200))
+        engine.physicsState.position = CGPoint(x: newX, y: newY)
+        engine.physicsState.velocity = .zero
+
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        if Task.isCancelled { vanishOpacity = 1.0; return }
+
+        withAnimation(.easeOut(duration: 0.6)) { vanishOpacity = 1.0 }
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        vanishOpacity = 1.0
     }
 }
 
