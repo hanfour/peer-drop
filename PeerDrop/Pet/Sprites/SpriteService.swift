@@ -113,13 +113,13 @@ actor SpriteService {
         guard let zipURL = SpriteAssetResolver.url(for: request.spriteRequest, in: bundle) else {
             throw SpriteServiceError.assetNotFound(request.spriteRequest)
         }
-        return try await framesInternal(at: zipURL, for: request)
+        return try await loadFrames(at: zipURL, for: request)
     }
 
-    /// Test seam: callers that already know the zip URL (e.g. unit tests against
-    /// hand-crafted fixtures whose species isn't in SpeciesCatalog) bypass the
-    /// asset resolver. Production code goes through `frames(for:)` instead.
-    func framesInternal(at zipURL: URL, for request: AnimationRequest) async throws -> AnimationFrames {
+    /// Cache check + decode + cache fill. Private to keep the URL-direct
+    /// shape from leaking to production callers (which must go through
+    /// SpriteAssetResolver via `frames(for:)`).
+    private func loadFrames(at zipURL: URL, for request: AnimationRequest) async throws -> AnimationFrames {
         if let cached = animationFrames[request] { return cached }
 
         let frames = try await Self.decodeAnimationFrames(
@@ -130,6 +130,16 @@ actor SpriteService {
         animationFrames[request] = frames
         return frames
     }
+
+    #if DEBUG
+    /// Test seam: callers that already know the zip URL (e.g. unit tests
+    /// against hand-crafted fixtures whose species isn't in SpeciesCatalog)
+    /// bypass the asset resolver. Compiled out of release builds so production
+    /// code physically can't reach this path.
+    func framesInternal(at zipURL: URL, for request: AnimationRequest) async throws -> AnimationFrames {
+        return try await loadFrames(at: zipURL, for: request)
+    }
+    #endif
 
     nonisolated static func decodeAnimationFrames(
         zipURL: URL,
