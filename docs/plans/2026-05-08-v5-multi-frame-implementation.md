@@ -47,25 +47,107 @@ This phase has only ONE task and is a HARD gate. Do not proceed to Phase 1 until
 6. Inspect: `unzip -l test-anim.zip` should show animation/walk/<dir>_<frame>.png entries.
 7. Open `metadata.json` from the zip; verify `frames.animations` has populated `walk` + `idle` keys.
 
-**Decision gate:**
+**Decision gate (3 outcomes):**
 
-- ✅ **PixelLab supports it natively** → proceed to Phase 1 with All-in plan unchanged.
-- ❌ **PixelLab does NOT support animation gen** → fall back per design doc Section 2 "Fallback if PixelLab fails":
+- ✅ **Plan A — PixelLab supports it natively, schema matches design** → proceed to Phase 1 unchanged.
+- ✅ **Plan A-prime — PixelLab supports it, schema differs (VERIFIED 2026-05-08)** → update design doc §2 (raw vs normalized form), proceed to Phase 0.5 (write `Scripts/normalize-pixellab-zip.sh`), then Phase 1.
+- ❌ **Plan B/C — PixelLab does NOT support animation gen** → fall back:
   - Plan B: ImageMagick post-process — translate `rotations/east.png` ±2 px between frames; cheap walk cycle
   - Plan C: Downscope to B-standard (6 walk + 3 idle) which may be more tractable
-  - Update design doc with chosen fallback before proceeding to Phase 1.
+  - Update design doc with chosen fallback before proceeding.
+
+**Verified outcome (2026-05-08):** Plan A-prime. PixelLab Pixel Apprentice tier has "Add Animation" UI with explicit Walk (4/6/8 frame) + Idle presets. Real export uses UUID-keyed animation slots and `export_version: "2.0"`; design doc updated with normalize-step approach.
 
 **Commit (only if pass):**
 
 ```bash
-git commit --allow-empty -m "gate(v5): PixelLab animation generation verified
+git commit --allow-empty -m "gate(v5): PixelLab animation generation verified (Plan A-prime)
 
 PixelLab Pixel Apprentice tier confirmed to support animation
-frame generation per character (walk + idle, 8 + 4 frames × 8
-directions). Test character exported successfully with populated
-metadata.json frames.animations block.
+frame generation per character via Walk (4/6/8 frames) + Idle
+presets, per-direction. Test character (cat-tabby-adult,
+character ID de4b1d65-dd67-4200-bb40-07bb88ed99cb) exported
+successfully with populated metadata.json frames.animations
+block (south direction, 8 walk frames).
 
-Phase 0 gate passed. Proceeding to Phase 1 (code foundations).
+Schema delta vs original design: PixelLab uses UUID-keyed animation
+slots (animation-3294cf41 not 'walk'), keeps export_version at
+'2.0', omits fps/frame_count/loops fields. Design doc updated
+with raw-vs-normalized distinction; mitigation = post-export
+normalize script (Phase 0.5) before bundling.
+
+Phase 0 gate passed. Proceeding to Phase 0.5 (normalize script),
+then Phase 1 (code foundations).
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Phase 0.5 — Normalize script (~half day)
+
+Bridges raw PixelLab exports to the `SpriteMetadata` schema Phase 1 will parse. Without this, every Phase 1.x parser test would have to handle two schemas; with it, the Swift code stays clean.
+
+### Task 0.5.1: Write `Scripts/normalize-pixellab-zip.sh`
+
+**Files:**
+- Create: `Scripts/normalize-pixellab-zip.sh` (executable)
+- Reference fixture: `docs/pet-design/v5-pixellab-evidence/raw-export-cat-tabby-adult-walk-south.zip` (real PixelLab export from gate verification — single direction, walk only)
+
+**Behavior (per design doc §2 "Normalize step"):**
+
+```
+Usage: Scripts/normalize-pixellab-zip.sh <raw-export.zip> <species>-<stage>.zip
+
+1. Unzip raw to temp dir
+2. Read metadata.json
+3. Iterate frames.animations.{uuid} keys (insertion order):
+   - Frame count per direction (sample first dir's array length):
+     * >= 6 → action = "walk"
+     * <  6 → action = "idle"
+   - If 1st key heuristic ties (e.g. both 8 frames), fall back to insertion-
+     order rule: 1st = walk, 2nd = idle (operator must generate walk first).
+   - Error+exit if heuristic and order disagree.
+4. Move each animations/animation-{uuid}/ → animations/{action}/
+5. Rewrite metadata.json:
+   - Wrap each animation entry: {fps, frame_count, loops, directions}
+     - walk defaults: fps=6, loops=true
+     - idle defaults: fps=2, loops=true
+     - frame_count = array length per direction
+   - Update all frame paths inside `directions` (animation-{uuid}/dir/file → {action}/dir/file)
+   - Set export_version = "3.0", v5_compatible = true
+6. Re-zip from temp dir to <species>-<stage>.zip
+7. Exit 0 on success
+```
+
+**Tests (manual smoke):**
+
+```bash
+# Smoke 1 — known-good real export from gate verification
+Scripts/normalize-pixellab-zip.sh \
+    .playwright-mcp/adult-grey-tabby-cat-with-dark-tiger-stripes-and-H.zip \
+    /tmp/cat-tabby-adult.zip
+
+unzip -p /tmp/cat-tabby-adult.zip metadata.json | python3 -m json.tool | grep -E "(export_version|walk|idle|fps|frame_count)"
+
+# Expected: export_version "3.0", walk block with fps=6 frame_count=8,
+# idle block with fps=2 frame_count=4 (if idle was generated; else just walk).
+```
+
+### Task 0.5.2: Optional — Swift parser sanity-test against normalized output
+
+After Task 0.5.1, drop the normalized zip into `PeerDropTests/Resources/Pets/test-anim-real.zip` for use by Phase 1.1 (instead of, or alongside, the hand-crafted `test-anim-v3.zip`).
+
+### Task 0.5.3: Commit
+
+```bash
+git add Scripts/normalize-pixellab-zip.sh
+git commit -m "feat(v5): normalize-pixellab-zip.sh — UUID→action rename + schema bump
+
+Phase 0.5. Bridges PixelLab raw export (UUID-keyed animation slots,
+export_version 2.0, no fps/frame_count) to v3.0 normalized schema
+that Swift SpriteMetadata parser will consume. Frame-count heuristic
+(>=6=walk, <6=idle) plus operator rule 'walk first' as tiebreaker.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
@@ -83,6 +165,8 @@ Build the renderer + animator infrastructure first. Tests use synthetic test fix
 - Test fixture: `PeerDropTests/Resources/Pets/test-anim-v3.zip` (hand-craft, small)
 
 **Step 1: Hand-craft test fixture**
+
+This fixture represents the **normalized** form (post-`Scripts/normalize-pixellab-zip.sh`), not the raw PixelLab export. Phase 0.5 produced a real normalized zip at `PeerDropTests/Resources/Pets/test-anim-real.zip` if you'd rather use it; the hand-crafted version below has the advantage of being tiny + fully predictable.
 
 Create `test-anim-v3.zip` with:
 - `rotations/south.png` (any 8×8 black PNG)

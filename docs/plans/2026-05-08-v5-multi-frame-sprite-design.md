@@ -82,26 +82,56 @@ SwiftUI Image in FloatingPetView
 
 ## Section 2 — Zip Format & PixelLab Asset-Gen Sprint
 
-### New zip layout
+### Two zip forms: raw (PixelLab export) vs normalized (shipped)
+
+PixelLab's actual export schema (verified 2026-05-08 via Pixel Apprentice tier) does **not** match the v3.0 schema this design originally assumed. PixelLab uses UUID-keyed animation slots, leaves `export_version` at `"2.0"`, and omits `fps` / `frame_count` / `loops` fields. Rather than complicate Swift code to parse two shapes, we run a **normalize step** between PixelLab export and bundling.
+
+### Raw form (as exported by PixelLab)
 
 ```
-ghost.zip/
-├── rotations/                           ← KEPT from v4 (static fallback, idle frame 1, etc.)
-│   ├── south.png … south-west.png       (8 directions)
+adult_grey_tabby_cat_…export.zip/
+├── rotations/                                       (8 directions, unchanged)
+│   └── south.png … south-west.png
 ├── animations/
-│   ├── walk/                            ← NEW
-│   │   ├── south_001.png … south_008.png
-│   │   ├── east_001.png … east_008.png
-│   │   └── (8 dir × 8 frames = 64 PNGs)
-│   └── idle/                            ← NEW
-│       ├── south_001.png … south_004.png
-│       └── (8 dir × 4 frames = 32 PNGs)
-└── metadata.json                        ← EXTENDED
+│   ├── animation-{uuid-A}/                          ← UUID-keyed slot
+│   │   └── south/frame_000.png … frame_007.png     (one folder per direction)
+│   └── animation-{uuid-B}/
+│       └── south/frame_000.png … frame_003.png
+└── metadata.json                                    (export_version: "2.0")
 ```
 
-Per-zip totals: 8 + 64 + 32 = **104 PNGs** + metadata. ~106 KB per zip × 324 zips = ~34 MB total.
+Real metadata.json (excerpt):
+```json
+{
+  "frames": {
+    "rotations": { "south": "rotations/south.png", ... },
+    "animations": {
+      "animation-3294cf41": {
+        "south": ["animations/animation-3294cf41/south/frame_000.png", ... 8 entries]
+      }
+    }
+  },
+  "export_version": "2.0"
+}
+```
 
-### Updated `metadata.json` schema
+### Normalized form (as shipped in `PeerDrop/Resources/Pets/`)
+
+```
+cat-tabby-adult.zip/
+├── rotations/                           ← KEPT from v4
+│   └── south.png … south-west.png
+├── animations/
+│   ├── walk/                            ← renamed from animation-{uuid-A} (8-frame heuristic)
+│   │   └── south/frame_000.png … frame_007.png
+│   └── idle/                            ← renamed from animation-{uuid-B} (4-frame heuristic)
+│       └── south/frame_000.png … frame_003.png
+└── metadata.json                        ← rewritten by normalize step
+```
+
+Per-zip totals once full coverage gen'd: 8 + 64 + 32 = **104 PNGs** + metadata. ~106 KB per zip × 324 zips = ~34 MB total.
+
+### Normalized `metadata.json` schema (what Swift parses)
 
 ```json
 {
@@ -114,7 +144,7 @@ Per-zip totals: 8 + 64 + 32 = **104 PNGs** + metadata. ~106 KB per zip × 324 zi
         "frame_count": 8,
         "loops": true,
         "directions": {
-          "south": ["animations/walk/south_001.png", "...", "animations/walk/south_008.png"],
+          "south": ["animations/walk/south/frame_000.png", "...", "animations/walk/south/frame_007.png"],
           "east": [...],
           ...
         }
@@ -127,14 +157,39 @@ Per-zip totals: 8 + 64 + 32 = **104 PNGs** + metadata. ~106 KB per zip × 324 zi
       }
     }
   },
-  "export_version": "3.0",   ← bumped from "2.0"
+  "export_version": "3.0",   ← bumped by normalize step
   "v5_compatible": true
 }
 ```
 
+### Normalize step — `Scripts/normalize-pixellab-zip.sh`
+
+Operator workflow per character export:
+
+1. Generate **walk first** in PixelLab (8-frame Walking preset), then **idle** (Idle preset). Order matters as a tiebreaker.
+2. Export ZIP from PixelLab.
+3. Run: `Scripts/normalize-pixellab-zip.sh <raw.zip> <species>-<stage>.zip`
+4. Drop normalized zip into `PeerDrop/Resources/Pets/`.
+
+What the script does:
+- Unzips raw.
+- For each `animations/animation-{uuid}/` directory:
+  - Counts frames per direction (sample one direction).
+  - **Heuristic:** ≥6 frames → `walk`, <6 → `idle`. (Single-action zips: rare, just one rename.)
+  - Tiebreaker on heuristic ambiguity: PixelLab metadata.json key insertion order (walk first per the operator rule above).
+- Renames each UUID directory to its action name (`walk` / `idle`).
+- Rewrites `metadata.json`:
+  - Wraps each direction-array in `{fps, frame_count, loops, directions}` — defaults `fps=6/loops=true` for walk, `fps=2/loops=true` for idle, `frame_count` = array length.
+  - Updates frame paths to new dir names.
+  - Sets `export_version` to `"3.0"`, adds `v5_compatible: true`.
+- Re-zips to `<species>-<stage>.zip`.
+- Errors loudly if heuristic + insertion-order disagree (operator must verify).
+
+This keeps the Swift `SpriteMetadata` parser dealing with a single, clean schema — all messiness lives in the bash script.
+
 ### PixelLab sprint structure (4 weeks)
 
-**Pre-flight gate (Day 1-2):** Verify PixelLab supports animation frame generation (likely yes — `frames.animations` exists in their schema, just empty in v4 batch). If not, fall back to ImageMagick post-processing or scope to B-standard.
+**Pre-flight gate (Day 1-2): VERIFIED 2026-05-08.** PixelLab Pixel Apprentice tier supports per-character animation generation natively via "Add Animation" UI with explicit "Walk (4/6/8 frames)" + "Idle" presets. Per-direction generation (radio-select direction → "Generate in Background" produces 8 frames for that direction). Schema delta vs. original assumption documented above; mitigated by `Scripts/normalize-pixellab-zip.sh`.
 
 **Week 1:** Foundation + 5-species spike. Generate cat × 5 breeds + dog × 5 breeds (30 zips) as proof-of-concept.
 
@@ -144,7 +199,7 @@ Per-zip totals: 8 + 64 + 32 = **104 PNGs** + metadata. ~106 KB per zip × 324 zi
 
 **Consistency strategy:** Reuse v4 character IDs in PixelLab when generating animations (if supported). Otherwise regenerate from prompt; accept 20-30% drift requiring retry.
 
-**Fallback if PixelLab fails:**
+**Fallback if PixelLab fails:** (no longer needed — PixelLab verified working; retained for historical context)
 - Plan B: ImageMagick post-process — translate paws ±2 px between frames. Cheap walk cycle, passable visual.
 - Plan C: Downscope to B-standard (6 walk + 3 idle) which may be more tractable.
 
@@ -410,7 +465,7 @@ Week 4 — Soak + ship
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| PixelLab can't generate animations natively | medium (unknown) | high | Day 1-2 verification gate; ImageMagick fallback or scope reduction |
+| PixelLab can't generate animations natively | ~~medium~~ **resolved 2026-05-08** | ~~high~~ | Verified — Pixel Apprentice has Walk (4/6/8 frame) + Idle presets. Schema-delta mitigated by `Scripts/normalize-pixellab-zip.sh` (UUID→action rename + export_version bump). |
 | Character drift between v4 static and v5 animated | medium | medium | Reuse v4 character IDs if PixelLab supports; else accept drift, document |
 | 30 %+ retry rate blows quota | low | medium | 6× quota buffer (324 / 2000); plenty of headroom |
 | Animation timer drains battery | low | medium | Pause on background; LRU cache caps memory; perf test gate |
