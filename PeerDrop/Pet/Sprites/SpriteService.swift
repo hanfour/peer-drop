@@ -6,7 +6,6 @@ import ZIPFoundation
 enum SpriteServiceError: Error {
     case assetNotFound(SpriteRequest)
     case directionMissing(SpriteRequest)
-    case animationDirectionMissing(action: PetAction, direction: SpriteDirection)
     case framePathMissing(String)
     case framePNGDecodeFailed(String)
 }
@@ -142,18 +141,25 @@ actor SpriteService {
             let dirKey = direction.rawValue
 
             if let actionKey = action.animationKey,
-               let anim = metadata.animations[actionKey] {
-                guard let paths = anim.directions[dirKey], !paths.isEmpty else {
-                    throw SpriteServiceError.animationDirectionMissing(
-                        action: action, direction: direction
-                    )
-                }
+               let anim = metadata.animations[actionKey],
+               let paths = anim.directions[dirKey],
+               !paths.isEmpty {
                 let images = try paths.map { try Self.decodePNG(zipURL: zipURL, path: $0) }
                 return AnimationFrames(images: images, fps: anim.fps, loops: anim.loops)
             }
 
-            // Fallback: v2 zip or v3 zip lacking the requested action.
-            // Treat the rotation PNG as a 1-frame "animation" with fps=1.
+            // Fallback path covers three real shapes:
+            //  - v2 zip (no animations block at all)
+            //  - v3 zip lacking the requested action (e.g. only walk shipped)
+            //  - v3 zip with the action but missing this direction
+            //    (Phase 3 ships partial coverage — production cat-tabby-adult
+            //    has walk/south/ only; east/west/etc must degrade gracefully
+            //    instead of throwing animationDirectionMissing all the way to
+            //    PetEngine, where try? would swallow it and the pet would
+            //    vanish on direction change).
+            // All three degrade to a 1-frame "animation" backed by the
+            // direction's rotation PNG. fps=1 so animator timer doesn't
+            // advance through nothing; loops=false because there's no cycle.
             guard let path = metadata.rotations[dirKey] else {
                 throw SpriteServiceError.framePathMissing("rotations/\(dirKey).png")
             }
