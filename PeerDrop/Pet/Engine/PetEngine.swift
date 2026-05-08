@@ -393,18 +393,25 @@ class PetEngine: ObservableObject {
             animator.setAction(action, frameCount: 1, fps: 1)
             return
         }
-        let species = pet.genome.resolvedSpeciesID
-        let stage = pet.level
         Task { [weak self] in
+            // Re-snapshot species + stage INSIDE the Task rather than
+            // capturing them at scheduling time. If the pet evolves
+            // (baby -> adult) between physicsState velocity emit and Task
+            // resumption — which can be many physics ticks later under
+            // load — we'd otherwise bind the animator with the previous
+            // stage's frame count and the renderer would read the new
+            // stage's frames. (`safeIndex` in PetRendererV3 defends against
+            // the residual await-during-evolution race by wrapping
+            // out-of-bounds frameIndex to 0; this fix narrows the window.)
+            guard let species = self?.pet.genome.resolvedSpeciesID,
+                  let stage = self?.pet.level else { return }
             let request = AnimationRequest(
                 species: species, stage: stage, direction: .south, action: action)
             do {
                 let frames = try await SpriteService.shared.frames(for: request)
-                guard let self else { return }
-                self.animator.setAction(action, frameCount: frames.images.count, fps: frames.fps)
+                self?.animator.setAction(action, frameCount: frames.images.count, fps: frames.fps)
             } catch {
-                guard let self else { return }
-                self.animator.setAction(action, frameCount: 1, fps: 1)
+                self?.animator.setAction(action, frameCount: 1, fps: 1)
             }
         }
     }
