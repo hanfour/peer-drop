@@ -306,26 +306,34 @@ class PetEngine: ObservableObject {
 
     // MARK: - Rendering
     func updateRenderedImage() {
-        // V3 path: PNG sprite via SpriteService + mood SF Symbol overlay.
+        // v5: PNG sprite via SpriteService + mood SF Symbol overlay,
+        // multi-frame animated. Calls the renderer's v5 overload with the
+        // animator's currentAction + currentFrame so each animator tick
+        // produces a different frame. v4-format zips (no animations block)
+        // are handled by SpriteService's graceful 1-frame fallback, so this
+        // path doesn't need to special-case them.
+        //
         // SpriteService is an actor, so the call is async and dispatched as a
         // Task. We cancel any in-flight Task before queuing the next one —
         // otherwise rapid facingRight flips (or evolution + interaction in
         // the same frame) could see a slow earlier render complete after a
         // fast later one and overwrite renderedImage with a stale frame.
-        //
-        // The animator-driven per-frame trigger is preserved — repeated calls
-        // with the same arguments hit the SpriteService cache cheaply, and
-        // PetRendererV3's own composite memoization (M4 fix) skips the
-        // UIGraphicsImageRenderer pass when the inputs haven't changed.
         let genome = pet.genome
         let level = pet.level
         let mood = pet.mood
         let direction: SpriteDirection = physicsState.facingRight ? .east : .west
+        let action = animator.currentAction
+        let frameIndex = animator.currentFrame
 
         renderTask?.cancel()
         renderTask = Task { @MainActor [weak self, rendererV3, sharedRenderedPet] in
             let img = try? await rendererV3.render(
-                genome: genome, level: level, mood: mood, direction: direction)
+                genome: genome,
+                level: level,
+                direction: direction,
+                action: action,
+                frameIndex: frameIndex,
+                mood: mood)
             // If a newer updateRenderedImage() call cancelled us between the
             // await and resumption, drop this frame on the floor.
             guard !Task.isCancelled else { return }
@@ -341,11 +349,64 @@ class PetEngine: ObservableObject {
         }
     }
 
+    /// Velocity magnitude (px/s) below which the pet is treated as idle.
+    /// Tuned to ignore sub-pixel residuals from physics integration
+    /// (throwDecay leaves tiny dx after the pet appears stopped). Too low
+    /// = pet "twitches" between idle and walk; too high = small genuine
+    /// movements get classified as idle.
+    static let walkVelocityThreshold: Double = 5.0
+
+    /// Maps a physics velocity to a v5 PetAction. Public for unit tests.
+    static func actionFromVelocity(_ velocity: CGVector) -> PetAction {
+        let speed = hypot(Double(velocity.dx), Double(velocity.dy))
+        return speed > walkVelocityThreshold ? .walking : .idle
+    }
+
     private func setupAnimationObserver() {
         animator.startAnimation()
+
+        // Each animator tick triggers a re-render so the new frameIndex
+        // reaches the renderer.
         animator.$currentFrame
             .sink { [weak self] _ in self?.updateRenderedImage() }
             .store(in: &cancellables)
+
+        // v5 action selection: physics velocity drives walk vs idle.
+        // removeDuplicates() filters identical action emissions so the
+        // animator only re-binds on genuine action transitions (preserves
+        // frameIndex on direction-only changes via setAction's same-action
+        // dedup).
+        $physicsState
+            .map { Self.actionFromVelocity($0.velocity) }
+            .removeDuplicates()
+            .sink { [weak self] action in self?.dispatchActionToAnimator(action) }
+            .store(in: &cancellables)
+    }
+
+    /// Resolves the metadata-defined frameCount + fps for `action` on the
+    /// pet's species/stage and rebinds the animator. v4-format zips (no
+    /// animations block) and unsupported actions both fall back to a single
+    /// 1-frame loop — animator still ticks, renderer's frameIndex stays at
+    /// 0, render output stays static.
+    private func dispatchActionToAnimator(_ action: PetAction) {
+        guard action.animationKey != nil else {
+            animator.setAction(action, frameCount: 1, fps: 1)
+            return
+        }
+        let species = pet.genome.resolvedSpeciesID
+        let stage = pet.level
+        Task { [weak self] in
+            let request = AnimationRequest(
+                species: species, stage: stage, direction: .south, action: action)
+            do {
+                let frames = try await SpriteService.shared.frames(for: request)
+                guard let self else { return }
+                self.animator.setAction(action, frameCount: frames.images.count, fps: frames.fps)
+            } catch {
+                guard let self else { return }
+                self.animator.setAction(action, frameCount: 1, fps: 1)
+            }
+        }
     }
 
     // MARK: - Shared State & Live Activity
