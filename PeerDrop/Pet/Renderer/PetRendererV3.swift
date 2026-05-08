@@ -94,6 +94,63 @@ final class PetRendererV3 {
         return composited
     }
 
+    /// v5 multi-frame entry. Picks `frameIndex` from the action's frame array
+    /// (or wraps to 0 if out of bounds) and composites the mood overlay.
+    /// Same ultimateFallback species behavior as the v4 entry above.
+    /// Doesn't share the `lastComposite` memoization with the v4 entry: the
+    /// new key would need to include action+frameIndex, and animator-driven
+    /// renders at ~12 Hz mostly hit different frames anyway.
+    func render(
+        genome: PetGenome,
+        level: PetLevel,
+        direction: SpriteDirection,
+        action: PetAction,
+        frameIndex: Int,
+        mood: PetMood
+    ) async throws -> CGImage {
+        let species = genome.resolvedSpeciesID
+        let basePNG = try await loadAnimationFrame(
+            species: species,
+            stage: level,
+            direction: direction,
+            action: action,
+            frameIndex: frameIndex
+        )
+        return composite(basePNG: basePNG, mood: mood)
+    }
+
+    private func loadAnimationFrame(
+        species: SpeciesID,
+        stage: PetLevel,
+        direction: SpriteDirection,
+        action: PetAction,
+        frameIndex: Int
+    ) async throws -> CGImage {
+        let request = AnimationRequest(species: species, stage: stage, direction: direction, action: action)
+        do {
+            let frames = try await service.frames(for: request)
+            return frames.images[safeIndex(frameIndex, in: frames.images.count)]
+        } catch SpriteServiceError.assetNotFound {
+            if species == Self.ultimateFallback {
+                throw SpriteServiceError.assetNotFound(request.spriteRequest)
+            }
+            rendererLogger.warning("Asset missing for species=\(species.rawValue, privacy: .public) stage=\(stage.rawValue); falling back to \(Self.ultimateFallback.rawValue, privacy: .public)")
+            let fallback = AnimationRequest(
+                species: Self.ultimateFallback,
+                stage: stage,
+                direction: direction,
+                action: action
+            )
+            let frames = try await service.frames(for: fallback)
+            return frames.images[safeIndex(frameIndex, in: frames.images.count)]
+        }
+    }
+
+    private func safeIndex(_ requested: Int, in count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return (requested >= 0 && requested < count) ? requested : 0
+    }
+
     /// Fetches the base sprite, falling back to `ultimateFallback` when the
     /// requested species×stage has no shipping zip. Without this, legacy
     /// `BodyGene.ghost` pets and incomplete species (e.g. `octopus-adult`,

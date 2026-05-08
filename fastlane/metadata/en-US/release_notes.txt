@@ -1,8 +1,11 @@
-PeerDrop 4.0.1 — Welcome Reveal
+PeerDrop 5.0 — Pets Come Alive
 
 What's new:
-- Pets now appear immediately on first launch with a welcome reveal — no more egg waiting.
-- v3.x users with hatching pets: your egg has hatched! See the species name and welcome screen.
+- Pets now walk with full multi-frame animations across every direction.
+- Subtle idle breathing brings pets to life when they're at rest.
+- Direction changes are smoother — your pet keeps animating mid-turn.
 
-Bug fixes:
-- Fixed missing pet visuals for v3.x users whose pets were still in egg stage when upgrading.
+Behind the scenes:
+- New sprite pipeline supports per-action frame arrays (walk, idle).
+- Bundle size is slightly larger to accommodate the new frames.
+- All v4 features and your saved pet are unchanged.

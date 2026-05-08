@@ -13,6 +13,7 @@ struct PeerDropApp: App {
     @State private var pendingInvite: InvitePayload?
     @State private var showInviteAccept = false
     @State private var showV4UpgradeOnboarding = false
+    @State private var showV5UpgradeOnboarding = false
 
     var body: some Scene {
         WindowGroup {
@@ -86,6 +87,27 @@ struct PeerDropApp: App {
                     // installs (no migrationDoneAt) skip this.
                     if V4UpgradeOnboarding.shouldPresent(for: petEngine.pet) {
                         showV4UpgradeOnboarding = true
+                    } else if V5UpgradeOnboarding.shouldPresent() {
+                        // v5 upgrade is mutually exclusive with v4 upgrade in
+                        // a single launch — if both fire, v4 gets priority
+                        // (it's the older, less-recently-seen one and chains
+                        // naturally; the v5 sheet will surface on the next
+                        // launch via the AppStorage gate).
+                        showV5UpgradeOnboarding = true
+                    }
+                    // Phase 6 — widget bridge invalidation. The App Group's
+                    // pet-rendered.png is whatever the LAST main-app render
+                    // wrote, which on a v4-installed device is a v4
+                    // single-frame image. Trigger a fresh render on the
+                    // first v5 launch (renderedImageVersion transitions
+                    // "" or "v4" -> "v5") so the widget picks up the new
+                    // multi-frame output. Persisted gate runs exactly once
+                    // per device per renderer-version bump.
+                    let renderedVersion = UserDefaults.standard
+                        .string(forKey: "renderedImageVersion") ?? ""
+                    if renderedVersion != "v5" {
+                        petEngine.updateRenderedImage()
+                        UserDefaults.standard.set("v5", forKey: "renderedImageVersion")
                     }
                 }
 
@@ -124,6 +146,14 @@ struct PeerDropApp: App {
                     petName: petEngine.pet.name
                 ) {
                     showV4UpgradeOnboarding = false
+                }
+            }
+            .sheet(isPresented: $showV5UpgradeOnboarding) {
+                V5UpgradeOnboarding(
+                    petImage: petEngine.renderedImage,
+                    petName: petEngine.pet.name
+                ) {
+                    showV5UpgradeOnboarding = false
                 }
             }
         }
