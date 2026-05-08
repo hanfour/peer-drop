@@ -14,8 +14,9 @@ final class SpeciesCatalogTests: XCTestCase {
         // docs/pet-design/ai-brief/species-zips-stages/. Update this when assets
         // are added or removed during the gen sprint.
         // Breakdown: 31 multi-variety families × their variants = 101 IDs,
-        // + 3 single-variety legacy families (bird, frog, octopus) = 104.
-        XCTAssertEqual(SpeciesCatalog.allIDs.count, 104)
+        // + 3 single-variety legacy families (bird, frog, octopus) + ghost
+        // (v4.0.2 single-stage species, bare ghost.zip) = 105.
+        XCTAssertEqual(SpeciesCatalog.allIDs.count, 105)
     }
 
     func test_allIDs_areUnique() {
@@ -53,8 +54,9 @@ final class SpeciesCatalogTests: XCTestCase {
 
     func test_allIDs_containsSingleVarietyLegacyFamilies() {
         // bird, frog, octopus exist as zip-bearing families with no sub-variety
-        // → SpeciesID is the bare family name.
-        for id in ["bird", "frog", "octopus"] {
+        // → SpeciesID is the bare family name. v4.0.2: ghost joined this group
+        // as a single-stage species (bare ghost.zip used at every PetLevel).
+        for id in ["bird", "frog", "ghost", "octopus"] {
             XCTAssertTrue(SpeciesCatalog.allIDs.contains(SpeciesID(id)),
                           "allIDs missing single-variety legacy family: \(id)")
         }

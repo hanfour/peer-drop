@@ -74,15 +74,19 @@ final class PetRendererV3Tests: XCTestCase {
         }
     }
 
-    // MARK: - ghost: no v4.0 asset → falls back to cat-tabby placeholder
+    // MARK: - ghost: v4.0.2 single-stage species (renders its own sprite)
 
-    func test_render_ghostBody_fallsBackToUltimatePlaceholder() async throws {
-        // BodyGene.ghost maps to SpeciesID("ghost"), which isn't in the
-        // catalog (M2.3) and has no bundled asset. The renderer's
-        // ultimateFallback (cat-tabby) kicks in so users with legacy ghost
-        // pets see a placeholder pet instead of a blank rectangle. Pin both
-        // the success outcome and the fallback identity by checking the
-        // dimensions match cat-tabby's 68×68 output.
+    func test_render_ghostBody_rendersGhostSprite() async throws {
+        // v4.0.1 and earlier: BodyGene.ghost mapped to SpeciesID("ghost") which
+        // wasn't in SpeciesCatalog and had no bundled asset, so the renderer's
+        // ultimateFallback (cat-tabby, 68×68) kicked in — users reported "my
+        // ghost shows as a cat".
+        //
+        // v4.0.2 fix: ghost added to SpeciesCatalog as a single-stage species,
+        // ghost.zip bundled (48×48 PixelLab output, same zip used at every
+        // PetLevel via SpriteAssetResolver.singleStageSpecies). The render now
+        // succeeds with the ghost's own sprite — pin the dimensions to 48×48
+        // to lock out a regression to the cat-tabby fallback (68×68).
         let renderer = makeRenderer()
         var ghost = PetGenome.random()
         ghost.body = .ghost
@@ -90,8 +94,8 @@ final class PetRendererV3Tests: XCTestCase {
         ghost.seed = nil
         let cg = try await renderer.render(
             genome: ghost, level: .adult, mood: .happy, direction: .east)
-        XCTAssertEqual(cg.width, 68, "ghost should render via the cat-tabby placeholder (68×68)")
-        XCTAssertEqual(cg.height, 68)
+        XCTAssertEqual(cg.width, 48, "ghost should render its own sprite (48×48), NOT the cat-tabby fallback (68×68)")
+        XCTAssertEqual(cg.height, 48)
     }
 
     // MARK: - mood overlay (M4b.2)

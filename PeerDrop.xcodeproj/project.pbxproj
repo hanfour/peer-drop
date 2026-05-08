@@ -564,10 +564,10 @@
 		4E541AC353B141C1ABC8F38B /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		4E9F8793914905C74E5A28D3 /* SpriteDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteDecoderTests.swift; sourceTree = "<group>"; };
 		4EA9862E96770E9E7C4DC4E2 /* PeerConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionState.swift; sourceTree = "<group>"; };
+		4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		4EF1CBD311D71DDF863068E4 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		4EFB0FFA7A2462D7EC7DEF40 /* PetAction+AnimationKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PetAction+AnimationKey.swift"; sourceTree = "<group>"; };
 		4FA61FA1584A3CF475D12AF1 /* PetPersonalityBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPersonalityBehaviorTests.swift; sourceTree = "<group>"; };
-		4FD5086C3376E21134107150 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteView.swift; sourceTree = "<group>"; };
 		50393228F69F31F111E2B37B /* VoiceCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallView.swift; sourceTree = "<group>"; };
 		505238DF5946BC1E6E39B70B /* NearbyTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyTab.swift; sourceTree = "<group>"; };
@@ -870,7 +870,7 @@
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
 				348FC413895A2131299A9250 /* PeerDropWidget */,
-				3A89ABADD4A5A1BB165D23DF /* v5-multi-frame */,
+				8135E0A166B3192E253501A4 /* v5-aging-ghost */,
 				B852FD7C848E2615AF9BF284 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1053,15 +1053,6 @@
 			path = PeerDropTests;
 			sourceTree = "<group>";
 		};
-		3A89ABADD4A5A1BB165D23DF /* v5-multi-frame */ = {
-			isa = PBXGroup;
-			children = (
-				4FD5086C3376E21134107150 /* Secrets.xcconfig */,
-			);
-			name = "v5-multi-frame";
-			path = .;
-			sourceTree = "<group>";
-		};
 		5182040E2FCD926A6810345D /* Model */ = {
 			isa = PBXGroup;
 			children = (
@@ -1235,6 +1226,15 @@
 				F5D979E35021B42ECC2F105F /* TailscalePeer.swift */,
 			);
 			path = Discovery;
+			sourceTree = "<group>";
+		};
+		8135E0A166B3192E253501A4 /* v5-aging-ghost */ = {
+			isa = PBXGroup;
+			children = (
+				4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */,
+			);
+			name = "v5-aging-ghost";
+			path = .;
 			sourceTree = "<group>";
 		};
 		86FB5FB7C6AB5DE16D960E48 /* Resources */ = {
@@ -2309,7 +2309,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4FD5086C3376E21134107150 /* Secrets.xcconfig */;
+			baseConfigurationReference = 4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2332,7 +2332,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4FD5086C3376E21134107150 /* Secrets.xcconfig */;
+			baseConfigurationReference = 4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

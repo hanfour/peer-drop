@@ -80,6 +80,27 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         }
     }
 
+    // MARK: - single-stage species (v4.0.2)
+
+    /// Single-stage species (`SpriteAssetResolver.singleStageSpecies`) ship one
+    /// zip total — the bare family ID, no stage suffix — and the same asset is
+    /// returned for every PetLevel. v4.0.2 added ghost; this test pins the
+    /// expectation that the bundle contains `<id>.zip` for each entry, since
+    /// the resolver's shortcut would otherwise silently drop a missing zip
+    /// onto the renderer's ultimateFallback (cat-tabby) — exactly the v4.0.1
+    /// "ghost shows as cat" bug we're fixing.
+    func test_mainBundle_containsBareZip_forEverySingleStageSpecies() {
+        var missing: [String] = []
+        for id in SpriteAssetResolver.singleStageSpecies {
+            let req = SpriteRequest(species: id, stage: .adult, direction: .east)
+            if SpriteAssetResolver.url(for: req, in: mainBundle) == nil {
+                missing.append(id.rawValue)
+            }
+        }
+        XCTAssertEqual(missing, [],
+                       "Missing bare zip for \(missing.count) single-stage species: \(missing.joined(separator: ", "))")
+    }
+
     // MARK: - end-to-end render via main bundle
 
     func test_mainBundle_endToEnd_decodesCatTabbyAdultEast() async throws {
