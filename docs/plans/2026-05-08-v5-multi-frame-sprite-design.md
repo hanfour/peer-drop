@@ -191,6 +191,12 @@ This keeps the Swift `SpriteMetadata` parser dealing with a single, clean schema
 
 **Pre-flight gate (Day 1-2): VERIFIED 2026-05-08.** PixelLab Pixel Apprentice tier supports per-character animation generation natively via "Add Animation" UI with explicit "Walk (4/6/8 frames)" + "Idle" presets. Per-direction generation (radio-select direction → "Generate in Background" produces 8 frames for that direction). Schema delta vs. original assumption documented above; mitigated by `Scripts/normalize-pixellab-zip.sh`.
 
+**Phase 2 partial verification (2026-05-08):** End-to-end pipeline (PixelLab → normalize → SpriteService → PetRendererV3 v5 overload → PetAnimationController → PetEngine) verified against a 2-direction walk export. Two findings for Phase 3 readiness:
+
+1. **Operator must generate at the v4 sprite size (68×68)**, NOT PixelLab's default 48×48. The user's existing PixelLab character library has a regenerated cat-tabby-adult at 48×48 (with "HAPPY EXPRESSION" prompt addition); using that as-is would visibly shrink user pets ~30%. Phase 3 mass-gen must explicitly target 68×68 in PixelLab's character creation flow, OR find/restore the original v4 68×68 characters.
+
+2. **Operators may accidentally create duplicate animation slots** when clicking through the "Add Animation" flow on a character that already has an animation. The normalize script now auto-deduplicates: if 2+ animation keys all heuristic-detect as `walk` (or all as `idle`), keep the slot with the most total frames and warn-drop the rest. Validated against a real 2-walk-slot export.
+
 **Week 1:** Foundation + 5-species spike. Generate cat × 5 breeds + dog × 5 breeds (30 zips) as proof-of-concept.
 
 **Week 2:** Mass generation (~150-200 zips at 8/day fast tier).

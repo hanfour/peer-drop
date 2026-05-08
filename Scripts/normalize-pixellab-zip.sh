@@ -73,44 +73,68 @@ if not animations:
     sys.exit(1)
 
 uuid_keys = list(animations.keys())
-if len(uuid_keys) > 2:
-    print(f"Error: expected <=2 animations, found {len(uuid_keys)}: {uuid_keys}",
-          file=sys.stderr)
-    sys.exit(1)
 
 def first_dir_count(anim_dict):
     for _, frame_list in anim_dict.items():
         return len(frame_list)
     return 0
 
+def total_frames(anim_dict):
+    return sum(len(v) for v in anim_dict.values())
+
+def heuristic_for(key):
+    return "walk" if first_dir_count(animations[key]) >= 6 else "idle"
+
+# Bucket keys by heuristic-detected action. Operators sometimes accidentally
+# create duplicate animation slots in PixelLab (e.g. clicking through "Add
+# Animation" again on a partial walk). When that happens, the smaller slot is
+# the orphan: keep the one with more total frames, drop the rest with a
+# warning. Mass-gen sprint will hit this regularly so erroring out is too
+# strict.
+walk_candidates = [k for k in uuid_keys if heuristic_for(k) == "walk"]
+idle_candidates = [k for k in uuid_keys if heuristic_for(k) == "idle"]
+
+def pick_largest(candidates, label):
+    if not candidates:
+        return None, []
+    if len(candidates) == 1:
+        return candidates[0], []
+    sorted_keys = sorted(candidates, key=lambda k: total_frames(animations[k]), reverse=True)
+    keep = sorted_keys[0]
+    drop = sorted_keys[1:]
+    print(
+        f"Warning: {len(candidates)} {label} slots found; keeping '{keep[:18]}' "
+        f"({total_frames(animations[keep])} frames) and dropping orphan(s): "
+        f"{[k[:18] for k in drop]}",
+        file=sys.stderr,
+    )
+    return keep, drop
+
+walk_key, walk_drops = pick_largest(walk_candidates, "walk")
+idle_key, idle_drops = pick_largest(idle_candidates, "idle")
+dropped_keys = set(walk_drops) | set(idle_drops)
+
+assignments = []
+if walk_key:
+    assignments.append((walk_key, "walk"))
+if idle_key:
+    assignments.append((idle_key, "idle"))
+
+if not assignments:
+    print("Error: no animations after filtering", file=sys.stderr)
+    sys.exit(1)
+
 DEFAULTS = {
     "walk": {"fps": 6, "loops": True},
     "idle": {"fps": 2, "loops": True},
 }
 
-assignments = []
-for idx, key in enumerate(uuid_keys):
-    fcount = first_dir_count(animations[key])
-    heuristic = "walk" if fcount >= 6 else "idle"
-
-    if len(uuid_keys) == 2:
-        order = "walk" if idx == 0 else "idle"
-        if heuristic != order:
-            print(
-                f"Error: heuristic ({heuristic}, frames={fcount}) and insertion "
-                f"order ({order}) disagree for key '{key}'. Operator must "
-                f"regenerate with walk first.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        assignments.append((key, order))
-    else:
-        assignments.append((key, heuristic))
-
-actions_seen = [a for _, a in assignments]
-if len(set(actions_seen)) != len(actions_seen):
-    print(f"Error: duplicate action assignments: {assignments}", file=sys.stderr)
-    sys.exit(1)
+# Clean up dropped orphan directories on disk (they'll bloat the zip
+# unnecessarily otherwise).
+for k in dropped_keys:
+    orphan_dir = os.path.join(tmp, "animations", k)
+    if os.path.isdir(orphan_dir):
+        shutil.rmtree(orphan_dir)
 
 new_animations = {}
 for key, action in assignments:

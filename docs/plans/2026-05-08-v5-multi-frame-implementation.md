@@ -573,17 +573,34 @@ subscription on animator.$currentFrame triggers re-render."
 
 After Phase 1 lands, the code can render multi-frame animations IF a v3 zip is bundled. This phase generates ONE real zip via PixelLab and verifies the full pipeline.
 
+### Phase 2 partial verification (2026-05-08)
+
+Pipeline end-to-end verified using a 2-direction walk-only export:
+1. PixelLab character → "Add Animation" → Walk (8 frames) → Generate in Background per direction (south, south-east generated; east still queued)
+2. Export → ZIP (raw form, UUID-keyed, export_version "2.0")
+3. `Scripts/normalize-pixellab-zip.sh` → normalized v3.0 form (auto-deduplicates orphan duplicate Walk slots, warning instead of erroring)
+4. xcodebuild test → all 18 v5-touched tests green (parser, service, renderer, animator, engine)
+
+Two findings discovered during this verification — required for Phase 3 mass-gen:
+
+**Finding A — Sprite size constraint (68×68):**
+The user's PixelLab library had a regenerated cat-tabby-adult at 48×48 (smaller than v4's 68×68). Test `MainBundleAssetCoverageTests.test_mainBundle_endToEnd_decodesCatTabbyAdultEast` asserts width/height = 68 on the production bundle. Swapping in a 48×48 zip broke this test AND would shrink user-visible sprites ~30%. **Phase 3 mass-gen must explicitly generate at 68×68** (PixelLab character creation flow's "Size" field), or find/restore the original v4-era 68×68 characters in the user's PixelLab library. Production zip was reverted; partial 48×48 evidence stashed at `docs/pet-design/v5-pixellab-evidence/normalized-cat-tabby-adult-partial-2dirs.zip` for reference only.
+
+**Finding B — Operator may create duplicate animation slots:**
+Clicking through "Add Animation" → Walk (8 frames) on a character that already has a Walk slot creates a NEW slot rather than reusing the existing. The normalize script's heuristic+order disambiguation would have errored. Updated to auto-deduplicate: if N>=2 keys all detect as `walk` (or all as `idle`), keep the one with most total frames and warn-drop the rest. Validated against real 2-walk-slot export.
+
 ### Task 2.1: Generate cat-tabby-adult v5 zip via PixelLab
 
 **Files:** `PeerDrop/Resources/Pets/cat-tabby-adult.zip` (replace v4)
 
 **Operator steps:**
 1. Open PixelLab
-2. Load existing cat-tabby-adult character by ID (from old metadata.json)
-3. Add walk animation: 8 frames, 8 directions
+2. **Use the original 68×68 v4-era character (ID `e04e5c20-758a-4a8f-8781-0a35f1f2131f` per old metadata.json), NOT the 48×48 regenerated character (`de4b1d65-...`).** If the original is missing from the library, regenerate explicitly at 68×68 via Create Character.
+3. Add walk animation: 8 frames, 8 directions (one Generate in Background per direction)
 4. Add idle animation: 4 frames, 8 directions
 5. Export ZIP
-6. Replace `PeerDrop/Resources/Pets/cat-tabby-adult.zip`
+6. Run `Scripts/normalize-pixellab-zip.sh <export.zip> PeerDrop/Resources/Pets/cat-tabby-adult.zip`
+7. Verify `MainBundleAssetCoverageTests.test_mainBundle_endToEnd_decodesCatTabbyAdultEast` still passes (asserts 68×68)
 
 ### Task 2.2: Manual smoke — cat-tabby walks in simulator
 
