@@ -34,6 +34,38 @@ final class PetEngineActionSelectionTests: XCTestCase {
         XCTAssertEqual(action, .idle)
     }
 
+    // MARK: - S3 hysteresis: nextAction(previous:velocity:)
+
+    func test_nextAction_idleAndSpeedInHysteresisBand_staysIdle() {
+        // Speed=4 is between exit=3 and enter=5; idle stays idle.
+        let action = PetEngine.nextAction(previous: .idle, velocity: CGVector(dx: 4, dy: 0))
+        XCTAssertEqual(action, .idle)
+    }
+
+    func test_nextAction_walkingAndSpeedInHysteresisBand_staysWalking() {
+        // Speed=4 is between exit=3 and enter=5; walking stays walking
+        // (this is the hysteresis behavior — the same speed that wouldn't
+        // start a walk continues an in-progress walk).
+        let action = PetEngine.nextAction(previous: .walking, velocity: CGVector(dx: 4, dy: 0))
+        XCTAssertEqual(action, .walking)
+    }
+
+    func test_nextAction_idleAboveEnterThreshold_promotesToWalking() {
+        let action = PetEngine.nextAction(previous: .idle, velocity: CGVector(dx: 6, dy: 0))
+        XCTAssertEqual(action, .walking)
+    }
+
+    func test_nextAction_walkingBelowExitThreshold_demotesToIdle() {
+        let action = PetEngine.nextAction(previous: .walking, velocity: CGVector(dx: 2, dy: 0))
+        XCTAssertEqual(action, .idle)
+    }
+
+    func test_nextAction_walkingExactlyAtExitThreshold_staysWalking() {
+        // Boundary inclusive on the walking side (>= 3.0 stays walking).
+        let action = PetEngine.nextAction(previous: .walking, velocity: CGVector(dx: 3, dy: 0))
+        XCTAssertEqual(action, .walking)
+    }
+
     // MARK: - Engine integration: physicsState transitions drive animator
 
     private func makeEngine() -> PetEngine {

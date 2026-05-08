@@ -349,17 +349,36 @@ class PetEngine: ObservableObject {
         }
     }
 
-    /// Velocity magnitude (px/s) below which the pet is treated as idle.
+    /// Velocity magnitude (px/s) ABOVE which idle promotes to walking.
     /// Tuned to ignore sub-pixel residuals from physics integration
-    /// (throwDecay leaves tiny dx after the pet appears stopped). Too low
-    /// = pet "twitches" between idle and walk; too high = small genuine
-    /// movements get classified as idle.
-    static let walkVelocityThreshold: Double = 5.0
+    /// (throwDecay leaves tiny dx after the pet appears stopped).
+    static let walkEnterThreshold: Double = 5.0
 
-    /// Maps a physics velocity to a v5 PetAction. Public for unit tests.
-    static func actionFromVelocity(_ velocity: CGVector) -> PetAction {
+    /// Velocity magnitude (px/s) BELOW which walking demotes back to idle.
+    /// Lower than the enter threshold to give hysteresis around the bound:
+    /// without the gap, a velocity that oscillates near 5.0 (e.g. friction
+    /// damping a throw) would flap walk→idle→walk every physics tick,
+    /// each transition spawning a fresh Task in dispatchActionToAnimator.
+    static let walkExitThreshold: Double = 3.0
+
+    /// Maps (previous action, current velocity) to the next v5 PetAction
+    /// using a hysteresis band: walking only exits below 3.0 px/s; idle
+    /// only enters walk above 5.0 px/s. Pure function for unit testing.
+    static func nextAction(previous: PetAction, velocity: CGVector) -> PetAction {
         let speed = hypot(Double(velocity.dx), Double(velocity.dy))
-        return speed > walkVelocityThreshold ? .walking : .idle
+        switch previous {
+        case .walking:
+            return speed >= walkExitThreshold ? .walking : .idle
+        default:
+            return speed > walkEnterThreshold ? .walking : .idle
+        }
+    }
+
+    /// Stateless variant retained for unit tests of the simple threshold
+    /// case (the integration tests exercise the hysteresis path via the
+    /// engine pipeline below). Treats the caller as starting from idle.
+    static func actionFromVelocity(_ velocity: CGVector) -> PetAction {
+        return nextAction(previous: .idle, velocity: velocity)
     }
 
     private func setupAnimationObserver() {
@@ -371,13 +390,18 @@ class PetEngine: ObservableObject {
             .sink { [weak self] _ in self?.updateRenderedImage() }
             .store(in: &cancellables)
 
-        // v5 action selection: physics velocity drives walk vs idle.
-        // removeDuplicates() filters identical action emissions so the
-        // animator only re-binds on genuine action transitions (preserves
-        // frameIndex on direction-only changes via setAction's same-action
-        // dedup).
+        // v5 action selection: physics velocity drives walk vs idle, with
+        // hysteresis. .scan threads the previous action through the
+        // pipeline so each emit can compare current speed to the right
+        // threshold (enter at 5 px/s, exit at 3 px/s — see nextAction).
+        // removeDuplicates() then filters away the steady-state same-action
+        // emissions so dispatchActionToAnimator only fires on genuine
+        // transitions; this preserves frameIndex through direction-only
+        // physics changes via setAction's same-action dedup.
         $physicsState
-            .map { Self.actionFromVelocity($0.velocity) }
+            .scan(PetAction.idle) { previous, state in
+                Self.nextAction(previous: previous, velocity: state.velocity)
+            }
             .removeDuplicates()
             .sink { [weak self] action in self?.dispatchActionToAnimator(action) }
             .store(in: &cancellables)
