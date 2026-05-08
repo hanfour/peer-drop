@@ -1,14 +1,73 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
+> **🚧 v5 mass-gen in progress** — `feat/v5-multi-frame` branch (code-complete 2026-05-08, 22 commits past main). Adds multi-frame walk + idle animations to all v4 species. Full coverage requires re-generating each species×stage with PixelLab's "Add Animation" UI (~104 generations per character). Pacing: ~5 months at 2,000/mo Apprentice quota. v5 builds ON TOP of the v4.0 frozen asset baseline below — per-zip drop workflow + PixelLab gotchas live in §0; §1–§6 stays as the v4.0 historical record.
+>
 > **🏁 v4.0 SHIPPED — workstream frozen.** Batch 2 (33 species, ~440 zips) integrated via PR #28 (M0–M12); 324 zips bundled into `PeerDrop/Resources/Pets/` (M5.1 commit `176f079`); v4.0.0 build 1 uploaded to TestFlight 2026-05-04, awaiting soak. Day 0 baseline at `4036e4c`. This file is preserved as **technical reference** for: PixelLab subscription/quota lessons (§1), zip naming convention (§3), submission JS pattern (§5), and per-breed visual-quality field notes (§6 batch logs).
 >
 > **Active workstream signals to find elsewhere:**
+> - v5 design + plan: `docs/plans/2026-05-08-v5-multi-frame-sprite-design.md` + `2026-05-08-v5-multi-frame-implementation.md`
+> - v5 reviewer notes + soak log: `docs/release/v5.0-reviewer-notes.md` + `v5.0-soak-log.md`
+> - v5 acceptance gate: `PeerDropTests/Pet/MainBundleAssetCoverageTests.swift` — `expectedV5Coverage` whitelist, `phase3Complete` flag
 > - v4.0 ship status / soak: `docs/release/v4.0-soak-log.md`
 > - v4.0 reviewer notes: `docs/release/v4.0-reviewer-notes.md`
 > - v4.0 submission gates: `docs/pet-design/v4-submission-checklist.md`
 
-**Last updated:** 2026-05-05 (frozen post-v4.0 ship; previously 2026-04-29 session 4 autonomous run completed)
-**Purpose:** Historical record of the v4.0 pet redesign asset pipeline + technical reference for any future asset gen.
+**Last updated:** 2026-05-08 (v5 mass-gen banner + §0 added; v4.0 sections frozen)
+**Purpose:** Historical record of the v4.0 pet redesign asset pipeline (§1–§6) + active v5 mass-gen workflow (§0) + technical reference for any future asset gen.
+
+---
+
+## 0. v5 Multi-Frame Mass-Gen — Active Workstream
+
+**Goal:** Re-generate every shipped species×stage with multi-frame walk + idle animations. Schema is v3.0 normalized (post `Scripts/normalize-pixellab-zip.sh`). First production deliverable: cat-tabby-adult.zip (commit `54f0f69`, partial: south walk only).
+
+### 0.1 Per-zip drop workflow
+
+Each PixelLab session ships ONE species×stage:
+
+1. **Open the original 68×68 character** (NOT the 48×48 regenerated "HAPPY EXPRESSION" variants — see §0.3). Use character IDs from the v4.0 zip metadata.json files for canonical 68×68 references.
+2. **Add Walk animation** in PixelLab: 8-frame preset, generate per direction × 8 = 64 generations per character.
+3. **Add Idle animation:** PixelLab default is 5 frames (NOT the design doc's assumed 4; heuristic ≥6=walk, <6=idle still classifies correctly).
+4. **Export ZIP** from PixelLab.
+5. **Normalize:** `Scripts/normalize-pixellab-zip.sh raw-export.zip <species-id>-<stage-slug>.zip` — handles UUID→action mapping, orphan dedup (mtime + frames tiebreaker), schema bump to v3.0, fps/loops defaults.
+6. **Drop into bundle:** `PeerDrop/Resources/Pets/<species-id>-<stage-slug>.zip`.
+7. **Update whitelist:** add `"<species-id>-<stage-slug>"` to `expectedV5Coverage` in `PeerDropTests/Pet/MainBundleAssetCoverageTests.swift`.
+8. **Verify:** `xcodebuild test -only-testing:PeerDropTests/MainBundleAssetCoverageTests` — `test_mainBundle_v5Coverage_matchesWhitelist` must pass.
+9. **Commit:** `asset(v5): <species>-<stage> — <details>`. See `54f0f69` for the format.
+
+When all multi-variety species × 3 stages are in `expectedV5Coverage`, flip `phase3Complete = true` in the test file and the acceptance gate becomes enforced for all future PRs.
+
+### 0.2 Quota math
+
+- Full coverage per species = 8 walk dirs × 8 frames + 8 idle dirs × 5 frames = **104 generations**
+- Plus inevitable retries (~30% per v4 batch experience) = ~135 generations realistic
+- 33 species × 135 = ~4,500 generations total
+- Apprentice quota = 2,000/mo → ~2.25 months minimum just for new generations
+- Practical pacing: 1–2 species per day = ~5 months end-to-end
+
+### 0.3 Critical PixelLab gotchas (Phase 0–3 verification surfaced these)
+
+- **Size: 68×68, not 48×48.** PixelLab defaults to 48×48 for new characters. v4 production zips are 68×68; using 48×48 visibly shrinks pets ~30% AND breaks `MainBundleAssetCoverageTests.test_mainBundle_endToEnd_decodesCatTabbyAdultEast`. Use the original v4-era character IDs (e.g. `e04e5c20-758a-4a8f-8781-0a35f1f2131f` for cat-tabby-adult); "HAPPY EXPRESSION" regenerated variants like `de4b1d65-...` are 48×48.
+- **Schema differs from design doc.** PixelLab exports use UUID-keyed animation slots (`animation-3294cf41`), keep `export_version: "2.0"`, and omit `fps`/`frame_count`/`loops` fields. Normalize script bridges to v3.0 — never hand-edit metadata.json.
+- **Operator-created duplicate Walk slots.** Clicking "Add Animation" → Walk on a character that already has Walk creates a NEW UUID slot rather than reusing. Normalize script auto-dedupes (newest mtime + most frames wins; tabular stderr report shows kept vs dropped).
+- **Animation key naming: "walk" not "walking".** `PetAction.walking.rawValue` is "walking" but the metadata key is "walk". `PetAction.animationKey` extension does the mapping (avoids 36-site rename of `.walking`).
+
+### 0.4 v5 progress tracker
+
+Authoritative source: `expectedV5Coverage` set in `MainBundleAssetCoverageTests.swift`. Don't duplicate progress here — it would drift.
+
+As of 2026-05-08:
+- **1 zip at v5:** `cat-tabby-adult` (south walk only; partial coverage is OK because C1 fix lets SpriteService degrade missing dirs to single-frame static)
+- **~303 zips remaining at v4:** all other (multi-variety species × 3 stages)
+
+### 0.5 Resilience: partial coverage is shippable
+
+Per the C1 fix (commit `dd1a7ba`), `SpriteService.decodeAnimationFrames` falls back to the rotation PNG as a 1-frame static animation when:
+- The zip is v2 (no animations block at all), OR
+- The zip is v3 but lacks the requested action, OR
+- The zip is v3 with the action but lacks the requested direction
+
+This means **v5.0 is shippable with whatever subset of zips Phase 3 has produced at submission time.** Users with v5 see animated walking for migrated species, static (v4-style) for the rest. No broken pets.
 
 ---
 
