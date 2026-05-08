@@ -95,6 +95,20 @@ struct PeerDropApp: App {
                         // launch via the AppStorage gate).
                         showV5UpgradeOnboarding = true
                     }
+                    // Phase 6 — widget bridge invalidation. The App Group's
+                    // pet-rendered.png is whatever the LAST main-app render
+                    // wrote, which on a v4-installed device is a v4
+                    // single-frame image. Trigger a fresh render on the
+                    // first v5 launch (renderedImageVersion transitions
+                    // "" or "v4" -> "v5") so the widget picks up the new
+                    // multi-frame output. Persisted gate runs exactly once
+                    // per device per renderer-version bump.
+                    let renderedVersion = UserDefaults.standard
+                        .string(forKey: "renderedImageVersion") ?? ""
+                    if renderedVersion != "v5" {
+                        petEngine.updateRenderedImage()
+                        UserDefaults.standard.set("v5", forKey: "renderedImageVersion")
+                    }
                 }
 
                 // Wire pet callbacks
