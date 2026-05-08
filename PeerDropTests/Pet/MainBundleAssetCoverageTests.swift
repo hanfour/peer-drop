@@ -116,4 +116,112 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         XCTAssertEqual(failures.count, 0,
                        "Decode failures: \(failures.map { "\($0.id): \($0.error)" }.joined(separator: "; "))")
     }
+
+    // MARK: - Phase 4 prep — v5 schema coverage tracking
+
+    /// Source of truth for "which bundled zips currently ship at v5.0
+    /// schema (export_version 3.0)". Operator updates this set after each
+    /// `Scripts/normalize-pixellab-zip.sh` run drops a v5 zip into
+    /// `PeerDrop/Resources/Pets/`. When this set equals every (species,
+    /// stage) entry in SpeciesCatalog (minus expectedPartialCoverage),
+    /// Phase 3 mass-gen is functionally complete and the
+    /// `phase3AcceptanceGate` test below can be un-skipped.
+    ///
+    /// Format: `<species-id>-<stage-slug>` to match the bundled zip
+    /// filename, e.g. `cat-tabby-adult` for `cat-tabby-adult.zip`.
+    ///
+    /// Partial coverage WITHIN a v5 zip (e.g. only south direction
+    /// generated) is fine — the C1 fix lets SpriteService gracefully
+    /// degrade missing directions to single-frame static. This test only
+    /// cares about the schema version flag, not direction completeness.
+    private static let expectedV5Coverage: Set<String> = [
+        "cat-tabby-adult",  // commit 54f0f69 — partial (south walk only)
+    ]
+
+    /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
+    /// Two failure modes both surface here:
+    ///   • A bundled zip is v5 but missing from the whitelist → operator
+    ///     dropped a v5 zip without updating this file. Add the entry.
+    ///   • The whitelist names a zip that's NOT v5 in the bundle → the
+    ///     production zip got reverted (e.g. by `git checkout --`) without
+    ///     removing the whitelist entry. Either re-promote the zip or
+    ///     drop the whitelist entry.
+    /// Stays green throughout Phase 3 mass-gen as the whitelist grows.
+    func test_mainBundle_v5Coverage_matchesWhitelist() throws {
+        var bundleV5: Set<String> = []
+        var bundleNonV5: [(zipKey: String, exportVersion: String)] = []
+
+        for id in SpeciesCatalog.allIDs {
+            for stage in [PetLevel.baby, .adult, .elder] {
+                let req = SpriteRequest(species: id, stage: stage, direction: .east)
+                guard let url = SpriteAssetResolver.url(for: req, in: mainBundle) else { continue }
+                let zipKey = "\(id.rawValue)-\(stage.assetSlug)"
+                let metadata = try SpriteMetadata.parse(zipURL: url)
+                if metadata.exportVersion == "3.0" {
+                    bundleV5.insert(zipKey)
+                } else {
+                    bundleNonV5.append((zipKey, metadata.exportVersion))
+                }
+            }
+        }
+
+        let unexpectedV5 = bundleV5.subtracting(Self.expectedV5Coverage).sorted()
+        let missingFromBundle = Self.expectedV5Coverage.subtracting(bundleV5).sorted()
+
+        var problems: [String] = []
+        if !unexpectedV5.isEmpty {
+            problems.append(
+                "Bundled as v5 but not in whitelist (add to expectedV5Coverage): "
+                + unexpectedV5.joined(separator: ", "))
+        }
+        if !missingFromBundle.isEmpty {
+            // Look up actual schema version for clearer diagnostics
+            let bundledVersions = Dictionary(uniqueKeysWithValues: bundleNonV5)
+            let detail = missingFromBundle.map { key in
+                "\(key) [actual: v\(bundledVersions[key] ?? "missing")]"
+            }
+            problems.append(
+                "Whitelisted as v5 but not actually v5 in bundle: "
+                + detail.joined(separator: ", "))
+        }
+
+        XCTAssertEqual(problems, [], problems.joined(separator: " | "))
+    }
+
+    /// Phase 3 acceptance gate. SKIPPED while mass-gen is in flight so
+    /// unrelated PRs don't get red-CI-blocked on Phase 3 progress. Flip
+    /// `phase3Complete` to `true` (or delete this skip) when every
+    /// multi-variety species × stage has a v5 zip — at that point this
+    /// test enforces the contract going forward.
+    private static let phase3Complete: Bool = false
+
+    func test_mainBundle_phase3AcceptanceGate_everyMultiVarietyStageIsV5() throws {
+        let multiVarietyCount = SpeciesCatalog.allIDs.filter {
+            !Self.partialCoverageIDs.contains($0)
+        }.count
+        try XCTSkipIf(
+            !Self.phase3Complete,
+            "Phase 3 mass-gen still in progress (\(Self.expectedV5Coverage.count) v5 zips of "
+            + "\(multiVarietyCount * 3) target). Flip phase3Complete=true when shipped.")
+
+        var notV5: [String] = []
+        for id in SpeciesCatalog.allIDs where !Self.partialCoverageIDs.contains(id) {
+            for stage in [PetLevel.baby, .adult, .elder] {
+                let req = SpriteRequest(species: id, stage: stage, direction: .east)
+                guard let url = SpriteAssetResolver.url(for: req, in: mainBundle) else {
+                    notV5.append("\(id.rawValue)-\(stage.assetSlug) [missing zip]")
+                    continue
+                }
+                let metadata = try SpriteMetadata.parse(zipURL: url)
+                if metadata.exportVersion != "3.0" {
+                    notV5.append("\(id.rawValue)-\(stage.assetSlug) [v\(metadata.exportVersion)]")
+                }
+            }
+        }
+
+        XCTAssertEqual(
+            notV5, [],
+            "Phase 3 incomplete — \(notV5.count) zips not at v5: "
+            + notV5.joined(separator: ", "))
+    }
 }
