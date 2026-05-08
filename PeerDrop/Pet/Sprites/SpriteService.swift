@@ -1,9 +1,14 @@
 import Foundation
 import CoreGraphics
+import ImageIO
+import ZIPFoundation
 
 enum SpriteServiceError: Error {
     case assetNotFound(SpriteRequest)
     case directionMissing(SpriteRequest)
+    case animationDirectionMissing(action: PetAction, direction: SpriteDirection)
+    case framePathMissing(String)
+    case framePNGDecodeFailed(String)
 }
 
 /// Public façade for the v4.0 PNG sprite pipeline.
@@ -23,6 +28,7 @@ actor SpriteService {
     private let cache: SpriteCache
     private let bundle: Bundle
     private var inflightTasks: [SpriteRequest: Task<CGImage, Error>] = [:]
+    private var animationFrames: [AnimationRequest: AnimationFrames] = [:]
     private(set) var decodeCount: Int = 0
 
     init(cache: SpriteCache = .shared, bundle: Bundle = .main) {
@@ -94,6 +100,87 @@ actor SpriteService {
             // test pins that contract; this throw is the SpriteService-level
             // surface for it.
             throw SpriteServiceError.directionMissing(request)
+        }
+        return cg
+    }
+
+    // MARK: - v5 multi-frame animations
+
+    /// Returns the decoded animation frames for one (species, stage, direction,
+    /// action) tuple. v3.0 zip with the requested action → full frame array.
+    /// v2.0 zip (or v3 zip lacking the action) → 1-frame static fallback from
+    /// the rotation PNG, so callers don't need to special-case missing data.
+    func frames(for request: AnimationRequest) async throws -> AnimationFrames {
+        guard let zipURL = SpriteAssetResolver.url(for: request.spriteRequest, in: bundle) else {
+            throw SpriteServiceError.assetNotFound(request.spriteRequest)
+        }
+        return try await framesInternal(at: zipURL, for: request)
+    }
+
+    /// Test seam: callers that already know the zip URL (e.g. unit tests against
+    /// hand-crafted fixtures whose species isn't in SpeciesCatalog) bypass the
+    /// asset resolver. Production code goes through `frames(for:)` instead.
+    func framesInternal(at zipURL: URL, for request: AnimationRequest) async throws -> AnimationFrames {
+        if let cached = animationFrames[request] { return cached }
+
+        let frames = try await Self.decodeAnimationFrames(
+            zipURL: zipURL,
+            direction: request.direction,
+            action: request.action
+        )
+        animationFrames[request] = frames
+        return frames
+    }
+
+    nonisolated static func decodeAnimationFrames(
+        zipURL: URL,
+        direction: SpriteDirection,
+        action: PetAction
+    ) async throws -> AnimationFrames {
+        try await Task.detached(priority: .userInitiated) {
+            let metadata = try SpriteMetadata.parse(zipURL: zipURL)
+            let dirKey = direction.rawValue
+
+            if let actionKey = action.animationKey,
+               let anim = metadata.animations[actionKey] {
+                guard let paths = anim.directions[dirKey], !paths.isEmpty else {
+                    throw SpriteServiceError.animationDirectionMissing(
+                        action: action, direction: direction
+                    )
+                }
+                let images = try paths.map { try Self.decodePNG(zipURL: zipURL, path: $0) }
+                return AnimationFrames(images: images, fps: anim.fps, loops: anim.loops)
+            }
+
+            // Fallback: v2 zip or v3 zip lacking the requested action.
+            // Treat the rotation PNG as a 1-frame "animation" with fps=1.
+            guard let path = metadata.rotations[dirKey] else {
+                throw SpriteServiceError.framePathMissing("rotations/\(dirKey).png")
+            }
+            let image = try Self.decodePNG(zipURL: zipURL, path: path)
+            return AnimationFrames(images: [image], fps: 1, loops: false)
+        }.value
+    }
+
+    nonisolated private static func decodePNG(zipURL: URL, path: String) throws -> CGImage {
+        let archive: Archive
+        do {
+            archive = try Archive(url: zipURL, accessMode: .read)
+        } catch {
+            throw SpriteServiceError.framePNGDecodeFailed(path)
+        }
+        guard let entry = archive[path] else {
+            throw SpriteServiceError.framePathMissing(path)
+        }
+        var data = Data()
+        do {
+            _ = try archive.extract(entry) { chunk in data.append(chunk) }
+        } catch {
+            throw SpriteServiceError.framePNGDecodeFailed(path)
+        }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
+            throw SpriteServiceError.framePNGDecodeFailed(path)
         }
         return cg
     }
