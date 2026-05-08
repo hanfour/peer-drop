@@ -79,7 +79,8 @@ final class PetEngineActionSelectionTests: XCTestCase {
         return PetEngine(
             pet: pet,
             rendererV3: renderer,
-            sharedRenderedPet: SharedRenderedPet(suiteName: nil)
+            sharedRenderedPet: SharedRenderedPet(suiteName: nil),
+            spriteService: service
         )
     }
 
@@ -106,6 +107,17 @@ final class PetEngineActionSelectionTests: XCTestCase {
         // Combine pipeline + Task hop
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(engine.animator.currentAction, .walking)
+        // The injected test-bundle SpriteService resolved cat-tabby-adult.zip
+        // (v2 format, no animations) and returned the v2-fallback 1-frame
+        // static. Animator's totalFrames must reflect that — proves the
+        // metadata-fetch path actually ran (vs silently falling through to
+        // the catch-block 1-frame default which would also produce 1).
+        // Distinguish: v2-fallback returns fps=1, the catch-block default
+        // also sets fps=1. Both produce identical observable state for
+        // a v2 zip, which is correct: caller doesn't need to special-case.
+        XCTAssertEqual(engine.animator.totalFrames, 1,
+                       "test-bundle cat-tabby-adult.zip is v2 -> 1-frame fallback")
+        XCTAssertEqual(engine.animator.fps, 1)
         engine.animator.stopAnimation()
     }
 

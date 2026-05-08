@@ -25,6 +25,7 @@ class PetEngine: ObservableObject {
 
     private let rendererV3: PetRendererV3
     private let sharedRenderedPet: SharedRenderedPet
+    private let spriteService: SpriteService
     /// Most recently dispatched render task. Cancelled when a new
     /// updateRenderedImage() call comes in so out-of-order completions can't
     /// overwrite renderedImage with a stale frame.
@@ -64,7 +65,8 @@ class PetEngine: ObservableObject {
     init(
         pet: PetState = .newEgg(),
         rendererV3: PetRendererV3? = nil,
-        sharedRenderedPet: SharedRenderedPet? = nil
+        sharedRenderedPet: SharedRenderedPet? = nil,
+        spriteService: SpriteService = .shared
     ) {
         self.pet = pet
         self.behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
@@ -76,6 +78,11 @@ class PetEngine: ObservableObject {
         // and Live Activity can read the latest rendered pet without re-running
         // the v4.0 PNG pipeline themselves (M8 phase 2 wire-up).
         self.sharedRenderedPet = sharedRenderedPet ?? SharedRenderedPet()
+        // v5: dispatchActionToAnimator probes SpriteService for animation
+        // metadata. Tests inject a SpriteService bound to the test bundle so
+        // hand-crafted fixtures (whose species aren't in SpeciesCatalog) can
+        // exercise the metadata-fetch path; production uses .shared.
+        self.spriteService = spriteService
         setupAnimationObserver()
     }
 
@@ -432,7 +439,8 @@ class PetEngine: ObservableObject {
             let request = AnimationRequest(
                 species: species, stage: stage, direction: .south, action: action)
             do {
-                let frames = try await SpriteService.shared.frames(for: request)
+                let service = self?.spriteService ?? .shared
+                let frames = try await service.frames(for: request)
                 self?.animator.setAction(action, frameCount: frames.images.count, fps: frames.fps)
             } catch {
                 self?.animator.setAction(action, frameCount: 1, fps: 1)
