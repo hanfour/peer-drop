@@ -87,31 +87,71 @@ def heuristic_for(key):
 
 # Bucket keys by heuristic-detected action. Operators sometimes accidentally
 # create duplicate animation slots in PixelLab (e.g. clicking through "Add
-# Animation" again on a partial walk). When that happens, the smaller slot is
-# the orphan: keep the one with more total frames, drop the rest with a
-# warning. Mass-gen sprint will hit this regularly so erroring out is too
-# strict.
+# Animation" again on a partial walk). When that happens, pick the slot most
+# likely to represent the operator's actual intent and drop the rest with a
+# loud warning. Mass-gen sprint will hit this regularly so erroring out is
+# too strict.
+#
+# Tiebreaker — newest first (operator's last action wins), with frame count
+# as a stable secondary key. Earlier versions used "most frames wins" alone,
+# but that picks wrong when an operator partially re-generates: original
+# 8-frame walk is wrong, partial 4-frame regen is correct. mtime captures
+# the "latest intent" signal that frame count alone misses.
+def dir_mtime(key):
+    """Return latest mtime of any file under animations/{key}/. Returns 0
+    if the directory is missing on disk (shouldn't happen for a valid
+    export, but defensive)."""
+    d = os.path.join(tmp, "animations", key)
+    if not os.path.isdir(d):
+        return 0
+    latest = 0
+    for root, _, files in os.walk(d):
+        for f in files:
+            p = os.path.join(root, f)
+            try:
+                mt = os.path.getmtime(p)
+                if mt > latest:
+                    latest = mt
+            except OSError:
+                pass
+    return latest
+
 walk_candidates = [k for k in uuid_keys if heuristic_for(k) == "walk"]
 idle_candidates = [k for k in uuid_keys if heuristic_for(k) == "idle"]
 
-def pick_largest(candidates, label):
+def pick_winner(candidates, label):
     if not candidates:
         return None, []
     if len(candidates) == 1:
         return candidates[0], []
-    sorted_keys = sorted(candidates, key=lambda k: total_frames(animations[k]), reverse=True)
+    # Sort newest-first by mtime; ties (rare in practice — within-second
+    # generation) broken by total frame count, then by key for determinism.
+    sorted_keys = sorted(
+        candidates,
+        key=lambda k: (dir_mtime(k), total_frames(animations[k]), k),
+        reverse=True,
+    )
     keep = sorted_keys[0]
     drop = sorted_keys[1:]
+    keep_frames = total_frames(animations[keep])
+    keep_age = dir_mtime(keep)
     print(
-        f"Warning: {len(candidates)} {label} slots found; keeping '{keep[:18]}' "
-        f"({total_frames(animations[keep])} frames) and dropping orphan(s): "
-        f"{[k[:18] for k in drop]}",
+        f"Warning: {len(candidates)} {label} slots found, keeping the newest:",
         file=sys.stderr,
     )
+    for k in candidates:
+        marker = "KEEP" if k == keep else "DROP"
+        f = total_frames(animations[k])
+        age = dir_mtime(k)
+        rel = age - keep_age  # negative = older than kept
+        print(
+            f"  {marker} '{k[:18]}'  frames={f:3d}  mtime_offset={rel:+.1f}s",
+            file=sys.stderr,
+        )
     return keep, drop
 
-walk_key, walk_drops = pick_largest(walk_candidates, "walk")
-idle_key, idle_drops = pick_largest(idle_candidates, "idle")
+walk_key, walk_drops = pick_winner(walk_candidates, "walk")
+idle_key, idle_drops = pick_winner(idle_candidates, "idle")
 dropped_keys = set(walk_drops) | set(idle_drops)
 
 assignments = []
