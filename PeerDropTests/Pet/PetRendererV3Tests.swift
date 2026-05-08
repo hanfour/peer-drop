@@ -194,4 +194,46 @@ final class PetRendererV3Tests: XCTestCase {
         let db = Double(a.b - b.b)
         return (dr * dr + dg * dg + db * db).squareRoot()
     }
+
+    // MARK: - v5 multi-frame render overload (Phase 1.5)
+
+    func test_renderWithFrameIndex_v2Zip_returnsSingleFrameStaticFallback() async throws {
+        let renderer = makeRenderer()
+        let cg = try await renderer.render(
+            genome: catTabbyGenome(),
+            level: .adult,
+            direction: .east,
+            action: .walking,
+            frameIndex: 0,
+            mood: .happy
+        )
+        XCTAssertEqual(cg.width, 68)
+        XCTAssertEqual(cg.height, 68)
+    }
+
+    func test_renderWithFrameIndex_outOfBounds_wrapsToZero() async throws {
+        let renderer = makeRenderer()
+        let cg = try await renderer.render(
+            genome: catTabbyGenome(),
+            level: .adult,
+            direction: .south,
+            action: .walking,
+            frameIndex: 99,
+            mood: .happy
+        )
+        XCTAssertEqual(cg.width, 68)
+    }
+
+    func test_renderWithFrameIndex_idleAction_returnsCGImage() async throws {
+        let renderer = makeRenderer()
+        let cg = try await renderer.render(
+            genome: catTabbyGenome(),
+            level: .adult,
+            direction: .west,
+            action: .idle,
+            frameIndex: 0,
+            mood: .happy
+        )
+        XCTAssertEqual(cg.width, 68)
+    }
 }
