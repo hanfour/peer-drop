@@ -106,6 +106,7 @@
 		417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
 		422B1D0653742266E75E000D /* CatBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 739D02C5763EE45B3BC54940 /* CatBehavior.swift */; };
 		4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21815A246EC26999D8D31534 /* VoiceCallManager.swift */; };
+		43D47A8427F614A5F0ABDBB3 /* V5UpgradeOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F0045D9C48E3D1313DE8E0 /* V5UpgradeOnboardingTests.swift */; };
 		45B1940EF5BD196DDCFBF942 /* SharedRenderedPetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189868AF3D6A10B4D51AC0A6 /* SharedRenderedPetTests.swift */; };
 		4700A5799483DE1A0208A038 /* TwoDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DC79A8D29D6B05BC7B689B /* TwoDeviceTests.swift */; };
 		47056B1FA7FC87FFA1E97DCE /* TrustedContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E0326F5D9180F9D6580BC1 /* TrustedContactTests.swift */; };
@@ -342,6 +343,7 @@
 		DB9F13A8597DFF80A5947F32 /* PetBehaviorProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0D5CB4C84E2B9D9B7ED45B /* PetBehaviorProviderTests.swift */; };
 		DC36D0D22B9764100D164C35 /* TypingIndicatorPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 808A9F64C76046B0B42E2472 /* TypingIndicatorPayload.swift */; };
 		DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */; };
+		DD2DE0893C4BE33D0A962E96 /* V5UpgradeOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA5D496230C650E9C138FF7 /* V5UpgradeOnboarding.swift */; };
 		DD516AF5FE361FE721713A70 /* MoodOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CE631931D4651DFB306C78 /* MoodOverlay.swift */; };
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
 		DF24681F486E8AF718E5875D /* BodyTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34290A3B298585384BF81AE5 /* BodyTemplate.swift */; };
@@ -552,6 +554,7 @@
 		4A6F0E5B9A84993467707D72 /* PetMood.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetMood.swift; sourceTree = "<group>"; };
 		4B52261C190C8AD9BEA9B35F /* ConnectionE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionE2ETests.swift; sourceTree = "<group>"; };
 		4B6B1D2992D58BC9668FCED3 /* BLESignalingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLESignalingTests.swift; sourceTree = "<group>"; };
+		4BA5D496230C650E9C138FF7 /* V5UpgradeOnboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5UpgradeOnboarding.swift; sourceTree = "<group>"; };
 		4CE351D79BE63B4DE4EB21F7 /* RelaySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelaySession.swift; sourceTree = "<group>"; };
 		4DECB18745BF9BF19F554D57 /* VoicePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePlayer.swift; sourceTree = "<group>"; };
 		4E541AC353B141C1ABC8F38B /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
@@ -732,6 +735,7 @@
 		B8D0867DAE29BDA07261CF4A /* TailnetPeerStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerStoreTests.swift; sourceTree = "<group>"; };
 		B92E82C7FDDD05C4BCD5E53B /* SpeciesIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeciesIDTests.swift; sourceTree = "<group>"; };
 		B9B620D00284A700C480C5E5 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		B9F0045D9C48E3D1313DE8E0 /* V5UpgradeOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5UpgradeOnboardingTests.swift; sourceTree = "<group>"; };
 		BA07F3586A1F9F14F8BDF179 /* PreKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStore.swift; sourceTree = "<group>"; };
 		BA137F066528B6AB98E71424 /* ReactionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPickerView.swift; sourceTree = "<group>"; };
 		BA9DB2DB02DE2DBC2688F727 /* PetPayloadCrossVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPayloadCrossVersionTests.swift; sourceTree = "<group>"; };
@@ -1398,6 +1402,7 @@
 				77BDC58C1DE4D5C9C2EA9843 /* SpriteServiceAnimationTests.swift */,
 				E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */,
 				674960103D286E03D524A8CF /* V4UpgradeOnboardingTests.swift */,
+				B9F0045D9C48E3D1313DE8E0 /* V5UpgradeOnboardingTests.swift */,
 			);
 			path = Pet;
 			sourceTree = "<group>";
@@ -1448,6 +1453,7 @@
 				BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */,
 				7BE30BAD21DDB022E0E0F577 /* PixelView.swift */,
 				A6AFFD57A9FA50E4F4109A25 /* V4UpgradeOnboarding.swift */,
+				4BA5D496230C650E9C138FF7 /* V5UpgradeOnboarding.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -1910,6 +1916,7 @@
 				47056B1FA7FC87FFA1E97DCE /* TrustedContactTests.swift in Sources */,
 				C4A1EF54C15B9C11604C8857 /* TypingIndicatorTests.swift in Sources */,
 				F515C26C8D07196F4AA8D239 /* V4UpgradeOnboardingTests.swift in Sources */,
+				43D47A8427F614A5F0ABDBB3 /* V5UpgradeOnboardingTests.swift in Sources */,
 				A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */,
 				9CAA195089A2102D816EF96F /* X3DHTests.swift in Sources */,
 			);
@@ -2150,6 +2157,7 @@
 				AC282EF4C7E2C8E7F1A87ABE /* UserProfile.swift in Sources */,
 				BB0A876963F26D7D52EECB7A /* UserProfileView.swift in Sources */,
 				56FD21C7860AFB666E3019A0 /* V4UpgradeOnboarding.swift in Sources */,
+				DD2DE0893C4BE33D0A962E96 /* V5UpgradeOnboarding.swift in Sources */,
 				ED6ED0806FBF2005C1037FBC /* VerificationView.swift in Sources */,
 				4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */,
 				E18567293F69BFFD0F2A4C12 /* VoiceCallSession.swift in Sources */,
