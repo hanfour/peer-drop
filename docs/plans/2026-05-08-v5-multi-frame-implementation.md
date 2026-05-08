@@ -168,10 +168,12 @@ Build the renderer + animator infrastructure first. Tests use synthetic test fix
 
 This fixture represents the **normalized** form (post-`Scripts/normalize-pixellab-zip.sh`), not the raw PixelLab export. Phase 0.5 produced a real normalized zip at `PeerDropTests/Resources/Pets/test-anim-real.zip` if you'd rather use it; the hand-crafted version below has the advantage of being tiny + fully predictable.
 
+Path convention: matches `Scripts/normalize-pixellab-zip.sh` output — `animations/<action>/<direction>/frame_NNN.png` (nested by direction, 0-indexed).
+
 Create `test-anim-v3.zip` with:
 - `rotations/south.png` (any 8×8 black PNG)
-- `animations/walk/south_001.png` … `south_008.png` (any tiny PNGs)
-- `animations/idle/south_001.png` … `south_004.png`
+- `animations/walk/south/frame_000.png` … `frame_007.png` (any tiny PNGs)
+- `animations/idle/south/frame_000.png` … `frame_003.png`
 - `metadata.json`:
 
 ```json
@@ -181,9 +183,9 @@ Create `test-anim-v3.zip` with:
     "rotations": { "south": "rotations/south.png" },
     "animations": {
       "walk": { "fps": 6, "frame_count": 8, "loops": true,
-        "directions": { "south": ["animations/walk/south_001.png", "animations/walk/south_002.png", "animations/walk/south_003.png", "animations/walk/south_004.png", "animations/walk/south_005.png", "animations/walk/south_006.png", "animations/walk/south_007.png", "animations/walk/south_008.png"] } },
+        "directions": { "south": ["animations/walk/south/frame_000.png", "animations/walk/south/frame_001.png", "animations/walk/south/frame_002.png", "animations/walk/south/frame_003.png", "animations/walk/south/frame_004.png", "animations/walk/south/frame_005.png", "animations/walk/south/frame_006.png", "animations/walk/south/frame_007.png"] } },
       "idle": { "fps": 2, "frame_count": 4, "loops": true,
-        "directions": { "south": ["animations/idle/south_001.png", "animations/idle/south_002.png", "animations/idle/south_003.png", "animations/idle/south_004.png"] } }
+        "directions": { "south": ["animations/idle/south/frame_000.png", "animations/idle/south/frame_001.png", "animations/idle/south/frame_002.png", "animations/idle/south/frame_003.png"] } }
     }
   },
   "export_version": "3.0",
