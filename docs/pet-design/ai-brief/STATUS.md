@@ -1,6 +1,8 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-> **🚧 v5 mass-gen in progress** — `feat/v5-multi-frame` branch (code-complete 2026-05-08, 22 commits past main). Adds multi-frame walk + idle animations to all v4 species. Full coverage requires re-generating each species×stage with PixelLab's "Add Animation" UI (~104 generations per character). Pacing: ~5 months at 2,000/mo Apprentice quota. v5 builds ON TOP of the v4.0 frozen asset baseline below — per-zip drop workflow + PixelLab gotchas live in §0; §1–§6 stays as the v4.0 historical record.
+> **📤 v5.0.0 SUBMITTED** — build 1 `WAITING_FOR_REVIEW` on App Store as of 2026-05-09 19:41 local. All v5 code merged to main via PRs #30–#35. Initial v5 coverage shipping with v5.0: cat-tabby-adult (south + east + west walk + south idle) and ghost (south walk + south idle, all stages bundle as single asset). Reviewer's fresh-install pet has 50% chance of v5-animated species (cat 40% + ghost 10%) per `BodyGene.from()` rebalance. v5.0.x weekly cadence playbook for ongoing mass-gen at `docs/release/v5.0.x-cadence.md`.
+>
+> **🚧 v5 mass-gen ongoing** — Adds multi-frame walk + idle animations to all v4 species. Full coverage requires re-generating each species×stage with PixelLab's "Add Animation" UI (~104 generations per character). Pacing: ~3–4 months at 2,000/mo Apprentice quota with weekly v5.0.x patch releases. Per-zip drop workflow + PixelLab gotchas live in §0.
 >
 > **🏁 v4.0 SHIPPED — workstream frozen.** Batch 2 (33 species, ~440 zips) integrated via PR #28 (M0–M12); 324 zips bundled into `PeerDrop/Resources/Pets/` (M5.1 commit `176f079`); v4.0.0 build 1 uploaded to TestFlight 2026-05-04, awaiting soak. Day 0 baseline at `4036e4c`. This file is preserved as **technical reference** for: PixelLab subscription/quota lessons (§1), zip naming convention (§3), submission JS pattern (§5), and per-breed visual-quality field notes (§6 batch logs).
 >
@@ -12,7 +14,7 @@
 > - v4.0 reviewer notes: `docs/release/v4.0-reviewer-notes.md`
 > - v4.0 submission gates: `docs/pet-design/v4-submission-checklist.md`
 
-**Last updated:** 2026-05-08 (v5 mass-gen banner + §0 added; v4.0 sections frozen)
+**Last updated:** 2026-05-09 (v5.0.0 submitted to App Store, build 1 WAITING_FOR_REVIEW)
 **Purpose:** Historical record of the v4.0 pet redesign asset pipeline (§1–§6) + active v5 mass-gen workflow (§0) + technical reference for any future asset gen.
 
 ---
