@@ -23,29 +23,43 @@ enum SpriteAssetResolver {
 
     /// Species shipped as a single zip with no per-stage variants. The bundle
     /// filename is the bare family ID (e.g. `ghost.zip`) and the same asset is
-    /// returned for any requested `stage` — they have no baby/adult/elder art.
+    /// returned for any requested `stage`.
     ///
-    /// Ghost is the v4.0.2 entry: a legacy `BodyGene.ghost` carryover from the
-    /// pre-PNG pipeline. The art is a static "Pac-Man ghost" sprite with no
-    /// lifecycle progression by design (per docs/pet-design/ai-brief/STATUS.md),
-    /// so generating empty baby/elder variants would be busywork. Add new
-    /// single-stage species here AND to `SpeciesCatalog.families` together.
-    static let singleStageSpecies: Set<SpeciesID> = [SpeciesID("ghost")]
+    /// **v5.0 review #2:** derived from `SpeciesCatalog.isSingleStage(family:)`
+    /// rather than maintained as a separate hardcoded set. Atomic multi-stage
+    /// flip (when ghost-baby + ghost-elder land) is one edit in
+    /// SpeciesCatalog instead of two synchronized edits across two files.
+    static var singleStageSpecies: Set<SpeciesID> {
+        let families = Set(SpeciesCatalog.allIDs.map { $0.family })
+        return Set(families
+                    .filter { SpeciesCatalog.isSingleAssetFamily($0) }
+                    .map { SpeciesID($0) })
+    }
 
     /// Bundle filename (without extension) for the request, after catalog
     /// fallback. Returns nil when no asset filename can be derived — i.e.
-    /// the family is unknown to the catalog. Pure function; no I/O.
+    /// the family is unknown to the catalog OR the requested stage isn't
+    /// shipped (caller falls back via PetRendererV3.ultimateFallback).
+    /// Pure function; no I/O.
     static func filename(for request: SpriteRequest) -> String? {
         guard let resolved = SpeciesCatalog.resolve(request.species) else {
             return nil
         }
-        // Single-stage species (ghost, etc.): bare family ID, no stage suffix.
-        // The same `<id>.zip` is returned for every PetLevel — these species
-        // intentionally have no baby/adult/elder progression, so the
-        // species-stage template doesn't apply.
-        if singleStageSpecies.contains(resolved) {
-            return resolved.rawValue
+        let family = resolved.family
+
+        // Single-asset family (e.g. ghost): bare family ID, no stage suffix.
+        // The same `<family>.zip` is returned for every PetLevel — by design
+        // these families ship as one bundled asset.
+        if SpeciesCatalog.isSingleAssetFamily(family) {
+            return family
         }
+
+        // Stage isn't shipped for this family (e.g. octopus-adult, bird-baby).
+        // Return nil so PetRendererV3.ultimateFallback handles the gap.
+        let stagesShipped = SpeciesCatalog.stagesShipped(for: family)
+        guard stagesShipped.contains(request.stage) else { return nil }
+
+        // Standard species×stage path.
         return "\(resolved.rawValue)-\(request.stage.assetSlug)"
     }
 

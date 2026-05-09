@@ -5,9 +5,22 @@ import Foundation
 /// Data layout: each family maps to an ordered list of sub-variety strings, with
 /// the first element treated as the family default. Single-variety legacy families
 /// (bird, frog, octopus, ghost) carry an empty variants list — their `SpeciesID`
-/// is the bare family name. Ghost is additionally a single-stage species
-/// (`SpriteAssetResolver.singleStageSpecies`): one zip total, used at every
-/// `PetLevel`.
+/// is the bare family name.
+///
+/// **stagesShipped** (added v5.0 review #2): the subset of `PetLevel` values
+/// actually present as separate zip files for this family. Three patterns:
+///
+/// - Multi-variety species with full coverage: `[.baby, .adult, .elder]` —
+///   each (variant, stage) combo has its own zip.
+/// - Single-variety with partial coverage: e.g. bird/frog/octopus ship a
+///   subset (`[.elder]` or `[.baby, .elder]`) — missing stages return nil
+///   from SpriteAssetResolver and trigger PetRendererV3.ultimateFallback.
+/// - Single-stage species (e.g. ghost): exactly one shipped stage, with
+///   empty variants — bundled as a bare-family-named zip (`ghost.zip`)
+///   that's used at every PetLevel via the resolver's single-stage path.
+///   When operator generates ghost-baby/ghost-elder, change stagesShipped
+///   to `[.baby, .adult, .elder]` — atomic flip, no separate
+///   `singleStageSpecies` set to keep in sync.
 ///
 /// Defaults match plan §M2.3 locked picks for legacy BodyGene mappings
 /// (cat→tabby, dog→shiba, bear→brown, dragon→western, slime→green,
@@ -21,13 +34,25 @@ enum SpeciesCatalog {
 
     private struct Family {
         /// Ordered: first element is the default sub-variety for this family.
-        /// Empty for single-variety legacy families (bird, frog, octopus).
+        /// Empty for single-variety legacy families (bird, frog, octopus, ghost).
         let variants: [String]
+
+        /// PetLevels for which this family has shipped zip assets. Used by
+        /// SpriteAssetResolver to determine which (species, stage) combos
+        /// resolve to a bundled zip. Defaults to all 3 stages.
+        var stagesShipped: Set<PetLevel> = [.baby, .adult, .elder]
+
+        /// True iff this family ships as ONE bare-family-named zip (e.g.
+        /// `ghost.zip`) used at every PetLevel, regardless of `stagesShipped`.
+        /// False (default) means each shipped stage has its own
+        /// `<species-id>-<stage>.zip` — that includes partial-coverage
+        /// single-variety species (e.g. bird/frog ship as `bird-elder.zip`).
+        var bundleAsSingleAsset: Bool = false
     }
 
     private static let families: [String: Family] = [
         "bear":     Family(variants: ["brown", "black", "panda", "polar"]),
-        "bird":     Family(variants: []),
+        "bird":     Family(variants: [], stagesShipped: [.elder]),                          // partial coverage; bird-elder.zip
         "cat":      Family(variants: ["tabby", "bengal", "calico", "persian", "siamese"]),
         "cow":      Family(variants: ["highland", "holstein", "yellow"]),
         "deer":     Family(variants: ["moose", "sika", "whitetail"]),
@@ -35,13 +60,17 @@ enum SpeciesCatalog {
         "dragon":   Family(variants: ["western", "eastern", "fire", "ice"]),
         "duck":     Family(variants: ["mallard", "mandarin", "yellow"]),
         "fox":      Family(variants: ["arctic", "red", "silver"]),
-        "frog":     Family(variants: []),
-        "ghost":    Family(variants: []),  // single-stage; bundled as PeerDrop/Resources/Pets/ghost.zip (see SpriteAssetResolver.singleStageSpecies)
+        "frog":     Family(variants: [], stagesShipped: [.elder]),                          // partial coverage; frog-elder.zip
+        // single-asset; bundled as PeerDrop/Resources/Pets/ghost.zip used at
+        // every PetLevel. When operator generates ghost-baby + ghost-elder,
+        // flip bundleAsSingleAsset:false + stagesShipped:[.baby,.adult,.elder]
+        // for atomic multi-stage transition.
+        "ghost":    Family(variants: [], stagesShipped: [.adult], bundleAsSingleAsset: true),
         "hamster":  Family(variants: ["campbell", "golden", "white", "winterwhite"]),
         "hedgehog": Family(variants: ["brown", "chocolate", "white"]),
         "horse":    Family(variants: ["black", "chestnut", "zebra"]),
         "lizard":   Family(variants: ["bearded", "chameleon", "gecko"]),
-        "octopus":  Family(variants: []),
+        "octopus":  Family(variants: [], stagesShipped: [.baby, .elder]),  // partial coverage
         "otter":    Family(variants: ["river", "sea"]),
         "owl":      Family(variants: ["barn", "horned", "snowy"]),
         "parrot":   Family(variants: ["budgie", "cockatiel", "macaw"]),
@@ -105,5 +134,21 @@ enum SpeciesCatalog {
     /// families.
     static func variants(for family: String) -> [String] {
         families[family]?.variants ?? []
+    }
+
+    /// PetLevels with shipped zip assets for a family. Returns full
+    /// `[.baby, .adult, .elder]` set for unknown families (defensive fallback).
+    static func stagesShipped(for family: String) -> Set<PetLevel> {
+        families[family]?.stagesShipped ?? [.baby, .adult, .elder]
+    }
+
+    /// True iff this family ships as ONE bare-family-named zip (e.g. `ghost.zip`)
+    /// used at every PetLevel. Replaces the old
+    /// `SpriteAssetResolver.singleStageSpecies` hardcoded set.
+    /// Distinct from "single-variety with partial coverage" (e.g. bird ships
+    /// as `bird-elder.zip`, NOT `bird.zip`) — that's
+    /// `variants.isEmpty && !bundleAsSingleAsset`.
+    static func isSingleAssetFamily(_ family: String) -> Bool {
+        families[family]?.bundleAsSingleAsset ?? false
     }
 }

@@ -103,3 +103,4 @@ private_keys/
 *.cer
 *.certSigningRequest
 *.p12
+Scripts/__pycache__/
