@@ -88,7 +88,7 @@ struct PeerDropApp: App {
                     // installs (no migrationDoneAt) skip this.
                     if V4UpgradeOnboarding.shouldPresent(for: petEngine.pet) {
                         showV4UpgradeOnboarding = true
-                    } else if V5UpgradeOnboarding.shouldPresent() {
+                    } else if V5UpgradeOnboarding.shouldPresent(pet: petEngine.pet) {
                         // v5 upgrade is mutually exclusive with v4 upgrade in
                         // a single launch — if both fire, v4 gets priority
                         // (it's the older, less-recently-seen one and chains
