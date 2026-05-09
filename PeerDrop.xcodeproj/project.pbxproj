@@ -107,6 +107,7 @@
 		422B1D0653742266E75E000D /* CatBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 739D02C5763EE45B3BC54940 /* CatBehavior.swift */; };
 		4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21815A246EC26999D8D31534 /* VoiceCallManager.swift */; };
 		43D47A8427F614A5F0ABDBB3 /* V5UpgradeOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F0045D9C48E3D1313DE8E0 /* V5UpgradeOnboardingTests.swift */; };
+		452533F98EE28AB04B5C7420 /* AssetSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B4DE0245ECD862958D1439 /* AssetSpec.swift */; };
 		45B1940EF5BD196DDCFBF942 /* SharedRenderedPetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189868AF3D6A10B4D51AC0A6 /* SharedRenderedPetTests.swift */; };
 		4700A5799483DE1A0208A038 /* TwoDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DC79A8D29D6B05BC7B689B /* TwoDeviceTests.swift */; };
 		47056B1FA7FC87FFA1E97DCE /* TrustedContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E0326F5D9180F9D6580BC1 /* TrustedContactTests.swift */; };
@@ -564,7 +565,6 @@
 		4E541AC353B141C1ABC8F38B /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		4E9F8793914905C74E5A28D3 /* SpriteDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteDecoderTests.swift; sourceTree = "<group>"; };
 		4EA9862E96770E9E7C4DC4E2 /* PeerConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionState.swift; sourceTree = "<group>"; };
-		4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		4EF1CBD311D71DDF863068E4 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		4EFB0FFA7A2462D7EC7DEF40 /* PetAction+AnimationKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PetAction+AnimationKey.swift"; sourceTree = "<group>"; };
 		4FA61FA1584A3CF475D12AF1 /* PetPersonalityBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPersonalityBehaviorTests.swift; sourceTree = "<group>"; };
@@ -758,6 +758,7 @@
 		C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFramer.swift; sourceTree = "<group>"; };
 		C4148097F734513B29899E4A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		C45A1BF776BAD2272FD68D83 /* SpriteSheetLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteSheetLoaderTests.swift; sourceTree = "<group>"; };
+		C4B4DE0245ECD862958D1439 /* AssetSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetSpec.swift; sourceTree = "<group>"; };
 		C4F993BA6D5384B7F944865C /* MailboxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxClient.swift; sourceTree = "<group>"; };
 		C6842DD7730A244B26924472 /* PetBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetBubbleView.swift; sourceTree = "<group>"; };
 		C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordStoreTests.swift; sourceTree = "<group>"; };
@@ -838,6 +839,7 @@
 		FC682C14084D950A4869B2CE /* TransferHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferHistoryView.swift; sourceTree = "<group>"; };
 		FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualConnectView.swift; sourceTree = "<group>"; };
 		FF26DD75E9420CA07E5B83FB /* CameraPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPickerView.swift; sourceTree = "<group>"; };
+		FFE98BD5880361559067CEC6 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -870,7 +872,7 @@
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
 				348FC413895A2131299A9250 /* PeerDropWidget */,
-				8135E0A166B3192E253501A4 /* v5-aging-ghost */,
+				6F0DB7F4DAF7B72686627D9D /* v5-deeper */,
 				B852FD7C848E2615AF9BF284 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1080,6 +1082,7 @@
 			isa = PBXGroup;
 			children = (
 				5F187A0363D91E2B6D5C0DC2 /* AnimationFrames.swift */,
+				C4B4DE0245ECD862958D1439 /* AssetSpec.swift */,
 				0ADED9CD12A8556762E899C0 /* BodyGene+SpeciesID.swift */,
 				2021539898896A9A26B2F9E6 /* SpeciesCatalog.swift */,
 				3062C325AC7AB93063F9B2E8 /* SpeciesID.swift */,
@@ -1194,6 +1197,15 @@
 			path = Behavior;
 			sourceTree = "<group>";
 		};
+		6F0DB7F4DAF7B72686627D9D /* v5-deeper */ = {
+			isa = PBXGroup;
+			children = (
+				FFE98BD5880361559067CEC6 /* Secrets.xcconfig */,
+			);
+			name = "v5-deeper";
+			path = .;
+			sourceTree = "<group>";
+		};
 		71203F913DF3E6E389EE350F /* Security */ = {
 			isa = PBXGroup;
 			children = (
@@ -1226,15 +1238,6 @@
 				F5D979E35021B42ECC2F105F /* TailscalePeer.swift */,
 			);
 			path = Discovery;
-			sourceTree = "<group>";
-		};
-		8135E0A166B3192E253501A4 /* v5-aging-ghost */ = {
-			isa = PBXGroup;
-			children = (
-				4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */,
-			);
-			name = "v5-aging-ghost";
-			path = .;
 			sourceTree = "<group>";
 		};
 		86FB5FB7C6AB5DE16D960E48 /* Resources */ = {
@@ -1958,6 +1961,7 @@
 				478D8CE37D8CE1BE9ECEB012 /* AnimationFrames.swift in Sources */,
 				D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */,
 				874F53371173F39758963EA1 /* ArchiveManager.swift in Sources */,
+				452533F98EE28AB04B5C7420 /* AssetSpec.swift in Sources */,
 				9A0AE6490AE9C3A6306B7D62 /* AssignGroupSheet.swift in Sources */,
 				CC145E5DBBC74F156B5EDBEB /* BLEDiscovery.swift in Sources */,
 				E7D669E89E90C7BC29F74660 /* BLESignaling.swift in Sources */,
@@ -2309,7 +2313,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */;
+			baseConfigurationReference = FFE98BD5880361559067CEC6 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2332,7 +2336,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4EB0E29AF94D25AEB4EA3D0F /* Secrets.xcconfig */;
+			baseConfigurationReference = FFE98BD5880361559067CEC6 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

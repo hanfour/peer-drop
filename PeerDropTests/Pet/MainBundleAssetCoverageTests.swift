@@ -107,8 +107,8 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: mainBundle)
         let req = SpriteRequest(species: SpeciesID("cat-tabby"), stage: .adult, direction: .east)
         let cg = try await service.image(for: req)
-        XCTAssertEqual(cg.width, 68)
-        XCTAssertEqual(cg.height, 68)
+        XCTAssertEqual(cg.width, Int(AssetSpec.canonicalCanvas.width))
+        XCTAssertEqual(cg.height, Int(AssetSpec.canonicalCanvas.height))
     }
 
     /// End-to-end decode of every multi-variety species' adult-east frame.

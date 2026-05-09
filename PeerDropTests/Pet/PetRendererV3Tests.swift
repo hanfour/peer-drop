@@ -31,8 +31,8 @@ final class PetRendererV3Tests: XCTestCase {
             mood: .happy,
             direction: .east
         )
-        XCTAssertEqual(cg.width, 68)
-        XCTAssertEqual(cg.height, 68)
+        XCTAssertEqual(cg.width, Int(AssetSpec.canonicalCanvas.width))
+        XCTAssertEqual(cg.height, Int(AssetSpec.canonicalCanvas.height))
     }
 
     // MARK: - direction-aware (M4.2)
@@ -79,14 +79,15 @@ final class PetRendererV3Tests: XCTestCase {
     func test_render_ghostBody_rendersGhostSprite() async throws {
         // v4.0.1 and earlier: BodyGene.ghost mapped to SpeciesID("ghost") which
         // wasn't in SpeciesCatalog and had no bundled asset, so the renderer's
-        // ultimateFallback (cat-tabby, 68×68) kicked in — users reported "my
-        // ghost shows as a cat".
+        // ultimateFallback (cat-tabby) kicked in — users reported "my ghost
+        // shows as a cat".
         //
         // v4.0.2 fix: ghost added to SpeciesCatalog as a single-stage species,
-        // ghost.zip bundled (48×48 PixelLab output, same zip used at every
-        // PetLevel via SpriteAssetResolver.singleStageSpecies). The render now
-        // succeeds with the ghost's own sprite — pin the dimensions to 48×48
-        // to lock out a regression to the cat-tabby fallback (68×68).
+        // ghost.zip bundled (initially 48×48 PixelLab output).
+        // v5.0 fix: ghost.zip regenerated at AssetSpec.canonicalCanvas (68×68)
+        //          with proper translucent ghostly visual. Test now asserts the
+        //          canonical size (68); regression to a different size or to
+        //          cat-tabby fallback both fail.
         let renderer = makeRenderer()
         var ghost = PetGenome.random()
         ghost.body = .ghost
@@ -94,8 +95,9 @@ final class PetRendererV3Tests: XCTestCase {
         ghost.seed = nil
         let cg = try await renderer.render(
             genome: ghost, level: .adult, mood: .happy, direction: .east)
-        XCTAssertEqual(cg.width, 48, "ghost should render its own sprite (48×48), NOT the cat-tabby fallback (68×68)")
-        XCTAssertEqual(cg.height, 48)
+        XCTAssertEqual(cg.width, Int(AssetSpec.canonicalCanvas.width),
+                       "ghost should render its own sprite at canonical canvas size, not fall back to cat-tabby")
+        XCTAssertEqual(cg.height, Int(AssetSpec.canonicalCanvas.height))
     }
 
     // MARK: - mood overlay (M4b.2)
@@ -211,8 +213,8 @@ final class PetRendererV3Tests: XCTestCase {
             frameIndex: 0,
             mood: .happy
         )
-        XCTAssertEqual(cg.width, 68)
-        XCTAssertEqual(cg.height, 68)
+        XCTAssertEqual(cg.width, Int(AssetSpec.canonicalCanvas.width))
+        XCTAssertEqual(cg.height, Int(AssetSpec.canonicalCanvas.height))
     }
 
     func test_renderWithFrameIndex_outOfBounds_wrapsToZero() async throws {
