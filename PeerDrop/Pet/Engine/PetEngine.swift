@@ -1,7 +1,10 @@
 import Foundation
 import Combine
 import CoreGraphics
+import OSLog
 import UIKit
+
+private let petEngineLog = Logger(subsystem: "com.hanfour.peerdrop", category: "PetEngine")
 
 @MainActor
 class PetEngine: ObservableObject {
@@ -326,9 +329,15 @@ class PetEngine: ObservableObject {
         let qualifiesUnderV5 = ageInDays >= Self.adultToElderAgeDays
             && daysSinceInteraction < Self.adultToElderActivityWindowDays
         if !qualifiesUnderV5 {
+            // os_log so the migration is visible in Console.app's unified
+            // logging without spamming the runtime. Operator can confirm the
+            // fix landed on a real device by filtering Console for category
+            // "PetEngine" and seeing this line on first v5 launch.
+            petEngineLog.notice("v5 aging migration: demoting elder→adult — ageInDays=\(ageInDays, privacy: .public), daysSinceInteraction=\(daysSinceInteraction, privacy: .public)")
             pet.level = .adult
             return true
         }
+        petEngineLog.debug("v5 aging migration: keeping elder — qualifies under v5 (ageInDays=\(ageInDays, privacy: .public), daysSinceInteraction=\(daysSinceInteraction, privacy: .public))")
         return false
     }
 
