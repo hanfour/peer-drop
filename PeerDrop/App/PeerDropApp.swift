@@ -104,7 +104,13 @@ struct PeerDropApp: App {
                     // "" or "v4" -> "v5") so the widget picks up the new
                     // multi-frame output. Persisted gate runs exactly once
                     // per device per renderer-version bump.
+                    //
+                    // Same gate also runs the v5 aging migration: pets
+                    // promoted to .elder under v4.0.x's overly-aggressive
+                    // 14-day rule get demoted back to .adult if they don't
+                    // qualify under the v5 90-day + activity gate.
                     if renderedImageVersion != "v5" {
+                        petEngine.migrateAgingForV5()
                         petEngine.updateRenderedImage()
                         renderedImageVersion = "v5"
                     }
