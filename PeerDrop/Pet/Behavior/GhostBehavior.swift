@@ -32,17 +32,20 @@ final class GhostBehavior: PetBehaviorProvider {
         // IMPORTANT: Ghost NEVER falls — floating is normal state
         // Airborne is the ghost's natural habitat
         if physics.surface == .airborne || physics.surface == .ground {
-            // Periodic flicker — every 15-30s when idle (independent of long
-            // idle gate). Gives users visible ghost-specific behavior fast.
+            // Periodic flicker — every 5-10s when idle (was 15-30s in v4.0.2).
+            // User feedback: ghost should feel "ghostly" all the time, not
+            // ~once-per-30s. Tightening to 5-10s makes the supernatural
+            // signal pervasive without becoming distracting.
             let now = Date()
             if current == .idle && elapsed > 2.0 {
-                let flickerCooldown = TimeInterval.random(in: 15...30)
+                let flickerCooldown = TimeInterval.random(in: 5...10)
                 if now.timeIntervalSince(lastFlickerAt) > flickerCooldown {
                     lastFlickerAt = now
                     return .flicker
                 }
-                // Periodic vanish — every 2-3 minutes when idle.
-                let vanishCooldown = TimeInterval.random(in: 120...180)
+                // Periodic vanish — every 60-90s when idle (was 120-180s
+                // in v4.0.2). User feedback: 2-3 minutes felt too rare.
+                let vanishCooldown = TimeInterval.random(in: 60...90)
                 if now.timeIntervalSince(lastVanishAt) > vanishCooldown {
                     lastVanishAt = now
                     return .vanish
