@@ -157,6 +157,14 @@ final class MainBundleAssetCoverageTests: XCTestCase {
     /// cares about the schema version flag, not direction completeness.
     private static let expectedV5Coverage: Set<String> = [
         "cat-tabby-adult",  // commit 54f0f69 — partial (south walk only)
+        // ghost is a single-stage species (`SpriteAssetResolver.singleStageSpecies`)
+        // that resolves all 3 PetLevel stage requests to the same ghost.zip file.
+        // The test loop produces 3 zipKeys per ghost — all v5 because they share
+        // one v5 zip. Multi-stage flip (separate ghost-baby/ghost-adult/ghost-elder
+        // assets) is the operator follow-up tracked in STATUS.md §0.4.1.
+        "ghost-baby",
+        "ghost-adult",
+        "ghost-elder",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
