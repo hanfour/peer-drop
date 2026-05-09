@@ -1,11 +1,14 @@
 PeerDrop 5.0 — Pets Come Alive
 
 What's new:
-- Pets now walk with full multi-frame animations across every direction.
-- Subtle idle breathing brings pets to life when they're at rest.
-- Direction changes are smoother — your pet keeps animating mid-turn.
+- Pets gained multi-frame walk animations and subtle idle breathing — they actually move now instead of sliding.
+- Smoother direction changes: animation continues mid-turn instead of resetting.
+- Initial coverage focuses on common species; more pets gain animations in future updates.
+
+Bug fixes:
+- Fixed a long-standing bug where pets aged into "elder" too quickly. Pets now stay adult longer; elder is reserved for genuinely long-lived pets with active engagement.
+- Ghost pet redesigned with a properly ghostly look (translucent wisp form, no longer Pac-Man-shaped).
 
 Behind the scenes:
-- New sprite pipeline supports per-action frame arrays (walk, idle).
-- Bundle size is slightly larger to accommodate the new frames.
-- All v4 features and your saved pet are unchanged.
+- New sprite pipeline supports per-action frame arrays.
+- All v4 features and your saved pet are preserved.
