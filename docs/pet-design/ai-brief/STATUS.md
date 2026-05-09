@@ -60,6 +60,20 @@ As of 2026-05-08:
 - **1 zip at v5:** `cat-tabby-adult` (south walk only; partial coverage is OK because C1 fix lets SpriteService degrade missing dirs to single-frame static)
 - **~303 zips remaining at v4:** all other (multi-variety species × 3 stages)
 
+### 0.4.1 Ghost asset backlog (separate from main v5 mass-gen)
+
+Ghost has its own backlog distinct from the multi-variety species mass-gen. As of 2026-05-09, ghost ships as a single-stage species with one bundled asset (`PeerDrop/Resources/Pets/ghost.zip`). Three issues need PixelLab work:
+
+1. **Wrong size: 48×48 instead of 68×68.** Same constraint as the main v5 mass-gen. The current ghost.zip was generated at 48×48 — visibly smaller than every other v4 species. **Regenerate at 68×68** as part of the ghost rework.
+
+2. **Single-stage when other species are multi-stage.** Ghost has no baby/adult/elder progression — currently a `singleStageSpecies` in `SpriteAssetResolver`. The v5 lifecycle update means ghost users see no evolution while every other species progresses. **Generate `ghost-baby` + `ghost-adult` + `ghost-elder` at 68×68** so ghost participates in the lifecycle. After all three exist, remove ghost from `SpriteAssetResolver.singleStageSpecies` and from `SpeciesCatalog.families["ghost"].variants` empty case (or migrate to the multi-stage path) — this is one atomic change, not staged, to avoid the cat-tabby fallback regression that v4.0.2 fixed.
+
+3. **Visual style needs to look like a ghost.** User feedback: existing ghost.zip art doesn't read as ghostly — too solid, not transparent/ethereal enough. PixelLab generation should target a more obviously supernatural style (translucent, blue-tinted, wisp-like). Consider non-default palette + alpha channel.
+
+Operator workflow when generating: same as §0.1 (drop normalized zip, update `expectedV5Coverage`, test). Plus the SpeciesCatalog/SpriteAssetResolver flip mentioned in (2) above when the third stage lands.
+
+Tracking: `MainBundleAssetCoverageTests.test_mainBundle_v5Coverage_matchesWhitelist` will report ghost-baby / ghost-adult / ghost-elder as "Bundled as v5 but not in whitelist" the moment they land — that's the signal to add them and do the SpeciesCatalog flip.
+
 ### 0.5 Resilience: partial coverage is shippable
 
 Per the C1 fix (commit `dd1a7ba`), `SpriteService.decodeAnimationFrames` falls back to the rotation PNG as a 1-frame static animation when:
