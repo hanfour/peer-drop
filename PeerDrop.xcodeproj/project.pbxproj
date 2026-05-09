@@ -21,6 +21,7 @@
 		0CC504EF1BCDE08A7C0FC29B /* ClipboardSyncPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6177991133811D150A9C63BB /* ClipboardSyncPayload.swift */; };
 		0EA206190D6C15E8362C65F6 /* PeerDropWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E58E671AF75C790526DDCDB /* PeerDropWidgetBundle.swift */; };
 		0EB449EE2838A44505508B07 /* DataChannelTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CF2ADC56F3918BA1B6A59B /* DataChannelTransport.swift */; };
+		0EFBCD47C0D33D744EE2EB6C /* V5UpgradeOnboardingHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5883B9C4565535B9BECDC1 /* V5UpgradeOnboardingHost.swift */; };
 		0F44132EAB6FCE1288327B84 /* SpriteCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9DB03196B8791524E4A3BE /* SpriteCache.swift */; };
 		0F583BCCB1AD0B9CD7DD3B31 /* PetGenomeSpeciesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */; };
 		0FC5D9230D4D2179ADC0C958 /* TrustBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4DE23F4DC70DE5619071BA /* TrustBadgeView.swift */; };
@@ -592,6 +593,7 @@
 		5D4717B3021E2DAD82772B39 /* PetLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLevel.swift; sourceTree = "<group>"; };
 		5D7E4A6EE9C506EDF235ED18 /* PetSecretChatRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSecretChatRow.swift; sourceTree = "<group>"; };
 		5E421866DB4CEFF89A391E29 /* PetBehaviorProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetBehaviorProvider.swift; sourceTree = "<group>"; };
+		5E5883B9C4565535B9BECDC1 /* V5UpgradeOnboardingHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5UpgradeOnboardingHost.swift; sourceTree = "<group>"; };
 		5ED89221EA62C36E1FA97B61 /* HashVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifier.swift; sourceTree = "<group>"; };
 		5F187A0363D91E2B6D5C0DC2 /* AnimationFrames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationFrames.swift; sourceTree = "<group>"; };
 		5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TEST_SPEC.md; sourceTree = "<group>"; };
@@ -1463,6 +1465,7 @@
 				7BE30BAD21DDB022E0E0F577 /* PixelView.swift */,
 				A6AFFD57A9FA50E4F4109A25 /* V4UpgradeOnboarding.swift */,
 				4BA5D496230C650E9C138FF7 /* V5UpgradeOnboarding.swift */,
+				5E5883B9C4565535B9BECDC1 /* V5UpgradeOnboardingHost.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -2170,6 +2173,7 @@
 				BB0A876963F26D7D52EECB7A /* UserProfileView.swift in Sources */,
 				56FD21C7860AFB666E3019A0 /* V4UpgradeOnboarding.swift in Sources */,
 				DD2DE0893C4BE33D0A962E96 /* V5UpgradeOnboarding.swift in Sources */,
+				0EFBCD47C0D33D744EE2EB6C /* V5UpgradeOnboardingHost.swift in Sources */,
 				ED6ED0806FBF2005C1037FBC /* VerificationView.swift in Sources */,
 				4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */,
 				E18567293F69BFFD0F2A4C12 /* VoiceCallSession.swift in Sources */,

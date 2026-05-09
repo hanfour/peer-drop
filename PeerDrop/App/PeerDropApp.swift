@@ -154,10 +154,14 @@ struct PeerDropApp: App {
                 }
             }
             .sheet(isPresented: $showV5UpgradeOnboarding) {
-                V5UpgradeOnboarding(
-                    petImage: petEngine.renderedImage,
-                    petName: petEngine.pet.name
-                ) {
+                // Host wraps V5UpgradeOnboarding so it observes petEngine
+                // and re-renders when renderedImage updates. Without the
+                // host, sheet construction captures `petEngine.renderedImage`
+                // at presentation time — which is often nil because the
+                // first updateRenderedImage() Task hasn't completed yet.
+                // Result: user sees pawprint placeholder instead of their
+                // actual pet on the upgrade screen.
+                V5UpgradeOnboardingHost(petEngine: petEngine) {
                     showV5UpgradeOnboarding = false
                 }
             }
