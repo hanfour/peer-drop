@@ -263,27 +263,73 @@ class PetEngine: ObservableObject {
 
     // MARK: - Evolution
     //
-    // v4.0.1 lifecycle model (egg stage removed):
-    //   baby  → adult  : age-only at 8 days from birthDate (was: 3 days + 500 XP in v3.x)
-    //   adult → elder  : age-only at 14 days from birthDate (new in v4.0)
-    //   elder          : terminal
+    // v5.0 lifecycle model (corrects v4.0.x's overly-rapid aging):
+    //   baby  → adult  : age-only at 8 days from birthDate
+    //   adult → elder  : age >= 90 days AND interacted within last 30 days
+    //   elder          : terminal (set during the active engagement window)
     //
-    // The baby→adult shift from experience-driven to age-only is intentional: v4.0
-    // emphasises graceful aging over grinding. Legacy pets that were stuck at .baby
-    // with insufficient XP will simply age into .adult on the first interaction
-    // after their 8-day mark.
+    // Why the change from v4.0.x's 14-day adult→elder gate:
+    // 14 days meant adult was a 6-day blip and any user past 2 weeks had a
+    // permanently-elder pet. Two corrections:
+    //   1. Stretch baseline timeline. 90 days lets adult be the dominant
+    //      stage (~3 months) with elder as a genuine "your pet has lived a
+    //      long life" milestone.
+    //   2. Activity gate. Pets only progress to elder if their owner is
+    //      actively engaging — dormant pets stay adult. A user returning
+    //      after a long absence finds their pet still adult (their
+    //      lastInteraction is stale, so the gate doesn't fire). Once they
+    //      resume interacting, lastInteraction updates and the gate
+    //      evaluates against the new reality.
+    //
+    // Migration (one-shot, see migrateAgingForV5): existing pets that were
+    // incorrectly promoted to elder under the old gate get demoted back to
+    // adult at first v5 launch.
+    static let adultToElderAgeDays: Double = 90
+    static let adultToElderActivityWindowDays: Double = 30
+
     private func checkEvolution() {
-        // FIXME(v4.0.x): EvolutionRequirement.for(.baby) thresholds (500 XP / 3 days) don't match checkEvolution()'s age-only 8-day rule. UI evolutionProgress + PetTabView "ready in ~Xh" hint will mislead users. Refactor in v4.0.x polish.
-        let ageInDays = Date().timeIntervalSince(pet.birthDate) / 86400
+        // FIXME(v5.x): EvolutionRequirement.for(.baby) thresholds (500 XP / 3 days) don't match checkEvolution()'s age-only 8-day rule. UI evolutionProgress + PetTabView "ready in ~Xh" hint will mislead users. Refactor in v5.x polish.
+        let now = Date()
+        let ageInDays = now.timeIntervalSince(pet.birthDate) / 86400
 
         switch pet.level {
         case .baby:
             if ageInDays >= 8 { evolve(to: .adult) }
         case .adult:
-            if ageInDays >= 14 { evolve(to: .elder) }
+            // Both gates required: meaningful age AND ongoing engagement.
+            let daysSinceInteraction = now.timeIntervalSince(pet.lastInteraction) / 86400
+            if ageInDays >= Self.adultToElderAgeDays
+                && daysSinceInteraction < Self.adultToElderActivityWindowDays {
+                evolve(to: .elder)
+            }
         case .elder:
             return
         }
+    }
+
+    /// One-shot v5 migration: pets that were promoted to .elder under the
+    /// pre-v5 14-day age-only gate but don't meet the v5 90-day + activity
+    /// gate get demoted back to .adult. Idempotent — re-runs are no-ops
+    /// because demoted pets either qualify for re-promotion next tick (in
+    /// which case they correctly become elder again) or stay adult.
+    ///
+    /// Called once per device on first v5 launch from PeerDropApp .task,
+    /// gated alongside the renderedImageVersion bump so it can't run
+    /// repeatedly. Public so PeerDropApp can invoke it.
+    /// Returns true iff a demotion happened (for logging / migration record).
+    @discardableResult
+    func migrateAgingForV5() -> Bool {
+        guard pet.level == .elder else { return false }
+        let now = Date()
+        let ageInDays = now.timeIntervalSince(pet.birthDate) / 86400
+        let daysSinceInteraction = now.timeIntervalSince(pet.lastInteraction) / 86400
+        let qualifiesUnderV5 = ageInDays >= Self.adultToElderAgeDays
+            && daysSinceInteraction < Self.adultToElderActivityWindowDays
+        if !qualifiesUnderV5 {
+            pet.level = .adult
+            return true
+        }
+        return false
     }
 
     private func evolve(to level: PetLevel) {

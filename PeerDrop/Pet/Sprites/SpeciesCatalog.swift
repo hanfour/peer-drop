@@ -4,8 +4,10 @@ import Foundation
 ///
 /// Data layout: each family maps to an ordered list of sub-variety strings, with
 /// the first element treated as the family default. Single-variety legacy families
-/// (bird, frog, octopus) carry an empty variants list — their `SpeciesID` is the
-/// bare family name.
+/// (bird, frog, octopus, ghost) carry an empty variants list — their `SpeciesID`
+/// is the bare family name. Ghost is additionally a single-stage species
+/// (`SpriteAssetResolver.singleStageSpecies`): one zip total, used at every
+/// `PetLevel`.
 ///
 /// Defaults match plan §M2.3 locked picks for legacy BodyGene mappings
 /// (cat→tabby, dog→shiba, bear→brown, dragon→western, slime→green,
@@ -34,6 +36,7 @@ enum SpeciesCatalog {
         "duck":     Family(variants: ["mallard", "mandarin", "yellow"]),
         "fox":      Family(variants: ["arctic", "red", "silver"]),
         "frog":     Family(variants: []),
+        "ghost":    Family(variants: []),  // single-stage; bundled as PeerDrop/Resources/Pets/ghost.zip (see SpriteAssetResolver.singleStageSpecies)
         "hamster":  Family(variants: ["campbell", "golden", "white", "winterwhite"]),
         "hedgehog": Family(variants: ["brown", "chocolate", "white"]),
         "horse":    Family(variants: ["black", "chestnut", "zebra"]),

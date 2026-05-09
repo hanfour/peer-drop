@@ -49,13 +49,19 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
     }
 
     func test_updateRenderedImage_writesPlaceholder_whenSpeciesAssetMissing() async throws {
-        // Body=.ghost has no v4.0 asset, but PetRendererV3.loadBasePNG falls
-        // back to cat-tabby (ultimateFallback). So a ghost pet renders + writes
-        // the placeholder image to the bridge — UX preference is "show
+        // The test bundle only ships cat-tabby-adult.zip (and ghost.zip from
+        // v4.0.2). Any other species hits PetRendererV3.loadBasePNG's catch
+        // branch and falls back to cat-tabby (ultimateFallback) so the user
+        // sees a placeholder pet instead of nothing — UX preference is "show
         // placeholder" over "show nothing".
+        //
+        // Pre-v4.0.2 this test used body=.ghost, but ghost is now a bundled
+        // single-stage species (its own 48×48 sprite ships in the test bundle
+        // as ghost.zip). Switched to body=.dragon: dragon-western-adult.zip is
+        // NOT in the test bundle, so the fallback path still fires.
         var pet = PetState.newEgg()
         pet.level = .adult
-        pet.genome.body = .ghost
+        pet.genome.body = .dragon
         pet.genome.subVariety = nil
         pet.genome.seed = nil
         let engine = makeEngine(pet: pet)
@@ -63,7 +69,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
         engine.updateRenderedImage()
         try await waitForRenderedImage(engine: engine, timeout: 2.0)
 
-        XCTAssertNotNil(engine.renderedImage, "ghost should render via the placeholder fallback")
+        XCTAssertNotNil(engine.renderedImage, "missing-asset render should fall back to placeholder")
         XCTAssertNotNil(bridge.read(), "Bridge should get the placeholder image")
         XCTAssertEqual(bridge.read()?.width, 68, "placeholder is cat-tabby 68×68")
     }

@@ -43,7 +43,7 @@ final class BodyGeneMappingTests: XCTestCase {
         XCTAssertEqual(BodyGene.octopus.defaultSpeciesID, SpeciesID("octopus"))
     }
 
-    // MARK: - ghost: no assets in v4.0 catalog (M3 loader handles fallback)
+    // MARK: - ghost: single-stage species (v4.0.2 — bare ghost.zip bundled)
 
     func test_ghost_mapsTo_bareGhost() {
         XCTAssertEqual(BodyGene.ghost.defaultSpeciesID, SpeciesID("ghost"))
@@ -58,10 +58,15 @@ final class BodyGeneMappingTests: XCTestCase {
         }
     }
 
-    // MARK: - all mapped IDs (except ghost) must resolve in the catalog
+    // MARK: - every mapped ID must resolve in the catalog
 
-    func test_allMappedIDs_exceptGhost_resolveInCatalog() {
-        for body in BodyGene.allCases where body != .ghost {
+    /// v4.0.2: ghost was previously excluded ("test_allMappedIDs_exceptGhost_…")
+    /// because the catalog had no `ghost` entry and the renderer fell back to
+    /// cat-tabby — surfacing as "my ghost shows as a cat" in user reports.
+    /// Adding `ghost` to `SpeciesCatalog.families` + bundling `ghost.zip`
+    /// closes that gap; ghost now resolves to itself, no fallback needed.
+    func test_allMappedIDs_resolveInCatalog() {
+        for body in BodyGene.allCases {
             XCTAssertNotNil(SpeciesCatalog.resolve(body.defaultSpeciesID),
                             "BodyGene.\(body) maps to \(body.defaultSpeciesID.rawValue) which does not resolve in SpeciesCatalog")
         }
