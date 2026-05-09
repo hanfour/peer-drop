@@ -108,21 +108,54 @@ struct V5UpgradeOnboarding: View {
 }
 
 extension V5UpgradeOnboarding {
-    /// Pure decision function. Three conditions:
+    /// v5.0 effective ship date. Pets with `birthDate` before this are
+    /// pre-v5 — their owners had no multi-frame animations to compare
+    /// against, so the upgrade announcement makes sense. Pets created
+    /// after this date are either fresh v5 installs or pets re-created
+    /// on v5 (already see animations from day one), so the announcement
+    /// would be confusing.
+    ///
+    /// **UPDATE BEFORE FINAL APP STORE SUBMISSION** — currently set to a
+    /// 2026-09-01 placeholder. The actual cutoff should be a few days
+    /// before v5.0 enters phased rollout so any TestFlight pets created
+    /// during soak are correctly classified as "post-v5".
+    static let v5ReleaseDate: Date = {
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 9
+        components.day = 1
+        components.timeZone = TimeZone(identifier: "UTC")
+        return Calendar(identifier: .gregorian).date(from: components) ?? .distantFuture
+    }()
+
+    /// Pure decision function. Two conditions both must hold:
     ///   • `v5UpgradeShown` flag is false (first time only)
     ///   • User is an established v4-and-earlier user — signal is either:
     ///       - `v4UpgradeShown` is true (they went through the v4 upgrade
     ///         screen, so definitely a v3.x→v4 migrator), OR
-    ///       - `hasCompletedOnboarding` is true (they finished the initial
-    ///         onboarding flow at some point, so they have history).
-    /// Fresh v5.0 installs that haven't yet finished initial onboarding skip
-    /// this screen entirely. The slight edge case — a fresh v5 install user
-    /// who finishes onboarding and then re-launches — gets shown the screen
-    /// once; harmless.
-    static func shouldPresent(defaults: UserDefaults = .standard) -> Bool {
+    ///       - the user has a saved pet with `birthDate < v5ReleaseDate`
+    ///         (pet was created on a pre-v5 version of the app).
+    ///
+    /// Why the birthDate signal: `hasCompletedOnboarding` was used in PR
+    /// #30 as a proxy for "user has history", but it triggers for fresh
+    /// v5 installs on the second launch (after they finish onboarding,
+    /// then relaunch). Those users have no v4 baseline to compare, so the
+    /// "Pets Got New Animations" copy reads as confusing. birthDate vs
+    /// ship date is the cleaner signal: pets created on a v4 install are
+    /// reliably pre-v5; fresh v5 pets always have post-v5 birthDates.
+    static func shouldPresent(
+        pet: PetState?,
+        defaults: UserDefaults = .standard,
+        v5ReleaseDate: Date = V5UpgradeOnboarding.v5ReleaseDate
+    ) -> Bool {
         guard !defaults.bool(forKey: "v5UpgradeShown") else { return false }
-        let v4Seen = defaults.bool(forKey: "v4UpgradeShown")
-        let onboardingDone = defaults.bool(forKey: "hasCompletedOnboarding")
-        return v4Seen || onboardingDone
+        // Strongest signal: user explicitly went through the v3.x -> v4
+        // upgrade flow. They're definitely an upgrader.
+        if defaults.bool(forKey: "v4UpgradeShown") { return true }
+        // Fallback: their pet was created before v5 shipped. Excludes both
+        // fresh v5 installs (no saved pet, or post-v5 birthDate) and
+        // post-v5 pet re-creations.
+        guard let pet = pet else { return false }
+        return pet.birthDate < v5ReleaseDate
     }
 }

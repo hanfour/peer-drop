@@ -14,6 +14,7 @@ struct PeerDropApp: App {
     @State private var showInviteAccept = false
     @State private var showV4UpgradeOnboarding = false
     @State private var showV5UpgradeOnboarding = false
+    @AppStorage("renderedImageVersion") private var renderedImageVersion: String = ""
 
     var body: some Scene {
         WindowGroup {
@@ -87,7 +88,7 @@ struct PeerDropApp: App {
                     // installs (no migrationDoneAt) skip this.
                     if V4UpgradeOnboarding.shouldPresent(for: petEngine.pet) {
                         showV4UpgradeOnboarding = true
-                    } else if V5UpgradeOnboarding.shouldPresent() {
+                    } else if V5UpgradeOnboarding.shouldPresent(pet: petEngine.pet) {
                         // v5 upgrade is mutually exclusive with v4 upgrade in
                         // a single launch — if both fire, v4 gets priority
                         // (it's the older, less-recently-seen one and chains
@@ -103,11 +104,9 @@ struct PeerDropApp: App {
                     // "" or "v4" -> "v5") so the widget picks up the new
                     // multi-frame output. Persisted gate runs exactly once
                     // per device per renderer-version bump.
-                    let renderedVersion = UserDefaults.standard
-                        .string(forKey: "renderedImageVersion") ?? ""
-                    if renderedVersion != "v5" {
+                    if renderedImageVersion != "v5" {
                         petEngine.updateRenderedImage()
-                        UserDefaults.standard.set("v5", forKey: "renderedImageVersion")
+                        renderedImageVersion = "v5"
                     }
                 }
 

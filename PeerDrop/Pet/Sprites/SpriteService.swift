@@ -28,6 +28,7 @@ actor SpriteService {
     private let bundle: Bundle
     private var inflightTasks: [SpriteRequest: Task<CGImage, Error>] = [:]
     private var animationFrames: [AnimationRequest: AnimationFrames] = [:]
+    private var inflightAnimationTasks: [AnimationRequest: Task<AnimationFrames, Error>] = [:]
     private(set) var decodeCount: Int = 0
 
     init(cache: SpriteCache = .shared, bundle: Bundle = .main) {
@@ -119,14 +120,32 @@ actor SpriteService {
     /// Cache check + decode + cache fill. Private to keep the URL-direct
     /// shape from leaking to production callers (which must go through
     /// SpriteAssetResolver via `frames(for:)`).
+    ///
+    /// Inflight-task dedup: concurrent first-time calls for the same
+    /// AnimationRequest share a single decode rather than each running
+    /// their own. Without this, two `.task { engine.dispatchAction... }`
+    /// firings on rapid action transitions could each kick off their own
+    /// `decodeAnimationFrames` Task.detached before either populated
+    /// `animationFrames[request]`. The actor serializes individual hops
+    /// but not the awaits between them — see `image(for:)` above for the
+    /// matching pattern on the static-rotation cache.
     private func loadFrames(at zipURL: URL, for request: AnimationRequest) async throws -> AnimationFrames {
         if let cached = animationFrames[request] { return cached }
+        if let existing = inflightAnimationTasks[request] {
+            return try await existing.value
+        }
 
-        let frames = try await Self.decodeAnimationFrames(
-            zipURL: zipURL,
-            direction: request.direction,
-            action: request.action
-        )
+        let task = Task<AnimationFrames, Error> {
+            try await Self.decodeAnimationFrames(
+                zipURL: zipURL,
+                direction: request.direction,
+                action: request.action
+            )
+        }
+        inflightAnimationTasks[request] = task
+        defer { inflightAnimationTasks[request] = nil }
+
+        let frames = try await task.value
         animationFrames[request] = frames
         return frames
     }
@@ -150,11 +169,22 @@ actor SpriteService {
             let metadata = try SpriteMetadata.parse(zipURL: zipURL)
             let dirKey = direction.rawValue
 
+            // Open the zip Archive once and reuse for every frame extract —
+            // an 8-frame walk is 8 PNG paths, and re-opening the zip each
+            // time was redundant I/O. ZIPFoundation's Archive struct is
+            // designed for exactly this batched-read pattern.
+            let archive: Archive
+            do {
+                archive = try Archive(url: zipURL, accessMode: .read)
+            } catch {
+                throw SpriteServiceError.framePNGDecodeFailed(zipURL.lastPathComponent)
+            }
+
             if let actionKey = action.animationKey,
                let anim = metadata.animations[actionKey],
                let paths = anim.directions[dirKey],
                !paths.isEmpty {
-                let images = try paths.map { try Self.decodePNG(zipURL: zipURL, path: $0) }
+                let images = try paths.map { try Self.decodePNG(archive: archive, path: $0) }
                 return AnimationFrames(images: images, fps: anim.fps, loops: anim.loops)
             }
 
@@ -173,18 +203,12 @@ actor SpriteService {
             guard let path = metadata.rotations[dirKey] else {
                 throw SpriteServiceError.framePathMissing("rotations/\(dirKey).png")
             }
-            let image = try Self.decodePNG(zipURL: zipURL, path: path)
+            let image = try Self.decodePNG(archive: archive, path: path)
             return AnimationFrames(images: [image], fps: 1, loops: false)
         }.value
     }
 
-    nonisolated private static func decodePNG(zipURL: URL, path: String) throws -> CGImage {
-        let archive: Archive
-        do {
-            archive = try Archive(url: zipURL, accessMode: .read)
-        } catch {
-            throw SpriteServiceError.framePNGDecodeFailed(path)
-        }
+    nonisolated private static func decodePNG(archive: Archive, path: String) throws -> CGImage {
         guard let entry = archive[path] else {
             throw SpriteServiceError.framePathMissing(path)
         }
