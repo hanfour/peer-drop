@@ -161,6 +161,14 @@ struct FloatingPetView: View {
     }
 
     private func physicsStep(dt: CGFloat) {
+        // Drive sprite animation off the same clock as physics. Always run —
+        // even when physics is gated below by drag/absent/exit/enter, the
+        // animator should keep ticking so the rendered image stays current.
+        // Matches the old Timer's "fire regardless of physics state" semantics
+        // (the displayLink is invalidated onDisappear, so this naturally stops
+        // when the view goes away).
+        engine.animator.advance(dt: TimeInterval(dt))
+
         guard !isDragging else { return }
         guard !isAbsent else { return }
         guard !isExiting && !isEntering else { return }  // animation handles movement
