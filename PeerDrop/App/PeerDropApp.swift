@@ -96,23 +96,22 @@ struct PeerDropApp: App {
                         // launch via the AppStorage gate).
                         showV5UpgradeOnboarding = true
                     }
-                    // Phase 6 — widget bridge invalidation. The App Group's
-                    // pet-rendered.png is whatever the LAST main-app render
-                    // wrote, which on a v4-installed device is a v4
-                    // single-frame image. Trigger a fresh render on the
-                    // first v5 launch (renderedImageVersion transitions
-                    // "" or "v4" -> "v5") so the widget picks up the new
-                    // multi-frame output. Persisted gate runs exactly once
-                    // per device per renderer-version bump.
-                    //
-                    // Same gate also runs the v5 aging migration: pets
-                    // promoted to .elder under v4.0.x's overly-aggressive
-                    // 14-day rule get demoted back to .adult if they don't
-                    // qualify under the v5 90-day + activity gate.
-                    if renderedImageVersion != "v5" {
+                    // Widget bridge invalidation gate, also doubles as the
+                    // host for one-shot per-version migrations:
+                    //   - v5: aging gate change (90d + activity), widget
+                    //         re-render after sprite pipeline swap.
+                    //   - v5.0.1: ghost-body migration. The BodyGene decoder
+                    //         silently maps "ghost" → .cat at load time; this
+                    //         gate forces a persist so the corrected body
+                    //         lands on disk immediately rather than waiting
+                    //         for the next backgrounding event.
+                    // Bumping the gate string re-fires the migration block
+                    // for users who already crossed the previous gate.
+                    if renderedImageVersion != "v5.0.1" {
                         petEngine.migrateAgingForV5()
+                        petEngine.migrateGhostBodyForV501()
                         petEngine.updateRenderedImage()
-                        renderedImageVersion = "v5"
+                        renderedImageVersion = "v5.0.1"
                     }
                 }
 

@@ -94,16 +94,6 @@ enum PetPhysicsEngine {
         state.position.y = max(surfaces.ceiling, min(state.position.y, surfaces.ground))
     }
 
-    /// Floating — free directional, ignores all surfaces
-    static func applyFloat(_ state: inout PetPhysicsState, direction: CGVector,
-                           speed: CGFloat, dt: CGFloat) {
-        let len = hypot(direction.dx, direction.dy)
-        guard len > 0 else { return }
-        state.position.x += (direction.dx / len) * speed * dt
-        state.position.y += (direction.dy / len) * speed * dt
-        state.facingRight = direction.dx >= 0
-    }
-
     /// Hop — horizontal jump from ground
     static func applyHop(_ state: inout PetPhysicsState, direction: HorizontalDirection,
                          speed: CGFloat, jumpVelocity: CGFloat = -250) {

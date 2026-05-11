@@ -18,21 +18,12 @@ final class PetRendererV3 {
     private let service: SpriteService
 
     /// Ultimate fallback species when a pet's resolved SpeciesID has no
-    /// shipping assets (e.g. legacy `BodyGene.ghost` whose v4.0 assets weren't
-    /// generated, or stages where some species are missing entries like
-    /// `octopus-adult`). The fallback target MUST have all 3 stages bundled —
+    /// shipping assets (e.g. partial-coverage species like `octopus-adult`
+    /// or `bird-baby`). The fallback target MUST have all 3 stages bundled —
     /// `cat-tabby` was chosen because it's the legacy `BodyGene.cat` default
-    /// and the most coverage-tested asset in the bundle.
-    ///
-    /// Contract history: M4 review locked `test_render_ghost_throwsAssetNotFound`
-    /// with the strict-error contract on the assumption that a nil image was
-    /// preferable to a wrong placeholder. M8 phase 5 reversed this — once the
-    /// legacy widget path was removed, every consumer needed SOME image to
-    /// avoid blank UI on legacy pets, and SpriteService keeps the strict
-    /// assetNotFound contract for its own diagnostic value. Renderer-layer
-    /// fallback is the right surface to absorb the gap. Tests updated:
-    ///   `test_render_ghostBody_fallsBackToUltimatePlaceholder`
-    ///   `test_updateRenderedImage_writesPlaceholder_whenSpeciesAssetMissing`
+    /// and the most coverage-tested asset in the bundle. SpriteService
+    /// deliberately keeps the strict `assetNotFound` contract for diagnostic
+    /// value; renderer-layer fallback is the right surface to absorb the gap.
     static let ultimateFallback = SpeciesID("cat-tabby")
 
     /// Fraction of the base sprite's width consumed by the mood overlay.
@@ -152,12 +143,11 @@ final class PetRendererV3 {
     }
 
     /// Fetches the base sprite, falling back to `ultimateFallback` when the
-    /// requested species×stage has no shipping zip. Without this, legacy
-    /// `BodyGene.ghost` pets and incomplete species (e.g. `octopus-adult`,
-    /// `bird-baby/adult`) would crash the renderer instead of showing the
-    /// safe cat-tabby placeholder. SpriteService deliberately keeps the
-    /// strict `assetNotFound` contract (its tests pin it), so the fallback
-    /// has to live at the renderer layer.
+    /// requested species×stage has no shipping zip. Without this, incomplete
+    /// species (e.g. `octopus-adult`, `bird-baby/adult`) would crash the
+    /// renderer instead of showing the safe cat-tabby placeholder.
+    /// SpriteService deliberately keeps the strict `assetNotFound` contract
+    /// (its tests pin it), so the fallback has to live at the renderer layer.
     private func loadBasePNG(
         species: SpeciesID,
         stage: PetLevel,

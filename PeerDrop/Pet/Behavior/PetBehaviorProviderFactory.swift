@@ -11,7 +11,6 @@ enum PetBehaviorProviderFactory {
         case .bear:     return BearBehavior()
         case .dragon:   return DragonBehavior()
         case .octopus:  return OctopusBehavior()
-        case .ghost:    return GhostBehavior()
         case .slime:    return SlimeBehavior()
         }
     }

@@ -34,8 +34,6 @@ enum PetAction: String, Codable, CaseIterable {
     case breathFire, hover, wingSpread, roar
     // Octopus
     case inkSquirt, tentacleReach, camouflage, wallSuction
-    // Ghost
-    case phaseThrough, flicker, spook, vanish
     // Slime
     case split, melt, absorb, wallStick
 

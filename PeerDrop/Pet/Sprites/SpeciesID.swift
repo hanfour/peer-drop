@@ -3,7 +3,7 @@ import Foundation
 /// Flat-string identifier for a pet species variant, e.g. `"cat-tabby"`, `"slime-fire"`,
 /// `"octopus"`. Splits on the first hyphen: prefix is the family ("cat"), suffix is the
 /// sub-variety ("tabby"). Single-token IDs (no hyphen) carry a nil variant — used by
-/// legacy single-stage species like `octopus` and `ghost`.
+/// legacy single-variety species like `octopus`, `bird`, `frog`.
 ///
 /// Codable as a plain string (single-value container) so persisted/network payloads stay
 /// compact: `{"id":"cat-tabby"}` rather than `{"id":{"rawValue":"cat-tabby"}}`.

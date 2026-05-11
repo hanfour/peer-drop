@@ -22,13 +22,10 @@ enum SpriteAssetResolver {
     static let bundleSubdirectory = "Pets"
 
     /// Species shipped as a single zip with no per-stage variants. The bundle
-    /// filename is the bare family ID (e.g. `ghost.zip`) and the same asset is
-    /// returned for any requested `stage`.
-    ///
-    /// **v5.0 review #2:** derived from `SpeciesCatalog.isSingleStage(family:)`
-    /// rather than maintained as a separate hardcoded set. Atomic multi-stage
-    /// flip (when ghost-baby + ghost-elder land) is one edit in
-    /// SpeciesCatalog instead of two synchronized edits across two files.
+    /// filename is the bare family ID and the same asset is returned for any
+    /// requested `stage`. Derived from `SpeciesCatalog.isSingleAssetFamily(_:)`
+    /// so atomic multi-stage flips happen in one place. Currently empty — no
+    /// shipping family uses single-asset bundling.
     static var singleStageSpecies: Set<SpeciesID> {
         let families = Set(SpeciesCatalog.allIDs.map { $0.family })
         return Set(families
@@ -47,9 +44,9 @@ enum SpriteAssetResolver {
         }
         let family = resolved.family
 
-        // Single-asset family (e.g. ghost): bare family ID, no stage suffix.
-        // The same `<family>.zip` is returned for every PetLevel — by design
-        // these families ship as one bundled asset.
+        // Single-asset family: bare family ID, no stage suffix. The same
+        // `<family>.zip` is returned for every PetLevel — by design these
+        // families ship as one bundled asset.
         if SpeciesCatalog.isSingleAssetFamily(family) {
             return family
         }

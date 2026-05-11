@@ -3,9 +3,18 @@ import Foundation
 // MARK: - Gene Enums
 
 enum BodyGene: String, Codable, CaseIterable {
-    case cat, dog, rabbit, bird, frog, bear, dragon, octopus, ghost, slime
+    case cat, dog, rabbit, bird, frog, bear, dragon, octopus, slime
 
-    /// Map legacy values from v1 genome saves
+    /// Map legacy values from earlier genome saves.
+    ///
+    /// **v5.0.1 ghost retirement (2026-05-11):** the `.ghost` case was
+    /// removed because the species' visual quality never reached an
+    /// acceptable bar. Existing pets whose persisted JSON has
+    /// `body: "ghost"` silently decode to `.cat`, preserving the pet's
+    /// identity (id, name, age, level, interaction history) and only
+    /// swapping the rendered appearance. The widget-bridge invalidation
+    /// + persist happen in `PetEngine.migrateGhostBodyForV501()` so
+    /// disk + widget cache catch up on first launch.
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)
@@ -13,6 +22,7 @@ enum BodyGene: String, Codable, CaseIterable {
         case "round": self = .bear
         case "square": self = .cat
         case "oval": self = .slime
+        case "ghost": self = .cat
         default:
             guard let value = BodyGene(rawValue: raw) else {
                 throw DecodingError.dataCorruptedError(
@@ -25,30 +35,23 @@ enum BodyGene: String, Codable, CaseIterable {
 
     /// Determine body type from personality gene at hatch.
     ///
-    /// **v5.0 distribution shift (2026-05-09):** cat family weight raised
-    /// from 14% to 40%, ghost weight raised from 6% to 10%. Reason: in
-    /// v5.0's initial release, cat-tabby and ghost are the only species
-    /// shipping at v5 schema (multi-frame walk animations). Other species
-    /// gain animations across subsequent updates per the weekly cadence
-    /// in `docs/release/v5.0.x-cadence.md`. Skewing the genome distribution
-    /// toward animated species during the rollout window means newly-
-    /// hatched pets are more likely to demonstrate the v5 animation
-    /// pipeline that the release notes advertise.
-    ///
-    /// As more species reach v5 schema, this distribution should rebalance
-    /// back toward uniform — track in the cadence playbook.
+    /// **v5.0.1 distribution (2026-05-11):** the 10% ghost band collapses
+    /// into cat, raising cat to 50%. Cat-tabby is the only species
+    /// shipping at v5 schema (multi-frame walk animations); other species
+    /// gain animations across subsequent v5.0.x updates per
+    /// `docs/release/v5.0.x-cadence.md`. As more species reach v5 schema,
+    /// rebalance back toward uniform.
     static func from(personalityGene pg: Double) -> BodyGene {
         switch pg {
-        case ..<0.40: return .cat       // 40% (v5 animated; was 14%)
-        case ..<0.50: return .ghost     // 10% (v5 animated; was 6% range)
-        case ..<0.60: return .dog       // 10% (v4 static, common; was 14%)
-        case ..<0.68: return .rabbit    // 8%  (was 12%)
-        case ..<0.76: return .bird      // 8%  (was 12%)
-        case ..<0.82: return .frog      // 6%  (was 10%)
-        case ..<0.88: return .bear      // 6%  (was 10%)
-        case ..<0.92: return .dragon    // 4%  (was 8%)
-        case ..<0.96: return .octopus   // 4%  (was 7%)
-        default:      return .slime     // 4%  (was 7%)
+        case ..<0.50: return .cat       // 50% (v5 animated)
+        case ..<0.60: return .dog       // 10%
+        case ..<0.68: return .rabbit    // 8%
+        case ..<0.76: return .bird      // 8%
+        case ..<0.82: return .frog      // 6%
+        case ..<0.88: return .bear      // 6%
+        case ..<0.92: return .dragon    // 4%
+        case ..<0.96: return .octopus   // 4%
+        default:      return .slime     // 4%
         }
     }
 }
