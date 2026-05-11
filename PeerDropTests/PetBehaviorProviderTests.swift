@@ -43,21 +43,6 @@ final class PetBehaviorProviderTests: XCTestCase {
         XCTAssertEqual(p.uniqueActions, [.perch, .peck, .preen, .dive, .glide])
     }
 
-    // MARK: - Ghost Profile (floating, passThrough)
-
-    func testGhostProfileValues() {
-        let ghost = PetBehaviorProviderFactory.create(for: .ghost)
-        let p = ghost.profile
-        XCTAssertEqual(p.physicsMode, .floating)
-        XCTAssertEqual(p.gravity, 0)
-        XCTAssertFalse(p.canClimbWalls)
-        XCTAssertFalse(p.canHangCeiling)
-        XCTAssertTrue(p.canPassThroughWalls)
-        XCTAssertEqual(p.baseSpeed, 55)
-        XCTAssertEqual(p.movementStyle, .float)
-        XCTAssertEqual(p.uniqueActions, [.phaseThrough, .flicker, .spook, .vanish])
-    }
-
     // MARK: - Slime Profile (bouncing, 600 gravity)
 
     func testSlimeProfileValues() {

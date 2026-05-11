@@ -71,14 +71,6 @@ final class PetPhysicsEngineTests: XCTestCase {
         XCTAssertEqual(state.velocity.dy, 0, accuracy: 0.01)
     }
 
-    func testGhostPassesThroughWalls() {
-        var state = PetPhysicsState(position: CGPoint(x: -10, y: 400), velocity: CGVector(dx: -50, dy: 0), surface: .airborne)
-        let surfaces = ScreenSurfaces.test(leftWall: 0, rightWall: 400)
-        let ghostProfile = PetBehaviorProviderFactory.create(for: .ghost).profile
-        PetPhysicsEngine.update(&state, dt: 1.0 / 60.0, surfaces: surfaces, profile: ghostProfile)
-        XCTAssertLessThan(state.position.x, 0)
-    }
-
     func testReducedGravityForCrawling() {
         var state = PetPhysicsState(position: CGPoint(x: 100, y: 100), velocity: .zero, surface: .airborne)
         let surfaces = ScreenSurfaces.test(ground: 800)
@@ -96,13 +88,6 @@ final class PetPhysicsEngineTests: XCTestCase {
         PetPhysicsEngine.applyFly(&state, direction: CGVector(dx: 1, dy: -0.5), speed: 90, dt: 1.0 / 60.0, surfaces: surfaces)
         XCTAssertGreaterThan(state.position.x, 200)
         XCTAssertLessThan(state.position.y, 300)
-    }
-
-    func testApplyFloat() {
-        var state = PetPhysicsState(position: CGPoint(x: 200, y: 300), velocity: .zero, surface: .airborne)
-        PetPhysicsEngine.applyFloat(&state, direction: CGVector(dx: 0.7, dy: 0.3), speed: 55, dt: 1.0 / 60.0)
-        XCTAssertGreaterThan(state.position.x, 200)
-        XCTAssertGreaterThan(state.position.y, 300)
     }
 
     func testApplyHop() {

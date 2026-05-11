@@ -52,17 +52,6 @@ final class PetSpeciesIntegrationTests: XCTestCase {
         }
     }
 
-    func testFloatingSpeciesNeverFall() {
-        let traits = PersonalityTraits(independence: 0.5, curiosity: 0.5, energy: 0.5, timidity: 0.5, mischief: 0.5)
-        let airborne = PetPhysicsState(position: CGPoint(x: 200, y: 300), velocity: .zero, surface: .airborne)
-        let ghost = PetBehaviorProviderFactory.create(for: .ghost)
-        for _ in 0..<100 {
-            let action = ghost.nextBehavior(current: .idle, physics: airborne, level: .baby,
-                                             elapsed: 0, foodTarget: nil, traits: traits)
-            XCTAssertNotEqual(action, .fall, "Ghost should never fall")
-        }
-    }
-
     func testPhysicsProfileIntegration() {
         // Test that physics engine respects profile gravity
         var state = PetPhysicsState(position: CGPoint(x: 100, y: 100), velocity: .zero, surface: .airborne)

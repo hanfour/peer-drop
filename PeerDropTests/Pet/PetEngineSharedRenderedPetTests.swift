@@ -49,16 +49,14 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
     }
 
     func test_updateRenderedImage_writesPlaceholder_whenSpeciesAssetMissing() async throws {
-        // The test bundle only ships cat-tabby-adult.zip (and ghost.zip from
-        // v4.0.2). Any other species hits PetRendererV3.loadBasePNG's catch
-        // branch and falls back to cat-tabby (ultimateFallback) so the user
-        // sees a placeholder pet instead of nothing — UX preference is "show
-        // placeholder" over "show nothing".
+        // The test bundle only ships cat-tabby-adult.zip. Any other species
+        // hits PetRendererV3.loadBasePNG's catch branch and falls back to
+        // cat-tabby (ultimateFallback) so the user sees a placeholder pet
+        // instead of nothing — UX preference is "show placeholder" over
+        // "show nothing".
         //
-        // Pre-v4.0.2 this test used body=.ghost, but ghost is now a bundled
-        // single-stage species (its own 48×48 sprite ships in the test bundle
-        // as ghost.zip). Switched to body=.dragon: dragon-western-adult.zip is
-        // NOT in the test bundle, so the fallback path still fires.
+        // body=.dragon chosen because dragon-western-adult.zip is NOT in the
+        // test bundle, so the fallback path fires.
         var pet = PetState.newEgg()
         pet.level = .adult
         pet.genome.body = .dragon

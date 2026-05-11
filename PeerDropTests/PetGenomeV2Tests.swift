@@ -3,14 +3,17 @@ import XCTest
 
 final class PetGenomeV2Tests: XCTestCase {
 
-    func testBodyGeneHas10Cases() {
-        XCTAssertEqual(BodyGene.allCases.count, 10)
+    func testBodyGeneHas9Cases() {
+        // v5.0.1: ghost retired (was 10). See BodyGene declaration.
+        XCTAssertEqual(BodyGene.allCases.count, 9)
     }
 
     func testBodyGeneFromPersonalityGene() {
+        // v5.0.1 distribution: cat 50%, dog 10%, rabbit 8%, bird 8%,
+        // frog 6%, bear 6%, dragon 4%, octopus 4%, slime 4%.
         XCTAssertEqual(BodyGene.from(personalityGene: 0.05), .cat)
-        XCTAssertEqual(BodyGene.from(personalityGene: 0.75), .dragon)
-        XCTAssertEqual(BodyGene.from(personalityGene: 0.95), .slime)
+        XCTAssertEqual(BodyGene.from(personalityGene: 0.85), .bear)
+        XCTAssertEqual(BodyGene.from(personalityGene: 0.99), .slime)
     }
 
     func testPaletteIndexDecoupledFromBody() {

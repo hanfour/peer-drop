@@ -107,84 +107,6 @@ final class PetSpeciesBehaviorTests: XCTestCase {
                       "Bird should convert fall to glide/hover, got: \(result)")
     }
 
-    // MARK: - Ghost: airborne -> NOT fall; canPassThroughWalls true
-
-    func testGhostAirborneDoesNotFall() {
-        let ghost = GhostBehavior()
-        let traits = makeTraits()
-        let physics = makePhysics(surface: .airborne)
-
-        for _ in 0..<100 {
-            let result = ghost.nextBehavior(current: .idle, physics: physics,
-                                            level: .baby, elapsed: 0.0,
-                                            foodTarget: nil, traits: traits)
-            XCTAssertNotEqual(result, .fall, "Ghost should NEVER fall when airborne")
-        }
-    }
-
-    func testGhostCanPassThroughWalls() {
-        let ghost = GhostBehavior()
-        XCTAssertTrue(ghost.profile.canPassThroughWalls)
-    }
-
-    func testGhostConvertsFallToIdle() {
-        let ghost = GhostBehavior()
-        let traits = makeTraits()
-        let physics = makePhysics(surface: .airborne)
-
-        let result = ghost.nextBehavior(current: .fall, physics: physics,
-                                        level: .baby, elapsed: 0.0,
-                                        foodTarget: nil, traits: traits)
-        XCTAssertNotEqual(result, .fall, "Ghost should convert fall to idle")
-    }
-
-    /// Phase 2 of v4.0.2 ghost fix — periodic flicker should fire when idle
-    /// even before the long-idle (`elapsed > idleDurationRange.lowerBound`)
-    /// gate, so users see ghost-specific behavior within ~30s.
-    func testGhostBehaviorReturnsFlickerPeriodicallyWhenIdle() {
-        let ghost = GhostBehavior()
-        let traits = makeTraits()
-        let physics = makePhysics(surface: .airborne)
-
-        var sawFlicker = false
-        // Fresh ghost — first idle tick past the 2s gate should produce
-        // .flicker because lastFlickerAt is .distantPast.
-        for _ in 0..<10 {
-            let result = ghost.nextBehavior(current: .idle, physics: physics,
-                                            level: .baby, elapsed: 2.5,
-                                            foodTarget: nil, traits: traits)
-            if result == .flicker {
-                sawFlicker = true
-                break
-            }
-        }
-        XCTAssertTrue(sawFlicker,
-                      "Ghost should flicker promptly when idle (timestamp gate)")
-    }
-
-    /// Confirms the ghost-specific action set is reachable through the
-    /// long-idle path — i.e. .spook / .vanish / .flicker / .phaseThrough
-    /// are all on the menu and not just .idle.
-    func testGhostLongIdleReturnsSpeciesAction() {
-        let ghost = GhostBehavior()
-        let traits = makeTraits()
-        let physics = makePhysics(surface: .airborne)
-        let speciesActions: Set<PetAction> = [.phaseThrough, .flicker, .spook, .vanish]
-
-        var sawSpeciesAction = false
-        for _ in 0..<200 {
-            let result = ghost.nextBehavior(current: .idle, physics: physics,
-                                            level: .baby, elapsed: 10.0,
-                                            foodTarget: nil, traits: traits)
-            if speciesActions.contains(result) {
-                sawSpeciesAction = true
-                break
-            }
-        }
-        XCTAssertTrue(sawSpeciesAction,
-                      "Ghost should sometimes return a species action after long idle")
-    }
-
     // MARK: - Frog: bouncing mode; canClimbWalls
 
     func testFrogBouncingMode() {
@@ -264,14 +186,6 @@ final class PetSpeciesBehaviorTests: XCTestCase {
         XCTAssertEqual(seq.steps.first?.action, .dig, "Dog exit should start with .dig")
     }
 
-    func testGhostExitStartsWithFlicker() {
-        let ghost = GhostBehavior()
-        let seq = ghost.exitSequence(from: CGPoint(x: 200, y: 400),
-                                     screenBounds: CGRect(x: 0, y: 0, width: 400, height: 800))
-        XCTAssertFalse(seq.steps.isEmpty)
-        XCTAssertEqual(seq.steps.first?.action, .flicker, "Ghost exit should start with .flicker")
-    }
-
     // MARK: - Enter Sequence Tests
 
     func testAllEnterSequencesNotEmpty() {
@@ -279,7 +193,7 @@ final class PetSpeciesBehaviorTests: XCTestCase {
         let allBehaviors: [PetBehaviorProvider] = [
             CatBehavior(), DogBehavior(), RabbitBehavior(), BirdBehavior(),
             FrogBehavior(), BearBehavior(), DragonBehavior(), OctopusBehavior(),
-            GhostBehavior(), SlimeBehavior(),
+            SlimeBehavior(),
         ]
 
         for behavior in allBehaviors {
@@ -315,15 +229,4 @@ final class PetSpeciesBehaviorTests: XCTestCase {
         }
     }
 
-    func testGhostChatReturnsBehind() {
-        let ghost = GhostBehavior()
-        let frames = [CGRect(x: 0, y: 100, width: 200, height: 40)]
-        let result = ghost.chatBehavior(messageFrames: frames, petPosition: .zero)
-        XCTAssertNotNil(result)
-        if case .behind = result?.position {
-            // expected
-        } else {
-            XCTFail("Ghost chat should use .behind position, got: \(String(describing: result?.position))")
-        }
-    }
 }

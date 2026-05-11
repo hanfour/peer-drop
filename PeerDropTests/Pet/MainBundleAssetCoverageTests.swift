@@ -80,15 +80,14 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         }
     }
 
-    // MARK: - single-stage species (v4.0.2)
+    // MARK: - single-stage species
 
     /// Single-stage species (`SpriteAssetResolver.singleStageSpecies`) ship one
     /// zip total — the bare family ID, no stage suffix — and the same asset is
-    /// returned for every PetLevel. v4.0.2 added ghost; this test pins the
-    /// expectation that the bundle contains `<id>.zip` for each entry, since
-    /// the resolver's shortcut would otherwise silently drop a missing zip
-    /// onto the renderer's ultimateFallback (cat-tabby) — exactly the v4.0.1
-    /// "ghost shows as cat" bug we're fixing.
+    /// returned for every PetLevel. Pins the expectation that every entry has
+    /// a bundled `<id>.zip`. Currently the set is empty (no shipping family
+    /// uses single-asset bundling); the test stays as plumbing in case a
+    /// future species adopts that layout.
     func test_mainBundle_containsBareZip_forEverySingleStageSpecies() {
         var missing: [String] = []
         for id in SpriteAssetResolver.singleStageSpecies {
@@ -157,14 +156,6 @@ final class MainBundleAssetCoverageTests: XCTestCase {
     /// cares about the schema version flag, not direction completeness.
     private static let expectedV5Coverage: Set<String> = [
         "cat-tabby-adult",  // commit 54f0f69 — partial (south walk only)
-        // ghost is a single-stage species (`SpriteAssetResolver.singleStageSpecies`)
-        // that resolves all 3 PetLevel stage requests to the same ghost.zip file.
-        // The test loop produces 3 zipKeys per ghost — all v5 because they share
-        // one v5 zip. Multi-stage flip (separate ghost-baby/ghost-adult/ghost-elder
-        // assets) is the operator follow-up tracked in STATUS.md §0.4.1.
-        "ghost-baby",
-        "ghost-adult",
-        "ghost-elder",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.

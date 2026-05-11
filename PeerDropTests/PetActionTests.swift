@@ -7,8 +7,8 @@ final class PetActionTests: XCTestCase {
     // MARK: - CaseIterable
 
     func testCaseIterableConformance() {
-        // 32 original + 40 species-specific = 72 total
-        XCTAssertEqual(PetAction.allCases.count, 72)
+        // 32 original + 36 species-specific = 68 total
+        XCTAssertEqual(PetAction.allCases.count, 68)
     }
 
     func testAllCasesAreUnique() {
@@ -74,13 +74,6 @@ final class PetActionTests: XCTestCase {
         XCTAssertNotNil(PetAction(rawValue: "tentacleReach"))
         XCTAssertNotNil(PetAction(rawValue: "camouflage"))
         XCTAssertNotNil(PetAction(rawValue: "wallSuction"))
-    }
-
-    func testGhostActions() {
-        XCTAssertNotNil(PetAction(rawValue: "phaseThrough"))
-        XCTAssertNotNil(PetAction(rawValue: "flicker"))
-        XCTAssertNotNil(PetAction(rawValue: "spook"))
-        XCTAssertNotNil(PetAction(rawValue: "vanish"))
     }
 
     func testSlimeActions() {
