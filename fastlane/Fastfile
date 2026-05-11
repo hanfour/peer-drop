@@ -149,6 +149,34 @@ platform :ios do
     end
   end
 
+  desc "TEMP DIAG: list every iOS App Store version (any state, any platform)"
+  lane :diag_versions do
+    require "spaceship"
+    require "json"
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    data["duration"] || 1200,
+      in_house:    data["in_house"] || false
+    )
+    app = Spaceship::ConnectAPI::App.find("com.hanfour.peerdrop")
+    UI.message("All iOS versions (unfiltered):")
+    versions = app.get_app_store_versions(limit: 200)
+    versions.each do |v|
+      UI.message("  v#{v.version_string.ljust(8)} #{v.platform.to_s.ljust(8)} #{v.app_store_state.to_s.ljust(28)} #{v.created_date}")
+    end
+    UI.message("")
+    UI.message("All iOS builds (last 20):")
+    builds = app.get_builds(limit: 20, includes: "preReleaseVersion")
+    builds.each do |b|
+      v = b.pre_release_version&.version || "?"
+      UI.message("  build #{b.version.to_s.ljust(4)} → v#{v.ljust(8)} #{b.processing_state.to_s.ljust(12)} expired=#{b.expired} uploaded #{b.uploaded_date}")
+    end
+  end
+
   desc "Poll ASC for state changes; alert via macOS Notification + iMessage + log"
   desc "Notifies on: edit-version state change, build processing-state change,"
   desc "live-version replacement (a release went out)."

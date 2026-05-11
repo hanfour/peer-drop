@@ -540,7 +540,6 @@
 		3C9B97DBDAB6199D70D28408 /* MessageEditDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageEditDeleteTests.swift; sourceTree = "<group>"; };
 		3D03168691C8271ED0CCDFB8 /* ConnectionStatusHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStatusHeaderView.swift; sourceTree = "<group>"; };
 		3DD0E22D4FE38D3FEDAF3DBD /* IdentityKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityKeyManager.swift; sourceTree = "<group>"; };
-		3DF49E667ABEFD8082DF4A1F /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		3F5A5A4F2AA8CCB19B5623D8 /* PetAnimationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetAnimationController.swift; sourceTree = "<group>"; };
 		40175BAB1E4990BC4A9B7DDA /* RenderedImageVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderedImageVersionTests.swift; sourceTree = "<group>"; };
 		405A064FF9B9B45DFF4A8D8A /* SocialEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialEntry.swift; sourceTree = "<group>"; };
@@ -629,6 +628,7 @@
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
 		6E06927E83F57264F730DDE2 /* PoopState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoopState.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
+		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
@@ -872,11 +872,11 @@
 			children = (
 				F3369C6D619A47A28F3F58EA /* Pets */,
 				3823673D5A46544596C830A9 /* Pets */,
+				9EC0E908E1A38EE0458CEC1B /* peer-drop */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
 				348FC413895A2131299A9250 /* PeerDropWidget */,
-				F5EE6E16179668C89C16663A /* v5-remove-ghost */,
 				B852FD7C848E2615AF9BF284 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1344,6 +1344,15 @@
 			path = Discovery;
 			sourceTree = "<group>";
 		};
+		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
+			isa = PBXGroup;
+			children = (
+				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop";
+			path = .;
+			sourceTree = "<group>";
+		};
 		A29F6E76ECC1DF4E1D976EFA /* Settings */ = {
 			isa = PBXGroup;
 			children = (
@@ -1594,15 +1603,6 @@
 				FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */,
 			);
 			path = Connection;
-			sourceTree = "<group>";
-		};
-		F5EE6E16179668C89C16663A /* v5-remove-ghost */ = {
-			isa = PBXGroup;
-			children = (
-				3DF49E667ABEFD8082DF4A1F /* Secrets.xcconfig */,
-			);
-			name = "v5-remove-ghost";
-			path = .;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -2258,7 +2258,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 5.0.0;
+				MARKETING_VERSION = 5.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop.widget;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2312,7 +2312,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 5.0.0;
+				MARKETING_VERSION = 5.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop.widget;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2321,7 +2321,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3DF49E667ABEFD8082DF4A1F /* Secrets.xcconfig */;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2335,7 +2335,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.0.0;
+				MARKETING_VERSION = 5.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2344,7 +2344,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3DF49E667ABEFD8082DF4A1F /* Secrets.xcconfig */;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2358,7 +2358,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.0.0;
+				MARKETING_VERSION = 5.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
