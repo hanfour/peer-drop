@@ -43,7 +43,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "5.0.0"
+        MARKETING_VERSION: "5.0.1"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -162,7 +162,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop.widget
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "5.0.0"
+        MARKETING_VERSION: "5.0.1"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: PeerDropWidget/PeerDropWidget.entitlements
     entitlements:
