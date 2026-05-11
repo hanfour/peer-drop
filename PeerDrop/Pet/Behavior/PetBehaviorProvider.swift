@@ -6,7 +6,6 @@ import Foundation
 enum PetPhysicsMode: String {
     case grounded   // gravity, ground/wall (cat, dog, rabbit, bear)
     case flying     // no gravity, free movement (bird, dragon)
-    case floating   // no gravity, no collision, pass through walls (ghost)
     case bouncing   // gravity with bounce (frog, slime)
     case crawling   // reduced gravity, attach any surface (octopus)
 }
@@ -18,7 +17,6 @@ enum MovementStyle: String {
     case hop        // rabbit, frog
     case fly        // bird, dragon
     case slither    // octopus
-    case float      // ghost
     case bounce     // slime
 }
 
@@ -32,7 +30,6 @@ enum PetExitStyle {
     case walkOff           // bear
     case skyAscend         // dragon
     case inkVanish         // octopus
-    case fadeOut           // ghost
     case meltDown          // slime
 }
 
@@ -44,7 +41,6 @@ enum PetEnterStyle {
     case walkIn
     case skyDescend
     case inkAppear
-    case fadeIn
     case reformUp
 }
 
@@ -133,8 +129,7 @@ extension PetBehaviorProvider {
 
         // Airborne -> fall (for grounded/bouncing)
         if physics.surface == .airborne
-            && profile.physicsMode != .flying
-            && profile.physicsMode != .floating {
+            && profile.physicsMode != .flying {
             return .fall
         }
 

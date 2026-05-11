@@ -6,7 +6,7 @@ import XCTest
 ///   • subVariety derives from BodyGene.defaultSpeciesID.variant
 ///   • seed is deterministic from (petID, name) — same input on any device
 ///     produces the same seed (so cloud-sync re-migration is stable)
-///   • single-variety legacy bodies (.octopus, .ghost) leave subVariety nil
+///   • single-variety legacy bodies (.octopus) leave subVariety nil
 ///   • idempotent: re-loading after migration returns the stored pet
 ///     unchanged; subsequent calls don't re-run the sweep
 final class PetStoreMigrationTests: XCTestCase {

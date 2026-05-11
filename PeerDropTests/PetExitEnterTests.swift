@@ -25,14 +25,6 @@ final class PetExitEnterTests: XCTestCase {
         XCTAssertEqual(seq.steps.first?.action, .glide)
     }
 
-    func testGhostExitIsFlicker() {
-        let ghost = GhostBehavior()
-        let seq = ghost.exitSequence(from: CGPoint(x: 200, y: 400),
-                                      screenBounds: CGRect(x: 0, y: 0, width: 400, height: 800))
-        XCTAssertEqual(seq.steps.first?.action, .flicker)
-        let hasFade = seq.steps.contains { $0.opacityDelta != nil }
-        XCTAssertTrue(hasFade)
-    }
 
     func testSlimeExitIsMelt() {
         let slime = SlimeBehavior()

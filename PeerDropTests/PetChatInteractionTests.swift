@@ -19,14 +19,6 @@ final class PetChatInteractionTests: XCTestCase {
         if case .beside = result?.position { } else { XCTFail("Dog should use .beside") }
     }
 
-    func testGhostChatIsBehind() {
-        let ghost = GhostBehavior()
-        let frames = [CGRect(x: 20, y: 100, width: 200, height: 40)]
-        let result = ghost.chatBehavior(messageFrames: frames, petPosition: CGPoint(x: 100, y: 300))
-        XCTAssertNotNil(result)
-        if case .behind = result?.position { } else { XCTFail("Ghost should use .behind") }
-    }
-
     func testEmptyFramesReturnsNil() {
         let cat = CatBehavior()
         let result = cat.chatBehavior(messageFrames: [], petPosition: CGPoint(x: 100, y: 300))

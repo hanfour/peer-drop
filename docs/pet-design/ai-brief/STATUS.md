@@ -1,6 +1,8 @@
 # Pet AI Asset Generation — Status & Continuation Brief
 
-> **📤 v5.0.0 SUBMITTED** — build 1 `WAITING_FOR_REVIEW` on App Store as of 2026-05-09 19:41 local. All v5 code merged to main via PRs #30–#35. Initial v5 coverage shipping with v5.0: cat-tabby-adult (south + east + west walk + south idle) and ghost (south walk + south idle, all stages bundle as single asset). Reviewer's fresh-install pet has 50% chance of v5-animated species (cat 40% + ghost 10%) per `BodyGene.from()` rebalance. v5.0.x weekly cadence playbook for ongoing mass-gen at `docs/release/v5.0.x-cadence.md`.
+> **📤 v5.0.1 IN FLIGHT** — Ghost species retired (visual quality issues, never reached an acceptable bar across regeneration attempts). Existing Ghost-bodied pets silently migrate to Cat on first v5.0.1 launch via `BodyGene.init(from:)` + `PetEngine.migrateGhostBodyForV501()`. Pet identity (id, name, age, level, history) fully preserved; only the rendered sprite changes. Genome distribution rebalanced (cat 40% → 50%; ghost 10% → 0%). See `docs/release/v5.0.1-reviewer-notes.md`.
+>
+> **v5.0.0 LIVE** — Released 2026-05-09. Initial v5 coverage shipping with v5.0: cat-tabby-adult (south + east + west walk + south idle). v5.0.x weekly cadence playbook for ongoing mass-gen at `docs/release/v5.0.x-cadence.md`.
 >
 > **🚧 v5 mass-gen ongoing** — Adds multi-frame walk + idle animations to all v4 species. Full coverage requires re-generating each species×stage with PixelLab's "Add Animation" UI (~104 generations per character). Pacing: ~3–4 months at 2,000/mo Apprentice quota with weekly v5.0.x patch releases. Per-zip drop workflow + PixelLab gotchas live in §0.
 >
@@ -14,7 +16,7 @@
 > - v4.0 reviewer notes: `docs/release/v4.0-reviewer-notes.md`
 > - v4.0 submission gates: `docs/pet-design/v4-submission-checklist.md`
 
-**Last updated:** 2026-05-09 (v5.0.0 submitted to App Store, build 1 WAITING_FOR_REVIEW)
+**Last updated:** 2026-05-11 (v5.0.1 in flight — Ghost species retired)
 **Purpose:** Historical record of the v4.0 pet redesign asset pipeline (§1–§6) + active v5 mass-gen workflow (§0) + technical reference for any future asset gen.
 
 ---
@@ -62,19 +64,9 @@ As of 2026-05-08:
 - **1 zip at v5:** `cat-tabby-adult` (south walk only; partial coverage is OK because C1 fix lets SpriteService degrade missing dirs to single-frame static)
 - **~303 zips remaining at v4:** all other (multi-variety species × 3 stages)
 
-### 0.4.1 Ghost asset backlog (separate from main v5 mass-gen)
+### 0.4.1 Ghost asset backlog — RETIRED in v5.0.1
 
-Ghost has its own backlog distinct from the multi-variety species mass-gen. As of 2026-05-09, ghost ships as a single-stage species with one bundled asset (`PeerDrop/Resources/Pets/ghost.zip`). Three issues need PixelLab work:
-
-1. **Wrong size: 48×48 instead of 68×68.** Same constraint as the main v5 mass-gen. The current ghost.zip was generated at 48×48 — visibly smaller than every other v4 species. **Regenerate at 68×68** as part of the ghost rework.
-
-2. **Single-stage when other species are multi-stage.** Ghost has no baby/adult/elder progression — currently a `singleStageSpecies` in `SpriteAssetResolver`. The v5 lifecycle update means ghost users see no evolution while every other species progresses. **Generate `ghost-baby` + `ghost-adult` + `ghost-elder` at 68×68** so ghost participates in the lifecycle. After all three exist, remove ghost from `SpriteAssetResolver.singleStageSpecies` and from `SpeciesCatalog.families["ghost"].variants` empty case (or migrate to the multi-stage path) — this is one atomic change, not staged, to avoid the cat-tabby fallback regression that v4.0.2 fixed.
-
-3. **Visual style needs to look like a ghost.** User feedback: existing ghost.zip art doesn't read as ghostly — too solid, not transparent/ethereal enough. PixelLab generation should target a more obviously supernatural style (translucent, blue-tinted, wisp-like). Consider non-default palette + alpha channel.
-
-Operator workflow when generating: same as §0.1 (drop normalized zip, update `expectedV5Coverage`, test). Plus the SpeciesCatalog/SpriteAssetResolver flip mentioned in (2) above when the third stage lands.
-
-Tracking: `MainBundleAssetCoverageTests.test_mainBundle_v5Coverage_matchesWhitelist` will report ghost-baby / ghost-adult / ghost-elder as "Bundled as v5 but not in whitelist" the moment they land — that's the signal to add them and do the SpeciesCatalog flip.
+Ghost was retired in v5.0.1 (2026-05-11). Across two regeneration attempts (v4.0.2 cherry-pick + 68×68 v5.0 redo) we couldn't reach an acceptable visual quality bar for the translucent wisp aesthetic. Rather than ship more partial fixes, the species was removed entirely. Existing Ghost-bodied pets silently migrate to Cat via `BodyGene.init(from:)` mapping `"ghost"` → `.cat`. See `docs/release/v5.0.1-reviewer-notes.md`.
 
 ### 0.5 Resilience: partial coverage is shippable
 

@@ -117,16 +117,6 @@ final class PetEngineTests: XCTestCase {
         XCTAssertEqual(engine.behaviorProvider.profile.physicsMode, .flying)
     }
 
-    func testEngineProviderGhostFloats() {
-        var genome = PetGenome.random()
-        genome.body = .ghost
-        var pet = PetState.newEgg()
-        pet.genome = genome
-        let engine = PetEngine(pet: pet)
-        XCTAssertEqual(engine.behaviorProvider.profile.physicsMode, .floating)
-        XCTAssertTrue(engine.behaviorProvider.profile.canPassThroughWalls)
-    }
-
     // MARK: - Evolution Progress
 
     func testEvolutionProgress() {

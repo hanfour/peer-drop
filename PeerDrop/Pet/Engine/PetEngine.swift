@@ -341,6 +341,27 @@ class PetEngine: ObservableObject {
         return false
     }
 
+    /// One-shot v5.0.1 migration: force-persist current state so any pet whose
+    /// persisted JSON had `body: "ghost"` (silently mapped to `.cat` by
+    /// `BodyGene.init(from:)` at load time) writes the corrected body back to
+    /// disk immediately, ahead of the next backgrounding event. Without this,
+    /// a user who never backgrounds the app between launches would keep the
+    /// stale `body: "ghost"` JSON on disk indefinitely — the runtime works
+    /// correctly via the decoder shim, but the disk state stays inconsistent.
+    /// Idempotent — safe to call repeatedly; subsequent calls just re-write
+    /// the already-cat body. Returns true on successful persist.
+    @discardableResult
+    func migrateGhostBodyForV501() -> Bool {
+        do {
+            try PetStore().save(pet)
+            petEngineLog.notice("v5.0.1 ghost migration: persisted current pet state — body=\(self.pet.genome.body.rawValue, privacy: .public)")
+            return true
+        } catch {
+            petEngineLog.error("v5.0.1 ghost migration: persist failed — \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
     private func evolve(to level: PetLevel) {
         pet.level = level
         // Naming UX moved to PetWelcomeView (Phase 4) — pets are born .baby, not evolved into it.
