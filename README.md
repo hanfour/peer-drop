@@ -1,5 +1,7 @@
 # PeerDrop
 
+[![v5 asset coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hanfour/peer-drop/badges/v5-coverage.json)](docs/plans/v5.1+-deferred.md)
+
 A peer-to-peer file transfer and communication app for iOS, enabling direct device-to-device connections without requiring internet access.
 
 ## Features

@@ -1,0 +1,86 @@
+name: v5 Asset Coverage Badge
+
+# Maintains the `v5 coverage: N/M (P%)` shields.io endpoint badge on the
+# `badges` branch. The README references it via shields.io. Updates whenever
+# the bundled asset set or the v5 whitelist changes.
+#
+# Implementation of design item #9 in docs/plans/v5.1+-deferred.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'PeerDrop/Resources/Pets/**'
+      - 'PeerDropTests/Pet/MainBundleAssetCoverageTests.swift'
+      - 'Scripts/compute_v5_coverage.sh'
+      - '.github/workflows/asset-coverage-badge.yml'
+  workflow_dispatch:  # manual re-run for verification
+
+# We only need a single in-flight badge update; cancel older runs if a newer
+# push lands while a job is still running.
+concurrency:
+  group: asset-coverage-badge
+  cancel-in-progress: true
+
+jobs:
+  update-badge:
+    name: Compute coverage + commit to badges branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to push to the badges branch
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Compute coverage JSON
+        id: compute
+        run: |
+          json=$(Scripts/compute_v5_coverage.sh)
+          human=$(Scripts/compute_v5_coverage.sh --human)
+          echo "Generated: $human"
+          # Persist JSON for the next step + expose human-readable summary in
+          # the workflow log for at-a-glance verification.
+          printf '%s\n' "$json" > /tmp/v5-coverage.json
+          {
+            echo "summary=$human"
+            echo "json<<EOF"
+            echo "$json"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish to badges branch
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -e
+          # Fresh worktree on the badges branch — orphan-create if it doesn't
+          # exist yet. Only this one JSON lives on the branch.
+          if git ls-remote --exit-code --heads origin badges >/dev/null 2>&1; then
+              echo "badges branch exists — checking out"
+              git fetch origin badges:badges
+              git worktree add /tmp/badges-wt badges
+          else
+              echo "badges branch missing — creating orphan"
+              git worktree add --detach /tmp/badges-wt HEAD
+              cd /tmp/badges-wt
+              git checkout --orphan badges
+              git rm -rf . || true
+              cd -
+          fi
+
+          cp /tmp/v5-coverage.json /tmp/badges-wt/v5-coverage.json
+          cd /tmp/badges-wt
+
+          if git status --porcelain | grep -q .; then
+              git add v5-coverage.json
+              git commit -m "asset-coverage-badge: ${{ steps.compute.outputs.summary }}"
+              git push origin badges
+              echo "✅ Badge updated"
+          else
+              echo "ℹ️  Coverage unchanged — nothing to commit"
+          fi
