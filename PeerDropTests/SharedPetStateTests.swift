@@ -6,11 +6,15 @@ import XCTest
 /// UserDefaults-based implementation could not avoid.
 final class SharedPetStateTests: XCTestCase {
 
-    private func makeSnapshot(experience: Int = 42, name: String = "Pixel") -> PetSnapshot {
+    /// `progress` doubles as a discriminator across snapshots in the same
+    /// test; values must be unique across the call sites that compare
+    /// last-write-wins ordering. Pre-v5.0.x this was the `experience: Int`
+    /// arg — same shape, different field.
+    private func makeSnapshot(progress: Double = 0.5, name: String = "Pixel") -> PetSnapshot {
         PetSnapshot(
             name: name, bodyType: .cat, eyeType: .dot, patternType: .none,
             level: .baby, mood: .happy, paletteIndex: 0,
-            experience: experience, maxExperience: 500)
+            evolutionProgress: progress)
     }
 
     override func setUp() {
@@ -27,14 +31,14 @@ final class SharedPetStateTests: XCTestCase {
 
     func testWriteAndReadPetSnapshot() {
         let shared = SharedPetState(suiteName: nil)
-        let snapshot = makeSnapshot()
+        let snapshot = makeSnapshot(progress: 0.42)
         shared.write(snapshot)
         let read = shared.read()
         XCTAssertNotNil(read)
         XCTAssertEqual(read?.name, "Pixel")
         XCTAssertEqual(read?.bodyType, .cat)
         XCTAssertEqual(read?.level, .baby)
-        XCTAssertEqual(read?.experience, 42)
+        XCTAssertEqual(read?.evolutionProgress, 0.42)
     }
 
     func testWriteReadRoundTripExactEquality() {
@@ -68,11 +72,11 @@ final class SharedPetStateTests: XCTestCase {
     func testLastWriteWinsAndIsValid() {
         let shared = SharedPetState(suiteName: nil)
         for i in 0..<10 {
-            shared.write(makeSnapshot(experience: i))
+            shared.write(makeSnapshot(progress: Double(i) / 10.0))
         }
         let read = shared.read()
         XCTAssertNotNil(read)
-        XCTAssertEqual(read?.experience, 9)
+        XCTAssertEqual(read?.evolutionProgress ?? -1, 0.9, accuracy: 0.001)
     }
 
     /// NSFileCoordinator + atomic writes serialize concurrent writers, so the
@@ -81,10 +85,11 @@ final class SharedPetStateTests: XCTestCase {
         let shared = SharedPetState(suiteName: nil)
         let writeCount = 20
         let group = DispatchGroup()
+        // Distinct, easily-recoverable progress values: 0/20, 1/20, …, 19/20.
         for i in 0..<writeCount {
             group.enter()
             DispatchQueue.global().async {
-                shared.write(self.makeSnapshot(experience: i))
+                shared.write(self.makeSnapshot(progress: Double(i) / Double(writeCount)))
                 group.leave()
             }
         }
@@ -92,10 +97,11 @@ final class SharedPetStateTests: XCTestCase {
 
         let final = shared.read()
         XCTAssertNotNil(final, "Final read after concurrent writes must succeed")
-        // The winner is non-deterministic but must be one of the values written.
-        let validRange = 0..<writeCount
-        XCTAssertTrue(validRange.contains(final?.experience ?? -1),
-                      "experience=\(String(describing: final?.experience)) must be in 0..<\(writeCount)")
+        // The winner is non-deterministic but its progress must round-trip
+        // back to one of the written values.
+        let recovered = Int(round((final?.evolutionProgress ?? -1) * Double(writeCount)))
+        XCTAssertTrue((0..<writeCount).contains(recovered),
+                      "progress=\(String(describing: final?.evolutionProgress)) must round-trip to 0..<\(writeCount)")
     }
 
     /// On first launch of v3.4, existing v3.3.x users have a snapshot stored
@@ -108,7 +114,7 @@ final class SharedPetStateTests: XCTestCase {
             defaults.removePersistentDomain(forName: suiteName)
         }
 
-        let legacy = makeSnapshot(experience: 123, name: "Legacy")
+        let legacy = makeSnapshot(progress: 0.42, name: "Legacy")
         let legacyData = try JSONEncoder().encode(legacy)
         defaults.set(legacyData, forKey: "petSnapshot")
         XCTAssertNotNil(defaults.data(forKey: "petSnapshot"))
@@ -144,7 +150,7 @@ final class SharedPetStateTests: XCTestCase {
     func testConcurrentReadsDuringWritesAreNeverCorrupt() {
         let shared = SharedPetState(suiteName: nil)
         // Seed with a known-good snapshot first.
-        shared.write(makeSnapshot(experience: 0))
+        shared.write(makeSnapshot(progress: 0.0))
 
         let group = DispatchGroup()
         let writerCount = 10
@@ -153,7 +159,7 @@ final class SharedPetStateTests: XCTestCase {
         for i in 0..<writerCount {
             group.enter()
             DispatchQueue.global().async {
-                shared.write(self.makeSnapshot(experience: i))
+                shared.write(self.makeSnapshot(progress: Double(i) / 10.0))
                 group.leave()
             }
         }

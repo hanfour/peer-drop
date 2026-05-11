@@ -26,27 +26,36 @@ struct PetTabView: View {
                     }
                 }
 
-                // EXP progress bar + evolution status
-                VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: engine.evolutionProgress) {
-                        HStack {
-                            Text("EXP").font(.caption2).foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(engine.pet.experience) / \(EvolutionRequirement.for(engine.pet.level)?.requiredExperience ?? 999)")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                    .tint(.green)
+                // Age-based evolution progress. Hides for elder (final stage).
+                if let req = EvolutionRequirement.for(engine.pet.level) {
+                    let elapsedSeconds = Date().timeIntervalSince(engine.pet.birthDate)
+                    let elapsedDays = Int(elapsedSeconds / 86400)
+                    let targetDays = Int(req.minimumAge / 86400)
+                    let remainingSeconds = req.minimumAge - elapsedSeconds
 
-                    // Show age requirement hint when XP is met but age isn't
-                    if let req = EvolutionRequirement.for(engine.pet.level) {
-                        let xpMet = engine.pet.experience >= req.requiredExperience
-                        let ageMet = Date().timeIntervalSince(engine.pet.birthDate) >= req.minimumAge
-                        if xpMet && !ageMet {
-                            let remainingHours = Int(ceil((req.minimumAge - Date().timeIntervalSince(engine.pet.birthDate)) / 3600))
-                            Text(String(localized: "EXP is ready! Evolution in ~\(remainingHours)h"))
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: engine.evolutionProgress) {
+                            HStack {
+                                Text("Age").font(.caption2).foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(elapsedDays) / \(targetDays) days")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .tint(.green)
+
+                        // Show a countdown when within the last 24 h. Outside
+                        // that window the day-granularity label above is
+                        // already informative.
+                        if remainingSeconds > 0 && remainingSeconds <= 86400 {
+                            let remainingHours = Int(ceil(remainingSeconds / 3600))
+                            Text(String(localized: "Evolution in ~\(remainingHours)h"))
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
+                        } else if req.requiresRecentActivity {
+                            Text(String(localized: "Stay engaged to keep progressing"))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

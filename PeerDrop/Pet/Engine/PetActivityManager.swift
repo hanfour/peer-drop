@@ -10,14 +10,13 @@ class PetActivityManager {
     private var currentActivity: Activity<PetActivityAttributes>?
 
     static func contentState(from snapshot: PetSnapshot) -> PetActivityAttributes.ContentState {
-        let progress = snapshot.maxExperience > 0
-            ? min(Double(snapshot.experience) / Double(snapshot.maxExperience), 1.0)
-            : 0.0
+        // expProgress is the Live Activity attribute name from v3.x; the value
+        // is now age-based evolution progress (replaced XP-based v5.0.x).
         return PetActivityAttributes.ContentState(
             pose: IslandPose.from(mood: snapshot.mood),
             mood: snapshot.mood,
             level: snapshot.level,
-            expProgress: progress)
+            expProgress: min(max(snapshot.evolutionProgress, 0.0), 1.0))
     }
 
     func startActivity(snapshot: PetSnapshot) {

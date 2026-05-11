@@ -52,9 +52,15 @@ class PetEngine: ObservableObject {
         PetPalettes.palette(for: pet.genome)
     }
 
+    /// Progress toward the next evolution, in [0, 1]. v5.0.x: age-based to
+    /// match `checkEvolution()`'s actual rule (8 days for baby→adult, 90 days
+    /// for adult→elder). Pre-v5.0.x this was XP-based against thresholds the
+    /// engine never enforced — see `EvolutionRequirement` doc comment.
+    /// Elder pets return 1.0 (final stage).
     var evolutionProgress: Double {
-        guard let req = EvolutionRequirement.for(pet.level) else { return 1.0 }
-        return min(1.0, Double(pet.experience) / Double(req.requiredExperience))
+        guard let req = EvolutionRequirement.for(pet.level), req.minimumAge > 0 else { return 1.0 }
+        let elapsed = Date().timeIntervalSince(pet.birthDate)
+        return min(1.0, max(0.0, elapsed / req.minimumAge))
     }
 
     var currentLifeState: PetLifeState {
@@ -535,8 +541,7 @@ class PetEngine: ObservableObject {
             level: pet.level,
             mood: pet.mood,
             paletteIndex: pet.genome.paletteIndex,
-            experience: pet.experience,
-            maxExperience: EvolutionRequirement.for(pet.level)?.requiredExperience ?? 999
+            evolutionProgress: evolutionProgress
         )
         sharedState.write(snapshot)
         if #available(iOS 16.2, *) {
@@ -554,8 +559,7 @@ class PetEngine: ObservableObject {
             level: pet.level,
             mood: pet.mood,
             paletteIndex: pet.genome.paletteIndex,
-            experience: pet.experience,
-            maxExperience: EvolutionRequirement.for(pet.level)?.requiredExperience ?? 999
+            evolutionProgress: evolutionProgress
         )
         (activityManager as? PetActivityManager)?.startActivity(snapshot: snapshot)
     }

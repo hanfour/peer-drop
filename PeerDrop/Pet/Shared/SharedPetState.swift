@@ -8,8 +8,12 @@ struct PetSnapshot: Codable, Equatable {
     let level: PetLevel
     let mood: PetMood
     let paletteIndex: Int
-    let experience: Int
-    let maxExperience: Int
+    /// Age-based progress toward the next evolution, in [0, 1]. Computed by
+    /// the main app's `PetEngine.evolutionProgress` and passed through to
+    /// Live Activity / widget. v5.0.x replaced the prior `experience` +
+    /// `maxExperience` pair after those were found to be XP-gated against
+    /// thresholds the engine never enforced (see EvolutionRequirement docs).
+    let evolutionProgress: Double
 }
 
 /// Bridge between the main app and the widget / Live Activity.

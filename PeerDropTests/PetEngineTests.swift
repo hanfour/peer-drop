@@ -117,23 +117,35 @@ final class PetEngineTests: XCTestCase {
         XCTAssertEqual(engine.behaviorProvider.profile.physicsMode, .flying)
     }
 
-    // MARK: - Evolution Progress
+    // MARK: - Evolution Progress (v5.0.x: age-based)
 
-    func testEvolutionProgress() {
-        // Fresh baby pet with 0 XP (baby→adult requires 500 XP)
-        engine.pet.experience = 0
+    func testEvolutionProgress_freshBaby_isZero() {
+        engine.pet.birthDate = Date()
         XCTAssertEqual(engine.evolutionProgress, 0.0, accuracy: 0.001)
+    }
 
-        // 50 XP out of 500 required
-        engine.pet.experience = 50
-        XCTAssertEqual(engine.evolutionProgress, 0.1, accuracy: 0.001)
+    func testEvolutionProgress_babyHalfway_isHalf() {
+        // Halfway through the 8-day baby window.
+        engine.pet.birthDate = Date().addingTimeInterval(-4 * 86400)
+        XCTAssertEqual(engine.evolutionProgress, 0.5, accuracy: 0.005)
+    }
 
-        // 500 XP = full
-        engine.pet.experience = 500
+    func testEvolutionProgress_babyPastThreshold_capsAtOne() {
+        // 20 days old — past the 8-day baby→adult gate.
+        engine.pet.birthDate = Date().addingTimeInterval(-20 * 86400)
         XCTAssertEqual(engine.evolutionProgress, 1.0, accuracy: 0.001)
+    }
 
-        // Over 500 XP should still cap at 1.0
-        engine.pet.experience = 1000
+    func testEvolutionProgress_adult_isAgeBased() {
+        // Adult at 45 days, halfway through the 90-day adult→elder gate.
+        engine.pet.level = .adult
+        engine.pet.birthDate = Date().addingTimeInterval(-45 * 86400)
+        XCTAssertEqual(engine.evolutionProgress, 0.5, accuracy: 0.005)
+    }
+
+    func testEvolutionProgress_elder_isFull() {
+        // Elder is the final stage — no further evolution gate.
+        engine.pet.level = .elder
         XCTAssertEqual(engine.evolutionProgress, 1.0, accuracy: 0.001)
     }
 }

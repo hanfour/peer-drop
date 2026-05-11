@@ -121,7 +121,20 @@ final class PetStateTests: XCTestCase {
         let req = EvolutionRequirement.for(.baby)
         XCTAssertNotNil(req)
         XCTAssertEqual(req?.targetLevel, .adult)
-        XCTAssertEqual(req?.requiredExperience, 500)
+        XCTAssertEqual(req?.minimumAge, 8 * 86400)  // 8 days, matches PetEngine.checkEvolution
+        XCTAssertFalse(req?.requiresRecentActivity ?? true)
+    }
+
+    func testEvolutionRequirementForAdult() {
+        let req = EvolutionRequirement.for(.adult)
+        XCTAssertNotNil(req)
+        XCTAssertEqual(req?.targetLevel, .elder)
+        XCTAssertEqual(req?.minimumAge, 90 * 86400)  // 90 days
+        XCTAssertTrue(req?.requiresRecentActivity ?? false)
+    }
+
+    func testEvolutionRequirementForElder() {
+        XCTAssertNil(EvolutionRequirement.for(.elder), "elder is the final stage")
     }
 
     // MARK: - SocialEntry
