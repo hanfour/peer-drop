@@ -1,15 +1,11 @@
-PeerDrop 5.0.2 — Pets actually animate now
+PeerDrop 5.1 — Local-network connections are now end-to-end encrypted.
 
-The walking animation that shipped with 5.0 was silently broken — pets moved across the screen but their walk sprite never cycled, so it looked like they were sliding instead of walking. Fixed.
+When two v5.1+ peers connect on the same Wi-Fi, every chat message, file transfer, and signal between them is sealed inside a Double Ratchet session (the same forward-secret crypto used by Signal). Earlier versions trusted the local network and sent data in the clear once both sides shook hands — fine for a home router, less fine on a cafe AP. That's fixed.
 
 What's new:
-- Cats now properly cycle through their 8-frame walking animation (was stuck on frame 0).
-- Pets bounce off side walls instead of pressing into them.
-- Pets walk along the floor above the tab bar (no more drifting in the middle of the screen).
-- Dragging-and-releasing a pet drops it cleanly. No more unintended little hops on landing.
-- Evolution progress now shows your pet's age (the actual measure that matters), not a confusing XP bar.
+- Automatic E2E encryption over local TCP. No setup, no toggle — if both peers run 5.1+, the handshake happens silently in the first second after connecting.
+- A small lock icon appears next to each connected peer once the encrypted channel is up. Green = trusted match. Orange = first time meeting this peer. Red triangle = the peer's key changed — investigate before sharing anything sensitive.
+- Connecting with a v5.0.x peer still works exactly as before — connections downgrade transparently to plaintext.
+- If the encrypted handshake doesn't complete within 5 seconds, the connection falls back to plaintext instead of hanging forever.
 
-The cat is currently the only species with full multi-frame walking. Other species still render correctly but as single-frame static sprites — more species get walking animations in future updates.
-
-If your pet still looks stuck:
-- Force-quit and reopen the app. The fix lands on next launch.
+This is a security-foundation release; no visible new features beyond the lock chip. Behavior is otherwise unchanged from 5.0.2.
