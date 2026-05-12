@@ -1,11 +1,15 @@
-PeerDrop 5.0.1 — Quick follow-up to 5.0
+PeerDrop 5.0.2 — Pets actually animate now
+
+The walking animation that shipped with 5.0 was silently broken — pets moved across the screen but their walk sprite never cycled, so it looked like they were sliding instead of walking. Fixed.
 
 What's new:
-- Retired the Ghost species. We were never satisfied with the way it looked, and rather than ship more partial fixes, we removed it entirely.
+- Cats now properly cycle through their 8-frame walking animation (was stuck on frame 0).
+- Pets bounce off side walls instead of pressing into them.
+- Pets walk along the floor above the tab bar (no more drifting in the middle of the screen).
+- Dragging-and-releasing a pet drops it cleanly. No more unintended little hops on landing.
+- Evolution progress now shows your pet's age (the actual measure that matters), not a confusing XP bar.
 
-If your pet was a Ghost:
-- Don't worry — your pet is preserved. Same name, same age, same level, same memories. Only the species visual changes (now a Cat). Nothing is lost.
+The cat is currently the only species with full multi-frame walking. Other species still render correctly but as single-frame static sprites — more species get walking animations in future updates.
 
-Behind the scenes:
-- Smaller bundle, less to download.
-- Migration runs silently on first launch. No action needed from you.
+If your pet still looks stuck:
+- Force-quit and reopen the app. The fix lands on next launch.
