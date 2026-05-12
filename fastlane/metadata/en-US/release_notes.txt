@@ -1,11 +1,11 @@
-PeerDrop 5.1 — Local-network connections are now end-to-end encrypted.
+PeerDrop 5.2 — Local-network connections are end-to-end encrypted, and pairing with a new device now requires explicit verification.
 
-When two v5.1+ peers connect on the same Wi-Fi, every chat message, file transfer, and signal between them is sealed inside a Double Ratchet session (the same forward-secret crypto used by Signal). Earlier versions trusted the local network and sent data in the clear once both sides shook hands — fine for a home router, less fine on a cafe AP. That's fixed.
+End-to-end encryption: When two v5.2 peers connect on the same Wi-Fi, every chat message, file transfer, and signal between them is sealed inside a Double Ratchet session (the same forward-secret crypto used by Signal). Earlier versions trusted the local network and sent data in the clear once both sides shook hands — fine for a home router, less fine on a cafe AP. That's fixed.
 
-What's new:
-- Automatic E2E encryption over local TCP. No setup, no toggle — if both peers run 5.1+, the handshake happens silently in the first second after connecting.
-- A small lock icon appears next to each connected peer once the encrypted channel is up. Green = trusted match. Orange = first time meeting this peer. Red triangle = the peer's key changed — investigate before sharing anything sensitive.
-- Connecting with a v5.0.x peer still works exactly as before — connections downgrade transparently to plaintext.
-- If the encrypted handshake doesn't complete within 5 seconds, the connection falls back to plaintext instead of hanging forever.
+Explicit pairing: The first time you connect to a new device, both screens show the same 6-digit verification code. Compare the codes face-to-face (or over a trusted channel like a phone call) and tap "Accept & Trust" on both sides. Until you do, files and chat are blocked — no silent first-contact trust. If the codes don't match, tap "Reject" to block the peer.
 
-This is a security-foundation release; no visible new features beyond the lock chip. Behavior is otherwise unchanged from 5.0.2.
+A small lock icon next to each connected peer shows the trust state: green for matched, orange for first contact (pending your approval), red triangle if the peer's identity key changed.
+
+Backward-compatible: connecting to a v5.0.x peer still works exactly as before. Same protocol version, same data flows.
+
+Under the hood: pet sprite rendering is now atlas-based — bundled artwork is smaller and loads faster.
