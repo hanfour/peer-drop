@@ -5,22 +5,29 @@
 # Wraps the per-zip cadence described in `docs/release/v5.0.x-cadence.md`:
 #   1. Normalize raw PixelLab export → v3.0 schema
 #   2. Drop into the bundle directory
-#   3. Tell the operator what line to add to `expectedV5Coverage`
-#   4. Run the focused asset-coverage test to confirm everything wires up
+#   3. Build atlas (single PNG + UV map) — strips per-frame PNGs to
+#      shrink the IPA; SpriteService/SpriteDecoder slice from the atlas
+#   4. Tell the operator what line to add to `expectedV5Coverage`
+#   5. Run the focused asset-coverage test to confirm everything wires up
 #
 # Does NOT commit or push — operator reviews the diff first. This script
 # only mutates files; the git workflow is `git add … && git commit -m …`
 # after running.
 #
 # Usage:
-#   Scripts/drop_v5_zip.sh <raw-pixellab-export.zip> <species-stage>
+#   Scripts/drop_v5_zip.sh [--no-atlas] <raw-pixellab-export.zip> <species-stage>
 #
 # Examples:
 #   Scripts/drop_v5_zip.sh ~/Downloads/raw.zip dog-shiba-adult
 #   Scripts/drop_v5_zip.sh ./fox-elder-raw.zip fox-elder
+#   Scripts/drop_v5_zip.sh --no-atlas raw.zip dog-shiba-adult  # legacy v3.0 only
 #
 # The <species-stage> argument is the bundled filename WITHOUT the `.zip`
 # suffix — matches the format already in `expectedV5Coverage`.
+#
+# --no-atlas: ship the v3.0 per-frame zip without atlas conversion. Use
+# only when investigating an atlas-related regression — the reader
+# handles both formats, so the default-on atlas path is safe.
 
 set -euo pipefail
 
@@ -28,6 +35,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PETS_DIR="$REPO_ROOT/PeerDrop/Resources/Pets"
 WHITELIST_FILE="$REPO_ROOT/PeerDropTests/Pet/MainBundleAssetCoverageTests.swift"
 NORMALIZE_SCRIPT="$REPO_ROOT/Scripts/normalize-pixellab-zip.sh"
+ATLAS_SCRIPT="$REPO_ROOT/Scripts/build_atlas.py"
 
 # ANSI helpers (no-op when output isn't a TTY).
 if [[ -t 1 ]]; then
@@ -48,7 +56,27 @@ step() {
 
 # ─── Args ───────────────────────────────────────────────────────────────
 
-[[ $# -eq 2 ]] || die "Usage: $0 <raw-pixellab-export.zip> <species-stage>
+BUILD_ATLAS=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-atlas)
+            BUILD_ATLAS=0
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            die "Unknown flag: $1"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+[[ $# -eq 2 ]] || die "Usage: $0 [--no-atlas] <raw-pixellab-export.zip> <species-stage>
 Example:
     $0 ~/Downloads/raw.zip dog-shiba-adult"
 
@@ -67,11 +95,24 @@ fi
 [[ -f "$WHITELIST_FILE" ]]        || die "Whitelist file not found: $WHITELIST_FILE"
 [[ -x "$NORMALIZE_SCRIPT" ]]      || die "Normalize script not executable: $NORMALIZE_SCRIPT"
 
+# Pillow preflight when atlas step is enabled — failing here with a clear
+# message beats a cryptic "ModuleNotFoundError: No module named 'PIL'"
+# halfway through the run, which would leave the bundle with the un-
+# atlased zip in place (recoverable but confusing).
+if [[ $BUILD_ATLAS -eq 1 ]]; then
+    [[ -f "$ATLAS_SCRIPT" ]] || die "Atlas script not found: $ATLAS_SCRIPT"
+    if ! python3 -c "from PIL import Image" 2>/dev/null; then
+        die "Pillow (PIL) is required for atlas conversion. Install with:
+    pip3 install --user Pillow
+Or pass --no-atlas to skip atlas build for this run."
+    fi
+fi
+
 OUT_ZIP="$PETS_DIR/${SPECIES_STAGE}.zip"
 
 # ─── Step 1: Normalize ──────────────────────────────────────────────────
 
-step "1/4 Normalize $RAW_ZIP → $SPECIES_STAGE.zip"
+step "1/5 Normalize $RAW_ZIP → $SPECIES_STAGE.zip"
 TMP_ZIP="$(mktemp -t "drop_v5_${SPECIES_STAGE}.XXXXXX").zip"
 trap 'rm -f "$TMP_ZIP"' EXIT
 
@@ -80,7 +121,7 @@ echo "   ${DIM}Normalized output: $TMP_ZIP${RESET}"
 
 # ─── Step 2: Drop into bundle ───────────────────────────────────────────
 
-step "2/4 Drop into $PETS_DIR/"
+step "2/5 Drop into $PETS_DIR/"
 if [[ -e "$OUT_ZIP" ]]; then
     OVERWRITE="(overwriting existing — diff: $(stat -f%z "$OUT_ZIP") → $(stat -f%z "$TMP_ZIP") bytes)"
     echo "   ${YELLOW}$OVERWRITE${RESET}"
@@ -89,9 +130,31 @@ mv "$TMP_ZIP" "$OUT_ZIP"
 echo "   ${DIM}Bundled at: $OUT_ZIP${RESET}"
 trap - EXIT  # successfully moved; nothing to clean up
 
-# ─── Step 3: Whitelist guidance ─────────────────────────────────────────
+# ─── Step 3: Build atlas ────────────────────────────────────────────────
 
-step "3/4 Whitelist entry"
+if [[ $BUILD_ATLAS -eq 1 ]]; then
+    step "3/5 Build atlas (strip per-frame PNGs)"
+    BEFORE_BYTES=$(stat -f%z "$OUT_ZIP")
+    if ! python3 "$ATLAS_SCRIPT" "$OUT_ZIP" --strip-frames; then
+        die "atlas build failed — $OUT_ZIP left in v3.0 per-frame state.
+Investigate, then either re-run this script or atlas manually:
+    python3 $ATLAS_SCRIPT $OUT_ZIP --strip-frames"
+    fi
+    AFTER_BYTES=$(stat -f%z "$OUT_ZIP")
+    SAVED=$(( BEFORE_BYTES - AFTER_BYTES ))
+    if [[ $BEFORE_BYTES -gt 0 ]]; then
+        PCT=$(( 100 * SAVED / BEFORE_BYTES ))
+    else
+        PCT=0
+    fi
+    echo "   ${GREEN}✓${RESET} ${BEFORE_BYTES} → ${AFTER_BYTES} bytes (${DIM}-${SAVED} bytes, -${PCT}%${RESET})"
+else
+    step "3/5 Build atlas ${DIM}(skipped — --no-atlas)${RESET}"
+fi
+
+# ─── Step 4: Whitelist guidance ─────────────────────────────────────────
+
+step "4/5 Whitelist entry"
 if grep -q "\"$SPECIES_STAGE\"" "$WHITELIST_FILE"; then
     echo "   ${GREEN}✓${RESET} '$SPECIES_STAGE' already in expectedV5Coverage"
 else
@@ -102,9 +165,9 @@ else
     echo "   Then re-run this script (idempotent) to verify the test passes."
 fi
 
-# ─── Step 4: Focused test ───────────────────────────────────────────────
+# ─── Step 5: Focused test ───────────────────────────────────────────────
 
-step "4/4 Run asset coverage test"
+step "5/5 Run asset coverage test"
 echo "   ${DIM}xcodebuild test -only-testing:PeerDropTests/Pet/MainBundleAssetCoverageTests${RESET}"
 TEST_LOG="$(mktemp -t "drop_v5_test_${SPECIES_STAGE}.XXXXXX").log"
 if xcodebuild test \
