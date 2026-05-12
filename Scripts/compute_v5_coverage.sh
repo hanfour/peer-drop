@@ -21,8 +21,12 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-COVERAGE_FILE="$REPO_ROOT/PeerDropTests/Pet/MainBundleAssetCoverageTests.swift"
-PETS_DIR="$REPO_ROOT/PeerDrop/Resources/Pets"
+
+# Env-overridable input paths. Default to the bundled locations; the test
+# harness (Scripts/test_compute_v5_coverage.sh) sets these to point at
+# synthetic fixtures.
+COVERAGE_FILE="${COVERAGE_FILE_OVERRIDE:-$REPO_ROOT/PeerDropTests/Pet/MainBundleAssetCoverageTests.swift}"
+PETS_DIR="${PETS_DIR_OVERRIDE:-$REPO_ROOT/PeerDrop/Resources/Pets}"
 
 if [[ ! -f "$COVERAGE_FILE" ]]; then
     echo "ERROR: not found: $COVERAGE_FILE" >&2
@@ -33,13 +37,46 @@ if [[ ! -d "$PETS_DIR" ]]; then
     exit 1
 fi
 
-# Extract the expectedV5Coverage block. We look for the literal set body — entries
-# are double-quoted, hyphenated, lowercase like "cat-tabby-adult".
+# Extract the expectedV5Coverage block. Handles three layouts:
+#   • multi-line set body (current style)
+#   • single-line set body (Set<String> = ["foo", "bar"])
+#   • entries on the same line as the opening `[`
+#
+# Entries are lowercase hyphenated quoted strings; we scan only within
+# the literal `expectedV5Coverage` set's brackets to avoid matching any
+# other quoted token in the file. The `exit` after the closing bracket
+# is the safety net against future edits that re-open another set body
+# elsewhere in the file.
 COVERED=$(awk '
-    /expectedV5Coverage: Set<String> = \[/  { in_set = 1; next }
-    in_set && /^[[:space:]]*\]/              { in_set = 0 }
-    in_set && /"[a-z][a-z0-9-]+"/            { count++ }
-    END                                      { print count + 0 }
+    function count_in(text,    n) {
+        n = 0
+        # Strip Swift line-comment (// …) so quoted tokens inside trailing
+        # commentary do not get counted. We do this before scanning rather
+        # than per-match because the comment may contain a `]` or quote
+        # that would confuse downstream awk regex matchers.
+        sub(/\/\/.*/, "", text)
+        while (match(text, /"[a-z][a-z0-9-]+"/)) {
+            n++
+            text = substr(text, RSTART + RLENGTH)
+        }
+        return n
+    }
+    /expectedV5Coverage: Set<String> = \[/ {
+        in_set = 1
+        line = $0
+        sub(/.*Set<String> = \[/, "", line)  # strip prefix incl. the opening bracket
+        if (match(line, /\]/)) {              # ] on the same line: count + done
+            line = substr(line, 1, RSTART - 1)
+            count += count_in(line)
+            in_set = 0
+            exit
+        }
+        count += count_in(line)
+        next
+    }
+    in_set && /^[[:space:]]*\]/  { in_set = 0; exit }
+    in_set                       { count += count_in($0) }
+    END                          { print count + 0 }
 ' "$COVERAGE_FILE")
 
 TOTAL=$(find "$PETS_DIR" -maxdepth 1 -name '*.zip' -type f | wc -l | tr -d ' ')

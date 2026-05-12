@@ -115,15 +115,16 @@ extension V5UpgradeOnboarding {
     /// on v5 (already see animations from day one), so the announcement
     /// would be confusing.
     ///
-    /// Set to 2026-05-15 — gives ~6 days buffer for App Store review +
-    /// phased rollout from the 2026-05-09 ship submission. TestFlight
-    /// pets created on/after this date won't see the upgrade prompt;
-    /// existing v4 pets (birthDate < 2026-05-15) see it once.
+    /// **Actual approval/release: 2026-05-09** (Apple cleared review faster
+    /// than the original 6-day buffer estimate). The constant was originally
+    /// set to 2026-05-15 in anticipation of a slower review; updated to the
+    /// real release date so fresh v5.0.x installs from 2026-05-09 onward
+    /// correctly bypass the "Pets Got New Animations" sheet.
     static let v5ReleaseDate: Date = {
         var components = DateComponents()
         components.year = 2026
         components.month = 5
-        components.day = 15
+        components.day = 9
         components.timeZone = TimeZone(identifier: "UTC")
         return Calendar(identifier: .gregorian).date(from: components) ?? .distantFuture
     }()
