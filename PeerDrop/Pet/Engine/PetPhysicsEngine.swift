@@ -18,16 +18,24 @@ enum PetPhysicsEngine {
         state.position.x += state.velocity.dx * dt
         state.position.y += state.velocity.dy * dt
         let passThroughWalls = profile?.canPassThroughWalls ?? false
-        resolveCollision(&state, surfaces: surfaces, canPassThroughWalls: passThroughWalls)
+        let physicsMode = profile?.physicsMode ?? .grounded
+        resolveCollision(&state, surfaces: surfaces,
+                         canPassThroughWalls: passThroughWalls,
+                         physicsMode: physicsMode)
     }
 
     static func resolveCollision(_ state: inout PetPhysicsState, surfaces: ScreenSurfaces,
-                                 canPassThroughWalls: Bool = false) {
+                                 canPassThroughWalls: Bool = false,
+                                 physicsMode: PetPhysicsMode = .grounded) {
         guard !canPassThroughWalls else { return }
 
         if state.position.y >= surfaces.ground {
             state.position.y = surfaces.ground
-            if abs(state.velocity.dy) > 20 {
+            // Only bouncing pets (frog, slime) actually bounce on landing.
+            // Grounded pets (cat, dog, rabbit, bear, dragon, octopus) land
+            // cleanly — bouncing them produced the "unnatural drop with
+            // little hops" feedback after a drag release.
+            if physicsMode == .bouncing && abs(state.velocity.dy) > 20 {
                 state.velocity.dy = -state.velocity.dy * bounceRestitution
             } else {
                 state.velocity = .zero
@@ -58,7 +66,26 @@ enum PetPhysicsEngine {
         let dx = direction == .right ? speed * dt : -speed * dt
         state.position.x += dx
         state.facingRight = direction == .right
-        state.position.x = max(surfaces.leftWall, min(state.position.x, surfaces.rightWall - petSize))
+
+        // Bounce off side walls — flip facing direction so the next physics
+        // tick walks back the other way. Previously the position was clamped
+        // but `facingRight` stayed pinned, so the pet pressed into the wall
+        // indefinitely until the behavior loop happened to flip it.
+        let rightBound = surfaces.rightWall - petSize
+        if state.position.x <= surfaces.leftWall {
+            state.position.x = surfaces.leftWall
+            state.facingRight = true
+        } else if state.position.x >= rightBound {
+            state.position.x = rightBound
+            state.facingRight = false
+        }
+
+        // Kinematic walking always traces the floor. Without this, the pet's
+        // y can drift (default-init position, post-throw landing slop, screen
+        // resize) and the cat ends up walking through the middle of the
+        // screen instead of along the bottom bar. Vertical actions (jump,
+        // climb, fly) go through their own branches so they're unaffected.
+        state.position.y = surfaces.ground
     }
 
     static func applyClimb(_ state: inout PetPhysicsState, speed: CGFloat,

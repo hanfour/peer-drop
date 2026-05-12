@@ -51,14 +51,55 @@ final class PetPhysicsEngineTests: XCTestCase {
         XCTAssertEqual(state.velocity.dy, -200)
     }
 
-    func testBounceOnLanding() {
+    func testBounceOnLanding_bouncingMode() {
+        // v5.0.x: bouncing is now opt-in via physicsMode (frog/slime only).
+        // Grounded pets land cleanly — see testGroundedPetLandsCleanly below.
         var state = PetPhysicsState(position: CGPoint(x: 100, y: 800), velocity: CGVector(dx: 50, dy: 300), surface: .airborne)
         let surfaces = ScreenSurfaces.test(ground: 800)
-        PetPhysicsEngine.resolveCollision(&state, surfaces: surfaces)
-        // High velocity causes a bounce — pet stays airborne with reversed dy
+        PetPhysicsEngine.resolveCollision(&state, surfaces: surfaces, physicsMode: .bouncing)
         XCTAssertEqual(state.surface, .airborne)
         XCTAssertLessThan(state.velocity.dy, 0)
         XCTAssertEqual(state.velocity.dy, -300 * PetPhysicsEngine.bounceRestitution, accuracy: 0.01)
+    }
+
+    func testGroundedPetLandsCleanly() {
+        // Cats, dogs, etc. should NOT hop on landing — that produced the
+        // "unnatural drop with little bounces" feedback on drag release.
+        var state = PetPhysicsState(position: CGPoint(x: 100, y: 800), velocity: CGVector(dx: 50, dy: 300), surface: .airborne)
+        let surfaces = ScreenSurfaces.test(ground: 800)
+        PetPhysicsEngine.resolveCollision(&state, surfaces: surfaces, physicsMode: .grounded)
+        XCTAssertEqual(state.surface, .ground, "grounded pet should land, not bounce")
+        XCTAssertEqual(state.velocity, .zero, "velocity zeroed on clean landing")
+    }
+
+    func testWalkBouncesOffLeftWall() {
+        var state = PetPhysicsState(position: CGPoint(x: 20, y: 800), velocity: .zero, surface: .ground)
+        state.facingRight = false
+        let surfaces = ScreenSurfaces.test(ground: 800, leftWall: 20, rightWall: 400)
+        // Walk left into the wall — should clamp + flip facing direction.
+        PetPhysicsEngine.applyWalk(&state, direction: .left, speed: 100, dt: 1.0 / 60.0, surfaces: surfaces)
+        XCTAssertEqual(state.position.x, 20, "clamped at left wall")
+        XCTAssertTrue(state.facingRight, "facing flipped to walk back right")
+    }
+
+    func testWalkBouncesOffRightWall() {
+        let rightBound = 400 - PetPhysicsEngine.petSize
+        var state = PetPhysicsState(position: CGPoint(x: rightBound, y: 800), velocity: .zero, surface: .ground)
+        state.facingRight = true
+        let surfaces = ScreenSurfaces.test(ground: 800, leftWall: 20, rightWall: 400)
+        PetPhysicsEngine.applyWalk(&state, direction: .right, speed: 100, dt: 1.0 / 60.0, surfaces: surfaces)
+        XCTAssertEqual(state.position.x, rightBound, "clamped at right wall (rightWall - petSize)")
+        XCTAssertFalse(state.facingRight, "facing flipped to walk back left")
+    }
+
+    func testWalkSnapsYToGround() {
+        // Pet's y drifted from the actual ground — applyWalk should put it
+        // back on the floor. Fixes "cat walking through the middle of the
+        // screen" after default-init or screen resize.
+        var state = PetPhysicsState(position: CGPoint(x: 200, y: 200), velocity: .zero, surface: .ground)
+        let surfaces = ScreenSurfaces.test(ground: 800, rightWall: 400)
+        PetPhysicsEngine.applyWalk(&state, direction: .right, speed: 30, dt: 1.0 / 60.0, surfaces: surfaces)
+        XCTAssertEqual(state.position.y, 800, accuracy: 0.01, "y snapped to ground level")
     }
 
     // MARK: - Profile-aware physics

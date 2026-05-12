@@ -135,6 +135,16 @@ struct FloatingPetView: View {
         .accessibilityIdentifier("floating-pet")
         .accessibilityLabel("Pet")
         .onAppear {
+            // Snap pet to the actual ground (above the tab bar) on first
+            // appearance. PetEngine's default-init position is (60, 200)
+            // because the engine has no screen reference at construction
+            // time; FloatingPetView is where screen geometry first becomes
+            // available, so this is where the y becomes meaningful. Only
+            // snap when the engine claims to be grounded — airborne /
+            // wall / ceiling pets should stay wherever physics put them.
+            if engine.physicsState.surface == .ground {
+                engine.physicsState.position.y = screenSurfaces().ground
+            }
             startPhysicsLoop()
             startBehaviorLoop()
         }
