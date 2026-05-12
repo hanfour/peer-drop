@@ -31,9 +31,12 @@ final class FileTransferSession: ObservableObject {
     }
 
     /// Return a unique file URL in receivedFilesDirectory, appending " (N)" for duplicates.
+    /// The input `fileName` is sanitized first — callers may pass untrusted
+    /// peer-supplied strings.
     static func uniqueDestination(for fileName: String) -> URL {
+        let safeName = FileNameSanitizer.sanitize(fileName)
         let dir = receivedFilesDirectory
-        var destURL = dir.appendingPathComponent(fileName)
+        var destURL = dir.appendingPathComponent(safeName)
         guard FileManager.default.fileExists(atPath: destURL.path) else { return destURL }
 
         let stem = destURL.deletingPathExtension().lastPathComponent
@@ -205,9 +208,14 @@ final class FileTransferSession: ObservableObject {
         currentFileName = metadata.displayName
         isCurrentTransferDirectory = metadata.isDirectory
 
-        // Prepare a temp file for streaming chunks to disk
+        // Prepare a temp file for streaming chunks to disk. fileName comes
+        // from the peer-supplied metadata and is sanitized before forming
+        // the path — without this, a peer sending `../../escape.bin` would
+        // write into a temp-dir sibling rather than under
+        // temporaryDirectory.
+        let safeName = FileNameSanitizer.sanitize(metadata.fileName)
         let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString + "_" + metadata.fileName)
+            .appendingPathComponent(UUID().uuidString + "_" + safeName)
         FileManager.default.createFile(atPath: tempURL.path, contents: nil)
         receiveTempURL = tempURL
 
@@ -302,13 +310,64 @@ final class FileTransferSession: ObservableObject {
         }
     }
 
+    /// Maximum bytes accepted on a single chunk. The sender's chunk size is
+    /// `Data.defaultChunkSize` (currently 64 KB); 1 MB gives generous headroom
+    /// for any reasonable future tuning while bounding the memory cost of a
+    /// single attacker-supplied frame.
+    static let maxChunkBytes = 1_048_576  // 1 MB
+
+    /// Maximum total bytes accepted on a single transfer session, regardless
+    /// of the sender's declared fileSize. Defends against a peer that lies
+    /// about the file size in the metadata then streams forever. 2 GB is
+    /// well above any legitimate user transfer (camera roll videos < 4 GB
+    /// would exceed and need a future ranged-transfer protocol).
+    static let maxTotalBytesPerTransfer: Int64 = 2_147_483_648  // 2 GB
+
     func handleFileChunk(_ message: PeerMessage) {
         guard let data = message.payload, let metadata = receiveMetadata else { return }
+
+        // 1) Per-chunk size cap — a single oversized frame should never be
+        //    written to disk. Drop the whole session if this triggers; the
+        //    sender is either buggy or hostile.
+        if data.count > Self.maxChunkBytes {
+            logger.error("Chunk size \(data.count) bytes exceeds max \(Self.maxChunkBytes) — aborting transfer from \(self.peerID, privacy: .public)")
+            abortReceive(reason: "Chunk size violated max-chunk-bytes limit")
+            return
+        }
+
+        // 2) Hard cap on total bytes received. The declared fileSize is
+        //    untrusted; we trust the smaller of (declared fileSize,
+        //    maxTotalBytesPerTransfer). A peer that declares 1 KB then
+        //    streams 2 GB gets cut off at the declared size.
+        let declaredCeiling = min(metadata.fileSize, Self.maxTotalBytesPerTransfer)
+        if receivedBytes + Int64(data.count) > declaredCeiling {
+            logger.error("Received \(self.receivedBytes + Int64(data.count)) bytes exceeds declared \(declaredCeiling) — aborting transfer from \(self.peerID, privacy: .public)")
+            abortReceive(reason: "Received bytes exceeded declared file size")
+            return
+        }
 
         receiveFileHandle?.write(data)
         receiveHasher.update(with: data)
         receivedBytes += Int64(data.count)
         progress = Double(receivedBytes) / Double(metadata.fileSize)
+    }
+
+    /// Clean up a partially-received transfer when an integrity check fails.
+    /// Closes the file handle, removes the temp file, resets receive state,
+    /// and surfaces a user-visible error.
+    private func abortReceive(reason: String) {
+        receiveFileHandle?.closeFile()
+        receiveFileHandle = nil
+        if let tempURL = receiveTempURL {
+            try? FileManager.default.removeItem(at: tempURL)
+        }
+        receiveTempURL = nil
+        receiveMetadata = nil
+        receivedBytes = 0
+        receiveHasher = HashVerifier()
+        isTransferring = false
+        progress = 0
+        lastError = reason
     }
 
     func handleFileComplete(_ message: PeerMessage) -> TransferRecord? {

@@ -219,7 +219,12 @@ final class ChatManager: ObservableObject {
     func saveMediaFile(data: Data, fileName: String, peerID: String) -> String {
         let dir = mediaDirectory(for: peerID)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        let uniqueName = "\(UUID().uuidString.prefix(8))_\(fileName)"
+        // peerID is internally generated; fileName is peer-supplied and
+        // must be sanitized before joining into the on-disk path. Without
+        // this a peer-supplied "../escape" name escapes the per-peer media
+        // dir and writes into a sibling peer's directory.
+        let safeFileName = FileNameSanitizer.sanitize(fileName)
+        let uniqueName = "\(UUID().uuidString.prefix(8))_\(safeFileName)"
         let fileURL = dir.appendingPathComponent(uniqueName)
         try? encryptor.encryptAndWrite(data, to: fileURL)
         return "\(peerID)/\(uniqueName)"
