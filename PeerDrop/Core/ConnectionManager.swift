@@ -135,6 +135,12 @@ final class ConnectionManager: ObservableObject {
     /// awaiting user consent before we create a TrustedContact and respond
     /// to X3DH. Drives the FirstContactVerificationSheet.
     @Published var pendingFirstContact: PendingFirstContact?
+    /// Pending local-Wi-Fi first-trust verification: a peer we just completed
+    /// a `LocalSecureChannel` handshake with whose identity key is unknown
+    /// to `TrustedContactStore`. Closes the audit-#14 TOFU gap by surfacing
+    /// the fingerprint to the user instead of silently auto-trusting.
+    /// Drives a second mount of `FirstContactVerificationSheet`.
+    @Published var pendingLocalFirstTrust: PendingFirstContact?
 
     /// Surfaced banner when consecutive decrypt failures from a single peer
     /// cross `decryptFailureBannerThreshold`. Cleared on successful decrypt
@@ -3659,7 +3665,100 @@ final class ConnectionManager: ObservableObject {
         } else {
             peerConnection.setPinningVerdict(.firstTrust)
             logger.info("Pinning: first-trust (TOFU) for \(identity.displayName, privacy: .public)")
+            surfaceLocalFirstTrust(identity: identity, peerPublicKey: peerPublicKey, fingerprint: fingerprint)
         }
+    }
+
+    /// Set the published prompt that drives `FirstContactVerificationSheet`
+    /// for the local-Wi-Fi path. Idempotent: a second firstTrust event on the
+    /// same fingerprint while the prompt is already up is dropped (the active
+    /// sheet already references that peer). Concurrent firstTrust events on
+    /// *different* peers are silently dropped in S1 — the user resolves one
+    /// sheet at a time and the lock chip on ConnectedTab still flags the
+    /// other peers as `.firstTrust`. A proper queue lands with S2/S3.
+    private func surfaceLocalFirstTrust(
+        identity: PeerIdentity,
+        peerPublicKey: Data,
+        fingerprint: String
+    ) {
+        if let existing = pendingLocalFirstTrust,
+           existing.senderIdentityKey == peerPublicKey {
+            return  // already prompting the user about this peer
+        }
+        guard pendingLocalFirstTrust == nil else {
+            logger.info("Skipping local first-trust prompt for \(identity.displayName, privacy: .public) — another prompt already active")
+            return
+        }
+        pendingLocalFirstTrust = PendingFirstContact(
+            fingerprint: fingerprint,
+            senderDisplayName: identity.displayName,
+            senderIdentityKey: peerPublicKey
+        )
+        logger.info("Surfaced local first-trust prompt for \(identity.displayName, privacy: .public)")
+    }
+
+    /// User approved a local-Wi-Fi first-trust prompt. Elevates the existing
+    /// `.unknown` TrustedContact (added silently by `checkPeerTrust` during
+    /// hello) to `.linked`, flips the live connection's pinning verdict to
+    /// `.matched` so the lock chip turns green, and clears the prompt.
+    /// Connection itself is unchanged — the user only authorised continuing
+    /// with this peer, not interrupting the live session.
+    func approveLocalFirstTrust(fingerprint: String) {
+        guard let current = pendingLocalFirstTrust, current.fingerprint == fingerprint else { return }
+        pendingLocalFirstTrust = nil
+
+        if let contact = trustedContactStore.find(byPublicKey: current.senderIdentityKey) {
+            trustedContactStore.updateTrustLevel(for: contact.id, to: .linked)
+            logger.info("Elevated \(contact.displayName, privacy: .public) to .linked after local first-trust approval")
+        } else {
+            // Defensive: checkPeerTrust runs earlier in the connection flow,
+            // so the .unknown record should already exist. If something
+            // raced and removed it (unlikely), recreate at .linked directly.
+            let newContact = TrustedContact(
+                deviceId: nil,
+                displayName: current.senderDisplayName,
+                identityPublicKey: current.senderIdentityKey,
+                trustLevel: .linked
+            )
+            trustedContactStore.add(newContact)
+            logger.info("Added missing contact at .linked after local first-trust approval")
+        }
+        if let conn = liveConnection(matchingPublicKey: current.senderIdentityKey) {
+            conn.setPinningVerdict(.matched)
+        }
+    }
+
+    /// User blocked a local-Wi-Fi first-trust prompt. Marks the contact as
+    /// blocked, tears down the live peer connection, and clears the prompt.
+    /// `isBlocked` is the user-facing block flag; the underlying contact
+    /// record persists for the audit trail so a future reconnect still
+    /// surfaces the block (instead of falling back through TOFU again).
+    func blockLocalFirstTrust(fingerprint: String) {
+        guard let current = pendingLocalFirstTrust, current.fingerprint == fingerprint else { return }
+        pendingLocalFirstTrust = nil
+
+        if let contact = trustedContactStore.find(byPublicKey: current.senderIdentityKey) {
+            trustedContactStore.setBlocked(contact.id, blocked: true)
+            logger.info("Blocked \(contact.displayName, privacy: .public) after local first-trust rejection")
+        }
+        if let (peerID, _) = liveConnectionEntry(matchingPublicKey: current.senderIdentityKey) {
+            Task { await disconnect(from: peerID) }
+        }
+    }
+
+    /// Find the live PeerConnection whose peer identity matches a public key.
+    /// Used by the local first-trust handlers to flip verdict / disconnect.
+    private func liveConnection(matchingPublicKey publicKey: Data) -> PeerConnection? {
+        liveConnectionEntry(matchingPublicKey: publicKey)?.connection
+    }
+
+    private func liveConnectionEntry(matchingPublicKey publicKey: Data) -> (peerID: String, connection: PeerConnection)? {
+        for (peerID, conn) in connections {
+            if conn.peerIdentity.identityPublicKey == publicKey {
+                return (peerID, conn)
+            }
+        }
+        return nil
     }
 
     /// User chose to block the contact whose key changed

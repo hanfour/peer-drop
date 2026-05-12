@@ -103,6 +103,17 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(item: $connectionManager.pendingLocalFirstTrust) { pending in
+            FirstContactVerificationSheet(
+                pending: pending,
+                onApprove: {
+                    connectionManager.approveLocalFirstTrust(fingerprint: pending.fingerprint)
+                },
+                onReject: {
+                    connectionManager.blockLocalFirstTrust(fingerprint: pending.fingerprint)
+                }
+            )
+        }
         .sheet(isPresented: $connectionManager.showTransferProgress) {
             TransferProgressView()
                 .environmentObject(connectionManager)
