@@ -58,4 +58,13 @@ enum MessageType: String, Codable {
 
     // Stable device identity (for invite routing)
     case deviceIdExchange
+
+    // Local-TCP E2E secure channel (v5.0.3+, audit-#13 Phase 2).
+    // - .secureHandshake: peer exchanges LocalSecureChannel.HandshakeBundle
+    //   in plaintext to bootstrap the Double Ratchet session.
+    // - .secureEnvelope: encrypted wrapper around a PeerMessage. Once both
+    //   peers have completed the handshake, all non-control messages flow
+    //   through this envelope automatically.
+    case secureHandshake
+    case secureEnvelope
 }

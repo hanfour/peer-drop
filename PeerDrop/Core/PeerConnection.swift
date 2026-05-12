@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import CryptoKit
 import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PeerConnection")
@@ -50,6 +51,36 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     /// Local identity for sending messages.
     private let localIdentity: PeerIdentity
+
+    // MARK: - Secure channel (audit-#13 Phase 2)
+
+    /// Active local-TCP secure channel, or nil if the peer hasn't completed
+    /// the Double Ratchet handshake. When set, `sendMessage` automatically
+    /// encrypts non-control messages and the receive loop decrypts
+    /// `.secureEnvelope` frames before delivering to `onMessageReceived`.
+    private(set) var secureChannel: LocalSecureChannel?
+
+    /// Ratchet private key generated when we sent OUR handshake bundle,
+    /// kept until we receive the peer's bundle so we can complete
+    /// `LocalSecureChannel.establish`. Cleared after establishment.
+    private var pendingRatchetPrivateKey: Curve25519.KeyAgreement.PrivateKey?
+
+    /// Phase of the local-TCP handshake.
+    enum SecureChannelState {
+        case disabled              // never initiated; sendMessage plaintext
+        case handshakeInProgress   // our bundle sent, awaiting peer's bundle
+        case secured               // both bundles exchanged, channel ready
+    }
+    private(set) var secureChannelState: SecureChannelState = .disabled
+
+    /// MessageTypes that bypass encryption even when a secureChannel exists.
+    /// These are either the handshake itself or low-cost keepalive — wrapping
+    /// would either chicken-and-egg the handshake or waste crypto on
+    /// 50-byte ping/pong frames.
+    private static let secureChannelBypassTypes: Set<MessageType> = [
+        .secureHandshake,
+        .ping, .pong,
+    ]
 
     /// Backward-compatible accessor for the underlying NWConnection (TCP transport only).
     var nwConnection: NWConnection? {
@@ -201,7 +232,96 @@ final class PeerConnection: ObservableObject, Identifiable {
         guard state.isActive else {
             throw ConnectionError.notConnected
         }
+        // If we have a secured channel and this message isn't a bypass
+        // type (handshake / ping / pong), wrap it before hitting the
+        // wire. Wrapping fails closed — if encrypt throws, the message
+        // does NOT fall through to plaintext.
+        if let channel = secureChannel,
+           !Self.secureChannelBypassTypes.contains(message.type) {
+            let plaintext = try message.encoded()
+            let frame = try channel.encrypt(plaintext)
+            let envelope = PeerMessage.secureEnvelope(frame: frame, senderID: localIdentity.id)
+            try await transport.send(envelope)
+            return
+        }
         try await transport.send(message)
+    }
+
+    // MARK: - Secure Channel (audit-#13 Phase 2)
+
+    /// Initiate the local-TCP secure handshake. Generates a fresh
+    /// ephemeral ratchet key, sends our `HandshakeBundle` over the wire
+    /// in plaintext, and transitions to `.handshakeInProgress`. The
+    /// channel becomes `.secured` once `handleIncomingSecureHandshake`
+    /// fires on the peer's response.
+    ///
+    /// Idempotent: calling twice on the same connection is a no-op the
+    /// second time. Caller should `await` this before sending business
+    /// messages — calls to `sendMessage` between initiation and
+    /// completion go through the plaintext path.
+    ///
+    /// `identity` defaults to the device singleton; tests inject a fake.
+    func initiateSecureHandshake(identity: LocalChannelIdentity = IdentityKeyManager.shared) async throws {
+        guard secureChannelState == .disabled else { return }
+        let (bundle, ratchetPriv) = LocalSecureChannel.prepareHandshake(identity: identity)
+        pendingRatchetPrivateKey = ratchetPriv
+        secureChannelState = .handshakeInProgress
+        let message = try PeerMessage.secureHandshake(bundle: bundle, senderID: localIdentity.id)
+        try await transport.send(message)
+    }
+
+    /// Process an inbound `.secureHandshake` message. If we haven't yet
+    /// sent our own bundle, send it now (passive responder case). Then
+    /// derive the channel from our held ratchet private key + the peer's
+    /// bundle. After success, `secureChannel` is non-nil and state is
+    /// `.secured`.
+    func handleIncomingSecureHandshake(
+        _ message: PeerMessage,
+        identity: LocalChannelIdentity = IdentityKeyManager.shared
+    ) async throws {
+        guard message.type == .secureHandshake else {
+            throw SecureChannelError.unexpectedMessageType
+        }
+        // Drop duplicate handshakes once the channel is up. Without this,
+        // a replayed-or-stuck bundle would generate a new ratchet key,
+        // call `establish` again, and replace the working channel with a
+        // fresh one — destroying in-flight session state and breaking
+        // every subsequent decrypt.
+        guard secureChannelState != .secured else {
+            logger.warning("PeerConnection[\(self.id.prefix(8))] ignoring duplicate handshake on secured channel")
+            return
+        }
+        let bundle = try message.decodePayload(LocalSecureChannel.HandshakeBundle.self)
+
+        // Passive responder: peer initiated; we never called
+        // initiateSecureHandshake. Generate our bundle on demand + send it
+        // so the peer can complete its own establish() on the other side.
+        if pendingRatchetPrivateKey == nil {
+            let (ourBundle, ratchetPriv) = LocalSecureChannel.prepareHandshake(identity: identity)
+            pendingRatchetPrivateKey = ratchetPriv
+            secureChannelState = .handshakeInProgress
+            let reply = try PeerMessage.secureHandshake(bundle: ourBundle, senderID: localIdentity.id)
+            try await transport.send(reply)
+        }
+
+        guard let ratchetPriv = pendingRatchetPrivateKey else {
+            throw SecureChannelError.missingPendingKey
+        }
+        secureChannel = try LocalSecureChannel.establish(
+            myIdentity: identity,
+            myRatchetPrivateKey: ratchetPriv,
+            peerBundle: bundle
+        )
+        pendingRatchetPrivateKey = nil
+        secureChannelState = .secured
+        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(self.secureChannel?.peerFingerprint ?? "?", privacy: .public)")
+    }
+
+    /// Errors specific to the secure-channel handshake.
+    enum SecureChannelError: Error, Equatable {
+        case unexpectedMessageType
+        case missingPendingKey
+        case envelopeWithoutChannel  // received .secureEnvelope before establishing
     }
 
     // MARK: - Receive Loop
@@ -215,7 +335,7 @@ final class PeerConnection: ObservableObject, Identifiable {
                 do {
                     let message = try await transport.receive()
                     guard connectionGeneration == generation else { break }
-                    onMessageReceived?(message)
+                    try await handleIncomingMessage(message)
                 } catch {
                     logger.error("PeerConnection[\(self.id.prefix(8))] receive error: \(error.localizedDescription)")
                     guard connectionGeneration == generation else { break }
@@ -223,6 +343,33 @@ final class PeerConnection: ObservableObject, Identifiable {
                     break
                 }
             }
+        }
+    }
+
+    /// Dispatch one incoming wire message. Handshake + envelope frames are
+    /// handled internally; business messages are forwarded to
+    /// `onMessageReceived`. Pulled out of `startReceiving` so the secure
+    /// channel logic stays testable and the receive loop stays small.
+    private func handleIncomingMessage(_ message: PeerMessage) async throws {
+        switch message.type {
+        case .secureHandshake:
+            try await handleIncomingSecureHandshake(message)
+
+        case .secureEnvelope:
+            guard let channel = secureChannel else {
+                // Envelope arrived before handshake completed. Drop it
+                // (logging) rather than throwing — a misbehaving peer
+                // shouldn't be able to kill our receive loop.
+                logger.error("PeerConnection[\(self.id.prefix(8))] dropped .secureEnvelope before channel established")
+                return
+            }
+            guard let frame = message.payload else { return }
+            let plaintext = try channel.decrypt(frame)
+            let inner = try PeerMessage.decoded(from: plaintext)
+            onMessageReceived?(inner)
+
+        default:
+            onMessageReceived?(message)
         }
     }
 

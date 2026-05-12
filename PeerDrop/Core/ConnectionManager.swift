@@ -3053,6 +3053,13 @@ final class ConnectionManager: ObservableObject {
         case .deviceIdExchange:
             // Legacy path — relay peers go through handleMessageForPeer, ignore here.
             break
+
+        case .secureHandshake, .secureEnvelope:
+            // Secure-channel frames are handled inside PeerConnection's
+            // receive loop before they reach this legacy single-connection
+            // path. If one slips through here, it's already too late to
+            // act on — log + drop.
+            logger.warning("handleMessageLegacy received secure-channel frame; ignoring")
         }
     }
 

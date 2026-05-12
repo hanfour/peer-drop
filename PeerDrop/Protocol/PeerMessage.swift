@@ -25,6 +25,21 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .deviceIdExchange, payload: data, senderID: senderID)
     }
 
+    /// Plaintext-on-wire handshake bundle. Sender's identity public key +
+    /// fresh ephemeral ratchet public key. Both peers exchange these to
+    /// bootstrap a LocalSecureChannel.
+    static func secureHandshake(bundle: LocalSecureChannel.HandshakeBundle, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(bundle)
+        return PeerMessage(type: .secureHandshake, payload: data, senderID: senderID)
+    }
+
+    /// Wrap an already-encrypted secure-channel frame for transport. Caller
+    /// is responsible for having an active LocalSecureChannel and produced
+    /// the `frame` via `channel.encrypt(...)`.
+    static func secureEnvelope(frame: Data, senderID: String) -> PeerMessage {
+        PeerMessage(type: .secureEnvelope, payload: frame, senderID: senderID)
+    }
+
     static func connectionRequest(senderID: String) -> PeerMessage {
         PeerMessage(type: .connectionRequest, senderID: senderID)
     }
