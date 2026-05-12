@@ -180,11 +180,34 @@ actor SpriteService {
                 throw SpriteServiceError.framePNGDecodeFailed(zipURL.lastPathComponent)
             }
 
+            // Atlas-aware probe: a zip carrying `atlas.json` slices frames
+            // out of a single backing image via zero-copy cropping(to:),
+            // avoiding N per-frame PNG decodes. Per-frame fallback still
+            // covers legacy v3.0 zips that haven't been atlased yet.
+            //
+            // Atlas image is decoded once per call here; SpriteService
+            // caches the resulting AnimationFrames by request key so the
+            // atlas re-decode amortizes across direction/action requests
+            // for the same species×stage. A future optimization (tracked
+            // in v5.1+-deferred.md §11) is to cache the atlas CGImage
+            // itself per zipURL so even cache-miss requests for a second
+            // animation share the master decode.
+            let atlas = try? SpriteAtlas.parse(archive: archive)
+            let atlasImage: CGImage? = atlas != nil
+                ? try? SpriteDecoder.loadAtlasImage(archive: archive)
+                : nil
+
             if let actionKey = action.animationKey,
                let anim = metadata.animations[actionKey],
                let paths = anim.directions[dirKey],
                !paths.isEmpty {
-                let images = try paths.map { try Self.decodePNG(archive: archive, path: $0) }
+                let images = try paths.map { path in
+                    try Self.decodeFrame(
+                        archive: archive,
+                        path: path,
+                        atlas: atlas,
+                        atlasImage: atlasImage)
+                }
                 return AnimationFrames(images: images, fps: anim.fps, loops: anim.loops)
             }
 
@@ -203,9 +226,32 @@ actor SpriteService {
             guard let path = metadata.rotations[dirKey] else {
                 throw SpriteServiceError.framePathMissing("rotations/\(dirKey).png")
             }
-            let image = try Self.decodePNG(archive: archive, path: path)
+            let image = try Self.decodeFrame(
+                archive: archive,
+                path: path,
+                atlas: atlas,
+                atlasImage: atlasImage)
             return AnimationFrames(images: [image], fps: 1, loops: false)
         }.value
+    }
+
+    /// Returns one frame's CGImage, slicing from the atlas when one is
+    /// present and the path is mapped, otherwise extracting and decoding
+    /// the per-frame PNG. Falling back per-path (rather than per-zip) keeps
+    /// partially-atlased zips — should we ever ship one — working.
+    nonisolated private static func decodeFrame(
+        archive: Archive,
+        path: String,
+        atlas: SpriteAtlas?,
+        atlasImage: CGImage?
+    ) throws -> CGImage {
+        if let atlas, let atlasImage, let rect = atlas.rect(for: path) {
+            guard let cg = atlasImage.cropping(to: rect.cgRect) else {
+                throw SpriteServiceError.framePNGDecodeFailed(path)
+            }
+            return cg
+        }
+        return try decodePNG(archive: archive, path: path)
     }
 
     nonisolated private static func decodePNG(archive: Archive, path: String) throws -> CGImage {
