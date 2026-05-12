@@ -53,6 +53,16 @@ struct DragonBehavior: PetBehaviorProvider {
                 return .idle
             }
         }
+        // Species-action timeout — picking a unique action (e.g. .scratch,
+        // .breathFire) would otherwise lock the pet forever because the
+        // switch above only handles .idle/.walking/.thrown — any other
+        // current action falls through to `return current` indefinitely.
+        // (v5.0.x fix; CatBehavior gets the same clause inline.)
+        if profile.uniqueActions.contains(current) && physics.surface == .ground {
+            if elapsed > profile.moveDurationRange.upperBound { return .idle }
+        }
+
+
 
         return current
     }

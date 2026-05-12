@@ -74,6 +74,16 @@ struct CatBehavior: PetBehaviorProvider {
             if elapsed > profile.moveDurationRange.upperBound { return .idle }
         }
 
+        // Species-action timeout — without this, picking a unique action
+        // (.scratch/.stretch/.groom/.nap) locks the cat forever because
+        // the rest of the switch only has clauses for .idle/.walking/.thrown
+        // and a `current` action that matches none of them falls through to
+        // `return current`, indefinitely. Reuse moveDurationRange so the
+        // animation length feels equivalent to a walk segment.
+        if profile.uniqueActions.contains(current) && physics.surface == .ground {
+            if elapsed > profile.moveDurationRange.upperBound { return .idle }
+        }
+
         return current
     }
 

@@ -86,11 +86,6 @@ class PetAnimationController: ObservableObject {
         guard !paused, dt > 0 else { return }
         accumulatedDt += dt
         let frameInterval = 1.0 / Double(max(fps, 1))
-        // Nanosecond-scale tolerance: `Int(0.7 / 0.1)` is `6`, not `7`, because
-        // 0.1 isn't exactly representable in IEEE-754 — the ratio comes back as
-        // 6.9999999... and `Int(_:)` truncates. The epsilon is far smaller than
-        // any sensible frame interval (1 ns) so it never causes a spurious
-        // advance, but it pulls boundary values past the truncation cutoff.
         let epsilon = 1e-9
         guard accumulatedDt + epsilon >= frameInterval else { return }
         let stepsToAdvance = Int((accumulatedDt + epsilon) / frameInterval)

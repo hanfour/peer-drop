@@ -8,7 +8,20 @@ private let petEngineLog = Logger(subsystem: "com.hanfour.peerdrop", category: "
 
 @MainActor
 class PetEngine: ObservableObject {
-    @Published var pet: PetState
+    @Published var pet: PetState {
+        didSet {
+            // `behaviorProvider` is keyed off `pet.genome.body`. PeerDropApp
+            // constructs `PetEngine()` with a random `newEgg()`, then later
+            // assigns `petEngine.pet = saved` (or the screenshot mock) — that
+            // path needs to also swap the behavior provider, otherwise (for
+            // example) a saved cat ends up driven by a random dog/bear/frog
+            // provider chosen at init time. Recreating only on body change is
+            // a no-op for hatched pets in normal play (body is immutable).
+            if oldValue.genome.body != pet.genome.body {
+                behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
+            }
+        }
+    }
     @Published var currentAction: PetAction = .idle
     @Published var currentDialogue: String?
     @Published private(set) var renderedImage: CGImage?
@@ -479,18 +492,25 @@ class PetEngine: ObservableObject {
             .sink { [weak self] _ in self?.updateRenderedImage() }
             .store(in: &cancellables)
 
-        // v5 action selection: physics velocity drives walk vs idle, with
-        // hysteresis. .scan threads the previous action through the
-        // pipeline so each emit can compare current speed to the right
-        // threshold (enter at 5 px/s, exit at 3 px/s — see nextAction).
-        // removeDuplicates() then filters away the steady-state same-action
-        // emissions so dispatchActionToAnimator only fires on genuine
-        // transitions; this preserves frameIndex through direction-only
-        // physics changes via setAction's same-action dedup.
-        $physicsState
-            .scan(PetAction.idle) { previous, state in
-                Self.nextAction(previous: previous, velocity: state.velocity)
-            }
+        // Drive the sprite animator off engine.currentAction directly.
+        //
+        // The earlier velocity-driven `$physicsState.scan(...).removeDuplicates`
+        // pipeline assumed `applyWalk` would set `state.velocity` to the
+        // walking velocity — but applyWalk is kinematic (modifies position
+        // directly, leaves velocity at .zero). So the pipeline only ever saw
+        // velocity = 0, always emitted `.idle`, and removeDuplicates filtered
+        // every subsequent emission. The animator stayed locked in its
+        // default `.idle` action regardless of what the behavior loop set,
+        // which surfaced as "the cat slides across the screen but the legs
+        // don't cycle" (Phase 3 visual verification, 2026-05-12).
+        //
+        // currentAction is the actual source of truth — set by the behavior
+        // loop, drag/throw handlers, and food-chase logic — so observing it
+        // directly puts the animator in sync with what physicsStep is doing.
+        // removeDuplicates() guards against redundant emissions; the
+        // animator's own same-action guard in setAction(_:frameCount:fps:)
+        // double-guards against frame resets on direction flips.
+        $currentAction
             .removeDuplicates()
             .sink { [weak self] action in self?.dispatchActionToAnimator(action) }
             .store(in: &cancellables)

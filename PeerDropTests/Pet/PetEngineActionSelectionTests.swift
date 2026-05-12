@@ -93,49 +93,41 @@ final class PetEngineActionSelectionTests: XCTestCase {
         engine.animator.stopAnimation()
     }
 
-    func test_engine_velocityAboveThreshold_transitionsAnimatorToWalking() async throws {
+    // v5.0.x: the animator pipeline now observes `engine.currentAction`
+    // directly (not physics velocity). The previous velocity-driven path
+    // assumed `applyWalk` set state.velocity — but applyWalk is kinematic,
+    // so the pipeline never fired and the animator stayed on its default
+    // idle. These tests now drive the pipeline via currentAction.
+
+    func test_engine_currentActionWalking_transitionsAnimatorToWalking() async throws {
         let engine = makeEngine()
-        // Wait for initial idle dispatch to complete
         try await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertEqual(engine.animator.currentAction, .idle)
 
-        engine.physicsState = PetPhysicsState(
-            position: engine.physicsState.position,
-            velocity: CGVector(dx: 60, dy: 0),
-            surface: .ground)
+        engine.currentAction = .walking
 
-        // Combine pipeline + Task hop
+        // Combine pipeline + async frame fetch Task hop
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(engine.animator.currentAction, .walking)
         // The injected test-bundle SpriteService resolved cat-tabby-adult.zip
-        // (v2 format, no animations) and returned the v2-fallback 1-frame
-        // static. Animator's totalFrames must reflect that — proves the
-        // metadata-fetch path actually ran (vs silently falling through to
-        // the catch-block 1-frame default which would also produce 1).
-        // Distinguish: v2-fallback returns fps=1, the catch-block default
-        // also sets fps=1. Both produce identical observable state for
-        // a v2 zip, which is correct: caller doesn't need to special-case.
+        // (v2 format) and returned the v2-fallback 1-frame static — proves
+        // the metadata-fetch path ran. Production bundle's v5 cat-tabby-adult
+        // returns 8 frames @ 6fps; the test bundle still has the v2-shape.
         XCTAssertEqual(engine.animator.totalFrames, 1,
                        "test-bundle cat-tabby-adult.zip is v2 -> 1-frame fallback")
         XCTAssertEqual(engine.animator.fps, 1)
         engine.animator.stopAnimation()
     }
 
-    func test_engine_velocityReturnsToZero_animatorBackToIdle() async throws {
+    func test_engine_currentActionBackToIdle_transitionsAnimatorBackToIdle() async throws {
         let engine = makeEngine()
         try await Task.sleep(nanoseconds: 200_000_000)
 
-        engine.physicsState = PetPhysicsState(
-            position: engine.physicsState.position,
-            velocity: CGVector(dx: 60, dy: 0),
-            surface: .ground)
+        engine.currentAction = .walking
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(engine.animator.currentAction, .walking)
 
-        engine.physicsState = PetPhysicsState(
-            position: engine.physicsState.position,
-            velocity: .zero,
-            surface: .ground)
+        engine.currentAction = .idle
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(engine.animator.currentAction, .idle)
         engine.animator.stopAnimation()
