@@ -35,7 +35,7 @@ struct PeerDropApp: App {
             }
             .animation(.easeOut(duration: 0.4), value: showLaunch)
             .onReceive(NotificationCenter.default.publisher(for: .didReceiveRelayPush)) { notification in
-                guard let userInfo = notification.userInfo as? [AnyHashable: Any] else { return }
+                guard let userInfo = notification.userInfo else { return }
                 PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
             }
             .task {

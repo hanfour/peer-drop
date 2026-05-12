@@ -96,7 +96,9 @@ extension TailnetPeerStore {
                 using: .tcp)
             let done = OSAllocatedUnfairLock(initialState: false)
             /// Atomically claim the done flag; returns `true` if successfully claimed.
-            func claimDone() -> Bool {
+            /// `@Sendable` so the local fn can be referenced from the
+            /// `stateUpdateHandler` (Sendable closure) without a Swift 6 warning.
+            @Sendable func claimDone() -> Bool {
                 done.withLock { val in
                     if val { return false }
                     val = true

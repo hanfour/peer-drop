@@ -86,9 +86,14 @@ final class InboxService: NSObject, ObservableObject {
     }
 
     private func startReceive() {
-        receiveTask = Task { [weak self] in
+        // Explicit @MainActor: in Swift 6 strict concurrency, unannotated
+        // `Task {}` no longer inherits the enclosing actor context, so reads
+        // of `self.webSocketTask` (MainActor-isolated) would require `await`.
+        // Marking the Task @MainActor makes the property access synchronous
+        // and stays correct under both compilation modes.
+        receiveTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                guard let self, let task = await self.webSocketTask else { break }
+                guard let self, let task = self.webSocketTask else { break }
                 do {
                     let message = try await task.receive()
                     // First successful receive confirms connection
@@ -137,10 +142,10 @@ final class InboxService: NSObject, ObservableObject {
     }
 
     private func startPing() {
-        pingTask = Task { [weak self] in
+        pingTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
-                guard let self, let task = await self.webSocketTask else { break }
+                guard let self, let task = self.webSocketTask else { break }
                 task.sendPing { error in
                     _ = error
                 }

@@ -922,7 +922,7 @@ final class ConnectionManager: ObservableObject {
             let envelope = try JSONDecoder().decode(RemoteMessageEnvelope.self, from: ciphertextData)
 
             // Find contact by public key, or by mailbox ID
-            var contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey)
+            let contact = trustedContactStore.find(byPublicKey: envelope.senderIdentityKey)
                 ?? trustedContactStore.find(byMailboxId: envelope.senderMailboxId)
 
             if let c = contact, c.isBlocked {

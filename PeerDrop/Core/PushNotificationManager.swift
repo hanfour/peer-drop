@@ -21,7 +21,9 @@ final class PushNotificationManager: NSObject, ObservableObject {
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
             guard granted else { logger.info("Push permission denied"); return }
-            await UIApplication.shared.registerForRemoteNotifications()
+            await MainActor.run {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
         } catch {
             logger.error("Push authorization failed: \(error.localizedDescription)")
         }
