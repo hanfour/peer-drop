@@ -105,6 +105,13 @@ final class FileTransfer: ObservableObject {
             throw FileTransferError.notConnected
         }
 
+        // audit-#14 Stage 3: untrusted peer must not be a transfer target.
+        // Surfaces as FileTransferError.peerNotTrusted at the caller — the
+        // existing transfer-error UI path renders the localized description.
+        guard await MainActor.run(body: { manager.isPeerTrustedForUserActions(peerID: peerID) }) else {
+            throw FileTransferError.peerNotTrusted
+        }
+
         _ = session ?? self.session(for: peerID)
 
         isTransferring = true
@@ -470,6 +477,7 @@ enum FileTransferError: Error, LocalizedError {
     case hashMismatch
     case transferRejected
     case cancelled
+    case peerNotTrusted
 
     var errorDescription: String? {
         switch self {
@@ -477,6 +485,8 @@ enum FileTransferError: Error, LocalizedError {
         case .hashMismatch: return "File integrity check failed"
         case .transferRejected: return "File transfer was rejected"
         case .cancelled: return "Transfer cancelled"
+        case .peerNotTrusted:
+            return "This peer hasn't been verified yet. Approve the pairing prompt before sending files."
         }
     }
 }

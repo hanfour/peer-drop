@@ -3382,6 +3382,16 @@ final class ConnectionManager: ObservableObject {
             return
         }
         let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
+
+        // audit-#14 Stage 3: gate user-initiated chat sends on user-approved
+        // trust. The message is persisted (so the user can see what they
+        // attempted to send) but immediately marked `.failed`.
+        guard isPeerTrustedForUserActions(peerID: peerID) else {
+            logger.info("Blocked outgoing chat to \(peer.displayName, privacy: .public) — peer not user-trusted")
+            chatManager.updateStatus(messageID: saved.id, status: .failed)
+            return
+        }
+
         Task {
             do {
                 try await peerConn.sendMessage(msg)
@@ -3396,6 +3406,13 @@ final class ConnectionManager: ObservableObject {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
         guard let peerConn = connections[peerID] else { return }
+        // audit-#14 Stage 3: gate media sends the same way text sends are gated.
+        // Local-only block — the message isn't persisted yet so there's nothing
+        // to mark .failed; just refuse with a log.
+        guard isPeerTrustedForUserActions(peerID: peerID) else {
+            logger.info("Blocked outgoing media — peer \(peerConn.peerIdentity.displayName, privacy: .public) not user-trusted")
+            return
+        }
         let peer = peerConn.peerIdentity
 
         let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData)
@@ -3773,6 +3790,51 @@ final class ConnectionManager: ObservableObject {
         if let (peerID, _) = liveConnectionEntry(matchingPublicKey: current.senderIdentityKey) {
             Task { await disconnect(from: peerID) }
         }
+    }
+
+    /// Trust gate for user-initiated send actions (file transfer, chat).
+    /// Closes audit-#14 Stage 3: a peer that completed `LocalSecureChannel`
+    /// but hasn't been explicitly approved by the user (still at `.unknown`
+    /// trust or `.firstTrust` pinning verdict) must not be the destination
+    /// of user data. Internal protocol messages (`.ping`, `.pong`,
+    /// `.secureHandshake`, hello) bypass this gate at the PeerConnection
+    /// layer — only user-visible sends consult it.
+    ///
+    /// Truth table:
+    ///   - Peer doesn't advertise secure-channel support (v5.0.x legacy):
+    ///     allow. No identity binding exists to enforce trust against,
+    ///     and we can't break interop with shipping clients.
+    ///   - v5.1+ peer, no identityPublicKey on record: deny. Shouldn't
+    ///     happen but the safe default is "fail closed".
+    ///   - v5.1+ peer, contact at `.unknown`: deny — user hasn't approved.
+    ///   - v5.1+ peer, contact `isBlocked`: deny.
+    ///   - v5.1+ peer, contact at `.linked` / `.verified`: allow.
+    ///
+    /// Trust elevation happens via `approveLocalFirstTrust` (the user tapping
+    /// "Accept & Trust" on the SAS sheet) or by an explicit verification flow
+    /// (QR code → `.verified`, future).
+    func isPeerTrustedForUserActions(peerID: String) -> Bool {
+        guard let peerConn = connections[peerID] else { return false }
+        let publicKey = peerConn.peerIdentity.identityPublicKey
+        let contact = publicKey.flatMap { trustedContactStore.find(byPublicKey: $0) }
+        return Self.evaluateTrustGate(
+            supportsSecureChannel: peerConn.peerIdentity.supportsSecureChannel,
+            publicKey: publicKey,
+            contact: contact)
+    }
+
+    /// Pure-function core of the trust gate, factored out for unit testing
+    /// without needing a live `PeerConnection`. Logic is mirrored in the
+    /// truth table on `isPeerTrustedForUserActions`.
+    nonisolated static func evaluateTrustGate(
+        supportsSecureChannel: Bool,
+        publicKey: Data?,
+        contact: TrustedContact?
+    ) -> Bool {
+        if !supportsSecureChannel { return true }  // v5.0.x legacy peer
+        guard publicKey != nil, let contact else { return false }
+        if contact.isBlocked { return false }
+        return contact.trustLevel >= .linked
     }
 
     /// Find the live PeerConnection whose peer identity matches a public key.
