@@ -54,6 +54,12 @@ targets:
     entitlements:
       path: PeerDrop/App/PeerDrop.entitlements
       properties:
+        # APNs capability — Apple maps "development" → "production"
+        # automatically at archive time based on the signing profile, so
+        # one value works for both TestFlight/App Store and dev builds.
+        # Without this key iOS calls didFailToRegisterForRemoteNotifications
+        # and the app never gets a device token.
+        aps-environment: development
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.hanfour.peerdrop
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.hanfour.peerdrop

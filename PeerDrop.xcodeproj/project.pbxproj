@@ -243,6 +243,7 @@
 		A0114BBE8D38E256684CDE3A /* SpriteAtlasTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A45DAA580281EE47354C5 /* SpriteAtlasTests.swift */; };
 		A01B7F8249D416A5EE360E68 /* SecurityDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */; };
 		A1BB908A54A5D487A92A848F /* SpeciesCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5998CF743055DF9A9596FF /* SpeciesCatalogTests.swift */; };
+		A26D03AAD1A5F03215DC0DF0 /* PushStatusRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */; };
 		A2834E70D0C759615AEEBBD9 /* IdentityKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD0E22D4FE38D3FEDAF3DBD /* IdentityKeyManager.swift */; };
 		A2B70B5096FE8882277DC23F /* PetPayloadCrossVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9DB2DB02DE2DBC2688F727 /* PetPayloadCrossVersionTests.swift */; };
 		A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137D4C965D7DFC2C55F1346F /* WorkerSignalingTests.swift */; };
@@ -723,6 +724,7 @@
 		9A90A886C2B08F97C6ED3F42 /* DataChannelClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelClient.swift; sourceTree = "<group>"; };
 		9A9F164C4D40D9F2C2CA4571 /* FileNameSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNameSanitizer.swift; sourceTree = "<group>"; };
 		9B335967E2F46FE4D5037176 /* VerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerificationView.swift; sourceTree = "<group>"; };
+		9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushStatusRow.swift; sourceTree = "<group>"; };
 		9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLevelMigrationTests.swift; sourceTree = "<group>"; };
 		9E58E671AF75C790526DDCDB /* PeerDropWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropWidgetBundle.swift; sourceTree = "<group>"; };
 		9E59D8ABA2AA136E95FA5CDE /* ChatPetOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPetOverlay.swift; sourceTree = "<group>"; };
@@ -1390,6 +1392,7 @@
 			children = (
 				2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */,
 				AFC7F344C93ACB56C79EE3AE /* DocumentPickerView.swift */,
+				9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */,
 				B5A7A24E192618BE5D8716A7 /* TailnetPeersView.swift */,
 				E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */,
 			);
@@ -2171,6 +2174,7 @@
 				E3BEAE8F5E0C39C262BB4404 /* ProofOfWork.swift in Sources */,
 				7C0D9050750875F998E05FCD /* ProtocolVersion.swift in Sources */,
 				3E676289E0FFEB46AC1FC7B1 /* PushNotificationManager.swift in Sources */,
+				A26D03AAD1A5F03215DC0DF0 /* PushStatusRow.swift in Sources */,
 				8DF39EB7F50B89124A84B950 /* RabbitBehavior.swift in Sources */,
 				A36DC25C0A7CBD82A82F298B /* ReactionPayload.swift in Sources */,
 				EE3FDCDE1B20A0027BC311E5 /* ReactionPickerView.swift in Sources */,

@@ -31,7 +31,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        // Silently ignore — push is a nice-to-have
+        Task { @MainActor in PushNotificationManager.shared.handleRegistrationFailure(error) }
     }
 
     func application(_ application: UIApplication,

@@ -54,7 +54,10 @@ struct SettingsView: View {
                         }
                     } footer: { Text("Change the relay server URL only if you host your own signaling worker.") }
                 }
-                Section { Toggle("Enable Notifications", isOn: $notificationsEnabled) } header: { Text("Notifications") } footer: { Text("Receive alerts for incoming connections and messages.") }
+                Section {
+                    Toggle("Enable Notifications", isOn: $notificationsEnabled)
+                    PushStatusRow()
+                } header: { Text("Notifications") } footer: { Text("Receive alerts for incoming connections and messages.") }
                 Section("Message Storage") { Picker("Storage Mode", selection: $storageMode) { Text("Local Only").tag("local"); Text("Sync to iCloud").tag("icloud") }.pickerStyle(.segmented); Text("Messages are stored on this device only.").font(.caption).foregroundStyle(.secondary) }
                 Section {
                     Button { exportArchive() } label: { Label("Export Archive", systemImage: "square.and.arrow.up") }

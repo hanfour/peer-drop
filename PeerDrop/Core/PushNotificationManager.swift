@@ -12,26 +12,92 @@ final class PushNotificationManager: NSObject, ObservableObject {
     /// Emits when a push-delivered invite arrives (App in background or tap on notification).
     @Published var receivedInvite: RelayInvite?
 
+    /// User-grant status from `UNUserNotificationCenter`. Refreshed by
+    /// `refreshAuthorizationStatus()` on app foreground.
+    @Published private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+
+    /// Where the APNs registration handshake stands. Drives the Settings
+    /// "Push notification status" row — without this, the v5.0–v5.2 silent
+    /// swallow on `didFailToRegisterForRemoteNotificationsWithError` made
+    /// the entire push pipeline broken-by-default invisible to the user.
+    @Published private(set) var registrationState: RegistrationState = .notRequested
+
+    enum RegistrationState: Equatable {
+        /// Permission never asked, or permission denied — no registration attempted.
+        case notRequested
+        /// `registerForRemoteNotifications()` called, awaiting iOS callback.
+        case registering
+        /// APNs token received and POST'd to the worker. Stores the leading
+        /// 8 hex chars for user-visible identification (full token never
+        /// surfaces in UI for security; it's already in worker storage).
+        case registered(tokenPrefix: String, syncedWithWorker: Bool)
+        /// iOS rejected the registration — usually missing `aps-environment`
+        /// entitlement, network failure during init, or rate-limit.
+        case failed(reason: String)
+    }
+
     /// Called by InboxService when it flushes queued invites after push-triggered reconnect.
     var onInboxFlush: ((RelayInvite) -> Void)?
 
     private override init() { super.init() }
 
+    /// Re-read permission status from the system. Cheap; safe to call
+    /// every time the app foregrounds. Catches the case where the user
+    /// toggled the system permission outside the app between sessions.
+    func refreshAuthorizationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        await MainActor.run {
+            self.authorizationStatus = settings.authorizationStatus
+        }
+    }
+
     func requestAuthorizationAndRegister() async {
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
-            guard granted else { logger.info("Push permission denied"); return }
+            await refreshAuthorizationStatus()
+            guard granted else {
+                logger.info("Push permission denied")
+                registrationState = .notRequested
+                return
+            }
+            registrationState = .registering
             await MainActor.run {
                 UIApplication.shared.registerForRemoteNotifications()
             }
         } catch {
             logger.error("Push authorization failed: \(error.localizedDescription)")
+            registrationState = .failed(reason: error.localizedDescription)
         }
+    }
+
+    /// Called by AppDelegate's `didFailToRegisterForRemoteNotificationsWithError`.
+    /// Replaces the prior silent-ignore — failure is now visible in the
+    /// Settings row and the logger subsystem. The most common cause is the
+    /// `aps-environment` entitlement missing from the build (the bug present
+    /// in v5.0–v5.2 that this method was added to catch).
+    func handleRegistrationFailure(_ error: Error) {
+        let nsError = error as NSError
+        // NSError code 3000 from NSCocoaErrorDomain on this callback is iOS's
+        // way of saying "no aps-environment entitlement" — surface it
+        // explicitly so the next operator doesn't have to spelunk.
+        let hint: String
+        if nsError.domain == "NSCocoaErrorDomain" && nsError.code == 3000 {
+            hint = "Missing aps-environment entitlement"
+        } else {
+            hint = error.localizedDescription
+        }
+        logger.error("APNs registration failed: \(hint, privacy: .public) (\(nsError.domain) #\(nsError.code))")
+        registrationState = .failed(reason: hint)
     }
 
     func handleDeviceToken(_ deviceToken: Data) async {
         let tokenHex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        logger.info("APNs token: \(tokenHex.prefix(8))...")
+        let tokenPrefix = String(tokenHex.prefix(8))
+        logger.info("APNs token: \(tokenPrefix)...")
+        // Surface "got token, syncing" before the network call so a slow /
+        // failing worker doesn't keep the UI in a misleading "registering"
+        // state for seconds.
+        registrationState = .registered(tokenPrefix: tokenPrefix, syncedWithWorker: false)
 
         let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
@@ -54,6 +120,10 @@ final class PushNotificationManager: NSObject, ObservableObject {
             let (_, response) = try await URLSession.shared.data(for: request)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
                 logger.info("Device registered with worker")
+                registrationState = .registered(tokenPrefix: tokenPrefix, syncedWithWorker: true)
+            } else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                logger.warning("Device register returned HTTP \(status)")
             }
         } catch {
             logger.error("Device register failed: \(error.localizedDescription)")
