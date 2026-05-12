@@ -66,12 +66,46 @@ final class PeerConnection: ObservableObject, Identifiable {
     private var pendingRatchetPrivateKey: Curve25519.KeyAgreement.PrivateKey?
 
     /// Phase of the local-TCP handshake.
-    enum SecureChannelState {
+    enum SecureChannelState: Equatable {
         case disabled              // never initiated; sendMessage plaintext
         case handshakeInProgress   // our bundle sent, awaiting peer's bundle
         case secured               // both bundles exchanged, channel ready
+        case fallbackPlaintext     // peer didn't respond in time; staying plaintext
     }
-    private(set) var secureChannelState: SecureChannelState = .disabled
+    @Published private(set) var secureChannelState: SecureChannelState = .disabled
+
+    /// Fingerprint-pinning verdict from the most recent handshake. Exposed
+    /// for the UI so the connected-peers list can surface a lock icon for
+    /// `.matched`/`.firstTrust` and a warning chip for `.mismatch`.
+    enum PinningVerdict: Equatable {
+        case notChecked         // channel not yet secured
+        case firstTrust         // peer was unknown to TrustedContactStore — TOFU stored
+        case matched            // peer key matched the existing TrustedContact entry
+        case mismatch(stored: String, received: String)  // ALERT — key changed silently
+    }
+    @Published private(set) var pinningVerdict: PinningVerdict = .notChecked
+
+    /// Update the pinning verdict from outside (called by ConnectionManager
+    /// after running the TrustedContactStore lookup in the
+    /// `onSecureChannelEstablished` callback). Keeps `pinningVerdict`'s
+    /// setter `private(set)` so business code can't randomly flip it.
+    func setPinningVerdict(_ verdict: PinningVerdict) {
+        pinningVerdict = verdict
+    }
+
+    /// Hook called when handshake completes so callers (`ConnectionManager`)
+    /// can run pinning + UI side effects. Receives the peer's fingerprint
+    /// (already on `secureChannel.peerFingerprint`).
+    var onSecureChannelEstablished: ((String) -> Void)?
+
+    /// Plaintext-fallback timer task. Cancelled when handshake completes.
+    private var handshakeFallbackTask: Task<Void, Never>?
+
+    /// How long to wait for a peer's handshake response before giving up
+    /// and falling back to plaintext mode. Both ends of a v5.1+ pair
+    /// should respond in well under 1 second; 5 seconds is conservative
+    /// enough that a slow-launching peer can still complete.
+    static let handshakeFallbackSeconds: UInt64 = 5
 
     /// MessageTypes that bypass encryption even when a secureChannel exists.
     /// These are either the handshake itself or low-cost keepalive — wrapping
@@ -266,8 +300,50 @@ final class PeerConnection: ObservableObject, Identifiable {
         let (bundle, ratchetPriv) = LocalSecureChannel.prepareHandshake(identity: identity)
         pendingRatchetPrivateKey = ratchetPriv
         secureChannelState = .handshakeInProgress
+        scheduleHandshakeFallback()
         let message = try PeerMessage.secureHandshake(bundle: bundle, senderID: localIdentity.id)
         try await transport.send(message)
+    }
+
+    /// ConnectionManager's entry point: called after the hello exchange
+    /// confirms the peer's capability flag. Initiates the handshake when
+    /// both peers support it; otherwise leaves the channel disabled so
+    /// every PeerMessage stays on the plaintext path (v5.0.x compat).
+    func startSecureChannelNegotiation(
+        peerSupportsSecureChannel: Bool,
+        identity: LocalChannelIdentity = IdentityKeyManager.shared
+    ) async {
+        guard peerSupportsSecureChannel else {
+            logger.info("PeerConnection[\(self.id.prefix(8))] peer doesn't support secure channel — staying plaintext")
+            return
+        }
+        do {
+            try await initiateSecureHandshake(identity: identity)
+        } catch {
+            logger.error("PeerConnection[\(self.id.prefix(8))] secure handshake send failed: \(error.localizedDescription); falling back to plaintext")
+            secureChannelState = .fallbackPlaintext
+        }
+    }
+
+    /// Schedule the plaintext-fallback timer. If we're still in
+    /// `.handshakeInProgress` after N seconds, give up on the peer and
+    /// move to `.fallbackPlaintext`. Without this, a buggy peer that
+    /// promised support but never sends the response bundle would leave
+    /// us stuck waiting forever and silently dropping every business
+    /// message (sendMessage looks at `secureChannel`, which stays nil
+    /// until establish() runs).
+    private func scheduleHandshakeFallback() {
+        handshakeFallbackTask?.cancel()
+        let generation = connectionGeneration
+        handshakeFallbackTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.handshakeFallbackSeconds * 1_000_000_000)
+            guard let self, !Task.isCancelled, self.connectionGeneration == generation else { return }
+            if self.secureChannelState == .handshakeInProgress {
+                logger.warning("PeerConnection[\(self.id.prefix(8))] handshake fallback fired after \(Self.handshakeFallbackSeconds)s — peer didn't respond")
+                self.secureChannelState = .fallbackPlaintext
+                self.pendingRatchetPrivateKey = nil
+            }
+        }
     }
 
     /// Process an inbound `.secureHandshake` message. If we haven't yet
@@ -300,6 +376,7 @@ final class PeerConnection: ObservableObject, Identifiable {
             let (ourBundle, ratchetPriv) = LocalSecureChannel.prepareHandshake(identity: identity)
             pendingRatchetPrivateKey = ratchetPriv
             secureChannelState = .handshakeInProgress
+            scheduleHandshakeFallback()
             let reply = try PeerMessage.secureHandshake(bundle: ourBundle, senderID: localIdentity.id)
             try await transport.send(reply)
         }
@@ -314,7 +391,11 @@ final class PeerConnection: ObservableObject, Identifiable {
         )
         pendingRatchetPrivateKey = nil
         secureChannelState = .secured
-        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(self.secureChannel?.peerFingerprint ?? "?", privacy: .public)")
+        handshakeFallbackTask?.cancel()
+        handshakeFallbackTask = nil
+        let fingerprint = secureChannel?.peerFingerprint ?? "?"
+        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(fingerprint, privacy: .public)")
+        onSecureChannelEstablished?(fingerprint)
     }
 
     /// Errors specific to the secure-channel handshake.

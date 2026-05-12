@@ -233,6 +233,47 @@ final class PeerConnectionSecureChannelTests: XCTestCase {
         XCTAssertEqual(decodedPayload?.text, "secret")
     }
 
+    // MARK: - v5.1 fallback + pinning surface
+
+    func test_startSecureChannelNegotiation_peerDoesNotSupport_staysDisabled() async {
+        let (a, aTransport, aIdentity, _, _, _) = makePair()
+        await a.startSecureChannelNegotiation(peerSupportsSecureChannel: false, identity: aIdentity)
+        XCTAssertEqual(a.secureChannelState, .disabled, "no handshake should fire against a v5.0.x peer")
+        XCTAssertTrue(aTransport.sentMessages.isEmpty, "must not leak a .secureHandshake to peers who can't decode it")
+    }
+
+    func test_startSecureChannelNegotiation_peerSupports_initiatesHandshake() async {
+        let (a, aTransport, aIdentity, _, _, _) = makePair()
+        await a.startSecureChannelNegotiation(peerSupportsSecureChannel: true, identity: aIdentity)
+        XCTAssertEqual(a.secureChannelState, .handshakeInProgress)
+        XCTAssertEqual(aTransport.sentMessages.first?.type, .secureHandshake)
+    }
+
+    func test_onSecureChannelEstablished_firesAfterHandshake() async throws {
+        let (a, aTransport, aIdentity, b, bTransport, bIdentity) = makePair()
+        let expect = expectation(description: "callback fires with peer fingerprint")
+        var observedFingerprint: String?
+        a.onSecureChannelEstablished = { fp in
+            observedFingerprint = fp
+            expect.fulfill()
+        }
+        try await a.initiateSecureHandshake(identity: aIdentity)
+        try await b.handleIncomingSecureHandshake(aTransport.sentMessages[0], identity: bIdentity)
+        try await a.handleIncomingSecureHandshake(bTransport.sentMessages[0], identity: aIdentity)
+        await fulfillment(of: [expect], timeout: 1.0)
+        XCTAssertNotNil(observedFingerprint)
+        XCTAssertEqual(observedFingerprint, a.secureChannel?.peerFingerprint)
+    }
+
+    func test_setPinningVerdict_updatesPublishedState() {
+        let (a, _, _, _, _, _) = makePair()
+        XCTAssertEqual(a.pinningVerdict, .notChecked)
+        a.setPinningVerdict(.firstTrust)
+        XCTAssertEqual(a.pinningVerdict, .firstTrust)
+        a.setPinningVerdict(.mismatch(stored: "AAAA", received: "BBBB"))
+        XCTAssertEqual(a.pinningVerdict, .mismatch(stored: "AAAA", received: "BBBB"))
+    }
+
     func test_duplicateHandshake_preservesExistingChannel() async throws {
         let (a, aTransport, aIdentity, b, bTransport, bIdentity) = makePair()
         try await a.initiateSecureHandshake(identity: aIdentity)

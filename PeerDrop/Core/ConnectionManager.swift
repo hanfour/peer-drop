@@ -1906,6 +1906,10 @@ final class ConnectionManager: ObservableObject {
 
                 // Start Nearby Interaction session if available
                 self.startNearbyInteractionSession(for: peerID, via: peerConnection)
+
+                // v5.1: peer's hello arrived inline above; capability flag
+                // is known. Kick off LocalSecureChannel handshake.
+                triggerSecureChannelNegotiation(for: peerConnection)
             } catch {
                 cancelTimeouts()
                 activeConnection?.cancel()
@@ -2784,6 +2788,8 @@ final class ConnectionManager: ObservableObject {
                 )
                 addConnection(peerConnection)
                 focusedPeerID = identity.id
+                // v5.1: capability flag is in the connectionAccept payload.
+                triggerSecureChannelNegotiation(for: peerConnection)
             }
 
             // State machine requires requesting → connecting → connected
@@ -2948,6 +2954,10 @@ final class ConnectionManager: ObservableObject {
                 // Update or create PeerConnection
                 if let peerConn = connections[identity.id] {
                     peerConn.updatePeerIdentity(identity)
+                    // v5.1: relay path swaps in the real identity here
+                    // (replacing the placeholder). Now we know whether the
+                    // peer supports LocalSecureChannel — trigger.
+                    triggerSecureChannelNegotiation(for: peerConn)
                 } else if focusedPeerID == nil, let conn = activeConnection {
                     let peerConnection = PeerConnection(
                         peerID: identity.id,
@@ -2958,6 +2968,7 @@ final class ConnectionManager: ObservableObject {
                     )
                     addConnection(peerConnection)
                     focusedPeerID = identity.id
+                    triggerSecureChannelNegotiation(for: peerConnection)
                 }
                 recordConnectedDevice()
                 resetReconnectAttempts()
@@ -3597,6 +3608,57 @@ final class ConnectionManager: ObservableObject {
             )
             trustedContactStore.add(newContact)
             logger.info("New contact added: \(peerIdentity.displayName) (unknown trust)")
+        }
+    }
+
+    // MARK: - LocalSecureChannel (v5.1 audit-#13)
+
+    /// Kick off the LocalSecureChannel handshake on a peer connection
+    /// whose `peerIdentity` is now fully populated. Wires the
+    /// `onSecureChannelEstablished` callback so the post-handshake
+    /// fingerprint can be pinned against `TrustedContactStore`. Safe to
+    /// call more than once on the same connection — `initiateSecureHandshake`
+    /// no-ops once state has left `.disabled`, so trigger points scattered
+    /// across hello/connectionAccept/acceptConnection can all call without
+    /// risk of starting a second handshake.
+    private func triggerSecureChannelNegotiation(for peerConnection: PeerConnection) {
+        peerConnection.onSecureChannelEstablished = { [weak self, weak peerConnection] fingerprint in
+            Task { @MainActor in
+                guard let self, let peerConnection else { return }
+                self.handleSecureChannelEstablished(for: peerConnection, fingerprint: fingerprint)
+            }
+        }
+        Task { [weak peerConnection] in
+            guard let peerConnection else { return }
+            await peerConnection.startSecureChannelNegotiation(
+                peerSupportsSecureChannel: peerConnection.peerIdentity.supportsSecureChannel
+            )
+        }
+    }
+
+    /// Run TOFU pinning after `LocalSecureChannel` establishes.
+    ///
+    /// `checkPeerTrust` runs earlier (off the hello payload) and is
+    /// responsible for ADDING a record. This callback's job is to set
+    /// `pinningVerdict` so the UI lock chip reflects the matched/mismatch
+    /// state, and to surface the existing `KeyChangeAlertInfo` flow if a
+    /// silent rotation slipped past checkPeerTrust.
+    @MainActor
+    private func handleSecureChannelEstablished(for peerConnection: PeerConnection, fingerprint: String) {
+        let identity = peerConnection.peerIdentity
+        guard let peerPublicKey = identity.identityPublicKey else {
+            logger.warning("Secure channel up but peer has no identityPublicKey — cannot pin")
+            return
+        }
+        if trustedContactStore.find(byPublicKey: peerPublicKey) != nil {
+            peerConnection.setPinningVerdict(.matched)
+            logger.info("Pinning: matched existing contact for \(identity.displayName, privacy: .public)")
+        } else if let stored = trustedContactStore.find(byDeviceId: identity.id) {
+            peerConnection.setPinningVerdict(.mismatch(stored: stored.keyFingerprint, received: fingerprint))
+            logger.warning("Pinning: KEY MISMATCH for \(identity.displayName, privacy: .public) — stored=\(stored.keyFingerprint, privacy: .public) received=\(fingerprint, privacy: .public)")
+        } else {
+            peerConnection.setPinningVerdict(.firstTrust)
+            logger.info("Pinning: first-trust (TOFU) for \(identity.displayName, privacy: .public)")
         }
     }
 
