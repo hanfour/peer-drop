@@ -32,23 +32,58 @@ struct FirstContactVerificationSheet: View {
                     }
                 }
 
-                Text("This is the first message from this device. Compare the fingerprint below in person or over a trusted channel (call, Signal, etc.) before accepting — it's the only way to ensure no one is intercepting your connection.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let sas = pending.sas {
+                    // SAS-led local-Wi-Fi flow (audit-#14 Stage 2): the 6-digit
+                    // code is the primary thing the two users compare across
+                    // their screens. The hex fingerprint stays as a secondary
+                    // detail for power users who want the longer artifact.
+                    Text("Both devices must show the same 6-digit code. Confirm with your peer face-to-face or over a trusted channel before accepting.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Text(pending.fingerprint)
-                    .font(.system(.title3, design: .monospaced).weight(.semibold))
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(2)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        Color(.secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
-                    .accessibilityLabel(Text("Fingerprint"))
-                    .accessibilityValue(Text(pending.fingerprint))
+                    Text(sas)
+                        .font(.system(size: 40, weight: .semibold, design: .monospaced))
+                        .tracking(8)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                        .padding(.vertical, 20)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Color(.secondarySystemBackground),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                        .accessibilityLabel(Text("Verification code"))
+                        .accessibilityValue(Text(sas))
+
+                    DisclosureGroup(String(localized: "Show fingerprint")) {
+                        Text(pending.fingerprint)
+                            .font(.system(.footnote, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .accessibilityLabel(Text("Fingerprint"))
+                            .accessibilityValue(Text(pending.fingerprint))
+                    }
+                    .font(.caption)
+                } else {
+                    Text("This is the first message from this device. Compare the fingerprint below in person or over a trusted channel (call, Signal, etc.) before accepting — it's the only way to ensure no one is intercepting your connection.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(pending.fingerprint)
+                        .font(.system(.title3, design: .monospaced).weight(.semibold))
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(2)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Color(.secondarySystemBackground),
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                        .accessibilityLabel(Text("Fingerprint"))
+                        .accessibilityValue(Text(pending.fingerprint))
+                }
 
                 Spacer()
 

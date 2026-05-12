@@ -236,6 +236,63 @@ final class LocalSecureChannelTests: XCTestCase {
                        "channel.peerFingerprint must equal the peer's IdentityKeyManager.fingerprint")
     }
 
+    // MARK: - Short Authentication String (audit-#14 Stage 2)
+
+    func test_sas_isSymmetricAcrossPeers() throws {
+        let (a, b, _, _) = try establishPair()
+        XCTAssertEqual(a.shortAuthenticationString, b.shortAuthenticationString,
+                       "Both peers must compute the same SAS for the same key pair")
+    }
+
+    func test_sas_formatIsThreePlusThreeDigits() throws {
+        let (a, _, _, _) = try establishPair()
+        let sas = a.shortAuthenticationString
+        // "NNN NNN" — exactly two 3-digit groups separated by one space.
+        let pattern = "^[0-9]{3} [0-9]{3}$"
+        XCTAssertNotNil(sas.range(of: pattern, options: .regularExpression),
+                        "SAS must match \(pattern), got: '\(sas)'")
+    }
+
+    func test_sas_differsForDifferentKeyPairs() throws {
+        // Two unrelated channels must (almost always) produce different SAS.
+        // 6 decimal digits → 10^6 codes → 1-in-a-million collision rate; running
+        // 8 paired handshakes makes the probability of a same-SAS run ~8/1M.
+        // If this flakes, it's worth investigating — but not worth retrying.
+        var seen: Set<String> = []
+        for _ in 0..<8 {
+            let (a, _, _, _) = try establishPair()
+            seen.insert(a.shortAuthenticationString)
+        }
+        XCTAssertGreaterThan(seen.count, 1, "Expected distinct SAS across 8 fresh handshakes")
+    }
+
+    func test_sas_isStableAcrossReEstablishWithSameKeys() throws {
+        // SAS depends only on the static identity keys, not on the fresh
+        // ratchet keys exchanged each handshake. Re-running the handshake
+        // with the same two identities must yield the same SAS — that's the
+        // property a user relies on if they re-pair the same physical device.
+        let alice = makeIdentity()
+        let bob = makeIdentity()
+
+        let aliceIsInit = Array(alice.publicKey.rawRepresentation).lexicographicallyPrecedes(
+            Array(bob.publicKey.rawRepresentation))
+        let (initId, respId) = aliceIsInit ? (alice, bob) : (bob, alice)
+
+        func runHandshake() throws -> String {
+            let (initBundle, initRatchet) = LocalSecureChannel.prepareHandshake(identity: initId)
+            let (respBundle, _) = LocalSecureChannel.prepareHandshake(identity: respId)
+            let channel = try LocalSecureChannel.establish(
+                myIdentity: initId,
+                myRatchetPrivateKey: initRatchet,
+                peerBundle: respBundle)
+            _ = initBundle  // silence unused
+            return channel.shortAuthenticationString
+        }
+        let first = try runHandshake()
+        let second = try runHandshake()
+        XCTAssertEqual(first, second, "Same identity pair must always yield the same SAS")
+    }
+
     // MARK: - Symmetry property
 
     func test_initiatorResponderRolesAreDeterministic() throws {

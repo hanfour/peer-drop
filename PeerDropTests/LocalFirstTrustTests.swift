@@ -165,4 +165,37 @@ final class LocalFirstTrustTests: XCTestCase {
             "stale fingerprint must not block"
         )
     }
+
+    // MARK: - SAS propagation (audit-#14 Stage 2)
+
+    func test_pendingFirstContact_carriesSAS_whenLocalHandshakeProvidesOne() {
+        let cm = makeManager()
+        let identityKey = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+        createdIdentityKeys.append(identityKey)
+
+        cm.pendingLocalFirstTrust = PendingFirstContact(
+            fingerprint: "AB12 CD34 EF56 7890 1234",
+            senderDisplayName: "Alice",
+            senderIdentityKey: identityKey,
+            sas: "123 456"
+        )
+
+        XCTAssertEqual(cm.pendingLocalFirstTrust?.sas, "123 456",
+                       "SAS must round-trip through the pending prompt unchanged")
+        XCTAssertNotEqual(cm.pendingLocalFirstTrust?.sas, cm.pendingLocalFirstTrust?.fingerprint,
+                          "SAS and fingerprint are distinct artifacts (SAS is a 6-digit code, fingerprint is a 20-hex string)")
+    }
+
+    func test_pendingFirstContact_remotePath_carriesNoSAS() {
+        // Remote-mailbox first-contact path doesn't have a LocalSecureChannel,
+        // so its sas field stays nil. The sheet uses presence of sas to pick
+        // the SAS-led layout vs the fingerprint-led layout.
+        let identityKey = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+        let pending = PendingFirstContact(
+            fingerprint: "AB12 CD34 EF56 7890 1234",
+            senderDisplayName: "Bob",
+            senderIdentityKey: identityKey
+        )
+        XCTAssertNil(pending.sas)
+    }
 }

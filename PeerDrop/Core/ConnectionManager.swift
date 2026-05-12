@@ -97,6 +97,24 @@ struct PendingFirstContact: Equatable, Identifiable {
     let fingerprint: String           // stable dedup key (also used as Identifiable id)
     let senderDisplayName: String     // what to show in the sheet
     let senderIdentityKey: Data
+    /// Short Authentication String (6 digits, "NNN NNN") derived from the
+    /// canonically-ordered identity key pair. Present when the prompt is
+    /// driven by a `LocalSecureChannel` handshake (local-Wi-Fi audit-#14
+    /// Stage 2). Nil for remote-mailbox first-contacts, which surface the
+    /// SHA-256 hex fingerprint only.
+    let sas: String?
+
+    init(
+        fingerprint: String,
+        senderDisplayName: String,
+        senderIdentityKey: Data,
+        sas: String? = nil
+    ) {
+        self.fingerprint = fingerprint
+        self.senderDisplayName = senderDisplayName
+        self.senderIdentityKey = senderIdentityKey
+        self.sas = sas
+    }
 
     var id: String { fingerprint }
 }
@@ -3665,7 +3683,16 @@ final class ConnectionManager: ObservableObject {
         } else {
             peerConnection.setPinningVerdict(.firstTrust)
             logger.info("Pinning: first-trust (TOFU) for \(identity.displayName, privacy: .public)")
-            surfaceLocalFirstTrust(identity: identity, peerPublicKey: peerPublicKey, fingerprint: fingerprint)
+            // `secureChannel` is non-nil here — the callback fires only after
+            // `establish()` materializes the channel. The SAS is computed
+            // during establish() and immutable for the channel's lifetime, so
+            // capturing it now is safe.
+            let sas = peerConnection.secureChannel?.shortAuthenticationString
+            surfaceLocalFirstTrust(
+                identity: identity,
+                peerPublicKey: peerPublicKey,
+                fingerprint: fingerprint,
+                sas: sas)
         }
     }
 
@@ -3679,7 +3706,8 @@ final class ConnectionManager: ObservableObject {
     private func surfaceLocalFirstTrust(
         identity: PeerIdentity,
         peerPublicKey: Data,
-        fingerprint: String
+        fingerprint: String,
+        sas: String?
     ) {
         if let existing = pendingLocalFirstTrust,
            existing.senderIdentityKey == peerPublicKey {
@@ -3692,7 +3720,8 @@ final class ConnectionManager: ObservableObject {
         pendingLocalFirstTrust = PendingFirstContact(
             fingerprint: fingerprint,
             senderDisplayName: identity.displayName,
-            senderIdentityKey: peerPublicKey
+            senderIdentityKey: peerPublicKey,
+            sas: sas
         )
         logger.info("Surfaced local first-trust prompt for \(identity.displayName, privacy: .public)")
     }

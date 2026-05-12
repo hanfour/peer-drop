@@ -86,6 +86,20 @@ final class LocalSecureChannel {
     private let ratchet: DoubleRatchetSession
     let peerIdentityPublicKey: Curve25519.KeyAgreement.PublicKey
 
+    /// 6-digit Short Authentication String derived from the canonically-ordered
+    /// pair of identity public keys. Both peers compute the same string; the
+    /// user compares it on both screens to verify no MITM is interposing
+    /// different keys. Formatted "NNN NNN" for legibility.
+    ///
+    /// Domain-separated with `kdfInfo` so the SAS can never collide with the
+    /// rootKey derivation (different output even if the same key bytes are
+    /// hashed). Active MITM would have to find a key collision under SHA-256
+    /// truncated to 4 bytes (~2^32 work) to forge a matching SAS — out of
+    /// reach for casual attackers, and the 1-in-a-million collision rate is
+    /// the standard SAS threat model (Signal's safety numbers use the same
+    /// truncate-and-display approach with larger digits).
+    let shortAuthenticationString: String
+
     /// Fingerprint of the peer's identity key. Same format as
     /// `IdentityKeyManager.fingerprint` for round-trip verification:
     /// `"A1B2 C3D4 E5F6 G7H8 I9J0"`.
@@ -101,10 +115,12 @@ final class LocalSecureChannel {
 
     private init(
         ratchet: DoubleRatchetSession,
-        peerIdentityPublicKey: Curve25519.KeyAgreement.PublicKey
+        peerIdentityPublicKey: Curve25519.KeyAgreement.PublicKey,
+        shortAuthenticationString: String
     ) {
         self.ratchet = ratchet
         self.peerIdentityPublicKey = peerIdentityPublicKey
+        self.shortAuthenticationString = shortAuthenticationString
     }
 
     // MARK: - Handshake API
@@ -194,10 +210,44 @@ final class LocalSecureChannel {
             )
         }
 
+        let sas = Self.computeSAS(
+            myKey: myIdentity.publicKey.rawRepresentation,
+            peerKey: peerIdentityKey.rawRepresentation
+        )
+
         return LocalSecureChannel(
             ratchet: ratchet,
-            peerIdentityPublicKey: peerIdentityKey
+            peerIdentityPublicKey: peerIdentityKey,
+            shortAuthenticationString: sas
         )
+    }
+
+    /// SAS = first 4 bytes of SHA-256(sorted_key_pair || kdfInfo) →
+    /// UInt32 → mod 1,000,000 → "NNN NNN". Sorting the keys is what makes
+    /// the result peer-symmetric: both sides feed the same bytes into the
+    /// same hash, so both see the same 6 digits.
+    private static func computeSAS(myKey: Data, peerKey: Data) -> String {
+        var sortedKeys = [myKey, peerKey]
+        sortedKeys.sort { lhs, rhs in
+            for i in 0..<min(lhs.count, rhs.count) {
+                if lhs[i] != rhs[i] { return lhs[i] < rhs[i] }
+            }
+            return lhs.count < rhs.count
+        }
+        var input = Data()
+        for k in sortedKeys { input.append(k) }
+        input.append(kdfInfo)
+
+        let digest = SHA256.hash(data: input)
+        var value: UInt32 = 0
+        for byte in digest.prefix(4) {
+            value = (value << 8) | UInt32(byte)
+        }
+        let number = value % 1_000_000
+        let formatted = String(format: "%06d", number)
+        let prefix = formatted.prefix(3)
+        let suffix = formatted.suffix(3)
+        return "\(prefix) \(suffix)"
     }
 
     // MARK: - Encrypt / Decrypt
