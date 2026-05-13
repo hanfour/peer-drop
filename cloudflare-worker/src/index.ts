@@ -82,11 +82,18 @@ function cleanupRateLimits() {
 }
 
 // CORS headers shared across all responses
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-API-Key, X-Mailbox-Id, X-Mailbox-Token",
-};
+// CORS: locked down in B2 of the worker-auth redesign. The iOS app
+// (the only production caller) is not a browser and ignores CORS
+// entirely. With no admin web dashboard shipping today, an open
+// `Access-Control-Allow-Origin: *` purely amplified the attack
+// surface: any web page could replay calls bound to the bundled
+// API_KEY. Empty headers cause browsers to reject preflight, but
+// don't affect server-to-server or native callers.
+//
+// To re-enable a specific browser origin later (e.g. a future admin
+// dashboard), restore the keys here with a single origin instead of
+// "*", and gate them behind an `Origin` header check.
+const corsHeaders: Record<string, string> = {};
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -325,28 +332,54 @@ export default {
       }
     }
 
-    // POST /debug/report — receive error report from app
+    // POST /debug/report — receive error report from app.
+    // Hardened in B3a of the worker-auth redesign (docs/plans/
+    // 2026-05-13-worker-auth-redesign.md):
+    //   - 8 KB body cap (was unbounded; attackers could fill KV with any
+    //     size payload)
+    //   - Schema allowlist — only the fields we actually display in the
+    //     admin reports view survive into KV. Everything else is dropped.
+    //   - PII redaction — neither the requester's IP nor User-Agent are
+    //     persisted. The "received from a real client" signal was never
+    //     used in practice; the trade-off in exposure was bad.
+    //   - 7-day retention TTL retained.
+    // Bearer-token auth comes in B3b once the App Attest flow lands.
     if (path === "/debug/report" && request.method === "POST") {
-      try {
-        const body = await request.json() as Record<string, unknown>;
-        const reportId = `report:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-        const report = {
-          ...body,
-          ip: clientIP,
-          timestamp: new Date().toISOString(),
-          userAgent: request.headers.get("User-Agent") || "unknown",
-        };
-        await env.ROOMS.put(reportId, JSON.stringify(report), { expirationTtl: 86400 * 7 }); // 7 days
-        return new Response(JSON.stringify({ ok: true, id: reportId }), {
-          status: 201,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch {
-        return new Response(JSON.stringify({ error: "Invalid report" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      const raw = await request.text();
+      if (raw.length > 8 * 1024) {
+        return jsonResponse({ error: "Payload too large" }, 413);
       }
+      let parsed: Record<string, unknown>;
+      try {
+        const obj = JSON.parse(raw) as unknown;
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+          return jsonResponse({ error: "Expected JSON object" }, 400);
+        }
+        parsed = obj as Record<string, unknown>;
+      } catch {
+        return jsonResponse({ error: "Invalid JSON" }, 400);
+      }
+
+      // Schema allowlist. Each field is bounded so a single report can't
+      // soak the 8 KB envelope all on one string. `stackHash` is expected
+      // to arrive already-hashed by the client — we never want raw stack
+      // traces in KV.
+      const report = {
+        type: typeof parsed.type === "string" ? String(parsed.type).slice(0, 32) : "error",
+        error: typeof parsed.error === "string" ? String(parsed.error).slice(0, 500) : "",
+        context: typeof parsed.context === "string" ? String(parsed.context).slice(0, 200) : undefined,
+        appVersion: typeof parsed.appVersion === "string" ? String(parsed.appVersion).slice(0, 32) : "unknown",
+        osVersion: typeof parsed.osVersion === "string" ? String(parsed.osVersion).slice(0, 32) : undefined,
+        stackHash: typeof parsed.stackHash === "string" ? String(parsed.stackHash).slice(0, 64) : undefined,
+        timestamp: new Date().toISOString(),
+        // PII intentionally redacted — see comment above.
+        ip: "redacted",
+        userAgent: "redacted",
+      };
+
+      const reportId = `report:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      await env.ROOMS.put(reportId, JSON.stringify(report), { expirationTtl: 86400 * 7 });
+      return jsonResponse({ ok: true, id: reportId }, 201);
     }
 
     // POST /debug/metric — ingest connection telemetry (API_KEY required)
