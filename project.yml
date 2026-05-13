@@ -65,6 +65,15 @@ targets:
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.hanfour.peerdrop
         com.apple.security.application-groups:
           - group.com.hanfour.peerdrop
+        # Keychain access group: required for unit tests to use the
+        # Security framework on simulator. Without this, every
+        # `SecItemAdd` returns errSecMissingEntitlement (-34018) and
+        # the IdentityKey / PreKey / ChatDataEncryptor / TrustedContact
+        # test suites all fail by construction, taking ~16 dependent
+        # tests with them. Single shared group; the team prefix
+        # placeholder resolves at signing time.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.hanfour.peerdrop
     info:
       path: PeerDrop/App/Info.plist
       properties:

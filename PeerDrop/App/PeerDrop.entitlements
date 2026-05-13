@@ -14,5 +14,9 @@
 	<array>
 		<string>group.com.hanfour.peerdrop</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.hanfour.peerdrop</string>
+	</array>
 </dict>
 </plist>
