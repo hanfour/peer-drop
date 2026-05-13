@@ -259,9 +259,18 @@ actor ConnectionMetrics {
         let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
         guard let url = URL(string: "\(baseURL)/debug/metric") else { return }
-        let apiKey = Bundle.main.object(forInfoDictionaryKey: "PeerDropWorkerAPIKey") as? String
-        guard let apiKey, !apiKey.isEmpty else {
-            logger.debug("Skipping flush: PeerDropWorkerAPIKey not set (e.g. unit-test or config missing)")
+        // Skip flush entirely when no credential is available — keeps
+        // unit-test runs quiet (otherwise every flush triggers 401s the
+        // "no queue" drop policy swallows silently anyway).
+        let hasAuth: Bool
+        if #available(iOS 14.0, *) {
+            hasAuth = (await DeviceTokenManager.shared.bearerHeader()) != nil
+                   || WorkerAuthHelper.legacyAPIKey() != nil
+        } else {
+            hasAuth = WorkerAuthHelper.legacyAPIKey() != nil
+        }
+        guard hasAuth else {
+            logger.debug("Skipping flush: no auth credential available (App Attest down + PeerDropWorkerAPIKey unset)")
             return
         }
         let encoder = ConnectionMetric.makeEncoder()
@@ -272,7 +281,7 @@ actor ConnectionMetrics {
                     var request = URLRequest(url: url)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+                    await WorkerAuthHelper.applyAuth(to: &request)
                     request.timeoutInterval = 10
                     do {
                         request.httpBody = try encoder.encode(metric)

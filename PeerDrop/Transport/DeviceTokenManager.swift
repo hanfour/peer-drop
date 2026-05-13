@@ -58,6 +58,13 @@ actor DeviceTokenManager {
         return "Bearer \(token)"
     }
 
+    /// Returns the raw token string suitable for `?token=…` on WebSocket
+    /// upgrade URLs (where URLSession can't attach custom headers).
+    /// Same caveats as `bearerHeader()`.
+    func currentRawToken() async -> String? {
+        await ensureValidToken()
+    }
+
     /// True when the device has successfully completed the App Attest
     /// flow at least once. Used by the Settings push status surface to
     /// show "this device authenticates with the server via App Attest"

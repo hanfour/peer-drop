@@ -106,9 +106,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey = UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? WorkerSignaling.bundledAPIKey {
-            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
-        }
+        await WorkerAuthHelper.applyAuth(to: &request)
         let body: [String: String] = [
             "deviceId": DeviceIdentity.deviceId,
             "pushToken": tokenHex,

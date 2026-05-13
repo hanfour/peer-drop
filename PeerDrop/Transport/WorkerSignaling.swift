@@ -90,7 +90,7 @@ final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey { request.setValue(apiKey, forHTTPHeaderField: "X-API-Key") }
+        await WorkerAuthHelper.applyAuth(to: &request)
 
         let (data, response) = try await session.data(for: request)
 
@@ -125,7 +125,7 @@ final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey { request.setValue(apiKey, forHTTPHeaderField: "X-API-Key") }
+        await WorkerAuthHelper.applyAuth(to: &request)
         let body: [String: String] = [
             "roomCode": roomCode,
             "roomToken": roomToken,
@@ -184,7 +184,7 @@ final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey { request.setValue(apiKey, forHTTPHeaderField: "X-API-Key") }
+        await WorkerAuthHelper.applyAuth(to: &request)
 
         let (data, response) = try await session.data(for: request)
 

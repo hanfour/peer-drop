@@ -24,21 +24,23 @@ final class InboxService: NSObject, ObservableObject {
     func connect() {
         disconnect()
         reconnectAttempt = 0
-        doConnect()
+        Task { await self.doConnect() }
     }
 
-    private func doConnect() {
+    private func doConnect() async {
         let base = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
         guard var components = URLComponents(string: base) else { return }
         components.scheme = components.scheme == "https" ? "wss" : "ws"
         components.path = "/v2/inbox/\(deviceId)"
 
-        // Add API key as query param (WS upgrade can't use custom headers in URLSession)
-        let apiKey = UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey")
-            ?? WorkerSignaling.bundledAPIKey
-        if let apiKey {
-            components.queryItems = [URLQueryItem(name: "apiKey", value: apiKey)]
+        // WS upgrade can't carry an Authorization header (URLSession's
+        // webSocketTask(with:) drops custom headers on the upgrade
+        // request), so auth piggybacks on the URL. WorkerAuthHelper
+        // picks Bearer + `?token=…` when App Attest is active, falls
+        // back to the legacy `?apiKey=…` shape otherwise.
+        if let authItem = await WorkerAuthHelper.authQueryItem() {
+            components.queryItems = [authItem]
         }
 
         guard let url = components.url else { return }
@@ -137,7 +139,7 @@ final class InboxService: NSObject, ObservableObject {
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled, let self else { return }
             self.logger.info("Inbox WS reconnecting (attempt \(self.reconnectAttempt))")
-            self.doConnect()
+            await self.doConnect()
         }
     }
 

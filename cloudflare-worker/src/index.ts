@@ -1056,12 +1056,20 @@ export default {
  * shrinks every release as more clients migrate.
  */
 async function isRequestAuthorized(request: Request, url: URL, env: Env): Promise<boolean> {
-  const authHeader = request.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ") && env.TOKEN_SECRET) {
-    const token = authHeader.slice("Bearer ".length).trim();
+  // Bearer first — header for normal requests, `?token=` query string
+  // for WebSocket upgrades (URLSession's `webSocketTask(with:)` can't
+  // attach custom headers to the upgrade request, so the InboxService
+  // WS path is the only legitimate query-param token consumer).
+  const headerBearer = request.headers.get("Authorization");
+  const headerToken = headerBearer?.startsWith("Bearer ")
+    ? headerBearer.slice("Bearer ".length).trim()
+    : null;
+  const queryToken = url.searchParams.get("token");
+  const candidateToken = headerToken ?? queryToken;
+  if (candidateToken && env.TOKEN_SECRET) {
     try {
       const { verifyToken } = await import("./deviceToken");
-      await verifyToken(token, env.TOKEN_SECRET);
+      await verifyToken(candidateToken, env.TOKEN_SECRET);
       return true;
     } catch {
       // Fall through to X-API-Key — a malformed/expired Bearer should

@@ -184,6 +184,7 @@
 		7D93FB0E5753A08AC030A5B2 /* GuidanceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28CD7A07E4B0EE99182B2EA3 /* GuidanceCard.swift */; };
 		7E18D695CB47FF12411FA824 /* MultiSimTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69468BFD13006A4427A306C6 /* MultiSimTestBase.swift */; };
 		7E6F1CBD65F99F5D00FB427D /* InteractionTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BCB78B5EC4B3A84417A174 /* InteractionTrackerTests.swift */; };
+		7E86FA0DD1B4A90AC71C7D24 /* WorkerAuthHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7268557E80C7DE40187E361B /* WorkerAuthHelper.swift */; };
 		7F0B86E2B56007AD906D3D88 /* PetStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 453F20DBDA714A7B590261F6 /* PetStats.swift */; };
 		8089303B801F6FBE5E25C4B5 /* DisabledFeatureUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD1035C987434358B87AFCD /* DisabledFeatureUXTests.swift */; };
 		818CE0F9D49E7C76170E1351 /* PetPersonalityBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA61FA1584A3CF475D12AF1 /* PetPersonalityBehaviorTests.swift */; };
@@ -654,6 +655,7 @@
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
 		717DA78992AFADED72D66BEB /* Phase2IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase2IntegrationTests.swift; sourceTree = "<group>"; };
 		7232A7A0BA24C480CCF1112E /* PetChatInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetChatInteractionTests.swift; sourceTree = "<group>"; };
+		7268557E80C7DE40187E361B /* WorkerAuthHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerAuthHelper.swift; sourceTree = "<group>"; };
 		7276A2479267623395CFB13B /* TailnetPeerEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntry.swift; sourceTree = "<group>"; };
 		73122425C58B15567D7F7F9D /* TCPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCPTransport.swift; sourceTree = "<group>"; };
 		73383ABF5706CAEE306977CA /* ConnectionMetricTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionMetricTests.swift; sourceTree = "<group>"; };
@@ -1192,6 +1194,7 @@
 				BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */,
 				2688CA0B5DF0712CDB7418FF /* TransferRecord.swift */,
 				77C92E76445C07EBDC65FE04 /* TransportProtocol.swift */,
+				7268557E80C7DE40187E361B /* WorkerAuthHelper.swift */,
 				4A0CDA4F3864AD6C66E7B50B /* WorkerSignaling.swift */,
 			);
 			path = Transport;
@@ -2241,6 +2244,7 @@
 				576B501BA221A9FAD6309E7B /* VoicePlayer.swift in Sources */,
 				CA5D8EB04D2EF450A33FA695 /* VoiceRecorder.swift in Sources */,
 				3FFBC03FD91DD4BFB1DFD135 /* WebRTCClient.swift in Sources */,
+				7E86FA0DD1B4A90AC71C7D24 /* WorkerAuthHelper.swift in Sources */,
 				171A4B0D64C2CCCE0AD9BAB9 /* WorkerSignaling.swift in Sources */,
 				A53C53FD08AB0F73CE7177CE /* X3DH.swift in Sources */,
 			);
