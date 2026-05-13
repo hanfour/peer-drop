@@ -372,6 +372,22 @@ platform :ios do
   desc "Build and submit to App Store review (auto-release on approval)"
   desc "Auto-loads reviewer notes (same as submit_only). Default phased:false."
   lane :release do
+    # Load the ASC API key into the lane context BEFORE build_app so
+    # gym can forward `-authenticationKey*` flags to xcodebuild — this
+    # is what lets `-allowProvisioningUpdates` actually refresh the
+    # team auto-profile when an App ID gains a new capability (v5.3's
+    # Push Notifications was the first case to hit this path).
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    1200,
+      in_house:    false
+    )
+
     # Auto-load reviewer notes from docs/release/v<version>-reviewer-notes.md.
     # Derived from project's MARKETING_VERSION so hotfix releases pick up
     # their own notes file (e.g. v4.0.1-reviewer-notes.md).
@@ -401,6 +417,19 @@ platform :ios do
       end
     end
 
+    # `-allowProvisioningUpdates` lets xcodebuild refresh the team
+    # auto-profile when the App ID's capabilities change (e.g. v5.3's
+    # Push Notifications add). gym doesn't auto-forward the ASC key to
+    # xcodebuild for this, so write the key to a temp .p8 and pass the
+    # three -authenticationKey* args explicitly. Cleaned up below.
+    asc_key_p8 = "/tmp/asc-api-key-#{Process.pid}.p8"
+    File.write(asc_key_p8, data["key"])
+    File.chmod(0o600, asc_key_p8)
+    auth_xcargs = "-allowProvisioningUpdates " \
+                  "-authenticationKeyID #{data['key_id']} " \
+                  "-authenticationKeyIssuerID #{data['issuer_id']} " \
+                  "-authenticationKeyPath #{asc_key_p8}"
+
     build_app(
       scheme: "PeerDrop",
       configuration: "Release",
@@ -410,6 +439,7 @@ platform :ios do
       clean: true,
       include_bitcode: false,
       include_symbols: true,
+      xcargs: auth_xcargs,
       export_options: {
         method: "app-store",
         signingStyle: "manual",
@@ -419,6 +449,8 @@ platform :ios do
         }
       }
     )
+    File.delete(asc_key_p8) if File.exist?(asc_key_p8)
+
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
       skip_screenshots: true,
