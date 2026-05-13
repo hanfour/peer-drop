@@ -329,22 +329,18 @@ struct NearbyTab: View {
                 }
 
                 Menu {
-                    Section("Sort By") {
-                        Button {
-                            sortModeRaw = SortMode.name.rawValue
-                        } label: {
-                            Label("Name", systemImage: sortMode == .name ? "checkmark" : "")
-                        }
-                        Button {
-                            sortModeRaw = SortMode.lastConnected.rawValue
-                        } label: {
-                            Label("Last Connected", systemImage: sortMode == .lastConnected ? "checkmark" : "")
-                        }
-                        Button {
-                            sortModeRaw = SortMode.connectionCount.rawValue
-                        } label: {
-                            Label("Connection Count", systemImage: sortMode == .connectionCount ? "checkmark" : "")
-                        }
+                    // Picker in a Menu auto-renders a leading checkmark on
+                    // the selected option and nothing on the others —
+                    // exactly the UX the previous `Label(..., systemImage:
+                    // selected ? "checkmark" : "")` workaround tried to
+                    // hand-roll. The workaround logged "No symbol named ''
+                    // found in system symbol set" on every menu open
+                    // because the empty-string branch hit the SF Symbol
+                    // resolver. Picker has none of that.
+                    Picker("Sort By", selection: $sortModeRaw) {
+                        Text("Name").tag(SortMode.name.rawValue)
+                        Text("Last Connected").tag(SortMode.lastConnected.rawValue)
+                        Text("Connection Count").tag(SortMode.connectionCount.rawValue)
                     }
                     Section {
                         Button {

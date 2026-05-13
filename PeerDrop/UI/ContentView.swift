@@ -28,6 +28,29 @@ enum ContentSheet: Identifiable {
     }
 }
 
+/// Routes the three security-related `ConnectionManager` sheets through a
+/// single `.sheet(item:)` binding. Without this, when two of the three
+/// underlying `@Published` fields go non-nil concurrently (a remote-mailbox
+/// invite landing while a local-Wi-Fi handshake completes is the realistic
+/// case), SwiftUI logs `[Invalid Configuration] Currently, only presenting
+/// a single sheet is supported` and silently queues one of them. The router
+/// picks by priority (incoming → remote first-contact → local first-trust);
+/// once the active one is resolved, the next non-nil source surfaces on the
+/// next render.
+private enum SecuritySheetRoute: Identifiable {
+    case incomingRequest(IncomingRequest)
+    case firstContact(PendingFirstContact)
+    case localFirstTrust(PendingFirstContact)
+
+    var id: String {
+        switch self {
+        case .incomingRequest(let r):  return "incoming:\(r.id)"
+        case .firstContact(let p):     return "remote:\(p.id)"
+        case .localFirstTrust(let p):  return "local:\(p.id)"
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @EnvironmentObject var petEngine: PetEngine
@@ -88,31 +111,32 @@ struct ContentView: View {
             .tag(3)
         }
         .modifier(TabBarOnlyModifier())  // Force tab bar on iPad
-        .sheet(item: $connectionManager.pendingIncomingRequest) { request in
-            ConsentSheet(request: request)
-                .environmentObject(connectionManager)
-        }
-        .sheet(item: $connectionManager.pendingFirstContact) { pending in
-            FirstContactVerificationSheet(
-                pending: pending,
-                onApprove: {
-                    connectionManager.approveFirstContact(fingerprint: pending.fingerprint)
-                },
-                onReject: {
-                    connectionManager.rejectFirstContact(fingerprint: pending.fingerprint)
-                }
-            )
-        }
-        .sheet(item: $connectionManager.pendingLocalFirstTrust) { pending in
-            FirstContactVerificationSheet(
-                pending: pending,
-                onApprove: {
-                    connectionManager.approveLocalFirstTrust(fingerprint: pending.fingerprint)
-                },
-                onReject: {
-                    connectionManager.blockLocalFirstTrust(fingerprint: pending.fingerprint)
-                }
-            )
+        .sheet(item: securitySheetBinding) { route in
+            switch route {
+            case .incomingRequest(let request):
+                ConsentSheet(request: request)
+                    .environmentObject(connectionManager)
+            case .firstContact(let pending):
+                FirstContactVerificationSheet(
+                    pending: pending,
+                    onApprove: {
+                        connectionManager.approveFirstContact(fingerprint: pending.fingerprint)
+                    },
+                    onReject: {
+                        connectionManager.rejectFirstContact(fingerprint: pending.fingerprint)
+                    }
+                )
+            case .localFirstTrust(let pending):
+                FirstContactVerificationSheet(
+                    pending: pending,
+                    onApprove: {
+                        connectionManager.approveLocalFirstTrust(fingerprint: pending.fingerprint)
+                    },
+                    onReject: {
+                        connectionManager.blockLocalFirstTrust(fingerprint: pending.fingerprint)
+                    }
+                )
+            }
         }
         .sheet(isPresented: $connectionManager.showTransferProgress) {
             TransferProgressView()
@@ -288,6 +312,44 @@ struct ContentView: View {
         // Evict stale entries
         let cutoff = Date().addingTimeInterval(-60)
         processedInviteIDs = processedInviteIDs.filter { $0.value > cutoff }
+    }
+
+    // MARK: - Security sheet routing
+
+    /// Two-way binding that funnels the three `ConnectionManager` security
+    /// sheets through a single `.sheet(item:)`. Read: highest-priority
+    /// non-nil source wins. Write: only the dismiss-to-nil case matters;
+    /// clear whichever source the active sheet was reading from. The
+    /// FirstContactVerificationSheet's button callbacks already clear
+    /// their source directly, so set(nil) here mainly handles swipe-down
+    /// dismiss (which `.interactiveDismissDisabled(true)` actually blocks
+    /// for those sheets, but the path stays correct in case the modifier
+    /// is ever removed).
+    private var securitySheetBinding: Binding<SecuritySheetRoute?> {
+        Binding(
+            get: {
+                if let req = connectionManager.pendingIncomingRequest {
+                    return .incomingRequest(req)
+                }
+                if let pending = connectionManager.pendingFirstContact {
+                    return .firstContact(pending)
+                }
+                if let pending = connectionManager.pendingLocalFirstTrust {
+                    return .localFirstTrust(pending)
+                }
+                return nil
+            },
+            set: { newValue in
+                guard newValue == nil else { return }
+                if connectionManager.pendingIncomingRequest != nil {
+                    connectionManager.pendingIncomingRequest = nil
+                } else if connectionManager.pendingFirstContact != nil {
+                    connectionManager.pendingFirstContact = nil
+                } else if connectionManager.pendingLocalFirstTrust != nil {
+                    connectionManager.pendingLocalFirstTrust = nil
+                }
+            }
+        )
     }
 }
 
