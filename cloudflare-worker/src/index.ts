@@ -136,7 +136,17 @@ export default {
     // Periodic cleanup
     if (Math.random() < 0.01) cleanupRateLimits();
 
-    // API key authentication (required for room creation, ICE credentials, device registration, and invites)
+    // Authentication for tier-2 endpoints (room creation, ICE creds,
+    // device registration, invite delivery, inbox WebSocket).
+    //
+    // During the v5.3 transition window, accept BOTH:
+    //   - `Authorization: Bearer <token>` issued by /v2/device/attest
+    //     (preferred — per-device, replay-resistant, 15-min TTL)
+    //   - legacy `X-API-Key: <bundled-key>` for v5.0–v5.2 clients
+    //     that still ship the bundled secret in Info.plist
+    //
+    // After the transition window we drop the X-API-Key fallback and
+    // this block becomes a single Bearer check.
     const requiresAuth = (path === "/room" && request.method === "POST") ||
                           (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST") ||
                           (path === "/v2/device/register" && request.method === "POST") ||
@@ -149,8 +159,8 @@ export default {
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
-      if (providedKey !== env.API_KEY) {
+      const authorized = await isRequestAuthorized(request, url, env);
+      if (!authorized) {
         return new Response(
           JSON.stringify({ error: "Unauthorized" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -594,6 +604,28 @@ export default {
     // Zero-knowledge relay — no logging of content, IPs, or relationships
     // ===================================================================
 
+    // POST /v2/device/challenge — issue a server-side challenge nonce
+    // for the App Attest flow. iOS calls this immediately before
+    // /v2/device/attest so the attestation is tied to a value the
+    // server controls (replay defense). 32 random bytes, 5-minute TTL,
+    // single-use — the /attest handler pulls + deletes the entry.
+    if (path === "/v2/device/challenge" && request.method === "POST") {
+      const body = await request.json().catch(() => null) as { deviceId?: string } | null;
+      if (!body?.deviceId) return jsonResponse({ error: "Missing deviceId" }, 400);
+      if (!/^[a-zA-Z0-9-]{8,64}$/.test(body.deviceId)) {
+        return jsonResponse({ error: "Invalid deviceId format" }, 400);
+      }
+      const challengeBytes = new Uint8Array(32);
+      crypto.getRandomValues(challengeBytes);
+      const challengeB64 = arrayBufferToBase64(challengeBytes);
+      await env.V2_STORE.put(
+        `challenge:${body.deviceId}`,
+        challengeB64,
+        { expirationTtl: 5 * 60 },
+      );
+      return jsonResponse({ challenge: challengeB64 }, 201);
+    }
+
     // POST /v2/device/attest — register a new device via Apple App Attest.
     // Returns a short-lived bearer token + caches the device's public
     // key for subsequent /v2/device/assert calls. Stub mode until pkijs
@@ -617,10 +649,27 @@ export default {
         return jsonResponse({ error: "Invalid deviceId format" }, 400);
       }
 
+      // Replay defense: the supplied challenge must match the server-
+      // issued nonce we stored at /v2/device/challenge time. Pull-and-
+      // delete so the same nonce can't satisfy two attestations.
+      const storedChallenge = await env.V2_STORE.get(`challenge:${body.deviceId}`);
+      if (!storedChallenge || storedChallenge !== body.challenge) {
+        return jsonResponse({ error: "Challenge expired or not issued" }, 400);
+      }
+      await env.V2_STORE.delete(`challenge:${body.deviceId}`);
+
+      // App Attest's clientDataHash is SHA-256(serverChallenge). The
+      // verifier expects that hash as its `challenge` input — recompute
+      // here from the raw bytes we just confirmed match.
+      const challengeBytes = base64Decode(body.challenge);
+      const clientDataHash = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", challengeBytes.buffer.slice(challengeBytes.byteOffset, challengeBytes.byteOffset + challengeBytes.byteLength) as ArrayBuffer),
+      );
+
       try {
         const result = await verifyAppAttestation({
           attestation: base64Decode(body.attestation),
-          challenge: base64Decode(body.challenge),
+          challenge: clientDataHash,
           keyId: base64Decode(body.keyId),
           bundleIdentifier: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
           teamIdentifier: env.APP_TEAM_ID ?? "UK48R5KWLV",
@@ -999,6 +1048,30 @@ export default {
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
+
+/**
+ * Combined auth check for the tier-2 endpoint set. Returns true if the
+ * request carries either a valid Bearer token signed with `TOKEN_SECRET`
+ * or the legacy `X-API-Key`. Bearer is checked first so the cheap path
+ * shrinks every release as more clients migrate.
+ */
+async function isRequestAuthorized(request: Request, url: URL, env: Env): Promise<boolean> {
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ") && env.TOKEN_SECRET) {
+    const token = authHeader.slice("Bearer ".length).trim();
+    try {
+      const { verifyToken } = await import("./deviceToken");
+      await verifyToken(token, env.TOKEN_SECRET);
+      return true;
+    } catch {
+      // Fall through to X-API-Key — a malformed/expired Bearer should
+      // still allow a transition-era client to retry with its bundled
+      // key during the deprecation window.
+    }
+  }
+  const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
+  return providedKey === env.API_KEY;
+}
 
 // Helper: JSON response with CORS
 function jsonResponse(data: unknown, status = 200): Response {

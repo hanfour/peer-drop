@@ -347,6 +347,7 @@
 		D54BEBA94D64DC3E79B1E64D /* PetAnimationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F5A5A4F2AA8CCB19B5623D8 /* PetAnimationController.swift */; };
 		D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */; };
 		D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */; };
+		D724CC354789CE58A1759690 /* DeviceTokenManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4D101B695598F45DFF45A8 /* DeviceTokenManager.swift */; };
 		D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */; };
 		D7A85C61F57646A64E170080 /* GroupRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */; };
 		D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */; };
@@ -843,6 +844,7 @@
 		E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		EA02F82C01BC5DE57FF9CF2E /* GuestPetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestPetView.swift; sourceTree = "<group>"; };
 		EA32370BB5417DCFA96EBEEB /* E2ETestSuites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ETestSuites.swift; sourceTree = "<group>"; };
+		EA4D101B695598F45DFF45A8 /* DeviceTokenManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTokenManager.swift; sourceTree = "<group>"; };
 		EBB53153F52CB6914A016F98 /* PetPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPayloadTests.swift; sourceTree = "<group>"; };
 		ED3F8AF2B19CC3C425A05946 /* ChatE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatE2ETests.swift; sourceTree = "<group>"; };
 		ED5A1838BC61752B0CC5210B /* TextMessagePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextMessagePayload.swift; sourceTree = "<group>"; };
@@ -1179,6 +1181,7 @@
 			children = (
 				9A90A886C2B08F97C6ED3F42 /* DataChannelClient.swift */,
 				B1CF2ADC56F3918BA1B6A59B /* DataChannelTransport.swift */,
+				EA4D101B695598F45DFF45A8 /* DeviceTokenManager.swift */,
 				D4D28254D09D4993B28316CD /* FileTransfer.swift */,
 				AD1B2B945FCDC84E81364EED /* FileTransferSession.swift */,
 				108F6A785DCF15C0FDB64BDB /* ICEConfigurationProvider.swift */,
@@ -2064,6 +2067,7 @@
 				EF4CFC9180E25C15F1F95713 /* DeviceRecord.swift in Sources */,
 				27A6618B320BC359BCC8078F /* DeviceRecordRow.swift in Sources */,
 				C3C0C03588C1886421B97385 /* DeviceRecordStore.swift in Sources */,
+				D724CC354789CE58A1759690 /* DeviceTokenManager.swift in Sources */,
 				5869553DAA2A2C0975800025 /* DisconnectSheet.swift in Sources */,
 				9110550525FA92103FF5B86A /* DiscoveryService.swift in Sources */,
 				23049AA320595802D640748B /* DiscoveryView.swift in Sources */,

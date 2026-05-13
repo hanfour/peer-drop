@@ -70,20 +70,53 @@ describe("HMAC token round-trip", () => {
 });
 
 describe("/v2/device/attest (real verifier)", () => {
+  // /v2/device/attest pulls a server-issued challenge from V2_STORE
+  // (set by /v2/device/challenge). Tests that exercise the verifier
+  // must first request a challenge so the replay-defense check passes
+  // and the verifier itself is what rejects the garbage.
+  async function issueChallenge(deviceId: string, ip: string): Promise<string> {
+    const resp = await SELF.fetch("https://worker.test/v2/device/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
+      body: JSON.stringify({ deviceId }),
+    });
+    expect(resp.status).toBe(201);
+    const body = await resp.json() as { challenge: string };
+    return body.challenge;
+  }
+
   it("returns 400 with CBOR decode error on garbage attestation bytes", async () => {
+    const deviceId = "abc-12345678";
+    const challenge = await issueChallenge(deviceId, "1.2.3.4");
     const resp = await SELF.fetch("https://worker.test/v2/device/attest", {
       method: "POST",
       headers: { "Content-Type": "application/json", "CF-Connecting-IP": "1.2.3.4" },
       body: JSON.stringify({
-        deviceId: "abc-12345678",
+        deviceId,
         attestation: btoa("fake-cbor-blob"),
         keyId: btoa("fake-key-id"),
-        challenge: btoa("fake-challenge"),
+        challenge,
       }),
     });
     expect(resp.status).toBe(400);
     const body = await resp.json() as { error?: string };
     expect(body.error?.toLowerCase()).toMatch(/cbor|decode|attestation/);
+  });
+
+  it("returns 400 when challenge wasn't issued first", async () => {
+    const resp = await SELF.fetch("https://worker.test/v2/device/attest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": "1.2.3.10" },
+      body: JSON.stringify({
+        deviceId: "no-challenge-device",
+        attestation: btoa("x"),
+        keyId: btoa("x"),
+        challenge: btoa("never-stored"),
+      }),
+    });
+    expect(resp.status).toBe(400);
+    const body = await resp.json() as { error?: string };
+    expect(body.error?.toLowerCase()).toMatch(/challenge/);
   });
 
   it("returns 400 on missing fields before reaching the verifier", async () => {
@@ -204,10 +237,10 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
   }
 
   it("accepts a valid synthetic assertion and bumps counter", async () => {
-    const kp = await crypto.subtle.generateKey(
+    const kp = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
-    );
-    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+    )) as CryptoKeyPair;
+    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey) as ArrayBuffer);
 
     const authData = buildAuthData(await rpIdHash(), 42);
     const clientData = new TextEncoder().encode("hello-client");
@@ -231,10 +264,10 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
   });
 
   it("rejects an assertion whose counter has not advanced", async () => {
-    const kp = await crypto.subtle.generateKey(
+    const kp = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
-    );
-    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+    )) as CryptoKeyPair;
+    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey) as ArrayBuffer);
 
     const authData = buildAuthData(await rpIdHash(), 5);
     const clientData = new TextEncoder().encode("hi");
@@ -251,13 +284,13 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
   });
 
   it("rejects an assertion signed by a different key", async () => {
-    const trueKp = await crypto.subtle.generateKey(
+    const trueKp = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
-    );
-    const otherKp = await crypto.subtle.generateKey(
+    )) as CryptoKeyPair;
+    const otherKp = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
-    );
-    const truePubDer = new Uint8Array(await crypto.subtle.exportKey("spki", trueKp.publicKey));
+    )) as CryptoKeyPair;
+    const truePubDer = new Uint8Array(await crypto.subtle.exportKey("spki", trueKp.publicKey) as ArrayBuffer);
     const authData = buildAuthData(await rpIdHash(), 1);
     const clientData = new TextEncoder().encode("h");
     // Sign with the OTHER key but submit the trusted pubkey.
@@ -273,10 +306,10 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
   });
 
   it("rejects an assertion whose rpIdHash is for a different app", async () => {
-    const kp = await crypto.subtle.generateKey(
+    const kp = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
-    );
-    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+    )) as CryptoKeyPair;
+    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey) as ArrayBuffer);
     const fakeRpHash = new Uint8Array(
       await crypto.subtle.digest("SHA-256", new TextEncoder().encode("ZZZZZZZZZZ.com.evil.app")),
     );
