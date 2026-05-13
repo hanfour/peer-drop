@@ -11,6 +11,13 @@
  */
 
 import { sendAPNs } from "./apns";
+import {
+  AttestationNotImplemented,
+  freshTokenPayload,
+  issueToken,
+  verifyAppAttestation,
+  verifyAppAttestAssertion,
+} from "./deviceToken";
 
 export interface Env {
   // KV
@@ -24,12 +31,22 @@ export interface Env {
   // Secrets
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
-  API_KEY: string; // Shared secret for authenticating iOS clients
+  API_KEY: string; // Shared secret for authenticating iOS clients (legacy — see TOKEN_SECRET)
   APNS_KEY_P8: string;
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
   ANALYTICS_KEY: string;
+  // Phase B device-token auth. HMAC secret for issuing per-device bearer
+  // tokens after App Attest verification. Set via
+  // `wrangler secret put TOKEN_SECRET` once the App Attest verifier
+  // lands; until then the device-token routes return 501 and clients
+  // stay on the legacy X-API-Key path.
+  TOKEN_SECRET: string;
+  // App identifier inputs for App Attest rpIdHash verification.
+  // Optional during the stub phase; required once verifier ships.
+  APP_BUNDLE_ID?: string;       // "com.hanfour.peerdrop"
+  APP_TEAM_ID?: string;         // "UK48R5KWLV"
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
@@ -574,6 +591,105 @@ export default {
     // Zero-knowledge relay — no logging of content, IPs, or relationships
     // ===================================================================
 
+    // POST /v2/device/attest — register a new device via Apple App Attest.
+    // Returns a short-lived bearer token + caches the device's public
+    // key for subsequent /v2/device/assert calls. Stub mode until pkijs
+    // attestation chain validation lands (see ./deviceToken.ts TODO);
+    // returns 501 so the iOS client can detect partial deployment and
+    // stay on the X-API-Key fallback.
+    if (path === "/v2/device/attest" && request.method === "POST") {
+      if (!env.TOKEN_SECRET) {
+        return jsonResponse({ error: "Server misconfigured: TOKEN_SECRET not set" }, 500);
+      }
+      const body = await request.json().catch(() => null) as {
+        deviceId?: string;
+        attestation?: string;       // base64
+        keyId?: string;
+        challenge?: string;          // base64
+      } | null;
+      if (!body || !body.deviceId || !body.attestation || !body.keyId || !body.challenge) {
+        return jsonResponse({ error: "Missing fields" }, 400);
+      }
+      if (!/^[a-zA-Z0-9-]{8,64}$/.test(body.deviceId)) {
+        return jsonResponse({ error: "Invalid deviceId format" }, 400);
+      }
+
+      try {
+        const result = await verifyAppAttestation({
+          attestation: base64Decode(body.attestation),
+          challenge: base64Decode(body.challenge),
+          keyId: body.keyId,
+          bundleIdentifier: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
+          teamIdentifier: env.APP_TEAM_ID ?? "UK48R5KWLV",
+        });
+        // Cache device-pubkey + counter for later assert calls.
+        await env.V2_STORE.put(
+          `attest:${body.deviceId}`,
+          JSON.stringify({
+            keyId: body.keyId,
+            publicKeyDer: arrayBufferToBase64(result.publicKeyDer),
+            receipt: arrayBufferToBase64(result.receipt),
+            counter: 0,
+            attestedAt: Date.now(),
+          }),
+          { expirationTtl: 90 * 86400 },
+        );
+        const token = await issueToken(freshTokenPayload(body.deviceId), env.TOKEN_SECRET);
+        return jsonResponse({ token, expiresInSeconds: 15 * 60 }, 201);
+      } catch (err) {
+        if (err instanceof AttestationNotImplemented) {
+          return jsonResponse({ error: "App Attest verification not yet implemented", stub: true }, 501);
+        }
+        return jsonResponse({ error: String((err as Error).message) }, 400);
+      }
+    }
+
+    // POST /v2/device/assert — refresh the bearer token by proving the
+    // device still controls the Secure Enclave keypair registered at
+    // /v2/device/attest time. Stub like /attest above.
+    if (path === "/v2/device/assert" && request.method === "POST") {
+      if (!env.TOKEN_SECRET) {
+        return jsonResponse({ error: "Server misconfigured: TOKEN_SECRET not set" }, 500);
+      }
+      const body = await request.json().catch(() => null) as {
+        deviceId?: string;
+        assertion?: string;     // base64
+        clientData?: string;    // base64
+      } | null;
+      if (!body || !body.deviceId || !body.assertion || !body.clientData) {
+        return jsonResponse({ error: "Missing fields" }, 400);
+      }
+      const cached = await env.V2_STORE.get(`attest:${body.deviceId}`);
+      if (!cached) {
+        return jsonResponse({ error: "Device not attested" }, 404);
+      }
+      const meta = JSON.parse(cached) as {
+        publicKeyDer: string;
+        counter: number;
+      };
+      try {
+        const result = await verifyAppAttestAssertion({
+          assertion: base64Decode(body.assertion),
+          clientData: base64Decode(body.clientData),
+          publicKeyDer: base64Decode(meta.publicKeyDer),
+          previousCounter: meta.counter,
+          expectedRpId: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
+        });
+        await env.V2_STORE.put(
+          `attest:${body.deviceId}`,
+          JSON.stringify({ ...JSON.parse(cached), counter: result.newCounter }),
+          { expirationTtl: 90 * 86400 },
+        );
+        const token = await issueToken(freshTokenPayload(body.deviceId), env.TOKEN_SECRET);
+        return jsonResponse({ token, expiresInSeconds: 15 * 60 }, 200);
+      } catch (err) {
+        if (err instanceof AttestationNotImplemented) {
+          return jsonResponse({ error: "App Attest verification not yet implemented", stub: true }, 501);
+        }
+        return jsonResponse({ error: String((err as Error).message) }, 400);
+      }
+    }
+
     // POST /v2/keys/register — Upload device's public key bundle
     if (path === "/v2/keys/register" && request.method === "POST") {
       const body = await request.json() as { mailboxId?: string; preKeyBundle?: unknown; token?: string };
@@ -891,6 +1007,21 @@ function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// base64 ⇄ bytes for the device-token endpoints. Standard (not URL-safe)
+// alphabet because the iOS App Attest API emits standard base64.
+function base64Decode(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function arrayBufferToBase64(buf: Uint8Array): string {
+  let s = "";
+  for (const b of buf) s += String.fromCharCode(b);
+  return btoa(s);
 }
 
 /**

@@ -18,5 +18,9 @@
     "typescript": "^5.0.0",
     "vitest": "^4.1.6",
     "wrangler": "^4.75.0"
+  },
+  "dependencies": {
+    "cbor2": "^2.3.0",
+    "pkijs": "^3.4.0"
   }
 }
