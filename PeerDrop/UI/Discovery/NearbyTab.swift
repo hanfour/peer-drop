@@ -1,18 +1,41 @@
 import SwiftUI
 
+/// All of NearbyTab's modal sheets routed through a single
+/// `.sheet(item:)` binding. Replaces the previous seven parallel
+/// `.sheet` modifiers, which logged "[Invalid Configuration] Currently,
+/// only presenting a single sheet is supported" any time SwiftUI saw
+/// two of them go truthy in the same render. ContentView's security
+/// sheets got the same treatment in commit 7024c26 — this lifts the
+/// last cluster.
+private enum NearbyTabSheet: Identifiable {
+    case manualConnect
+    case editPeer(DiscoveredPeer)
+    case connectionQR
+    case settings
+    case transferHistory
+    case relayConnect
+    case options
+
+    var id: String {
+        switch self {
+        case .manualConnect:    return "manualConnect"
+        case .editPeer(let p):  return "editPeer:\(p.id)"
+        case .connectionQR:     return "connectionQR"
+        case .settings:         return "settings"
+        case .transferHistory:  return "transferHistory"
+        case .relayConnect:     return "relayConnect"
+        case .options:          return "options"
+        }
+    }
+}
+
 struct NearbyTab: View {
     @Binding var selectedTab: Int
     @EnvironmentObject var connectionManager: ConnectionManager
     @AppStorage("peerDropViewMode") private var isGridMode = false
     @AppStorage("peerDropSortMode") private var sortModeRaw = "name"
     @AppStorage("peerDropIsOnline") private var isOnline = true
-    @State private var showManualConnect = false
-    @State private var editingPeer: DiscoveredPeer?
-    @State private var showSettings = false
-    @State private var showTransferHistory = false
-    @State private var showRelayConnect = false
-    @State private var showConnectionQR = false
-    @State private var showOptionsSheet = false
+    @State private var activeSheet: NearbyTabSheet?
     @State private var isSearchActive = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -84,7 +107,7 @@ struct NearbyTab: View {
         ZStack {
             VStack(spacing: 0) {
             if shouldShowGuidance {
-                GuidanceCard(onMoreOptions: { showOptionsSheet = true }, onDismiss: nil)
+                GuidanceCard(onMoreOptions: { activeSheet = .options }, onDismiss: nil)
             }
             Group {
                 if !isOnline {
@@ -160,7 +183,7 @@ struct NearbyTab: View {
                                 .swipeActions(edge: .leading) {
                                     if peer.source == .manual {
                                         Button {
-                                            editingPeer = peer
+                                            activeSheet = .editPeer(peer)
                                         } label: {
                                             Label("Edit", systemImage: "pencil")
                                         }
@@ -285,7 +308,7 @@ struct NearbyTab: View {
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    showManualConnect = true
+                    activeSheet = .manualConnect
                 } label: {
                     Image(systemName: "bolt.horizontal.fill")
                 }
@@ -320,7 +343,7 @@ struct NearbyTab: View {
 
                 if FeatureSettings.isRelayEnabled {
                     Button {
-                        showRelayConnect = true
+                        activeSheet = .relayConnect
                     } label: {
                         Image(systemName: "antenna.radiowaves.left.and.right.circle")
                     }
@@ -344,17 +367,17 @@ struct NearbyTab: View {
                     }
                     Section {
                         Button {
-                            showConnectionQR = true
+                            activeSheet = .connectionQR
                         } label: {
                             Label("My QR Code", systemImage: "qrcode")
                         }
                         Button {
-                            showSettings = true
+                            activeSheet = .settings
                         } label: {
                             Label("Settings", systemImage: "gearshape")
                         }
                         Button {
-                            showTransferHistory = true
+                            activeSheet = .transferHistory
                         } label: {
                             Label("Transfer History", systemImage: "clock.arrow.circlepath")
                         }
@@ -366,42 +389,46 @@ struct NearbyTab: View {
                 .accessibilityLabel("More options")
             }
         }
-        .sheet(isPresented: $showManualConnect) {
-            ManualConnectView()
-                .environmentObject(connectionManager)
-        }
-        .sheet(item: $editingPeer) { peer in
-            ManualConnectView(editingPeer: peer)
-                .environmentObject(connectionManager)
-        }
-        .sheet(isPresented: $showConnectionQR) {
-            ConnectionQRView()
-                .environmentObject(connectionManager)
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environmentObject(connectionManager)
-        }
-        .sheet(isPresented: $showTransferHistory) {
-            NavigationStack {
-                TransferHistoryView()
+        .sheet(item: $activeSheet, onDismiss: {
+            // The relay-connect sheet needs to clear the
+            // ConnectionManager flag that originally raised it; the
+            // other sheets are pure local state. Inspecting which
+            // sheet just closed from inside this callback isn't
+            // possible — activeSheet is already nil — so we always
+            // clear the flag. It's a no-op when the dismissed sheet
+            // was something else.
+            connectionManager.shouldShowRelayConnect = false
+        }) { sheet in
+            switch sheet {
+            case .manualConnect:
+                ManualConnectView()
                     .environmentObject(connectionManager)
+            case .editPeer(let peer):
+                ManualConnectView(editingPeer: peer)
+                    .environmentObject(connectionManager)
+            case .connectionQR:
+                ConnectionQRView()
+                    .environmentObject(connectionManager)
+            case .settings:
+                SettingsView()
+                    .environmentObject(connectionManager)
+            case .transferHistory:
+                NavigationStack {
+                    TransferHistoryView()
+                        .environmentObject(connectionManager)
+                }
+            case .relayConnect:
+                RelayConnectView()
+                    .environmentObject(connectionManager)
+            case .options:
+                ConnectionOptionsSheet()
+                    .environmentObject(connectionManager)
+                    .environmentObject(connectionContext)
             }
         }
-        .sheet(isPresented: $showRelayConnect, onDismiss: {
-            connectionManager.shouldShowRelayConnect = false
-        }) {
-            RelayConnectView()
-                .environmentObject(connectionManager)
-        }
-        .sheet(isPresented: $showOptionsSheet) {
-            ConnectionOptionsSheet()
-                .environmentObject(connectionManager)
-                .environmentObject(connectionContext)
-        }
         .onChange(of: connectionManager.shouldShowRelayConnect) { shouldShow in
-            if shouldShow && !showRelayConnect {
-                showRelayConnect = true
+            if shouldShow, activeSheet == nil {
+                activeSheet = .relayConnect
             }
         }
         .onAppear {

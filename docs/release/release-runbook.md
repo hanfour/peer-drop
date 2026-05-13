@@ -16,6 +16,7 @@ Before running `fastlane release`, confirm in order:
 - [ ] **5-lang release notes exist** at `fastlane/metadata/{en-US,zh-Hant,zh-Hans,ja,ko}/release_notes.txt`. Each file is committed plain text — fastlane uploads them as the version's localized notes.
 - [ ] **App Store Connect API key** at `fastlane/api_key.json` (gitignored — confirm it's still on your machine via `ls fastlane/api_key.json`).
 - [ ] **Code signing identity is current** — Xcode → Settings → Accounts → Apple ID still signed in, "PeerDrop" team selected, provisioning profile valid.
+- [ ] **If this release adds a new App ID capability** (Push Notifications, In-App Purchase, Sign in with Apple, etc.) — see "Adding a new App ID capability" below. v5.3 hit this with `aps-environment`.
 - [ ] **Optional**: pause iCloud Drive / Time Machine to avoid I/O contention during the build.
 
 ---
@@ -55,6 +56,28 @@ open -a Xcode
 # Settings > Accounts > re-sign in to Apple ID
 # Confirm "PeerDrop" team is selected and provisioning is current
 ```
+
+### Build fails: `Provisioning profile "..." doesn't include the X capability`
+
+You added an entitlement (e.g. `aps-environment`) but the App Store provisioning profile on Apple's side hasn't been updated to grant the matching capability. v5.3's Push Notifications add hit this exactly.
+
+See the "Adding a new App ID capability" section below for the full recovery flow. The short version:
+```bash
+# After enabling the capability on developer.apple.com:
+fastlane run get_provisioning_profile \
+  app_identifier:"com.hanfour.peerdrop" \
+  provisioning_name:"com.hanfour.peerdrop AppStore" \
+  force:true api_key_path:"./fastlane/api_key.json"
+fastlane run get_provisioning_profile \
+  app_identifier:"com.hanfour.peerdrop.widget" \
+  provisioning_name:"com.hanfour.peerdrop.widget AppStore" \
+  force:true api_key_path:"./fastlane/api_key.json"
+# Then retry: fastlane release
+```
+
+### Build fails: `No Accounts: Add a new account in Accounts settings`
+
+xcodebuild needs an authenticated Apple identity to refresh provisioning profiles when capabilities change. This used to require an interactive Xcode UI sign-in. As of commit `cbbadc7`, the `release` lane writes the ASC API key to a temp `.p8` and threads `-authenticationKey{ID,IssuerID,Path}` into xcodebuild via `xcargs`, so this should resolve itself — but if it surfaces again, verify `fastlane/api_key.json` is intact and parseable: `python3 -c 'import json; print(json.load(open("fastlane/api_key.json"))["key_id"])'`.
 
 ### Upload to TestFlight fails
 Check `fastlane/api_key.json` exists and has correct issuer/key contents.
@@ -103,6 +126,65 @@ fastlane/metadata/zh-Hant/release_notes.txt
 ```
 
 The metadata files are NOT per-version named — fastlane uses whatever is checked into main at release time. Make sure to overwrite them before each release.
+
+---
+
+## Adding a new App ID capability
+
+A release that introduces a new entitlement (`aps-environment`, `com.apple.developer.in-app-payments`, Sign in with Apple, etc.) requires manual Apple-side prep before `fastlane release` will archive successfully. Skipping this is what burned v5.3's first three release attempts.
+
+### Step 1 — Enable the capability on developer.apple.com
+
+1. Open https://developer.apple.com/account/resources/identifiers
+2. Click into `com.hanfour.peerdrop`
+3. **Capabilities** section → check the capability you're adding
+4. **Save** at the top right → confirm in the modal
+5. **Don't touch other capabilities** — disabling something already enabled (iCloud, App Groups, Keychain Sharing) breaks every shipped version that depended on it.
+6. If the app uses a widget extension and the capability needs to apply there too, repeat for `com.hanfour.peerdrop.widget`.
+
+### Step 2 — Regenerate the provisioning profile(s)
+
+```bash
+fastlane run get_provisioning_profile \
+  app_identifier:"com.hanfour.peerdrop" \
+  provisioning_name:"com.hanfour.peerdrop AppStore" \
+  force:true \
+  api_key_path:"./fastlane/api_key.json"
+
+fastlane run get_provisioning_profile \
+  app_identifier:"com.hanfour.peerdrop.widget" \
+  provisioning_name:"com.hanfour.peerdrop.widget AppStore" \
+  force:true \
+  api_key_path:"./fastlane/api_key.json"
+```
+
+`force:true` is required — without it the action sees the existing local profile and skips. The new profile auto-installs into `~/Library/MobileDevice/Provisioning Profiles/`.
+
+### Step 3 — Update the entitlements file
+
+Add the new key to the right `properties:` block in `project.yml` (NOT directly to `PeerDrop.entitlements` — xcodegen rewrites that file from project.yml on every `xcodegen generate`). Example for `aps-environment`:
+
+```yaml
+entitlements:
+  path: PeerDrop/App/PeerDrop.entitlements
+  properties:
+    aps-environment: development   # Apple maps to "production" at archive time
+    # ... existing keys ...
+```
+
+Then `xcodegen generate` to roll the change into pbxproj + the actual `.entitlements` file.
+
+### Step 4 — Run `fastlane release`
+
+The release lane now (as of `cbbadc7`) threads the ASC API key into xcodebuild via `xcargs`, so `-allowProvisioningUpdates` can actually authenticate and refresh anything that still needs refreshing. No further manual intervention should be needed.
+
+### What can go wrong
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Provisioning profile doesn't include the X capability` | Step 2 not run, or run before Step 1 saved | Re-run Step 2 |
+| `No Accounts: Add a new account in Accounts settings` | xcodebuild can't talk to Apple to update provisioning | The release lane handles this since cbbadc7. If it surfaces, verify `fastlane/api_key.json` is intact |
+| `Apple App Attestation Root CA` errors during App Attest | App ID `App Attest` capability auto-enabled by Apple for all dev accounts — no Step 1 needed. If `verifyAttestation` fails for other reasons, check team ID + bundle ID match between project.yml and worker's `APP_BUNDLE_ID` / `APP_TEAM_ID` env vars |
 
 ---
 
