@@ -1,11 +1,11 @@
-PeerDrop 5.2 — Local-network connections are end-to-end encrypted, and pairing with a new device now requires explicit verification.
+PeerDrop 5.3 — Push notifications are working again, and connecting to the relay server is now hardened.
 
-End-to-end encryption: When two v5.2 peers connect on the same Wi-Fi, every chat message, file transfer, and signal between them is sealed inside a Double Ratchet session (the same forward-secret crypto used by Signal). Earlier versions trusted the local network and sent data in the clear once both sides shook hands — fine for a home router, less fine on a cafe AP. That's fixed.
+Push notifications: v5.0–v5.2 shipped with the iOS push entitlement missing. The app registered for remote notifications and iOS silently rejected it, so background invites from your peers never reached you. Fixed in this release. If you accepted notification permission on a prior version, the next launch will pick up the registration automatically.
 
-Explicit pairing: The first time you connect to a new device, both screens show the same 6-digit verification code. Compare the codes face-to-face (or over a trusted channel like a phone call) and tap "Accept & Trust" on both sides. Until you do, files and chat are blocked — no silent first-contact trust. If the codes don't match, tap "Reject" to block the peer.
+Better relay-server authentication: previously every install of PeerDrop carried the same shared API key inside the app, which would let anyone who unpacked the .ipa hit the relay server on your behalf. v5.3 uses Apple's App Attest framework instead — your device cryptographically proves it's a legitimate iOS install before the server hands out tokens. The proof key lives in the Secure Enclave and never leaves your device. There's nothing to configure; it just works in the background.
 
-A small lock icon next to each connected peer shows the trust state: green for matched, orange for first contact (pending your approval), red triangle if the peer's identity key changed.
+Polish:
+- The "first time meeting this peer" pairing sheet from v5.2 now handles concurrent connections cleanly instead of queueing one silently behind the other.
+- The sort menu in the "Nearby" tab no longer flickers a stray empty icon on the non-selected options.
 
-Backward-compatible: connecting to a v5.0.x peer still works exactly as before. Same protocol version, same data flows.
-
-Under the hood: pet sprite rendering is now atlas-based — bundled artwork is smaller and loads faster.
+Compatibility: v5.3 still talks to v5.0–v5.2 peers exactly as before. The on-wire protocol version is unchanged.
