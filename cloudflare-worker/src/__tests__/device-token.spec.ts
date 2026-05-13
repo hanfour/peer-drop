@@ -10,7 +10,9 @@
 
 import { SELF } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
+import { encode as cborEncode } from "cbor2";
 import { issueToken, verifyToken, freshTokenPayload } from "../deviceToken";
+import { verifyAssertion } from "../appAttest";
 
 const TEST_SECRET = "test-token-secret-deterministic";
 const API_KEY = "test-api-key-12345";
@@ -67,8 +69,8 @@ describe("HMAC token round-trip", () => {
   });
 });
 
-describe("/v2/device/attest (stub mode)", () => {
-  it("returns 501 with stub flag when verifier not yet implemented", async () => {
+describe("/v2/device/attest (real verifier)", () => {
+  it("returns 400 with CBOR decode error on garbage attestation bytes", async () => {
     const resp = await SELF.fetch("https://worker.test/v2/device/attest", {
       method: "POST",
       headers: { "Content-Type": "application/json", "CF-Connecting-IP": "1.2.3.4" },
@@ -79,9 +81,9 @@ describe("/v2/device/attest (stub mode)", () => {
         challenge: btoa("fake-challenge"),
       }),
     });
-    expect(resp.status).toBe(501);
-    const body = await resp.json() as { stub?: boolean };
-    expect(body.stub).toBe(true);
+    expect(resp.status).toBe(400);
+    const body = await resp.json() as { error?: string };
+    expect(body.error?.toLowerCase()).toMatch(/cbor|decode|attestation/);
   });
 
   it("returns 400 on missing fields before reaching the verifier", async () => {
@@ -129,6 +131,166 @@ describe("/v2/device/assert (stub mode)", () => {
       body: JSON.stringify({ deviceId: "abc-12345678" }),
     });
     expect(resp.status).toBe(400);
+  });
+});
+
+describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
+  // Synthesize a real ECDSA P-256 keypair, build the assertion shape
+  // Apple's framework produces, sign it ourselves, and let the verifier
+  // chew on it. Pins the assertion math end-to-end without needing a
+  // real iOS device.
+
+  const BUNDLE_ID = "com.hanfour.peerdrop";
+  const TEAM_ID = "UK48R5KWLV";
+
+  async function rpIdHash(): Promise<Uint8Array> {
+    return new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${TEAM_ID}.${BUNDLE_ID}`)),
+    );
+  }
+
+  function buildAuthData(rpHash: Uint8Array, counter: number): Uint8Array {
+    // 32 + 1 + 4 = 37 bytes for assertion-shaped authData.
+    const buf = new Uint8Array(37);
+    buf.set(rpHash, 0);
+    buf[32] = 0;
+    buf[33] = (counter >>> 24) & 0xff;
+    buf[34] = (counter >>> 16) & 0xff;
+    buf[35] = (counter >>> 8) & 0xff;
+    buf[36] = counter & 0xff;
+    return buf;
+  }
+
+  function rawSigToDer(rawSig: Uint8Array): Uint8Array {
+    // Web Crypto returns ECDSA signatures in IEEE 1363 raw r||s (64 bytes
+    // for P-256). Apple/CBOR carries DER. Convert.
+    const r = rawSig.subarray(0, 32);
+    const s = rawSig.subarray(32, 64);
+    const encInt = (n: Uint8Array): Uint8Array => {
+      // Strip leading zeros, then re-add ONE if the high bit is set
+      // (DER INTEGERs are signed, so a high-bit byte needs the 0x00
+      // prefix to stay positive).
+      let i = 0;
+      while (i < n.length - 1 && n[i] === 0) i++;
+      let stripped = n.subarray(i);
+      if (stripped[0] & 0x80) {
+        const padded = new Uint8Array(stripped.length + 1);
+        padded.set(stripped, 1);
+        stripped = padded;
+      }
+      const tlv = new Uint8Array(2 + stripped.length);
+      tlv[0] = 0x02; tlv[1] = stripped.length; tlv.set(stripped, 2);
+      return tlv;
+    };
+    const rTLV = encInt(r);
+    const sTLV = encInt(s);
+    const out = new Uint8Array(2 + rTLV.length + sTLV.length);
+    out[0] = 0x30; out[1] = rTLV.length + sTLV.length;
+    out.set(rTLV, 2);
+    out.set(sTLV, 2 + rTLV.length);
+    return out;
+  }
+
+  async function signAssertion(privateKey: CryptoKey, authData: Uint8Array, clientData: Uint8Array): Promise<Uint8Array> {
+    const clientDataHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientData));
+    const composite = new Uint8Array(authData.length + clientDataHash.length);
+    composite.set(authData, 0);
+    composite.set(clientDataHash, authData.length);
+    const nonce = new Uint8Array(await crypto.subtle.digest("SHA-256", composite));
+    const rawSig = new Uint8Array(
+      await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privateKey, nonce),
+    );
+    return rawSigToDer(rawSig);
+  }
+
+  it("accepts a valid synthetic assertion and bumps counter", async () => {
+    const kp = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
+    );
+    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+
+    const authData = buildAuthData(await rpIdHash(), 42);
+    const clientData = new TextEncoder().encode("hello-client");
+    const sigDer = await signAssertion(kp.privateKey, authData, clientData);
+
+    const cborMap = new Map<string, Uint8Array>([
+      ["signature", sigDer],
+      ["authenticatorData", authData],
+    ]);
+    const assertion = cborEncode(cborMap);
+
+    const result = await verifyAssertion({
+      assertion,
+      clientData,
+      publicKeyDer: pubDer,
+      previousCounter: 0,
+      bundleIdentifier: BUNDLE_ID,
+      teamIdentifier: TEAM_ID,
+    });
+    expect(result.newCounter).toBe(42);
+  });
+
+  it("rejects an assertion whose counter has not advanced", async () => {
+    const kp = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
+    );
+    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+
+    const authData = buildAuthData(await rpIdHash(), 5);
+    const clientData = new TextEncoder().encode("hi");
+    const sigDer = await signAssertion(kp.privateKey, authData, clientData);
+    const assertion = cborEncode(new Map<string, Uint8Array>([
+      ["signature", sigDer],
+      ["authenticatorData", authData],
+    ]));
+
+    await expect(verifyAssertion({
+      assertion, clientData, publicKeyDer: pubDer, previousCounter: 5,
+      bundleIdentifier: BUNDLE_ID, teamIdentifier: TEAM_ID,
+    })).rejects.toThrow(/counter/i);
+  });
+
+  it("rejects an assertion signed by a different key", async () => {
+    const trueKp = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
+    );
+    const otherKp = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
+    );
+    const truePubDer = new Uint8Array(await crypto.subtle.exportKey("spki", trueKp.publicKey));
+    const authData = buildAuthData(await rpIdHash(), 1);
+    const clientData = new TextEncoder().encode("h");
+    // Sign with the OTHER key but submit the trusted pubkey.
+    const sigDer = await signAssertion(otherKp.privateKey, authData, clientData);
+    const assertion = cborEncode(new Map<string, Uint8Array>([
+      ["signature", sigDer],
+      ["authenticatorData", authData],
+    ]));
+    await expect(verifyAssertion({
+      assertion, clientData, publicKeyDer: truePubDer, previousCounter: 0,
+      bundleIdentifier: BUNDLE_ID, teamIdentifier: TEAM_ID,
+    })).rejects.toThrow(/signature/i);
+  });
+
+  it("rejects an assertion whose rpIdHash is for a different app", async () => {
+    const kp = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
+    );
+    const pubDer = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+    const fakeRpHash = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode("ZZZZZZZZZZ.com.evil.app")),
+    );
+    const authData = buildAuthData(fakeRpHash, 1);
+    const clientData = new TextEncoder().encode("h");
+    const sigDer = await signAssertion(kp.privateKey, authData, clientData);
+    const assertion = cborEncode(new Map<string, Uint8Array>([
+      ["signature", sigDer],
+      ["authenticatorData", authData],
+    ]));
+    await expect(verifyAssertion({
+      assertion, clientData, publicKeyDer: pubDer, previousCounter: 0,
+      bundleIdentifier: BUNDLE_ID, teamIdentifier: TEAM_ID,
+    })).rejects.toThrow(/rpIdHash/);
   });
 });
 

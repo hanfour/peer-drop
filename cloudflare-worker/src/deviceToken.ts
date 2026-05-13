@@ -84,63 +84,29 @@ export function freshTokenPayload(deviceId: string, scope: string = "default"): 
 }
 
 // =====================================================================
-// App Attest attestation + assertion verification — STUB
+// App Attest attestation + assertion verification
 // =====================================================================
 //
-// TODO(audit-#6 follow-up): implement using `pkijs` + `cbor2` per the
-// design in docs/plans/2026-05-13-worker-auth-redesign.md. The stub
-// below shapes the API surface so the route handlers + iOS client can
-// be wired and end-to-end-tested without the crypto fully landed.
-//
-// In stub mode every verifier throws `attestationNotImplemented`. The
-// route handlers translate that to HTTP 501 so the iOS client can
-// detect the partially-deployed state and fall back to the legacy
-// X-API-Key path during the transition window.
+// Implemented in `./appAttest.ts` using `pkijs` + `cbor2` + Web Crypto.
+// Re-exported here so route handlers keep the same import surface they
+// had when the verifier was stubbed.
 
-export interface AppAttestVerifyParams {
-  attestation: Uint8Array;     // CBOR-encoded attestation statement
-  challenge: Uint8Array;       // The clientDataHash the client signed
-  keyId: string;               // Apple-issued key identifier (base64)
-  bundleIdentifier: string;    // "com.hanfour.peerdrop"
-  teamIdentifier: string;      // "UK48R5KWLV"
-}
+export {
+  verifyAttestation as verifyAppAttestation,
+  verifyAssertion as verifyAppAttestAssertion,
+  type AttestationInput as AppAttestVerifyParams,
+  type AttestationResult as AppAttestVerifyResult,
+  type AssertionInput as AppAttestAssertionParams,
+  type AssertionResult as AppAttestAssertionResult,
+} from "./appAttest";
 
-export interface AppAttestVerifyResult {
-  publicKeyDer: Uint8Array;    // Cache this — assertions verify against it
-  receipt: Uint8Array;         // Apple receipt blob, for renew flow
-}
-
+/// Kept for back-compat with the stub-era route handlers. Will be
+/// removed once those switch to plain `Error` handling.
 export class AttestationNotImplemented extends Error {
-  constructor() {
-    super("App Attest verification not yet implemented — pkijs port pending");
+  constructor(reason: string) {
+    super(reason);
     this.name = "AttestationNotImplemented";
   }
-}
-
-/// STUB. See TODO above.
-export async function verifyAppAttestation(
-  _params: AppAttestVerifyParams,
-): Promise<AppAttestVerifyResult> {
-  throw new AttestationNotImplemented();
-}
-
-export interface AppAttestAssertionParams {
-  assertion: Uint8Array;
-  clientData: Uint8Array;
-  publicKeyDer: Uint8Array;     // From a prior `verifyAppAttestation`
-  previousCounter: number;
-  expectedRpId: string;         // SHA-256(teamId.bundleId)
-}
-
-export interface AppAttestAssertionResult {
-  newCounter: number;
-}
-
-/// STUB. See TODO above.
-export async function verifyAppAttestAssertion(
-  _params: AppAttestAssertionParams,
-): Promise<AppAttestAssertionResult> {
-  throw new AttestationNotImplemented();
 }
 
 // =====================================================================

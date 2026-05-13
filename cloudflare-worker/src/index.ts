@@ -12,7 +12,6 @@
 
 import { sendAPNs } from "./apns";
 import {
-  AttestationNotImplemented,
   freshTokenPayload,
   issueToken,
   verifyAppAttestation,
@@ -44,9 +43,13 @@ export interface Env {
   // stay on the legacy X-API-Key path.
   TOKEN_SECRET: string;
   // App identifier inputs for App Attest rpIdHash verification.
-  // Optional during the stub phase; required once verifier ships.
   APP_BUNDLE_ID?: string;       // "com.hanfour.peerdrop"
   APP_TEAM_ID?: string;         // "UK48R5KWLV"
+  // Set to "true" to also accept App Attest attestations issued by the
+  // development environment (AAGUID = "appattestdevelop"). Production
+  // worker should leave this unset / "false" so dev-build attestations
+  // never produce real tokens.
+  APP_ATTEST_ALLOW_DEV?: string;
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
@@ -618,9 +621,10 @@ export default {
         const result = await verifyAppAttestation({
           attestation: base64Decode(body.attestation),
           challenge: base64Decode(body.challenge),
-          keyId: body.keyId,
+          keyId: base64Decode(body.keyId),
           bundleIdentifier: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
           teamIdentifier: env.APP_TEAM_ID ?? "UK48R5KWLV",
+          allowDevelopmentEnvironment: env.APP_ATTEST_ALLOW_DEV === "true",
         });
         // Cache device-pubkey + counter for later assert calls.
         await env.V2_STORE.put(
@@ -637,9 +641,6 @@ export default {
         const token = await issueToken(freshTokenPayload(body.deviceId), env.TOKEN_SECRET);
         return jsonResponse({ token, expiresInSeconds: 15 * 60 }, 201);
       } catch (err) {
-        if (err instanceof AttestationNotImplemented) {
-          return jsonResponse({ error: "App Attest verification not yet implemented", stub: true }, 501);
-        }
         return jsonResponse({ error: String((err as Error).message) }, 400);
       }
     }
@@ -673,7 +674,8 @@ export default {
           clientData: base64Decode(body.clientData),
           publicKeyDer: base64Decode(meta.publicKeyDer),
           previousCounter: meta.counter,
-          expectedRpId: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
+          bundleIdentifier: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
+          teamIdentifier: env.APP_TEAM_ID ?? "UK48R5KWLV",
         });
         await env.V2_STORE.put(
           `attest:${body.deviceId}`,
@@ -683,9 +685,6 @@ export default {
         const token = await issueToken(freshTokenPayload(body.deviceId), env.TOKEN_SECRET);
         return jsonResponse({ token, expiresInSeconds: 15 * 60 }, 200);
       } catch (err) {
-        if (err instanceof AttestationNotImplemented) {
-          return jsonResponse({ error: "App Attest verification not yet implemented", stub: true }, 501);
-        }
         return jsonResponse({ error: String((err as Error).message) }, 400);
       }
     }
