@@ -41,6 +41,10 @@ struct PeerDropApp: App {
             .task {
                 await PushNotificationManager.shared.requestAuthorizationAndRegister()
                 await ConnectionMetrics.shared.fetchRemoteConfig()
+                // Drain out-of-band IAP transactions (refund, replay,
+                // family-sharing-share). Cheap; idempotent. Settings'
+                // TipJarSection drives interactive purchases separately.
+                TipJarManager.shared.startObservingTransactions()
                 // Re-fetch every hour while foregrounded.
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 3600 * 1_000_000_000)
