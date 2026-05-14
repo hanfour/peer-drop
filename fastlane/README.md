@@ -93,6 +93,14 @@ fastlane uses whatever's currently editable).
 
 Print ASC review status: live + in-flight versions + recent builds
 
+### ios diag_versions
+
+```sh
+[bundle exec] fastlane ios diag_versions
+```
+
+TEMP DIAG: list every iOS App Store version (any state, any platform)
+
 ### ios monitor
 
 ```sh
@@ -131,7 +139,9 @@ Build and upload to TestFlight (no review submission)
 [bundle exec] fastlane ios release
 ```
 
-Build and submit to App Store review
+Build and submit to App Store review (auto-release on approval)
+
+Auto-loads reviewer notes (same as submit_only). Default phased:false.
 
 ### ios submit_only
 
@@ -143,7 +153,7 @@ Submit an already-uploaded TestFlight build for review (no rebuild)
 
 Defaults: phased rollout + manual release — safe for major versions.
 
-Auto-loads reviewer notes from docs/release/v<major.minor>-reviewer-notes.md.
+Auto-loads reviewer notes from docs/release/v<version>-reviewer-notes.md (falls back to v<major.minor>).
 
 Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]
 
