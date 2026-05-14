@@ -43,9 +43,9 @@ class Keypoint:
 # Frame counts + fps (must match normalize_pixellab.py + AssetSpec.swift)
 # =====================================================================
 
-WALK_FRAMES = 8
+WALK_FRAMES = 3
 WALK_FPS = 6
-IDLE_FRAMES = 5
+IDLE_FRAMES = 3
 IDLE_FPS = 2
 
 
@@ -147,12 +147,16 @@ def _is_back(kp: Keypoint) -> bool:
 # below gracefully no-ops on them, leaving the body bob as the only
 # visible motion. Acceptable degenerate case.
 
-# Pixel amplitudes tuned for 68×68 chibi sprites. Tweak per archetype
-# if a species reads "too floppy" or "too stiff" in visual review.
-WALK_PAW_SWING_PX = 2.0       # horizontal swing
-WALK_PAW_LIFT_PX = 1.5        # vertical lift at peak
-WALK_BODY_BOB_PX = 0.5        # body sine bob
-WALK_HEAD_BOB_PX = 0.8
+# Amplitudes are in NORMALIZED [0, 1] coordinate space (PixelLab uses
+# normalized keypoints, not pixels). 0.03 = ~3% of image extent. Tune
+# per archetype if a species reads "too floppy" or "too stiff" in
+# visual review. (Previously these were pixel values which caused
+# perturbed coordinates to fly out of 0-1 range and trigger server
+# PyTorch tensor mismatch errors.)
+WALK_PAW_SWING_PX = 0.03      # horizontal swing
+WALK_PAW_LIFT_PX = 0.025      # vertical lift at peak
+WALK_BODY_BOB_PX = 0.008      # body sine bob
+WALK_HEAD_BOB_PX = 0.012
 
 
 def walk_phase(frame_index: int, total_frames: int = WALK_FRAMES) -> float:
@@ -228,8 +232,8 @@ def _swing_limb(kp: Keypoint, phase: float) -> Keypoint:
 # 5 frames @ 2 fps = 2.5-second cycle, slow enough to read as "alive
 # but not moving".
 
-IDLE_BODY_BOB_PX = 0.7
-IDLE_HEAD_SWAY_PX = 0.4
+IDLE_BODY_BOB_PX = 0.012
+IDLE_HEAD_SWAY_PX = 0.008
 
 
 def idle_phase(frame_index: int, total_frames: int = IDLE_FRAMES) -> float:

@@ -131,19 +131,24 @@ class PixelLabClient:
         *,
         reference_image_bytes: bytes,
         image_size: tuple[int, int],
-        skeleton_keypoints: list[Keypoint],
+        skeleton_frames: list[list[Keypoint]],
         view: str = "side",
         direction: str = "east",
         guidance_scale: float = 4.0,
         seed: Optional[int] = None,
-    ) -> bytes:
-        """Render one animation frame using the supplied skeleton pose.
-        Caller is responsible for assembling N frames into an animation
-        by calling this N times with different keypoint configurations."""
+    ) -> list[bytes]:
+        """Render multiple animation frames in one API call.
+        `skeleton_frames` is a list of frames where each frame is a list
+        of Keypoints. PixelLab requires minimum 3 frames per batch.
+        Returns a list of PNG bytes, one per frame, in the same order.
+        The reference image is resized to image_size — PixelLab's
+        internal tensor pipeline requires them to match."""
         body: dict[str, Any] = {
             "image_size": {"width": image_size[0], "height": image_size[1]},
-            "reference_image": _b64encode_png(reference_image_bytes),
-            "skeleton_keypoints": [kp.as_payload() for kp in skeleton_keypoints],
+            "reference_image": _b64encode_png(_resize_png(reference_image_bytes, image_size)),
+            "skeleton_keypoints": [
+                [kp.as_payload() for kp in frame] for frame in skeleton_frames
+            ],
             "view": view,
             "direction": direction,
             "guidance_scale": guidance_scale,
@@ -151,7 +156,14 @@ class PixelLabClient:
         if seed is not None:
             body["seed"] = seed
         result = self._post_json("/animate-with-skeleton", body)
-        return _decode_image_response(result)
+        # Response shape: {"usage": {...}, "images": [{...base64image...}, ...]}
+        images = result.get("images")
+        if not isinstance(images, list):
+            raise PixelLabError(
+                status=0,
+                detail=f"animate-with-skeleton expected `images` array, got {sorted(result.keys())}",
+            )
+        return [base64.b64decode(img["base64"]) for img in images]
 
     def estimate_skeleton(
         self,
@@ -240,22 +252,43 @@ class PixelLabClient:
 # ─── Helpers ────────────────────────────────────────────────────────────
 
 
-def _b64encode_png(image_bytes: bytes) -> str:
-    """PixelLab expects base64-encoded image payloads. Standard alphabet,
-    no URL-safe transforms, no data: prefix."""
-    return base64.b64encode(image_bytes).decode("ascii")
+def _resize_png(image_bytes: bytes, target_size: tuple[int, int]) -> bytes:
+    """Resize a PNG to target_size (width, height) preserving alpha.
+    PixelLab's animate pipeline expects reference_image dimensions to
+    exactly match the declared image_size."""
+    import io
+    from PIL import Image
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+    if img.size == target_size:
+        return image_bytes
+    resized = img.resize(target_size, Image.NEAREST)
+    buf = io.BytesIO()
+    resized.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _b64encode_png(image_bytes: bytes) -> dict[str, str]:
+    """PixelLab API wraps image payloads in a `Base64Image` object
+    (per OpenAPI schema): `{"type": "base64", "base64": "<encoded>"}`.
+    Standard alphabet, no URL-safe transforms, no data: prefix."""
+    return {
+        "type": "base64",
+        "base64": base64.b64encode(image_bytes).decode("ascii"),
+    }
 
 
 def _decode_image_response(result: dict[str, Any]) -> bytes:
-    """The image-producing endpoints return either:
-      - {"image": {"data": "<b64>"}} (PixelLab v1 shape)
-      - {"image_base64": "<b64>"}    (alternate shape observed in some endpoints)
-      - {"url": "<download-url>"}     (large-payload fallback)
-    Returns the decoded PNG bytes."""
-    if isinstance(result.get("image"), dict) and "data" in result["image"]:
-        return base64.b64decode(result["image"]["data"])
-    if "image_base64" in result:
-        return base64.b64decode(result["image_base64"])
+    """PixelLab image-producing endpoints return one of these shapes
+    (per OpenAPI schema):
+      - {"image": {"type": "base64", "base64": "<b64>"}}  (pixflux, rotate)
+      - {"images": [{"type": "base64", "base64": "<b64>"}]} (animate-with-skeleton, array)
+      - {"url": "<download-url>"}  (large-payload fallback, if any)
+    Returns the decoded PNG bytes of the first image."""
+    if isinstance(result.get("image"), dict) and "base64" in result["image"]:
+        return base64.b64decode(result["image"]["base64"])
+    images = result.get("images")
+    if isinstance(images, list) and images and isinstance(images[0], dict) and "base64" in images[0]:
+        return base64.b64decode(images[0]["base64"])
     if "url" in result:
         with urllib.request.urlopen(result["url"]) as resp:
             return resp.read()

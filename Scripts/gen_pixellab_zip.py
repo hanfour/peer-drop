@@ -126,12 +126,12 @@ class ClientProtocol:
         *,
         reference_image_bytes: bytes,
         image_size: tuple[int, int],
-        skeleton_keypoints: list,
+        skeleton_frames: list[list],
         view: str = "side",
         direction: str = "east",
         guidance_scale: float = 4.0,
         seed: Optional[int] = None,
-    ) -> bytes:
+    ) -> list[bytes]:
         ...
 
 
@@ -185,26 +185,28 @@ def render_direction(
         return {}
 
     out: dict[str, list[tuple[int, bytes]]] = {a: [] for a in ACTIONS}
+    from pixellab_client import Keypoint as ClientKeypoint
     for action in ACTIONS:
         n_frames = frames_for_action(action)
+        # Build all frames for this action as a batch (PixelLab requires
+        # min 3 frames per /animate-with-skeleton call).
+        skeleton_frames = []
         for frame_idx in range(n_frames):
             perturbed_kps = perturb(base, action, frame_idx)
-            # The client's Keypoint shape is structurally identical to
-            # the animator's, so we forward the dict directly (the
-            # client's `as_payload` would do the same conversion).
-            from pixellab_client import Keypoint as ClientKeypoint
             client_kps = [
                 ClientKeypoint(x=kp.x, y=kp.y, label=kp.label, z_index=kp.z_index)
                 for kp in perturbed_kps
             ]
-            png = client.animate_with_skeleton(
-                reference_image_bytes=rotation_png,
-                image_size=image_size,
-                skeleton_keypoints=client_kps,
-                direction=direction,
-            )
+            skeleton_frames.append(client_kps)
+        pngs = client.animate_with_skeleton(
+            reference_image_bytes=rotation_png,
+            image_size=image_size,
+            skeleton_frames=skeleton_frames,
+            direction=direction,
+        )
+        report.api_calls += 1
+        for frame_idx, png in enumerate(pngs):
             out[action].append((frame_idx, png))
-            report.api_calls += 1
             report.frames_written += 1
     return out
 
