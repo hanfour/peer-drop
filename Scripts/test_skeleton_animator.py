@@ -114,13 +114,15 @@ class LabelClassifierTests(unittest.TestCase):
 
 class WalkCycleTests(unittest.TestCase):
 
-    def test_walk_phase_spans_full_circle_across_8_frames(self):
-        phases = [walk_phase(i) for i in range(WALK_FRAMES)]
-        self.assertAlmostEqual(phases[0], 0.0)
-        self.assertAlmostEqual(phases[WALK_FRAMES // 2], math.pi)
-        # Last frame doesn't reach 2π exactly (modulo), but the next
-        # frame would.
+    def test_walk_phase_spans_full_circle(self):
+        # Frame 0 starts at phase 0, the WALK_FRAMES-th frame wraps back
+        # to 0 (one full cycle complete). Intermediate frames advance
+        # evenly through 0..2π.
+        self.assertAlmostEqual(walk_phase(0), 0.0)
         self.assertAlmostEqual(walk_phase(WALK_FRAMES), 0.0)
+        expected_step = 2.0 * math.pi / WALK_FRAMES
+        for i in range(WALK_FRAMES):
+            self.assertAlmostEqual(walk_phase(i), i * expected_step)
 
     def test_frame_0_returns_unmoved_skeleton(self):
         base = quadruped_skeleton()
@@ -258,10 +260,13 @@ class DispatchTests(unittest.TestCase):
         self.assertIn("jump", str(cm.exception))
 
     def test_frame_counts_match_pipeline_constants(self):
-        # The values bake into normalize_pixellab.py + AssetSpec.swift.
-        # Pin them so a refactor here doesn't silently change everything.
-        self.assertEqual(frames_for_action("walk"), 8)
-        self.assertEqual(frames_for_action("idle"), 5)
+        # PixelLab /animate-with-skeleton requires exactly 3 frames per
+        # batch (undocumented server constraint, hit during cat-bengal-adult
+        # first run). Downstream normalize + atlas + AssetSpec.swift are
+        # dynamic and read frame_count from the zip metadata, so the
+        # smaller count flows through without code changes.
+        self.assertEqual(frames_for_action("walk"), 3)
+        self.assertEqual(frames_for_action("idle"), 3)
         self.assertEqual(fps_for_action("walk"), 6)
         self.assertEqual(fps_for_action("idle"), 2)
 

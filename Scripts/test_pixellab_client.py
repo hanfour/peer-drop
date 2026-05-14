@@ -37,6 +37,18 @@ FAKE_KEY = "pl-test-1234567890"
 FAKE_PNG = b"\x89PNG\r\n\x1a\n" + b"fake-png-payload"
 
 
+def _make_real_png(size: tuple[int, int] = (16, 16)) -> bytes:
+    """Build a minimal valid PNG for tests that exercise PIL-decoding
+    paths (e.g. _resize_png). Used in place of FAKE_PNG when the code
+    under test will try to decode the image."""
+    from PIL import Image
+    import io
+    img = Image.new("RGBA", size, (128, 128, 128, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def make_response(payload: dict) -> MagicMock:
     """Build a fake urllib.request.urlopen context-manager response."""
     body = json.dumps(payload).encode("utf-8")
@@ -85,7 +97,7 @@ class RotateEndpointTests(unittest.TestCase):
     def test_rotate_posts_expected_body_and_returns_decoded_image(self):
         c = PixelLabClient(api_key=FAKE_KEY)
         b64_out = base64.b64encode(b"output-png-bytes").decode("ascii")
-        with patch("urllib.request.urlopen", return_value=make_response({"image": {"data": b64_out}})) as mock_open:
+        with patch("urllib.request.urlopen", return_value=make_response({"image": {"type": "base64", "base64": b64_out}})) as mock_open:
             result = c.rotate(
                 image_bytes=FAKE_PNG,
                 image_size=(68, 68),
@@ -108,23 +120,41 @@ class AnimateEndpointTests(unittest.TestCase):
 
     def test_animate_with_skeleton_serializes_keypoints(self):
         c = PixelLabClient(api_key=FAKE_KEY)
-        kps = [
+        kps_f0 = [
             Keypoint(x=10, y=20, label="head", z_index=2),
             Keypoint(x=30, y=40, label="hip"),
         ]
-        b64_out = base64.b64encode(b"frame-bytes").decode("ascii")
-        with patch("urllib.request.urlopen", return_value=make_response({"image_base64": b64_out})) as mock_open:
+        kps_f1 = [
+            Keypoint(x=11, y=21, label="head", z_index=2),
+            Keypoint(x=31, y=41, label="hip"),
+        ]
+        kps_f2 = [
+            Keypoint(x=12, y=22, label="head", z_index=2),
+            Keypoint(x=32, y=42, label="hip"),
+        ]
+        b64_a = base64.b64encode(b"frame-a").decode("ascii")
+        b64_b = base64.b64encode(b"frame-b").decode("ascii")
+        b64_c = base64.b64encode(b"frame-c").decode("ascii")
+        response = {"images": [
+            {"type": "base64", "base64": b64_a},
+            {"type": "base64", "base64": b64_b},
+            {"type": "base64", "base64": b64_c},
+        ]}
+        real_png = _make_real_png((64, 64))
+        with patch("urllib.request.urlopen", return_value=make_response(response)) as mock_open:
             result = c.animate_with_skeleton(
-                reference_image_bytes=FAKE_PNG,
-                image_size=(68, 68),
-                skeleton_keypoints=kps,
+                reference_image_bytes=real_png,
+                image_size=(64, 64),
+                skeleton_frames=[kps_f0, kps_f1, kps_f2],
                 direction="south",
             )
-            self.assertEqual(result, b"frame-bytes")
+            self.assertEqual(result, [b"frame-a", b"frame-b", b"frame-c"])
             req = mock_open.call_args[0][0]
             sent = json.loads(req.data.decode("utf-8"))
+            # skeleton_keypoints is a nested list: outer = frames, inner = keypoints
+            self.assertEqual(len(sent["skeleton_keypoints"]), 3)
             self.assertEqual(
-                sent["skeleton_keypoints"],
+                sent["skeleton_keypoints"][0],
                 [
                     {"x": 10, "y": 20, "label": "head", "z_index": 2},
                     {"x": 30, "y": 40, "label": "hip", "z_index": 0},
@@ -166,7 +196,7 @@ class RetryTests(unittest.TestCase):
         err = urllib.error.HTTPError(
             url="x", code=503, msg="Service Unavailable",
             hdrs=None, fp=io.BytesIO(b'{"error":"busy"}'))
-        ok_resp = make_response({"image": {"data": base64.b64encode(b"win").decode("ascii")}})
+        ok_resp = make_response({"image": {"type": "base64", "base64": base64.b64encode(b"win").decode("ascii")}})
         with patch("urllib.request.urlopen", side_effect=[err, err, ok_resp]) as mock_open:
             result = c.rotate(
                 image_bytes=FAKE_PNG, image_size=(68, 68),
@@ -202,12 +232,14 @@ class RetryTests(unittest.TestCase):
 
 class ResponseDecodingTests(unittest.TestCase):
 
-    def test_decodes_image_dict_shape(self):
-        out = _decode_image_response({"image": {"data": base64.b64encode(b"abc").decode("ascii")}})
+    def test_decodes_image_object_shape(self):
+        # pixflux / rotate response: {"image": {"type": "base64", "base64": "..."}}
+        out = _decode_image_response({"image": {"type": "base64", "base64": base64.b64encode(b"abc").decode("ascii")}})
         self.assertEqual(out, b"abc")
 
-    def test_decodes_image_base64_shape(self):
-        out = _decode_image_response({"image_base64": base64.b64encode(b"xyz").decode("ascii")})
+    def test_decodes_images_array_shape(self):
+        # animate-with-skeleton response: {"images": [{...}, ...]}
+        out = _decode_image_response({"images": [{"type": "base64", "base64": base64.b64encode(b"xyz").decode("ascii")}]})
         self.assertEqual(out, b"xyz")
 
     def test_unknown_shape_raises(self):

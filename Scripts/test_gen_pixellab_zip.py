@@ -75,20 +75,24 @@ class FakeClient:
         *,
         reference_image_bytes,
         image_size,
-        skeleton_keypoints,
+        skeleton_frames,
         view="side",
         direction="east",
         guidance_scale=4.0,
         seed=None,
-    ) -> bytes:
+    ) -> list[bytes]:
         self.animate_calls.append({
             "direction": direction,
-            "kp_count": len(skeleton_keypoints),
+            "frame_count": len(skeleton_frames),
+            "kp_count": len(skeleton_frames[0]) if skeleton_frames else 0,
             "ref_len": len(reference_image_bytes),
         })
-        # Return distinct bytes per call so the assembled zip can
-        # verify ordering.
-        return b"\x89PNG\r\n\x1a\n" + f"frame:{direction}:{seed}:{len(skeleton_keypoints)}".encode()
+        # Return one PNG per frame with distinct bytes so the assembled
+        # zip can verify ordering.
+        return [
+            b"\x89PNG\r\n\x1a\n" + f"frame:{direction}:{seed}:{i}:{len(frame)}".encode()
+            for i, frame in enumerate(skeleton_frames)
+        ]
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────
@@ -140,18 +144,21 @@ class ExtractRotationsTests(unittest.TestCase):
 
 class RenderDirectionTests(unittest.TestCase):
 
-    def test_emits_8_walk_and_5_idle_frames(self):
+    def test_emits_walk_and_idle_batches(self):
         report = GenReport(species_stage="test", output_path=Path("/tmp/x"))
         client = FakeClient()
         result = render_direction(
             client=client, direction="south",
             rotation_png=b"south-bytes", image_size=(68, 68), report=report,
         )
-        self.assertEqual(len(result["walk"]), 8)
-        self.assertEqual(len(result["idle"]), 5)
-        # 1 estimate + 8 walk + 5 idle = 14 API calls
-        self.assertEqual(report.api_calls, 14)
-        self.assertEqual(report.frames_written, 13)
+        # PixelLab /animate-with-skeleton requires exactly 3 frames per
+        # batch — see fix(scripts) commit. Each action becomes one batched
+        # API call.
+        self.assertEqual(len(result["walk"]), 3)
+        self.assertEqual(len(result["idle"]), 3)
+        # 1 estimate + 1 walk batch + 1 idle batch = 3 API calls
+        self.assertEqual(report.api_calls, 3)
+        self.assertEqual(report.frames_written, 6)
 
     def test_empty_skeleton_skips_direction(self):
         report = GenReport(species_stage="test", output_path=Path("/tmp/x"))
@@ -179,8 +186,8 @@ class BuildRawZipTests(unittest.TestCase):
             rotations = {d: d.encode() for d in DIRECTIONS}
             rendered = {
                 d: {
-                    "walk": [(i, f"w-{d}-{i}".encode()) for i in range(8)],
-                    "idle": [(i, f"i-{d}-{i}".encode()) for i in range(5)],
+                    "walk": [(i, f"w-{d}-{i}".encode()) for i in range(3)],
+                    "idle": [(i, f"i-{d}-{i}".encode()) for i in range(3)],
                 }
                 for d in DIRECTIONS
             }
@@ -196,9 +203,9 @@ class BuildRawZipTests(unittest.TestCase):
                 self.assertEqual(meta["character"]["size"], {"width": 68, "height": 68})
                 self.assertEqual(meta["export_version"], "2.0")
 
-                # 8 rotations + 8 dirs × (8 walk + 5 idle) = 8 + 104 = 112 PNGs
+                # 8 rotations + 8 dirs × (3 walk + 3 idle) = 8 + 48 = 56 PNGs
                 png_count = sum(1 for n in names if n.endswith(".png"))
-                self.assertEqual(png_count, 112)
+                self.assertEqual(png_count, 56)
 
                 # Animation slots exist + each has 8 directions.
                 anims = meta["frames"]["animations"]
@@ -237,9 +244,9 @@ class GenerateTests(unittest.TestCase):
 
             self.assertEqual(report.errors, [])
             self.assertTrue(out.is_file())
-            # 8 dirs × 14 calls each (1 estimate + 13 frames) = 112
-            self.assertEqual(report.api_calls, 112)
-            self.assertEqual(report.frames_written, 8 * 13)
+            # 8 dirs × 3 calls each (1 estimate + 1 walk batch + 1 idle batch) = 24
+            self.assertEqual(report.api_calls, 24)
+            self.assertEqual(report.frames_written, 8 * 6)
 
     def test_missing_source_zip_returns_error_report(self):
         with tempfile.TemporaryDirectory() as td:
