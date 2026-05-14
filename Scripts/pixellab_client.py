@@ -38,7 +38,7 @@ from typing import Any, Optional
 
 
 DEFAULT_BASE_URL = "https://api.pixellab.ai/v1"
-DEFAULT_TIMEOUT_SECONDS = 60
+DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BACKOFF_BASE_SECONDS = 1.0
 
@@ -239,7 +239,7 @@ class PixelLabClient:
                     time.sleep(sleep)
                     continue
                 raise PixelLabError(status=e.code, detail=detail) from e
-            except urllib.error.URLError as e:
+            except (urllib.error.URLError, TimeoutError) as e:
                 if attempt < self.max_retries - 1:
                     last_error = e
                     time.sleep(self.backoff_base_seconds * (2 ** attempt))

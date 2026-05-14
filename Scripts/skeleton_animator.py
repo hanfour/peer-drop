@@ -56,10 +56,14 @@ IDLE_FPS = 2
 
 # Patterns we look for. Listed in order of specificity so a label like
 # "left_front_paw" matches "paw" but also rejects matching just "left".
-PAW_PATTERNS = ("paw", "foot", "ankle")
-KNEE_PATTERNS = ("knee", "shin")
-HIP_PATTERNS = ("hip", "thigh")
-TORSO_PATTERNS = ("torso", "body", "spine", "chest")
+# `arm` and `leg` cover PixelLab's human-skeleton vocabulary, where the
+# limb endpoint labels are "LEFT ARM" / "RIGHT LEG" etc. — these are
+# functionally the paw-equivalent for quadruped sprites generated via
+# the API.
+PAW_PATTERNS = ("paw", "foot", "ankle", "arm", "leg")
+KNEE_PATTERNS = ("knee", "shin", "elbow")
+HIP_PATTERNS = ("hip", "thigh", "shoulder")
+TORSO_PATTERNS = ("torso", "body", "spine", "chest", "neck")
 HEAD_PATTERNS = ("head", "skull", "nose")
 TAIL_PATTERNS = ("tail",)
 
@@ -148,15 +152,14 @@ def _is_back(kp: Keypoint) -> bool:
 # visible motion. Acceptable degenerate case.
 
 # Amplitudes are in NORMALIZED [0, 1] coordinate space (PixelLab uses
-# normalized keypoints, not pixels). 0.03 = ~3% of image extent. Tune
-# per archetype if a species reads "too floppy" or "too stiff" in
-# visual review. (Previously these were pixel values which caused
-# perturbed coordinates to fly out of 0-1 range and trigger server
-# PyTorch tensor mismatch errors.)
-WALK_PAW_SWING_PX = 0.03      # horizontal swing
-WALK_PAW_LIFT_PX = 0.025      # vertical lift at peak
-WALK_BODY_BOB_PX = 0.008      # body sine bob
-WALK_HEAD_BOB_PX = 0.012
+# normalized keypoints, not pixels). 0.10 = ~10% of image extent —
+# clearly visible at 64×64 (6+ pixels). 0.03 was sub-pixel so PixelLab
+# generated near-identical frames. Tune per archetype if a species
+# reads "too floppy" or "too stiff" in visual review.
+WALK_PAW_SWING_PX = 0.10      # horizontal swing
+WALK_PAW_LIFT_PX = 0.08       # vertical lift at peak
+WALK_BODY_BOB_PX = 0.03       # body sine bob
+WALK_HEAD_BOB_PX = 0.04
 
 
 def walk_phase(frame_index: int, total_frames: int = WALK_FRAMES) -> float:
@@ -232,8 +235,8 @@ def _swing_limb(kp: Keypoint, phase: float) -> Keypoint:
 # 5 frames @ 2 fps = 2.5-second cycle, slow enough to read as "alive
 # but not moving".
 
-IDLE_BODY_BOB_PX = 0.012
-IDLE_HEAD_SWAY_PX = 0.008
+IDLE_BODY_BOB_PX = 0.04
+IDLE_HEAD_SWAY_PX = 0.03
 
 
 def idle_phase(frame_index: int, total_frames: int = IDLE_FRAMES) -> float:
