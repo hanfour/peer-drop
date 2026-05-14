@@ -77,6 +77,38 @@ Per the C1 fix (commit `dd1a7ba`), `SpriteService.decodeAnimationFrames` falls b
 
 This means **v5.0 is shippable with whatever subset of zips Phase 3 has produced at submission time.** Users with v5 see animated walking for migrated species, static (v4-style) for the rest. No broken pets.
 
+### 0.6 Pre-flight + reporting tools (2026-05-14)
+
+Two Python scripts added to make the per-zip cadence in §0.1 less manual:
+
+- **`Scripts/validate_pixellab_raw.py <raw-export.zip>`** — pre-flight check on a fresh PixelLab export BEFORE running `normalize-pixellab-zip.sh`. Catches the four classes of issue from §0.3 (48×48 size, missing rotation dirs, duplicate Walk slots, missing frame files) and prints a `✅/⚠️/❌` triage with actionable suggestions. Exits 1 on any FAIL. 14 unit cases in `Scripts/test_validate_pixellab_raw.py`.
+
+- **`Scripts/coverage_report.py [--write]`** — scans `PeerDrop/Resources/Pets/`, groups by family, shows per-family v5 / v2 / atlas counts, and ranks the next-batch candidates (sibling-of-shipped families first → adult stage → family size). With `--write`, output lands at `docs/pet-design/ai-brief/COVERAGE.md` so it can be re-generated after each batch ships without manual edits.
+
+The shields.io endpoint script (`Scripts/compute_v5_coverage.sh`, the README badge source) is unchanged — these are complementary, not replacements.
+
+### 0.7 Recommended per-zip cadence (updated 2026-05-14)
+
+```bash
+# 1. Pre-flight the raw export
+python3 Scripts/validate_pixellab_raw.py ~/Downloads/raw-export.zip
+# Fix any FAIL items in PixelLab + re-export before continuing.
+
+# 2. Normalize + drop into bundle + auto-atlas (no per-frame PNGs after this)
+Scripts/drop_v5_zip.sh ~/Downloads/raw-export.zip <species-id>-<stage>
+
+# 3. Refresh the coverage report so the next operator session sees the new state
+python3 Scripts/coverage_report.py --write
+
+# 4. Add the new zip name to expectedV5Coverage in MainBundleAssetCoverageTests.swift
+
+# 5. Commit
+git add PeerDrop/Resources/Pets/<species-id>-<stage>.zip \
+        PeerDropTests/Pet/MainBundleAssetCoverageTests.swift \
+        docs/pet-design/ai-brief/COVERAGE.md
+git commit -m "asset(v5): <species>-<stage> — <details>"
+```
+
 ---
 
 ## 1. PixelLab Subscription State
