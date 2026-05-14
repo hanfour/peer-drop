@@ -1,24 +1,27 @@
 # PixelLab API mass-gen automation (Phase F follow-up)
 
-PixelLab AI ships a public HTTP API (`api.pixellab.ai`). This doc
-covers what's automatable, what's not, and the cost/time tradeoff vs
-the existing operator-driven Apprentice-tier workflow.
+PixelLab AI ships a public HTTP API (`api.pixellab.ai`). **API access
+requires an active subscription** (confirmed via pixellab.ai/docs/faq
+2026-05-14) — the Apprentice tier we already pay for unlocks it.
+This doc covers how to use the API to chew through the mass-gen
+backlog WITHOUT spending a dollar beyond the existing subscription.
 
-Audience: operator (you) deciding whether to commit to API-driven
-mass-gen.
+Audience: operator (you) deciding whether to invest the engineering
+days that turn quota-paid-but-unused into mass-gen throughput.
 
 ## Why this matters
 
-Per `docs/pet-design/ai-brief/STATUS.md` §0.2, Phase 3 v5 mass-gen is
-~5 months of operator UI time on the Apprentice plan. The API
-theoretically collapses that to a one-evening batch run. The catch:
-the API requires the caller to supply skeleton keypoints frame-by-
-frame, whereas the UI applies built-in walk/idle skeletons in one
-click.
+The Apprentice subscription is $12/mo for 2000 generations/mo. The
+operator's natural UI pace per `docs/pet-design/ai-brief/STATUS.md`
+§0.2 is ~1-2 species/day = 100-200 zips/mo = 10k-20k API calls/mo,
+which would FAR exceed the 2000 quota — except no operator actually
+sustains daily UI sessions. Realistic UI throughput is much lower,
+so most months underutilize the quota that's been paid for.
 
-So the question isn't "can the API do it?" — yes, the endpoints exist.
-The question is "is the skeleton preset library you'd need to build
-worth it?"
+The API exists to flip that: one batch run per month consumes the
+full 2000-call quota in hours, with no extra dollars beyond the
+subscription. ~22 months calendar to finish the backlog, but ZERO
+clicking and zero overage.
 
 ## What's in this commit
 
@@ -45,35 +48,37 @@ Three Python pieces, all in `Scripts/`:
   mocks; running for-real costs money + an API key the repo doesn't
   carry.
 
-## Cost / time projection (2026-05-14)
+## Three scenarios (2026-05-14 numbers)
 
 ```
 $ python3 Scripts/pixellab_cost.py
-=== PixelLab mass-gen cost projection ===
-  Species remaining:        323
-  Generations per species:  104
-  Retry premium:            +30%
-  Total API calls:          43,669
+=== PixelLab mass-gen budget projection ===
+  Species×stages remaining: 323
+  Calls per species:        104
+  Total API calls needed:   43,669 (with 30% retry premium)
+  Apprentice plan:          $12/mo, 2,000 calls/mo included
+  Per-call overage rate:    $0.01
 
---- Option A: PixelLab API ---
-  USD per call:             $0.01
-  Total API cost:           $349
-  Wall time:                36 hr sequential / 9 hr at 4× parallel
+★ RECOMMENDED — Scenario 2: API + stay in quota
+  Calendar time:            21.8 months
+  Subscription cost:        $262 (you pay this anyway)
+  Extra dollars:            $0.00 ✓
 
---- Option B: Apprentice subscription + UI clicks ---
-  Months @ 2000/mo:         21.8
-  Subscription cost:        $262
-  Wall time:                ~21.8 months calendar
+Scenario 1: UI grinding (status quo)
+  Same calendar time as #2 (quota-bound), but daily UI clicking
+  Same total cost. Why prefer #2: one weekend/mo > clicking every day.
 
---- Delta ---
-  Cost difference:          API costs $87 more
-  Time saved:               655 days
+Scenario 3: API + accept overage (burst)
+  Wall time:                9 hours at 4× parallel
+  Extra dollars beyond
+  existing subscription:    $333 (41,669 overage calls × $0.008)
 ```
 
-The "21.8 months" assumes you hit the quota cap every month — the
-realistic operator pace per STATUS.md §0.2 is ~5 months at 1-2
-species/day. Either way, the API collapses calendar time by 1-2
-orders of magnitude.
+**The recommended path costs zero additional dollars** — the
+subscription is paid baseline, the API just lets you actually use
+all 2000 quota each month instead of leaving most of it on the
+table. The dev cost (skeleton preset library, below) is the same
+across scenarios 2 + 3; only the calendar / dollar tradeoff differs.
 
 ## The skeleton preset problem
 
@@ -127,32 +132,38 @@ the API integration just for that. **Recommend skipping Path C.**
 
 ### Path D — Don't automate, finish via UI
 
-Current trajectory. ~5 months operator time, $60 in subscription cost
-($12 × 5).
+Current trajectory. Realistic calendar ~22 months bound by Apprentice
+quota — same calendar as the API path BUT requires the operator
+clicking through 2000 generations every month manually. Same dollar
+cost as Path B (subscription only). Worst-of-both: operator labor +
+slow calendar.
 
-## Decision matrix
+## Decision matrix (subscription is paid baseline)
 
-| Path | Dev effort | Cost | Wall time | Risk |
+| Path | Dev effort | Extra $ beyond sub | Calendar | Operator labor / month |
 |---|---|---|---|---|
-| A. Hand-craft presets | 3-5 days | $349 API + dev time | 9 hr batch | Style divergence |
-| B. Estimate + perturbation | 2 days | $349 API + dev time | 9 hr batch | Style divergence (same) |
-| C. API rotations only | 1 day | trivial API | minimal saving | low |
-| D. UI subscription | 0 days | $60 (over 5 mo) | 5 months calendar | none — proven |
+| A. Hand-craft presets | 3-5 days | $0 | 22 mo | 1 weekend (batch run) |
+| **B. Estimate + perturbation** | **2 days** | **$0** | **22 mo** | **1 weekend (batch run)** |
+| B-burst. Same + accept overage | 2 days | $333 | **1 mo** | 1 weekend total |
+| C. API rotations only | 1 day | $0 | ~22 mo | UI for animations + 1 hr/mo for rotations |
+| D. UI grinding (status quo) | 0 days | $0 | 22 mo | Daily UI clicking |
 
 ## Recommendation
 
-If TestFlight expansion (#15) is a near-term goal where richer pet
-animations would help conversion: **Path B** (estimate + perturbation)
-buys you 5 months of calendar time for $349 + 2 dev-days.
+**Path B** is the answer for this audit's "no extra cost" framing:
+~2 days of skeleton-orchestration dev → zero ongoing dollars beyond
+the subscription you already pay → 22 months of unattended monthly
+batch runs instead of 22 months of daily UI clicking.
 
-If the rest of the product (transfer / chat / IAP) is the priority and
-pets are background: **Path D** (continue UI grinding) is fine —
-$60/month with no extra engineering burden, and the v5 cat-tabby-adult
-already in production proves the renderer works.
+Path B-burst is the answer if calendar time matters more than $333.
+TestFlight #15 readiness or "we want richer pets before a marketing
+push" are the realistic triggers. Defer the burst decision until the
+plain-Path-B run is producing batches and the visual quality is
+proven against the v5 cat-tabby-adult baseline.
 
 The PixelLab API client in this commit doesn't commit you either way.
-It's just the foundation that makes Paths A/B/C cheap to start when /
-if you decide to.
+It's just the foundation that makes Paths A/B cheap to start when /
+if you decide to invest the 2 dev days.
 
 ## To activate
 

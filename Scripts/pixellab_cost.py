@@ -1,27 +1,36 @@
 #!/usr/bin/env python3
-"""PixelLab API mass-gen cost calculator.
+"""PixelLab mass-gen cost projector.
 
-Surfaces the API-cost vs Apprentice-subscription-cost tradeoff so the
-operator can make an informed decision before committing to API-driven
-mass-gen. Pulls live coverage from `Scripts/coverage_report.py`'s
-underlying logic.
+Plans the v5 mass-gen budget assuming the operator already has an
+active PixelLab subscription. The Apprentice tier ($12/mo) unlocks
+the API AND gives 2000 generations/month — calls within the quota are
+free; calls over are billed per the per-call price.
 
-Defaults assume:
-  - 104 generations per species (8 walk dirs × 8 frames + 8 idle dirs × 5 frames)
-  - $0.008 per generation at 68×68 (the 2026-05-14 WebFetched rate;
-    verify against your actual usage invoice)
-  - 30% retry rate (matches v4 batch experience)
-  - 3 seconds per call sequential round-trip
+Three scenarios:
+
+  1. UI-grinding (status quo):  operator clicks each species in the
+     web UI; throughput limited by the operator's attention span,
+     usually well below the 2000/mo quota.
+
+  2. API + stay-in-quota:        the API automates UI clicking so
+     the operator hits the 2000/mo cap consistently. No overage,
+     no extra cost beyond the existing subscription. Finishes
+     calendar-faster than UI-grinding without spending more.
+
+  3. API + accept overage:       same automation but break through
+     the quota cap each month, finishing in 1-2 months by paying
+     for the calls beyond 2000.
 
 Usage:
     python3 Scripts/pixellab_cost.py
-        # default: report on the remaining v2 zips in the current bundle
+        # all three scenarios for the remaining v2 zips in the bundle
 
-    python3 Scripts/pixellab_cost.py --species 33 --price 0.008
-        # custom: 33 species at $0.008/call
+    python3 Scripts/pixellab_cost.py --species 33
+        # what-if for an arbitrary species count
 
-    python3 Scripts/pixellab_cost.py --no-retries
-        # skip the 30% retry premium (best case)
+    python3 Scripts/pixellab_cost.py --price 0.01
+        # adjust per-call price (defaults to $0.008 WebFetched 2026-05-14;
+        # verify against your actual usage invoice)
 """
 
 import argparse
@@ -94,46 +103,79 @@ def main() -> int:
     base_calls = species * args.frames
     retry_mult = 1.0 if args.no_retries else DEFAULT_RETRY_MULTIPLIER
     total_calls = int(base_calls * retry_mult)
-    api_cost = total_calls * args.price
 
-    # Time: sequential vs parallel
+    # Wall-time arithmetic for the API-driven scenarios.
     seq_seconds = total_calls * args.call_seconds
     par_seconds = seq_seconds / max(1, args.parallel)
 
-    # Apprentice tier alternative: $12/mo for 2000 quota; 5 months avg
-    # at 1-2 species/day operator pace per STATUS.md §0.2.
-    appr_months = max(1.0, total_calls / APPRENTICE_MONTHLY_QUOTA)
-    appr_cost = appr_months * APPRENTICE_MONTHLY_COST
+    # ─── Scenario 1: UI grinding (status quo per STATUS.md §0.2) ─────
+    # Apprentice quota is 2000/mo; operator UI pace is 1-2 species/day
+    # = 100-200 zips/mo = 10k-20k calls/mo, WAY above quota. Effectively
+    # bound by the quota cap. Realistic = quota-limited.
+    ui_months = max(1.0, total_calls / APPRENTICE_MONTHLY_QUOTA)
+    ui_sub_cost = ui_months * APPRENTICE_MONTHLY_COST
+    ui_overage_cost = 0.0
+    ui_total_cost = ui_sub_cost + ui_overage_cost
 
-    print(f"=== PixelLab mass-gen cost projection ===")
-    print(f"  Species remaining:        {species}")
-    print(f"  Generations per species:  {args.frames}")
+    # ─── Scenario 2: API + stay in quota ────────────────────────────
+    # Same calendar pace (quota-bound), but the operator runs one
+    # batch per month instead of daily UI sessions. Same cost as
+    # status quo because the subscription covers the quota.
+    api_quota_months = max(1.0, total_calls / APPRENTICE_MONTHLY_QUOTA)
+    api_quota_sub_cost = api_quota_months * APPRENTICE_MONTHLY_COST
+    api_quota_overage = 0.0
+    api_quota_total = api_quota_sub_cost + api_quota_overage
+
+    # ─── Scenario 3: API + accept overage ───────────────────────────
+    # Cram into a single month. 2000 free, rest at the per-call rate.
+    api_burst_overage_calls = max(0, total_calls - APPRENTICE_MONTHLY_QUOTA)
+    api_burst_overage_cost = api_burst_overage_calls * args.price
+    api_burst_sub_cost = APPRENTICE_MONTHLY_COST   # one month minimum
+    api_burst_total = api_burst_sub_cost + api_burst_overage_cost
+
+    print(f"=== PixelLab mass-gen budget projection ===")
+    print(f"  Species×stages remaining: {species}")
+    print(f"  Calls per species:        {args.frames}")
     print(f"  Retry premium:            {'+30%' if not args.no_retries else 'none (optimistic)'}")
-    print(f"  Total API calls:          {total_calls:,}")
+    print(f"  Total API calls needed:   {total_calls:,}")
+    print(f"  Apprentice plan:          ${APPRENTICE_MONTHLY_COST:.0f}/mo, {APPRENTICE_MONTHLY_QUOTA:,} calls/mo included")
+    print(f"  Per-call overage rate:    {format_dollars(args.price)}")
     print(f"")
-    print(f"--- Option A: PixelLab API (this script's domain) ---")
-    print(f"  USD per call:             {format_dollars(args.price)}")
-    print(f"  Total API cost:           {format_dollars(api_cost)}")
-    print(f"  Wall time @ {args.call_seconds:g}s/call:    {format_hours(seq_seconds)} sequential / "
-          f"{format_hours(par_seconds)} at {args.parallel}× parallel")
+    print(f"━━━ ★ RECOMMENDED ━━━ Scenario 2: API + stay in quota ━━━")
+    print(f"  Each month: one weekend batch fills the {APPRENTICE_MONTHLY_QUOTA:,}-call quota.")
+    print(f"  Calendar time:            {api_quota_months:.1f} months")
+    print(f"  Subscription cost:        {format_dollars(api_quota_sub_cost)} (you pay this anyway)")
+    print(f"  Overage cost:             $0.00")
+    print(f"  Extra dollars beyond     ")
+    print(f"  existing subscription:    $0.00 ✓")
     print(f"")
-    print(f"--- Option B: Apprentice subscription + UI clicks ---")
-    print(f"  Months @ {APPRENTICE_MONTHLY_QUOTA}/mo:     {appr_months:.1f}")
-    print(f"  Subscription cost:        {format_dollars(appr_cost)}")
-    print(f"  Wall time:                ~{appr_months:.1f} months calendar (operator's PixelLab UI time)")
+    print(f"--- Scenario 1: UI grinding (status quo) ---")
+    print(f"  Same quota cap as #2 but operator clicks each gen manually.")
+    print(f"  Calendar time:            {ui_months:.1f} months (operator-attention-bound)")
+    print(f"  Subscription cost:        {format_dollars(ui_sub_cost)}")
+    print(f"  Overage cost:             $0.00")
+    print(f"  Extra dollars:            $0.00 (same as #2)")
+    print(f"  Why prefer #2:            One weekend/mo > clicking every day")
     print(f"")
-    print(f"--- Delta ---")
-    print(f"  Cost difference:          API costs {format_dollars(api_cost - appr_cost)} more")
-    print(f"  Time saved:               {appr_months * 30 - par_seconds / 86400:.0f} days "
-          f"({appr_months:.1f} months → {par_seconds / 3600:.1f} hours)")
+    print(f"--- Scenario 3: API + accept overage (burst) ---")
+    print(f"  Fits the whole backlog in a single calendar month.")
+    print(f"  Free quota used:          {APPRENTICE_MONTHLY_QUOTA:,} calls")
+    print(f"  Overage calls:            {api_burst_overage_calls:,} × {format_dollars(args.price)}")
+    print(f"  Overage cost:             {format_dollars(api_burst_overage_cost)}")
+    print(f"  Subscription cost:        {format_dollars(api_burst_sub_cost)} (1 month)")
+    print(f"  Wall time:                {format_hours(par_seconds)} batch ({args.parallel}× parallel)")
+    print(f"  Extra dollars beyond     ")
+    print(f"  existing subscription:    {format_dollars(api_burst_overage_cost)}")
     print(f"")
     print(f"--- Caveats ---")
-    print(f"  1. API requires building skeleton_keypoints per frame manually —")
+    print(f"  1. The API requires the caller to supply skeleton_keypoints —")
     print(f"     see docs/plans/2026-05-14-pixellab-api-automation.md §Skeleton.")
     print(f"     The UI flow has skeletons baked in; the API does not.")
-    print(f"  2. Retry rate is a v4-batch heuristic; first API runs may vary.")
-    print(f"  3. Prices verify against your actual usage invoice; PixelLab's")
-    print(f"     'pricing varies with GPU time' clause applies.")
+    print(f"     That dev cost is the same across scenarios 2 + 3.")
+    print(f"  2. Retry premium is a v4-batch heuristic; first API runs may vary.")
+    print(f"  3. Apprentice 'API access requires active subscription' confirmed")
+    print(f"     via pixellab.ai/docs/faq 2026-05-14. Pricing assumes quota")
+    print(f"     covers API calls; verify against first batch's invoice.")
     return 0
 
 
