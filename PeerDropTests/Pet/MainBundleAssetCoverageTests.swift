@@ -156,6 +156,25 @@ final class MainBundleAssetCoverageTests: XCTestCase {
     /// cares about the schema version flag, not direction completeness.
     private static let expectedV5Coverage: Set<String> = [
         "cat-tabby-adult",  // commit 54f0f69 — partial (south walk only)
+        // Mass-gen batch 2026-05-15: 16 cat species via PixelLab API.
+        // cat-tabby-adult kept its existing partial v5 zip; mass-gen
+        // skipped it because its source zip had no rotations folder.
+        "cat-baby",
+        "cat-bengal-adult",
+        "cat-bengal-baby",
+        "cat-bengal-elder",
+        "cat-calico-adult",
+        "cat-calico-baby",
+        "cat-calico-elder",
+        "cat-elder",
+        "cat-persian-adult",
+        "cat-persian-baby",
+        "cat-persian-elder",
+        "cat-siamese-adult",
+        "cat-siamese-baby",
+        "cat-siamese-elder",
+        "cat-tabby-baby",
+        "cat-tabby-elder",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.

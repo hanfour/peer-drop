@@ -60,7 +60,11 @@ DIRECTIONS = (
     "north", "north-west", "west", "south-west",
 )
 ACTIONS = ("walk", "idle")
-DEFAULT_IMAGE_SIZE = (68, 68)
+# PixelLab /animate-with-skeleton only accepts canvas sizes that are
+# powers of 2 (256/128/64/32/16). The v5 system natively uses 68×68
+# sprites, so mass-gen produces 64×64 and the downstream normalize
+# step pads up to 68×68 before atlas build.
+DEFAULT_IMAGE_SIZE = (64, 64)
 
 
 @dataclass

@@ -233,8 +233,16 @@ class PixelLabClient:
                     detail = e.read().decode("utf-8")
                 except Exception:
                     pass
-                if 500 <= e.code < 600 and attempt < self.max_retries - 1:
+                # 5xx = server-side transient, exponential backoff.
+                # 429 = rate-limited, longer backoff (PixelLab's
+                # documented retry-after is up to 60s).
+                is_retryable = (
+                    (500 <= e.code < 600) or e.code == 429
+                ) and attempt < self.max_retries - 1
+                if is_retryable:
                     sleep = self.backoff_base_seconds * (2 ** attempt)
+                    if e.code == 429:
+                        sleep = max(sleep, 30.0 * (attempt + 1))  # 30s, 60s, 90s
                     last_error = e
                     time.sleep(sleep)
                     continue

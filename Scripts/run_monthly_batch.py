@@ -40,7 +40,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PETS_DIR = REPO_ROOT / "PeerDrop" / "Resources" / "Pets"
 WHITELIST_FILE = REPO_ROOT / "PeerDropTests" / "Pet" / "MainBundleAssetCoverageTests.swift"
 
-CALLS_PER_SPECIES = 112   # 8 estimate-skeleton + 64 walk + 40 idle
+CALLS_PER_SPECIES = 24    # 8 estimate-skeleton + 8 walk batches + 8 idle batches (batch mode = 3 frames per call)
 QUOTA_SAFETY_BUFFER = 50  # leave room for retries / a stuck species
 
 
