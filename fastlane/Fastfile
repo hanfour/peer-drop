@@ -371,7 +371,8 @@ platform :ios do
 
   desc "Build and submit to App Store review (auto-release on approval)"
   desc "Auto-loads reviewer notes (same as submit_only). Default phased:false."
-  lane :release do
+  desc "Pass submit:false to upload only (e.g. to attach IAPs in ASC before submit)."
+  lane :release do |options|
     # Load the ASC API key into the lane context BEFORE build_app so
     # gym can forward `-authenticationKey*` flags to xcodebuild — this
     # is what lets `-allowProvisioningUpdates` actually refresh the
@@ -451,13 +452,21 @@ platform :ios do
     )
     File.delete(asc_key_p8) if File.exist?(asc_key_p8)
 
+    # `submit: false` lets the operator pause between upload and submit —
+    # currently used to manually attach In-App Purchases via the ASC web
+    # UI (Spaceship has no IAP-attach API and the deliver action has no
+    # `in_app_purchases` parameter). After upload completes, version
+    # sits in PREPARE_FOR_SUBMISSION and the ASC web UI exposes the
+    # "App 內購買項目和訂閱項目" section. Submit via `fastlane submit_only`
+    # once IAPs are attached.
+    should_submit = options.fetch(:submit, true)
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
       skip_screenshots: true,
       skip_metadata: false,
       metadata_path: "./fastlane/metadata",
-      submit_for_review: true,
-      automatic_release: true,
+      submit_for_review: should_submit,
+      automatic_release: should_submit,
       phased_release: false,
       force: true,
       precheck_include_in_app_purchases: false,
