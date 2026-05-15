@@ -175,6 +175,24 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "cat-siamese-elder",
         "cat-tabby-baby",
         "cat-tabby-elder",
+        // Mass-gen batch 2026-05-15 (afternoon): 17 dog species via PixelLab API.
+        "dog-baby",
+        "dog-collie-adult",
+        "dog-collie-baby",
+        "dog-collie-elder",
+        "dog-dachshund-adult",
+        "dog-dachshund-baby",
+        "dog-dachshund-elder",
+        "dog-elder",
+        "dog-husky-adult",
+        "dog-husky-baby",
+        "dog-husky-elder",
+        "dog-labrador-adult",
+        "dog-labrador-baby",
+        "dog-labrador-elder",
+        "dog-shiba-adult",
+        "dog-shiba-baby",
+        "dog-shiba-elder",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
