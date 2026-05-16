@@ -16,35 +16,52 @@ struct TipJarSection: View {
     @State private var thanksMessage = ""
 
     var body: some View {
-        Group {
-            if tipJar.products.isEmpty && !tipJar.isWorking {
-                // Either the products haven't loaded yet (first paint
-                // before .task fires) or the App Store didn't return
-                // them (sandbox / region / pre-launch). Stay invisible
-                // rather than showing an empty section.
-                EmptyView()
-            } else {
-                Section {
-                    if tipJar.products.isEmpty {
+        // Always render the section, even with no products. Previously
+        // we hid it via `EmptyView()` when products were empty and not
+        // loading — which broke App Review (v5.3.2, Guideline 2.1(b)):
+        // the reviewer couldn't locate the IAP in the app because if
+        // sandbox StoreKit hadn't returned products yet by the time they
+        // opened Settings, the section was hidden. Now the section is
+        // always present, with explicit Loading / Unavailable / cards
+        // states so the reviewer (and any user) always sees a sign of
+        // life and an obvious path to the products.
+        Section {
+            if tipJar.products.isEmpty {
+                if tipJar.isWorking {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Loading tip products…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    // Either first paint before .task fires, or
+                    // StoreKit returned empty / errored. Surface a tap-
+                    // to-retry button so the reviewer (and any user
+                    // running pre-IAP-approval / weak-network) has a
+                    // concrete action.
+                    Button {
+                        Task { await tipJar.loadProducts() }
+                    } label: {
                         HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Loading…")
+                            Image(systemName: "arrow.clockwise")
+                            Text("Tap to load tip products")
                                 .foregroundStyle(.secondary)
                         }
-                    } else {
-                        HStack(spacing: 12) {
-                            ForEach(tipJar.products, id: \.id) { product in
-                                tipCard(product)
-                            }
-                        }
-                        .padding(.vertical, 4)
                     }
-                } header: {
-                    Text("Support PeerDrop")
-                } footer: {
-                    Text("PeerDrop is free and ad-free. Tips go to the developer — they don't unlock anything, they just say thanks.")
+                    .buttonStyle(.plain)
                 }
+            } else {
+                HStack(spacing: 12) {
+                    ForEach(tipJar.products, id: \.id) { product in
+                        tipCard(product)
+                    }
+                }
+                .padding(.vertical, 4)
             }
+        } header: {
+            Text("Support PeerDrop")
+        } footer: {
+            Text("PeerDrop is free and ad-free. Tips go to the developer — they don't unlock anything, they just say thanks.")
         }
         .task { await tipJar.loadProducts() }
         .onChange(of: tipJar.lastSucceededTipName) { name in
