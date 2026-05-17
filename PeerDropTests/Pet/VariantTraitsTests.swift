@@ -63,13 +63,64 @@ final class VariantTraitsTests: XCTestCase {
         XCTAssertTrue(SpeciesCatalog.variantSpecs(for: "octopus").isEmpty)
     }
 
-    func test_traits_for_returnsEmptyForExistingVariants() {
-        // Phase V.a is data-model-only: every existing variant has empty
-        // traits. Once V.b tags some variants this test gets a sibling
-        // that asserts the specific tags.
+    func test_traits_for_returnsEmptyForUntaggedVariants() {
+        // bird is single-variety with no traits; cat-bengal is the family
+        // default with no traits in Phase V.b.
         XCTAssertTrue(SpeciesCatalog.traits(for: SpeciesID("cat-bengal")).isEmpty)
-        XCTAssertTrue(SpeciesCatalog.traits(for: SpeciesID("dog-husky")).isEmpty)
+        XCTAssertTrue(SpeciesCatalog.traits(for: SpeciesID("dog-shiba")).isEmpty)
         XCTAssertTrue(SpeciesCatalog.traits(for: SpeciesID("bird")).isEmpty)
+    }
+
+    // MARK: - Phase V.b — first tagged variants
+
+    func test_taggedVariants_haveRarityTrait_2026_05_17() {
+        // Phase V.b seeds the system with these tags. Locks them so a
+        // future refactor that drops the trait shows up here.
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("cat-siamese")), .rare)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("dog-husky")), .rare)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("pig-boar")), .epic)
+    }
+
+    func test_taggedVariants_renderBorderAtCorrectColor() {
+        XCTAssertEqual(RarityOverlay.borderColor(for: SpeciesID("cat-siamese")),
+                       .systemGray3, "rare → silver border")
+        XCTAssertEqual(RarityOverlay.borderColor(for: SpeciesID("pig-boar")),
+                       .systemPurple, "epic → purple border")
+        XCTAssertNil(RarityOverlay.borderColor(for: SpeciesID("cat-tabby")),
+                     "common → no border drawn")
+    }
+
+    func test_hatchWeightedSelection_seedsHitRareVariantLessOften() {
+        // With 4 common (weight 100) + 1 rare (weight 25), the rare variant
+        // should be picked roughly 1/17 ≈ 5.9% of the time. We sample
+        // deterministically with seeds 0..<1000 and assert the rare count
+        // falls in a reasonable bracket.
+        var rareCount = 0
+        for seed: UInt32 in 0..<1000 {
+            let genome = PetGenome(body: .cat, eyes: .dot, pattern: .none, personalityGene: 0.5, seed: seed)
+            if genome.resolvedSpeciesID == SpeciesID("cat-siamese") {
+                rareCount += 1
+            }
+        }
+        // Expected ~59 (1000 * 25 / 425). Allow generous bracket since
+        // distribution is uniform on `seed % 425` so it's exactly 1000*25/425
+        // = 58.82 → 58 or 59.
+        XCTAssertGreaterThanOrEqual(rareCount, 50)
+        XCTAssertLessThanOrEqual(rareCount, 70)
+    }
+
+    func test_hatchWeightedSelection_uniformCaseUnchanged_forAllCommonFamily() {
+        // bear has 4 variants all common. Weighted pick should distribute
+        // ~250 each over 1000 seeds (same as old uniform behavior).
+        var counts: [SpeciesID: Int] = [:]
+        for seed: UInt32 in 0..<1000 {
+            let genome = PetGenome(body: .bear, eyes: .dot, pattern: .none, personalityGene: 0.5, seed: seed)
+            counts[genome.resolvedSpeciesID, default: 0] += 1
+        }
+        for (_, count) in counts {
+            XCTAssertGreaterThanOrEqual(count, 200, "Even distribution expected ≈250")
+            XCTAssertLessThanOrEqual(count, 300, "Even distribution expected ≈250")
+        }
     }
 
     func test_traits_for_unknownSpeciesReturnsEmpty() {

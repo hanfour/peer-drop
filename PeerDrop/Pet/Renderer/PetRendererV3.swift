@@ -80,7 +80,7 @@ final class PetRendererV3 {
         }
 
         let basePNG = try await loadBasePNG(species: species, stage: level, direction: direction)
-        let composited = composite(basePNG: basePNG, mood: mood)
+        let composited = composite(basePNG: basePNG, species: species, mood: mood)
         lastComposite = (key, composited)
         return composited
     }
@@ -107,7 +107,7 @@ final class PetRendererV3 {
             action: action,
             frameIndex: frameIndex
         )
-        return composite(basePNG: basePNG, mood: mood)
+        return composite(basePNG: basePNG, species: species, mood: mood)
     }
 
     private func loadAnimationFrame(
@@ -178,15 +178,27 @@ final class PetRendererV3 {
     /// identical inputs. The M4.3 caching contract (and the lastComposite
     /// memoization above) relies on this — don't substitute a non-deterministic
     /// primitive (e.g. CIContext) without also revisiting those tests.
-    private func composite(basePNG: CGImage, mood: PetMood) -> CGImage {
+    private func composite(basePNG: CGImage, species: SpeciesID, mood: PetMood) -> CGImage {
         let size = CGSize(width: basePNG.width, height: basePNG.height)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = false
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
 
-        let composited = renderer.image { _ in
+        let composited = renderer.image { ctx in
             UIImage(cgImage: basePNG).draw(in: CGRect(origin: .zero, size: size))
+
+            // Rarity border draws BETWEEN the base sprite and the mood
+            // overlay so it sits on the sprite edge but doesn't occlude
+            // the mood icon at the top-right. Returns nil for .common
+            // tier (no border).
+            if let borderColor = RarityOverlay.borderColor(for: species) {
+                let width = RarityOverlay.borderWidth(for: species)
+                let rect = CGRect(origin: .zero, size: size).insetBy(dx: width / 2, dy: width / 2)
+                ctx.cgContext.setStrokeColor(borderColor.cgColor)
+                ctx.cgContext.setLineWidth(width)
+                ctx.cgContext.stroke(rect)
+            }
 
             let side = Self.overlaySidePixels(forBaseWidth: size.width)
             let iconRect = CGRect(
