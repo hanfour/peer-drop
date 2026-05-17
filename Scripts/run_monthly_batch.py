@@ -130,7 +130,14 @@ def run_batch(
     for name in plan.candidates[:plan.fit_in_quota]:
         out = staging_dir / f"{name}-raw.zip"
         print(f"  → generating {name} ...", flush=True)
-        report = generate(name, client=client, output_path=out)
+        try:
+            report = generate(name, client=client, output_path=out)
+        except Exception as e:
+            # PixelLab can return transient timeouts past the client's
+            # internal retry budget — don't let one species crash the
+            # whole batch. Record the failure and continue.
+            report = GenReport(species_stage=name, output_path=out)
+            report.errors.append(f"unhandled exception: {type(e).__name__}: {e}")
         reports.append(report)
         marker = "✓" if not report.errors and report.output_path and report.output_path.is_file() else "✗"
         print(f"     {marker} {report.api_calls} API calls; {report.frames_written} frames",

@@ -232,6 +232,21 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "pig-potbelly-adult",
         "pig-potbelly-baby",
         "pig-potbelly-elder",
+        // Mass-gen batch 4 (2026-05-17): 14 rabbit species.
+        "rabbit-angora-adult",
+        "rabbit-angora-baby",
+        "rabbit-angora-elder",
+        "rabbit-baby",
+        "rabbit-dutch-adult",
+        "rabbit-dutch-baby",
+        "rabbit-dutch-elder",
+        "rabbit-elder",
+        "rabbit-lionhead-adult",
+        "rabbit-lionhead-baby",
+        "rabbit-lionhead-elder",
+        "rabbit-lop-adult",
+        "rabbit-lop-baby",
+        "rabbit-lop-elder",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
