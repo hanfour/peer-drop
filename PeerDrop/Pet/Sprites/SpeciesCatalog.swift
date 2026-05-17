@@ -1,5 +1,86 @@
 import Foundation
 
+// MARK: - Variant traits (Phase V.a, see docs/plans/2026-05-17-variant-traits.md)
+
+/// Collection-tier classification per variant. Affects hatching weights (rarer
+/// variants drop less often during egg-hatch) and visual treatment (border /
+/// sparkle overlay layered on the sprite at render time). Defaults to `.common`
+/// when no rarity trait is assigned to a `VariantSpec`.
+enum Rarity: Int, CaseIterable {
+    case common = 0
+    case rare = 1
+    case epic = 2
+    case legendary = 3
+
+    /// Hatching weight for the egg-system. Common variants drop ~4× as often
+    /// as rare, ~20× as often as epic, ~100× as often as legendary.
+    var hatchWeight: Int {
+        switch self {
+        case .common:    return 100
+        case .rare:      return 25
+        case .epic:      return 5
+        case .legendary: return 1
+        }
+    }
+}
+
+/// Per-variant trait that the runtime reacts to. Lets a variant differ from
+/// its family default by more than color/pattern alone — see Phase V plan
+/// for the "differentiation hook" rationale.
+enum VariantTrait: Hashable {
+    /// A decorative overlay PNG composited on top of the base sprite at the
+    /// neck/head anchor. Asset name resolves to `Pets/accessories/<name>.png`.
+    case accessory(assetName: String)
+
+    /// An extra idle animation (3 frames × 8 directions) played after the
+    /// pet has been idle for `triggerSeconds`. Asset is keyed in the species
+    /// zip's metadata.json under animations with the supplied key.
+    case uniqueIdle(animationKey: String, triggerSeconds: TimeInterval)
+
+    /// Collection rarity. Pure code (no asset) — runtime adds a border +
+    /// optional sparkle overlay based on tier.
+    case rarity(Rarity)
+}
+
+/// Declaration of one variant within a family. The legacy API
+/// `SpeciesCatalog.variants(for:)` returns `[String]` constructed from the
+/// `id` field for backward compatibility; new code that needs trait info
+/// calls `variantSpecs(for:)`.
+struct VariantSpec: Hashable {
+    let id: String
+    let traits: Set<VariantTrait>
+
+    init(_ id: String, traits: Set<VariantTrait> = []) {
+        self.id = id
+        self.traits = traits
+    }
+
+    /// Rarity tier for this variant (defaults to `.common` if no rarity
+    /// trait was assigned).
+    var rarity: Rarity {
+        for t in traits {
+            if case .rarity(let r) = t { return r }
+        }
+        return .common
+    }
+
+    /// Accessory asset name, if any. nil for variants without an accessory.
+    var accessoryAssetName: String? {
+        for t in traits {
+            if case .accessory(let name) = t { return name }
+        }
+        return nil
+    }
+
+    /// `(animationKey, triggerSeconds)` for the unique-idle trait, if any.
+    var uniqueIdle: (key: String, after: TimeInterval)? {
+        for t in traits {
+            if case .uniqueIdle(let key, let secs) = t { return (key, secs) }
+        }
+        return nil
+    }
+}
+
 /// Registry of every known species in the v4.0 PNG pipeline.
 ///
 /// Data layout: each family maps to an ordered list of sub-variety strings, with
@@ -33,7 +114,13 @@ enum SpeciesCatalog {
     private struct Family {
         /// Ordered: first element is the default sub-variety for this family.
         /// Empty for single-variety legacy families (bird, frog, octopus).
-        let variants: [String]
+        ///
+        /// Phase V.a (2026-05-17): migrated from `[String]` to `[VariantSpec]`
+        /// so each variant can carry traits (rarity, accessory, uniqueIdle).
+        /// Pre-existing variants migrated to empty-traits `VariantSpec` — no
+        /// behavior change for them. New variants can opt in by passing
+        /// `traits:` to the initializer.
+        let variants: [VariantSpec]
 
         /// PetLevels for which this family has shipped zip assets. Used by
         /// SpriteAssetResolver to determine which (species, stage) combos
@@ -48,41 +135,46 @@ enum SpeciesCatalog {
         var bundleAsSingleAsset: Bool = false
     }
 
+    /// Shorthand for the common case where a variant has no traits. Keeps
+    /// the families table readable at a glance; new variants with hooks
+    /// inline-spell `VariantSpec("name", traits: [.rarity(.rare)])`.
+    private static func v(_ id: String) -> VariantSpec { VariantSpec(id) }
+
     private static let families: [String: Family] = [
-        "bear":     Family(variants: ["brown", "black", "panda", "polar"]),
+        "bear":     Family(variants: [v("brown"), v("black"), v("panda"), v("polar")]),
         "bird":     Family(variants: [], stagesShipped: [.elder]),                          // partial coverage; bird-elder.zip
-        "cat":      Family(variants: ["tabby", "bengal", "calico", "persian", "siamese"]),
-        "cow":      Family(variants: ["highland", "holstein", "yellow"]),
-        "deer":     Family(variants: ["moose", "sika", "whitetail"]),
-        "dog":      Family(variants: ["shiba", "collie", "dachshund", "husky", "labrador"]),
-        "dragon":   Family(variants: ["western", "eastern", "fire", "ice"]),
-        "duck":     Family(variants: ["mallard", "mandarin", "yellow"]),
-        "fox":      Family(variants: ["arctic", "red", "silver"]),
+        "cat":      Family(variants: [v("tabby"), v("bengal"), v("calico"), v("persian"), v("siamese")]),
+        "cow":      Family(variants: [v("highland"), v("holstein"), v("yellow")]),
+        "deer":     Family(variants: [v("moose"), v("sika"), v("whitetail")]),
+        "dog":      Family(variants: [v("shiba"), v("collie"), v("dachshund"), v("husky"), v("labrador")]),
+        "dragon":   Family(variants: [v("western"), v("eastern"), v("fire"), v("ice")]),
+        "duck":     Family(variants: [v("mallard"), v("mandarin"), v("yellow")]),
+        "fox":      Family(variants: [v("arctic"), v("red"), v("silver")]),
         "frog":     Family(variants: [], stagesShipped: [.elder]),                          // partial coverage; frog-elder.zip
-        "hamster":  Family(variants: ["campbell", "golden", "white", "winterwhite"]),
-        "hedgehog": Family(variants: ["brown", "chocolate", "white"]),
-        "horse":    Family(variants: ["black", "chestnut", "zebra"]),
-        "lizard":   Family(variants: ["bearded", "chameleon", "gecko"]),
+        "hamster":  Family(variants: [v("campbell"), v("golden"), v("white"), v("winterwhite")]),
+        "hedgehog": Family(variants: [v("brown"), v("chocolate"), v("white")]),
+        "horse":    Family(variants: [v("black"), v("chestnut"), v("zebra")]),
+        "lizard":   Family(variants: [v("bearded"), v("chameleon"), v("gecko")]),
         "octopus":  Family(variants: [], stagesShipped: [.baby, .elder]),  // partial coverage
-        "otter":    Family(variants: ["river", "sea"]),
-        "owl":      Family(variants: ["barn", "horned", "snowy"]),
-        "parrot":   Family(variants: ["budgie", "cockatiel", "macaw"]),
-        "penguin":  Family(variants: ["crested", "emperor", "king"]),
-        "phoenix":  Family(variants: ["fire", "ice", "light"]),
-        "pig":      Family(variants: ["black", "boar", "pink", "potbelly"]),
-        "pigeon":   Family(variants: ["grey", "homing", "white"]),
-        "rabbit":   Family(variants: ["dutch", "angora", "lionhead", "lop"]),
-        "raccoon":  Family(variants: ["arctic", "standard"]),
-        "redpanda": Family(variants: ["snow", "standard"]),
-        "sheep":    Family(variants: ["goat", "merino", "woolly"]),
-        "slime":    Family(variants: ["green", "clear", "fire", "metal", "water"]),
-        "sloth":    Family(variants: ["threetoed", "twotoed"]),
-        "snake":    Family(variants: ["ball", "corn", "milk"]),
-        "squirrel": Family(variants: ["flying", "grey", "red"]),
-        "totoro":   Family(variants: ["grey", "large", "mini", "white"]),
-        "turtle":   Family(variants: ["sea", "tortoise", "water"]),
-        "unicorn":  Family(variants: ["dark", "rainbow", "white"]),
-        "wolf":     Family(variants: ["black", "grey", "white"]),
+        "otter":    Family(variants: [v("river"), v("sea")]),
+        "owl":      Family(variants: [v("barn"), v("horned"), v("snowy")]),
+        "parrot":   Family(variants: [v("budgie"), v("cockatiel"), v("macaw")]),
+        "penguin":  Family(variants: [v("crested"), v("emperor"), v("king")]),
+        "phoenix":  Family(variants: [v("fire"), v("ice"), v("light")]),
+        "pig":      Family(variants: [v("black"), v("boar"), v("pink"), v("potbelly")]),
+        "pigeon":   Family(variants: [v("grey"), v("homing"), v("white")]),
+        "rabbit":   Family(variants: [v("dutch"), v("angora"), v("lionhead"), v("lop")]),
+        "raccoon":  Family(variants: [v("arctic"), v("standard")]),
+        "redpanda": Family(variants: [v("snow"), v("standard")]),
+        "sheep":    Family(variants: [v("goat"), v("merino"), v("woolly")]),
+        "slime":    Family(variants: [v("green"), v("clear"), v("fire"), v("metal"), v("water")]),
+        "sloth":    Family(variants: [v("threetoed"), v("twotoed")]),
+        "snake":    Family(variants: [v("ball"), v("corn"), v("milk")]),
+        "squirrel": Family(variants: [v("flying"), v("grey"), v("red")]),
+        "totoro":   Family(variants: [v("grey"), v("large"), v("mini"), v("white")]),
+        "turtle":   Family(variants: [v("sea"), v("tortoise"), v("water")]),
+        "unicorn":  Family(variants: [v("dark"), v("rainbow"), v("white")]),
+        "wolf":     Family(variants: [v("black"), v("grey"), v("white")]),
     ]
 
     /// Every valid SpeciesID in the catalog. Multi-variety families contribute one
@@ -96,7 +188,7 @@ enum SpeciesCatalog {
         if entry.variants.isEmpty {
             return [SpeciesID(family)]
         }
-        return entry.variants.map { SpeciesID("\(family)-\($0)") }
+        return entry.variants.map { SpeciesID("\(family)-\($0.id)") }
     }
 
     /// Default SpeciesID for a family. For multi-variety families this is the first
@@ -105,7 +197,7 @@ enum SpeciesCatalog {
     static func familyDefault(for family: String) -> SpeciesID? {
         guard let entry = families[family] else { return nil }
         if let first = entry.variants.first {
-            return SpeciesID("\(family)-\(first)")
+            return SpeciesID("\(family)-\(first.id)")
         }
         return SpeciesID(family)
     }
@@ -124,9 +216,32 @@ enum SpeciesCatalog {
 
     /// Ordered list of sub-variety strings for a family. First element is the
     /// family default. Empty for single-variety legacy families and unknown
-    /// families.
+    /// families. Returns just the variant IDs — callers that need trait info
+    /// (rarity, accessory, uniqueIdle) should use `variantSpecs(for:)`.
     static func variants(for family: String) -> [String] {
+        (families[family]?.variants ?? []).map { $0.id }
+    }
+
+    /// Full variant specs for a family — same order as `variants(for:)` but
+    /// each entry includes the trait set declared in the catalog. Empty for
+    /// single-variety legacy families and unknown families.
+    static func variantSpecs(for family: String) -> [VariantSpec] {
         families[family]?.variants ?? []
+    }
+
+    /// Trait set for a specific SpeciesID, or `[]` if the ID is unknown or
+    /// has no traits declared. Resolves the variant by stripping the family
+    /// prefix and matching against `variantSpecs(for:)`.
+    static func traits(for speciesID: SpeciesID) -> Set<VariantTrait> {
+        let family = speciesID.family
+        let variantPart = speciesID.rawValue
+            .split(separator: "-", maxSplits: 1)
+            .dropFirst()
+            .joined(separator: "-")
+        guard !variantPart.isEmpty else { return [] }
+        return variantSpecs(for: family)
+            .first(where: { $0.id == variantPart })?
+            .traits ?? []
     }
 
     /// PetLevels with shipped zip assets for a family. Returns full
