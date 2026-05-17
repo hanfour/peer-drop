@@ -247,6 +247,16 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "rabbit-lop-adult",
         "rabbit-lop-baby",
         "rabbit-lop-elder",
+        // Mass-gen batch 5 (2026-05-17): 7 hamster species (partial —
+        // hit PixelLab monthly quota mid-batch; white/winterwhite +
+        // golden-elder deferred to next month).
+        "hamster-adult",
+        "hamster-baby",
+        "hamster-campbell-adult",
+        "hamster-campbell-baby",
+        "hamster-campbell-elder",
+        "hamster-golden-adult",
+        "hamster-golden-baby",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
