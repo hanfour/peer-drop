@@ -482,6 +482,35 @@ platform :ios do
   desc "Submit an already-uploaded TestFlight build for review (no rebuild)"
   desc "Defaults: phased rollout + manual release — safe for major versions."
   desc "Auto-loads reviewer notes from docs/release/v<version>-reviewer-notes.md (falls back to v<major.minor>)."
+  desc "Release the current PENDING_DEVELOPER_RELEASE version to App Store."
+  desc "Use after an approved version was submitted without auto-release"
+  desc "(e.g. `fastlane release submit:false` followed by manual ASC submit)."
+  lane :release_now do
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    1200,
+      in_house:    false
+    )
+
+    app_id = CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) || "com.hanfour.peerdrop"
+    app = Spaceship::ConnectAPI::App.find(app_id)
+    UI.user_error!("App not found for bundle id #{app_id}") unless app
+
+    pending = app.get_app_store_versions(
+      filter: { appStoreState: "PENDING_DEVELOPER_RELEASE" }
+    ).first
+    UI.user_error!("No PENDING_DEVELOPER_RELEASE version found.") unless pending
+
+    UI.message("Releasing v#{pending.version_string} (id #{pending.id})...")
+    pending.create_app_store_version_release_request
+    UI.success("✓ Release request created for v#{pending.version_string}. App Store will roll it out within minutes.")
+  end
+
   desc "Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]"
   desc "Example: fastlane submit_only version:4.0.0 build:1"
   lane :submit_only do |options|
