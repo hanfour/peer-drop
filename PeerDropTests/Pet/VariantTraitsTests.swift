@@ -81,6 +81,42 @@ final class VariantTraitsTests: XCTestCase {
         XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("pig-boar")), .epic)
     }
 
+    func test_taggedVariants_haveRarityTrait_2026_05_18() {
+        // Phase V.b second wave (7 new tags). Pinned to lock the
+        // 9-tagged-variants v5.3.4 baseline.
+        // Rare (silver border, hatch weight 25):
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("cat-persian")), .rare)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("dog-collie")), .rare)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("bear-panda")), .rare)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("pig-potbelly")), .rare)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("rabbit-lionhead")), .rare)
+        // Epic (purple border, hatch weight 5):
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("bear-polar")), .epic)
+        XCTAssertEqual(RarityOverlay.rarity(for: SpeciesID("fox-silver")), .epic)
+        // No legendary yet — reserved for Phase V.c new-breed surprise drop.
+    }
+
+    func test_bearDistribution_panda_rare_polar_epic() {
+        // bear has 2 common + 1 rare + 1 epic = total weight 230.
+        // brown / black ≈ 43.5% each (100/230); panda ≈ 10.9% (25/230);
+        // polar ≈ 2.2% (5/230).
+        var counts: [SpeciesID: Int] = [:]
+        for seed: UInt32 in 0..<10000 {
+            let genome = PetGenome(body: .bear, eyes: .dot, pattern: .none, personalityGene: 0.5, seed: seed)
+            counts[genome.resolvedSpeciesID, default: 0] += 1
+        }
+        let brown = counts[SpeciesID("bear-brown")] ?? 0
+        let black = counts[SpeciesID("bear-black")] ?? 0
+        let panda = counts[SpeciesID("bear-panda")] ?? 0
+        let polar = counts[SpeciesID("bear-polar")] ?? 0
+        // Sanity: weighted distribution lands close to expected ratios over 10k samples.
+        XCTAssertGreaterThan(brown + black, 8000, "common variants should dominate ≈87%")
+        XCTAssertGreaterThan(panda, 800, "panda (rare) should land ~1090 of 10000")
+        XCTAssertLessThan(panda, 1300)
+        XCTAssertGreaterThan(polar, 100, "polar (epic) should land ~217 of 10000")
+        XCTAssertLessThan(polar, 350)
+    }
+
     func test_taggedVariants_renderBorderAtCorrectColor() {
         XCTAssertEqual(RarityOverlay.borderColor(for: SpeciesID("cat-siamese")),
                        .systemGray3, "rare → silver border")
