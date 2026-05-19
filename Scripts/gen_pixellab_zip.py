@@ -234,8 +234,11 @@ def build_raw_zip(
     `rendered[direction][action]` is the list of frames for that
     direction/action.
     """
-    # Assign one UUID per action — the normalizer (heuristic_action +
-    # mtime tiebreaker) will identify them as walk/idle by frame count.
+    # Assign one UUID per action. Mass-gen produces exactly 3 frames per
+    # slot (PixelLab batch size constraint), so the normalizer's frame-
+    # count heuristic (>=6 = walk) can't tell walk from idle. We embed
+    # `_action` explicitly in each animation slot so normalize reads the
+    # label directly instead of guessing.
     action_uuids = {action: f"animation-{uuid.uuid4().hex[:8]}" for action in ACTIONS}
 
     meta = {
@@ -253,7 +256,7 @@ def build_raw_zip(
     }
 
     for action, uuid_key in action_uuids.items():
-        slot: dict[str, list[str]] = {}
+        slot: dict = {"_action": action}
         for direction, action_frames in rendered.items():
             action_list = action_frames.get(action, [])
             if not action_list:
@@ -262,7 +265,8 @@ def build_raw_zip(
                 f"animations/{uuid_key}/{direction}/frame_{frame_idx:03d}.png"
                 for frame_idx, _ in action_list
             ]
-        if slot:
+        # Slot needs at least one direction beyond the `_action` marker.
+        if len(slot) > 1:
             meta["frames"]["animations"][uuid_key] = slot
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:

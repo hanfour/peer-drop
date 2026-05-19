@@ -50,11 +50,24 @@ def total_frames(anim_dict: dict) -> int:
 
 
 def heuristic_action(anim_dict: dict) -> str:
-    """Map an animation slot to "walk" or "idle" based on per-direction frame
-    count. >=6 → walk; <6 → idle. Tuned for PixelLab presets:
-        Walk (4/6/8): 6 + 8 → walk; 4 → idle
-        Idle, Breathing Idle, Sad Idle: 4-5 → idle
+    """Map an animation slot to "walk" or "idle".
+
+    Priority:
+      1. If the slot dict carries an `_action` field (set by
+         `gen_pixellab_zip.py` for mass-gen-produced raw zips), use it
+         directly — the API client knows which slot is which and labels
+         them at build time.
+      2. Fall back to per-direction frame count. >=6 → walk; <6 → idle.
+         Tuned for PixelLab UI presets:
+            Walk (4/6/8): 6 + 8 → walk; 4 → idle
+            Idle, Breathing Idle, Sad Idle: 4-5 → idle
+         Mass-gen produces exactly 3 frames per slot (batch=3 server
+         constraint), which collides with the heuristic — both slots
+         look like idle. That's why the `_action` label was added.
     """
+    explicit = anim_dict.get("_action")
+    if explicit in ("walk", "idle"):
+        return explicit
     return "walk" if first_dir_count(anim_dict) >= HEURISTIC_WALK_MIN_FRAMES else "idle"
 
 
