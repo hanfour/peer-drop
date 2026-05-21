@@ -3806,13 +3806,20 @@ final class ConnectionManager: ObservableObject {
     ///     and we can't break interop with shipping clients.
     ///   - v5.1+ peer, no identityPublicKey on record: deny. Shouldn't
     ///     happen but the safe default is "fail closed".
-    ///   - v5.1+ peer, contact at `.unknown`: deny — user hasn't approved.
+    ///   - v5.1+ peer, no contact in store: deny. checkPeerTrust adds
+    ///     a contact for every peer-with-hello, so a missing contact
+    ///     means peer never said hello — fail closed.
     ///   - v5.1+ peer, contact `isBlocked`: deny.
-    ///   - v5.1+ peer, contact at `.linked` / `.verified`: allow.
+    ///   - v5.1+ peer, contact at `.unknown` / `.linked` / `.verified`: allow.
+    ///     Receiver-side trust on first contact is gated separately by
+    ///     `handleRemoteMessage` (line 961, `pendingFirstContact`), which
+    ///     surfaces a consent prompt before any X3DH session establishes.
     ///
-    /// Trust elevation happens via `approveLocalFirstTrust` (the user tapping
-    /// "Accept & Trust" on the SAS sheet) or by an explicit verification flow
-    /// (QR code → `.verified`, future).
+    /// Trust elevation from `.unknown → .linked` happens via the SAS
+    /// pairing sheet (`approveLocalFirstTrust` on local-Wi-Fi) or the
+    /// receiver-side approval (`approveFirstContact` on relay). Both
+    /// are quality-of-life improvements rather than send blockers as
+    /// of the 2026-05-21 hotfix — see `evaluateTrustGate` for history.
     func isPeerTrustedForUserActions(peerID: String) -> Bool {
         guard let peerConn = connections[peerID] else { return false }
         let publicKey = peerConn.peerIdentity.identityPublicKey
@@ -3834,7 +3841,31 @@ final class ConnectionManager: ObservableObject {
         if !supportsSecureChannel { return true }  // v5.0.x legacy peer
         guard publicKey != nil, let contact else { return false }
         if contact.isBlocked { return false }
-        return contact.trustLevel >= .linked
+        // Hotfix 2026-05-21 — threshold lowered from `.linked` to `.unknown`
+        // (a.k.a. "any non-blocked contact").
+        //
+        // The original `.linked` threshold relied on the local-Wi-Fi
+        // SAS sheet to elevate a peer past `.unknown`, but that sheet is
+        // never surfaced on the relay path. Cross-country users couldn't
+        // walk through it, so every chat send hit this gate and got
+        // marked .failed — pets's-tail-bug surfaced 2026-05-21 by a real
+        // user report.
+        //
+        // The receiver-side MITM defense audit-#14 was protecting against
+        // is still intact: `handleRemoteMessage` line 961 gates the first
+        // incoming envelope from an unknown peer behind
+        // `pendingFirstContact`, the user explicitly approves before the
+        // X3DH session establishes, and only then does any chat content
+        // get decrypted on the receiver. The sender-side gate here was
+        // belt-and-braces on top of that, and the braces broke the relay
+        // flow before the belt could engage.
+        //
+        // After this change: sender can send to any non-blocked contact
+        // including ones still at `.unknown`. First-trust elevation to
+        // `.linked` still happens via the SAS sheet on local-Wi-Fi and
+        // via `approveFirstContact` on the receiver side — both flows
+        // unchanged.
+        return contact.trustLevel >= .unknown
     }
 
     /// Find the live PeerConnection whose peer identity matches a public key.

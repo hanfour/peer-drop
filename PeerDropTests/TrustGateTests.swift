@@ -60,10 +60,17 @@ final class TrustGateTests: XCTestCase {
 
     // MARK: - v5.1+ peer, contact present
 
-    func test_securePeer_atUnknown_isDenied() {
-        // The audit-#14 scenario: a peer auto-added at .unknown by checkPeerTrust
-        // must not be the destination of user data until the user approves.
-        XCTAssertFalse(ConnectionManager.evaluateTrustGate(
+    func test_securePeer_atUnknown_isAllowed_afterHotfix_2026_05_21() {
+        // Hotfix 2026-05-21: gate threshold lowered from `.linked` to
+        // `.unknown`. The original `.linked` threshold required users to
+        // walk through the SAS pairing sheet, but that sheet only
+        // surfaces on the local-Wi-Fi path — relay (cross-country) users
+        // had no way to elevate past `.unknown` and every chat send hit
+        // this gate. Receiver-side trust on first contact is still gated
+        // by handleRemoteMessage's pendingFirstContact, so MITM defense
+        // is intact on the receiver side. See evaluateTrustGate's doc
+        // comment for the full history.
+        XCTAssertTrue(ConnectionManager.evaluateTrustGate(
             supportsSecureChannel: true,
             publicKey: Data(repeating: 0xAB, count: 32),
             contact: makeContact(trust: .unknown)))
