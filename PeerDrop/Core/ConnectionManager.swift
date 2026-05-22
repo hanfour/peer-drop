@@ -1157,6 +1157,16 @@ final class ConnectionManager: ObservableObject {
     func handleRemoteMessageForTesting(_ message: MailboxMessage) {
         handleRemoteMessage(message)
     }
+
+    /// Test-only: insert a `PeerConnection` into `connections` without
+    /// standing up an NWListener / NWConnection. Used by
+    /// `RelayTrustGateIntegrationTests` to drive
+    /// `isPeerTrustedForUserActions(peerID:)` end-to-end (peer-identity
+    /// extraction → `trustedContactStore` lookup → `evaluateTrustGate`)
+    /// in the relay-path scenario that the 2026-05-21 hotfix unblocked.
+    func _setConnectionForTesting(peerID: String, _ peerConnection: PeerConnection) {
+        connections[peerID] = peerConnection
+    }
     #endif
 
     func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
