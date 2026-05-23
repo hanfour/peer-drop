@@ -1,0 +1,5 @@
+{
+  "private_key_base64": "ZuHdbv1Luszs3bYoBMOEJPL3LZYof55fj5V1M/87sb4=",
+  "public_key_base64": "2Mds2dPO3W7UYqwP32fiee4pIK2BPMzVxBfgAKT1nyk=",
+  "comment": "DEVELOPMENT-ONLY Ed25519 key for signing crypto-policy blobs in dev/staging. Production keys are generated separately at v5.4 ship time and stored offline (see docs/security/crypto-policy-format.md). NEVER use this key for production policies."
+}

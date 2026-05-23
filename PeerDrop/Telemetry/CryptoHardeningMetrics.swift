@@ -1,10 +1,11 @@
 import Foundation
 import Combine
 
-/// Per-process counter store for the 22 crypto-hardening events listed
-/// in spec §8.1. Counters are keyed by `(kind, peerVersion)` so the
-/// flushed snapshot retains the per-peer-version dimension the spec
-/// requires. Thread-safe via NSLock. Snapshots flush through the
+/// Per-process counter store for the 23 crypto-hardening events (spec §8.1
+/// baseline of 22, + `policy.invariant_violation` added in PR4 review).
+/// Counters are keyed by `(kind, peerVersion)` so the flushed snapshot
+/// retains the per-peer-version dimension the spec requires.
+/// Thread-safe via NSLock. Snapshots flush through the
 /// existing ConnectionMetrics pipeline (wired in Task 1.10).
 ///
 /// Conforms to `ObservableObject` so it can be held as a `@StateObject`
@@ -36,7 +37,7 @@ public final class CryptoHardeningMetrics: ObservableObject {
         case c4ConsumedOpkPruned              = "c4.consumed_opk_pruned"
         case c4ConsumedOpkSize                = "c4.consumed_opk_size"
 
-        // policy (7)
+        // policy (8)
         case policyFetchSuccess               = "policy.fetch_success"
         case policyFetchFailure               = "policy.fetch_failure"
         case policySignatureInvalid           = "policy.signature_invalid"
@@ -44,6 +45,11 @@ public final class CryptoHardeningMetrics: ObservableObject {
         case policyValueOutOfBounds           = "policy.value_out_of_bounds"
         case policyCacheHit                   = "policy.cache_hit"
         case policyExpiredInUse               = "policy.expired_in_use"
+        /// A validly-signed blob whose policy violates a cross-field invariant
+        /// (e.g., `consumedOPKPruneWindow < spkMaxAge * 4`). Distinct from
+        /// `policyFetchFailure` (network) and `policySignatureInvalid` (tampering)
+        /// — this event signals operator misconfiguration or signed-key-with-bad-payload.
+        case policyInvariantViolation         = "policy.invariant_violation"
     }
 
     public struct Key: Hashable {

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "issuedAt": 1748000000,
+  "expiresAt": 1779536000,
+  "policy": {
+    "spkMaxAgeDays": 21,
+    "spkExpirationBehavior": "warn",
+    "opkExhaustionBehavior": {
+      "legacy": "proceedWithoutDH4",
+      "strict": "failClosed"
+    },
+    "opkRetryMaxAttempts": 5,
+    "opkRetryIntervalSeconds": 60,
+    "skippedKeyTTLDays": 30,
+    "skippedKeyMaxCount": 200,
+    "consumedOPKPruneWindowDays": 90
+  }
+}

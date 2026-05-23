@@ -17,6 +17,7 @@ Before running `fastlane release`, confirm in order:
 - [ ] **App Store Connect API key** at `fastlane/api_key.json` (gitignored — confirm it's still on your machine via `ls fastlane/api_key.json`).
 - [ ] **Code signing identity is current** — Xcode → Settings → Accounts → Apple ID still signed in, "PeerDrop" team selected, provisioning profile valid.
 - [ ] **If this release adds a new App ID capability** (Push Notifications, In-App Purchase, Sign in with Apple, etc.) — see "Adding a new App ID capability" below. v5.3 hit this with `aps-environment`.
+- [ ] **v5.4+ ONLY — Crypto-policy public key**: confirm `project.yml`'s `CryptoPolicyPublicKeys` entry is the **production** Ed25519 key, NOT the dev key committed at `cloudflare-worker/dev-signing-key.json`. See "Swapping crypto-policy keys to production" below. v5.4 is the first release that ships with this mechanism — getting this wrong means anyone with repo read access can sign policy blobs that production clients trust.
 - [ ] **Optional**: pause iCloud Drive / Time Machine to avoid I/O contention during the build.
 
 ---
@@ -185,6 +186,83 @@ The release lane now (as of `cbbadc7`) threads the ASC API key into xcodebuild v
 | `Provisioning profile doesn't include the X capability` | Step 2 not run, or run before Step 1 saved | Re-run Step 2 |
 | `No Accounts: Add a new account in Accounts settings` | xcodebuild can't talk to Apple to update provisioning | The release lane handles this since cbbadc7. If it surfaces, verify `fastlane/api_key.json` is intact |
 | `Apple App Attestation Root CA` errors during App Attest | App ID `App Attest` capability auto-enabled by Apple for all dev accounts — no Step 1 needed. If `verifyAttestation` fails for other reasons, check team ID + bundle ID match between project.yml and worker's `APP_BUNDLE_ID` / `APP_TEAM_ID` env vars |
+
+---
+
+## Swapping crypto-policy keys to production (v5.4+ only)
+
+The v5.4 crypto-policy mechanism ships with a development Ed25519 keypair at `cloudflare-worker/dev-signing-key.json`. The matching public key is in `project.yml`'s `CryptoPolicyPublicKeys` array and gets baked into `Info.plist`. **Both must be swapped before the v5.4.0 ship**, otherwise anyone with repo read access has signing authority over production policy blobs.
+
+### One-time setup (perform once for the lifetime of the production key)
+
+1. **Generate the production keypair offline** — never in this repo, never on a shared workstation:
+   ```bash
+   swift -e '
+   import Foundation; import CryptoKit
+   let k = Curve25519.Signing.PrivateKey()
+   print("private: " + k.rawRepresentation.base64EncodedString())
+   print("public:  " + k.publicKey.rawRepresentation.base64EncodedString())
+   '
+   ```
+2. **Store the private key in 1Password (or equivalent secret manager)** — note: this is the only copy. Losing it means revoking the matching public key in a follow-up build and re-signing everything.
+3. **Note the public key base64** — that's what goes in `project.yml`.
+
+### Pre-ship steps (perform once per release that touches the public-key set)
+
+1. **Edit `project.yml`** — replace the dev public key in `CryptoPolicyPublicKeys` with the production public key. During a key-rotation window, ship BOTH the old and new public keys in the array so the cached blob from before-the-rotation still verifies:
+   ```yaml
+   CryptoPolicyPublicKeys:
+     - <production-public-key-base64>
+     # Optional rotation window: keep the previous prod key for 30 days
+     # - <previous-production-public-key-base64>
+   ```
+2. **Re-sign `cloudflare-worker/bundled-default-policy.signed.json`** with the production private key. Save the production private key to a temp file on your workstation (NEVER commit), run:
+   ```bash
+   # Write the production private key to a temp file (NEVER commit)
+   cat > /tmp/prod-signing-key.json <<EOF
+   { "private_key_base64": "<prod-private-key-base64>" }
+   EOF
+   chmod 600 /tmp/prod-signing-key.json
+
+   # Sign
+   swift tools/sign-crypto-policy.swift \
+       cloudflare-worker/bundled-default-policy.json \
+       /tmp/prod-signing-key.json \
+     > cloudflare-worker/bundled-default-policy.signed.json
+
+   # Wipe the temp file
+   rm /tmp/prod-signing-key.json
+   ```
+3. **Regenerate the inlined TS constant** so the worker bundle picks up the new signed blob:
+   ```bash
+   cd cloudflare-worker && npm run prebuild && cd ..
+   ```
+4. **Run `xcodegen generate`** so `Info.plist` picks up the new public key from `project.yml`.
+5. **Verify locally**:
+   ```bash
+   xcodebuild test -scheme PeerDrop -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+     -only-testing:PeerDropTests/SignCryptoPolicyToolTests
+   ```
+   The `test_bundledDefaultSignedBlob_verifiesAgainstBundledPublicKey` test acts as a CI tripwire: it loads the signed blob, reads the bundled `Info.plist` public keys, and verifies — if you swapped the public key but forgot to re-sign (or vice versa), this fails.
+
+### Post-ship — deploy the worker
+
+Only after the IPA is uploaded and accepted by App Store Connect:
+
+```bash
+cd cloudflare-worker
+npx wrangler deploy --env production
+```
+
+If the bundled-default blob is sufficient for v5.4.0 ship, no `CRYPTO_POLICY_JSON` secret is needed yet. Operator overrides can be applied later via `wrangler secret put CRYPTO_POLICY_JSON --env production` per `docs/security/crypto-policy-format.md`.
+
+### Rolling back the public key
+
+If the production private key is lost or compromised:
+1. Generate a new keypair (Section "One-time setup" above).
+2. Ship a build with the NEW public key in `project.yml` (drop the compromised one entirely — no rotation window since the threat model is "the old key is in attacker hands").
+3. Re-sign the bundled-default blob and any worker-served override.
+4. The next time clients fetch, the new blob is trusted. Clients still running the previous build only trust the compromised key — they keep working but with whatever policy was last verified. Force-quit / reinstall as needed for high-risk fleets.
 
 ---
 

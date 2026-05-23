@@ -18,7 +18,17 @@ struct PeerDropApp: App {
         // NOTE: metrics are wired separately — StateObject initializers cannot
         // reference other instance properties (Swift restriction). Pass nil here;
         // the metrics path is exercised by SecurityPolicyStore's own unit tests.
-        return SecurityPolicyStore(storageDirectory: dir, publicKeys: bundledKeys, metrics: nil)
+        // Reuse the worker URL that the rest of the app uses (UserDefaults
+        // override takes precedence; falls back to the production hardcoded URL).
+        let workerURLString = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+            ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
+        let workerURL = URL(string: workerURLString)
+        return SecurityPolicyStore(
+            storageDirectory: dir,
+            publicKeys: bundledKeys,
+            metrics: nil,
+            baseURL: workerURL
+        )
     }()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
