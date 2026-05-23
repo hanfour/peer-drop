@@ -11,12 +11,15 @@ import Foundation
 /// - No whitespace anywhere.
 /// - Arrays preserve insertion order.
 /// - Supported leaf types: `String`, `Int` / `Int64`, `UInt32` / `UInt64`,
-///   `Double`, `Bool`, `NSNull`. Other types (e.g., `Date`) must be
-///   pre-serialized to strings by the caller.
+///   `Bool`, `NSNull`. Other types (`Double`, `Float`, `Date`, custom)
+///   must be pre-serialized to strings by the caller.
 ///
-/// NOT included from RFC 8785: number canonicalization (we don't emit Doubles
-/// in policy data so the JCS number rules don't apply here). If that becomes
-/// necessary, switch to a full JCS implementation.
+/// **`Double`/`Float` rejected by design.** Cross-language JSON
+/// round-tripping of floats is unreliable (Swift may emit `1.5` while a
+/// JS canonicalizer emits `1.5000000000000002`). The policy schema
+/// currently has no float fields; if one is added later, format it as a
+/// string at the caller side and adopt a full JCS number canonicalization
+/// here.
 public enum CanonicalJSON {
 
     public enum Error: Swift.Error {
@@ -54,9 +57,9 @@ public enum CanonicalJSON {
              is UInt, is UInt8, is UInt16, is UInt32, is UInt64:
             return v
         case is Double, is Float:
-            // We currently emit no floats in policy. If a future caller does,
-            // they should pre-format the value to a String and pass that.
-            return v
+            // Reject: cross-language float canonicalization is unreliable.
+            // Caller must pre-format any float-valued field as a String.
+            throw Error.unsupportedType("Double/Float — pre-format as String at the caller")
         default:
             throw Error.unsupportedType(String(describing: type(of: v)))
         }

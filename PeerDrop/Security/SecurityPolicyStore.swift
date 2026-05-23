@@ -36,22 +36,38 @@ public final class SecurityPolicyStore: ObservableObject {
         self.baseURL = baseURL
         self.urlSession = urlSession
         // Synchronous boot load — read + verify cache, or fall back to bundled default.
-        self.current = Self.loadFromCacheOrBundledV2(
+        self.current = SecurityPolicyStore.loadFromCacheOrBundled(
             directory: storageDirectory,
             publicKeys: publicKeys,
             metrics: metrics
         )
-        // Schedule the async fetch + 24h periodic refresh if a baseURL is
+        // Schedule the async fetch + adaptive refresh loop if a baseURL is
         // configured. Tests that don't want the network leg leave baseURL nil.
+        //
+        // The loop runs at 24h cadence on success. After a failure, switches to
+        // exponential backoff (1m → 2m → 4m → ... capped at 1h) until the next
+        // success resets the counter. This means a transient boot-time network
+        // hiccup doesn't strand the client on bundled defaults for 24h.
         if baseURL != nil {
             self.refreshTask = Task { [weak self] in
+                var consecutiveFailures = 0
                 // Initial fetch.
-                await self?.fetchAndUpdate()
-                // Periodic refresh every 24h until cancelled.
+                if let succeeded = await self?.fetchAndUpdate() {
+                    consecutiveFailures = succeeded ? 0 : 1
+                }
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 24 * 3600 * 1_000_000_000)
+                    let intervalSeconds: UInt64
+                    if consecutiveFailures == 0 {
+                        intervalSeconds = 24 * 3600              // happy path: once per day
+                    } else {
+                        let backoff = min(60 * (1 << min(consecutiveFailures - 1, 6)), 3600)
+                        intervalSeconds = UInt64(backoff)        // 60s → 120s → ... → 3600s cap
+                    }
+                    try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
                     if Task.isCancelled { break }
-                    await self?.fetchAndUpdate()
+                    if let succeeded = await self?.fetchAndUpdate() {
+                        consecutiveFailures = succeeded ? 0 : consecutiveFailures + 1
+                    }
                 }
             }
         }
@@ -67,9 +83,12 @@ public final class SecurityPolicyStore: ObservableObject {
 extension SecurityPolicyStore {
 
     /// One-shot async fetch + parse + publish. Called at boot (after sync
-    /// cache load) and every 24h while the app is foregrounded.
-    public func fetchAndUpdate() async {
-        guard let baseURL = baseURL else { return }
+    /// cache load) and from the periodic refresh loop. Returns `true` on a
+    /// fully-successful update, `false` on any error path (the caller's
+    /// backoff logic uses this to decide the next sleep interval).
+    @discardableResult
+    public func fetchAndUpdate() async -> Bool {
+        guard let baseURL = baseURL else { return false }
         let url = baseURL.appendingPathComponent("v2/config/crypto-policy")
 
         let data: Data
@@ -77,12 +96,12 @@ extension SecurityPolicyStore {
             let (responseData, response) = try await urlSession.data(from: url)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 metrics?.record(.policyFetchFailure)
-                return
+                return false
             }
             data = responseData
         } catch {
             metrics?.record(.policyFetchFailure)
-            return
+            return false
         }
 
         // Parse + verify.
@@ -91,13 +110,19 @@ extension SecurityPolicyStore {
             parsed = try SecurityPolicyStore.parseSignedPolicy(data, publicKeys: publicKeys)
         } catch SecurityPolicyStore.ParseError.invalidSignature {
             metrics?.record(.policySignatureInvalid)
-            return
+            return false
         } catch SecurityPolicyStore.ParseError.unsupportedSchemaVersion {
             metrics?.record(.policyVersionUnsupported)
-            return
+            return false
+        } catch SecurityPolicyStore.ParseError.invariantViolation {
+            // Validly-signed blob with a cross-field invariant violation —
+            // distinct from network failures (operator misconfiguration or
+            // signed-key-with-bad-payload). PR4-review-follow-up event.
+            metrics?.record(.policyInvariantViolation)
+            return false
         } catch {
             metrics?.record(.policyFetchFailure)
-            return
+            return false
         }
 
         // Apply local bounds clamping. Telemetry for any out-of-range field.
@@ -117,6 +142,7 @@ extension SecurityPolicyStore {
         // Already on @MainActor — update current directly.
         self.current = merged
         metrics?.record(.policyFetchSuccess)
+        return true
     }
 
     private func persistCache(_ blob: Data) async {
@@ -128,7 +154,7 @@ extension SecurityPolicyStore {
     /// signed blob from disk, verifies the signature, applies clamp + merge,
     /// and returns the resulting policy. Any error path falls back to bundled
     /// default.
-    fileprivate static func loadFromCacheOrBundledV2(
+    fileprivate static func loadFromCacheOrBundled(
         directory: URL,
         publicKeys: [Data],
         metrics: CryptoHardeningMetrics?

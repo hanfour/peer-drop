@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import PeerDrop
 
 @MainActor
@@ -113,6 +114,69 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
         await store.fetchAndUpdate()
         XCTAssertEqual(store.current, .bundledDefault)
         XCTAssertEqual(metrics.snapshot().counters["policy.fetch_failure"], 1)
+    }
+
+    func test_fetch_invariantViolation_recordsDistinctMetric() async throws {
+        // PR4-review-follow-up: parseSignedPolicy throws .invariantViolation
+        // for a validly-signed blob whose policy violates a cross-field
+        // invariant. fetchAndUpdate routes this to a distinct metric
+        // (policy.invariant_violation), not the generic fetch_failure bucket.
+        let workspaceURL = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let devKeyURL = workspaceURL.appendingPathComponent("cloudflare-worker/dev-signing-key.json")
+        struct Key: Codable {
+            let private_key_base64: String
+            let public_key_base64: String
+        }
+        let keyData = try Data(contentsOf: devKeyURL)
+        let key = try JSONDecoder().decode(Key.self, from: keyData)
+        let privKey = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: Data(base64Encoded: key.private_key_base64)!
+        )
+        let pubKey = Data(base64Encoded: key.public_key_base64)!
+
+        // pruneWindow=90 < spkMaxAge=30 * 4 = 120 → invariant violation.
+        let badPolicy = SecurityPolicy(
+            spkMaxAgeDays: 30,
+            spkExpirationBehavior: .warn,
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 5,
+            opkRetryIntervalSeconds: 60,
+            skippedKeyTTLDays: 30,
+            skippedKeyMaxCount: 200,
+            consumedOPKPruneWindowDays: 90
+        )
+        let policyJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(badPolicy)) as! [String: Any]
+        let payloadDict: [String: Any] = [
+            "schemaVersion": 1,
+            "issuedAt": 1_748_000_000,
+            "expiresAt": 1_750_592_000,
+            "policy": policyJSON
+        ]
+        let canonical = try CanonicalJSON.serialize(payloadDict)
+        let signature = try privKey.signature(for: canonical).base64EncodedString()
+        var blobDict = payloadDict
+        blobDict["signature"] = signature
+        let blob = try JSONSerialization.data(withJSONObject: blobDict, options: [.sortedKeys])
+        MockURLProtocol.responseData = blob
+
+        let metrics = CryptoHardeningMetrics()
+        let store = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics,
+            baseURL: URL(string: "https://example.com")!,
+            urlSession: makeSession()
+        )
+        _ = await store.fetchAndUpdate()
+        XCTAssertEqual(store.current, .bundledDefault, "invalid policy must NOT replace bundled default")
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.counters["policy.invariant_violation"], 1,
+                       "invariant violations must route to their dedicated metric, not policy.fetch_failure")
+        XCTAssertNil(snap.counters["policy.fetch_failure"],
+                     "invariant violation must NOT increment the generic fetch_failure bucket")
     }
 
     func test_boot_reads_cachedBlob_intoCurrent() throws {

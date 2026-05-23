@@ -13,9 +13,9 @@ final class CryptoHardeningMetricsTests: XCTestCase {
         XCTAssertEqual(snapshot.counters["c1.spk_timestamp_too_old"], 1)
     }
 
-    func test_eventKindCount_is_22() {
-        XCTAssertEqual(CryptoHardeningMetrics.EventKind.allCases.count, 22,
-                       "Spec §8.1 requires exactly 22 events")
+    func test_eventKindCount_is_23() {
+        XCTAssertEqual(CryptoHardeningMetrics.EventKind.allCases.count, 23,
+                       "Spec §8.1 baseline 22 events + 1 added in PR4 review (policy.invariant_violation)")
     }
 
     func test_recordIncrements_perPeerVersion() {
