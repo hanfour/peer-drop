@@ -91,4 +91,47 @@ final class OutboundRetryQueueTests: XCTestCase {
         let all = await queue.all()
         XCTAssertEqual(all.count, 0)
     }
+
+    // MARK: - runRetryTick tests
+
+    func test_retryTick_invokesCallback_perEntry() async throws {
+        let queue = try await OutboundRetryQueue(storageURL: tmpURL)
+        let e1 = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
+        let e2 = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "b", payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
+        try await queue.enqueue(e1)
+        try await queue.enqueue(e2)
+
+        var attempted = 0
+        await queue.runRetryTick { _ in
+            attempted += 1
+            return .success
+        }
+        XCTAssertEqual(attempted, 2)
+        let remaining = await queue.all()
+        XCTAssertEqual(remaining.count, 0, "successful entries should be removed")
+    }
+
+    func test_retryTick_failure_incrementsAttemptCount() async throws {
+        let queue = try await OutboundRetryQueue(storageURL: tmpURL)
+        let entry = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
+        try await queue.enqueue(entry)
+
+        await queue.runRetryTick { _ in .failure }
+        let updated = await queue.all().first
+        XCTAssertEqual(updated?.attemptCount, 1)
+    }
+
+    func test_retryTick_alreadyRemoved_doesNotBumpCount() async throws {
+        let queue = try await OutboundRetryQueue(storageURL: tmpURL)
+        let entry = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", payloadData: Data(), attemptCount: 3, firstAttemptAt: Date())
+        try await queue.enqueue(entry)
+
+        await queue.runRetryTick { e in
+            // Simulate the max-attempts-hit case: handler removes the entry itself
+            try? await queue.remove(id: e.id)
+            return .alreadyRemoved
+        }
+        let remaining = await queue.all()
+        XCTAssertEqual(remaining.count, 0)
+    }
 }

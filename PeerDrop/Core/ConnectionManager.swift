@@ -296,6 +296,96 @@ final class ConnectionManager: ObservableObject {
     /// is instrumented.
     var cryptoMetrics: CryptoHardeningMetrics?
 
+    // MARK: - OPK Retry Queue (Task 5.3 / PR5)
+
+    /// Persistent queue for messages whose X3DH initiation failed due to OPK
+    /// exhaustion. Assigned async-post-init from PeerDropApp.onAppear, mirroring
+    /// the policyStore / cryptoMetrics wiring pattern.
+    var outboundRetryQueue: OutboundRetryQueue?
+
+    /// Background task driving periodic retry ticks.
+    private var retryLoopTask: Task<Void, Never>?
+
+    private var activePolicyOrDefault: SecurityPolicy {
+        policyStore?.current ?? .bundledDefault
+    }
+
+    /// Start the periodic OPK retry loop. Called from `PeerDropApp.onAppear`
+    /// after the queue is assigned. Idempotent — calling twice cancels and
+    /// re-starts the previous loop.
+    func startRetryLoop() {
+        retryLoopTask?.cancel()
+        retryLoopTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let intervalSeconds = self?.activePolicyOrDefault.opkRetryIntervalSeconds ?? 60
+                try? await Task.sleep(nanoseconds: UInt64(intervalSeconds) * 1_000_000_000)
+                if Task.isCancelled { break }
+                await self?.tickRetryQueue()
+            }
+        }
+    }
+
+    /// Cancel the periodic retry loop. Called when the app moves to background
+    /// (or from tests).
+    func stopRetryLoop() {
+        retryLoopTask?.cancel()
+        retryLoopTask = nil
+    }
+
+    private func tickRetryQueue() async {
+        guard let queue = outboundRetryQueue else { return }
+        let policy = activePolicyOrDefault
+        let maxAttempts = policy.opkRetryMaxAttempts
+        await queue.runRetryTick { [weak self] entry in
+            guard let self = self else { return .failure }
+            // Check max-attempts BEFORE retrying — don't re-attempt past the cap.
+            if entry.attemptCount >= maxAttempts {
+                self.cryptoMetrics?.record(.c2OpkRetryExhausted, peerVersion: .unknown)
+                try? await queue.remove(id: entry.id)
+                // Task 5.4 will wire the UI banner here.
+                await self.surfaceC2ExhaustedBanner(for: entry)
+                return .alreadyRemoved
+            }
+            // Otherwise attempt to re-send.
+            do {
+                try await self.retrySendEnvelope(entry)
+                self.cryptoMetrics?.record(.c2OpkRetrySucceeded, peerVersion: .unknown)
+                return .success
+            } catch {
+                return .failure
+            }
+        }
+    }
+
+    /// Hook for the C2-exhausted UI banner. Concrete implementation lands
+    /// in Task 5.4; for PR5 it logs only.
+    @MainActor
+    private func surfaceC2ExhaustedBanner(for entry: OutboundRetryQueue.Entry) async {
+        // Task 5.4: assign to a @Published `pendingC2ExhaustedBanner` property
+        // that the UI subscribes to. For now, log + record metric only.
+    }
+
+    /// Attempt to re-encrypt + send a queue entry.
+    ///
+    /// Production path (lands in the send-path refactor alongside PR7 peer-version
+    /// detection):
+    ///   1. Re-fetch recipient's pre-key bundle via MailboxClient.
+    ///   2. Call remoteSessionManager.initiateSession(contactId:peerMailboxId:).
+    ///   3. If OPK still nil → throws X3DH.InitiationError.opkExhausted → caller re-enqueues.
+    ///   4. If success → encrypt via remoteSessionManager.encrypt + send via MailboxClient.
+    ///
+    /// For PR5, this stub always throws so the retry loop keeps attempting until
+    /// max-attempts are hit; the full implementation will replace this when the
+    /// per-peer version detection lands in PR7.
+    private func retrySendEnvelope(_ entry: OutboundRetryQueue.Entry) async throws {
+        // TODO(PR7): implement full re-initiation + send once per-peer version
+        // detection is available. The retry queue + loop infrastructure ships
+        // here so Task 5.4 (UI) and PR7 (send-path) can piggyback.
+        throw RetrySendError.notImplemented
+    }
+
+    private enum RetrySendError: Error { case notImplemented }
+
     // MARK: - Typing Indicator State
 
     private var typingDebounceTask: Task<Void, Never>?
@@ -1264,11 +1354,32 @@ final class ConnectionManager: ObservableObject {
         // 5. Add trusted contact
         trustedContactStore.add(fetchedContact)
 
-        // 6. Initiate X3DH session
-        let result = try await remoteSessionManager.initiateSession(
-            contactId: fetchedContact.id.uuidString,
-            peerMailboxId: invite.mailboxId
-        )
+        // 6. Initiate X3DH session — may throw opkExhausted when peer's OPK list
+        // is empty AND the fail-closed policy applies. Catch and enqueue so the
+        // retry loop (Task 5.3) will re-attempt once OPKs are replenished.
+        let result: RemoteSessionManager.InitiateResult
+        do {
+            result = try await remoteSessionManager.initiateSession(
+                contactId: fetchedContact.id.uuidString,
+                peerMailboxId: invite.mailboxId
+            )
+        } catch X3DH.InitiationError.opkExhausted {
+            // Greeting bytes to re-send once X3DH succeeds on retry.
+            let greetingBytes = String(localized: "Connected via invite link").data(using: .utf8) ?? Data()
+            if let queue = outboundRetryQueue {
+                let entry = OutboundRetryQueue.Entry(
+                    id: UUID(),
+                    recipientMailboxId: invite.mailboxId,
+                    payloadData: greetingBytes,
+                    attemptCount: 0,
+                    firstAttemptAt: Date()
+                )
+                try? await queue.enqueue(entry)
+            }
+            // Task 5.4: surface a "queued for retry" UI banner here.
+            // Bail out — the retry loop will complete the handshake.
+            return
+        }
 
         // 7. Send initial encrypted greeting
         let greeting = String(localized: "Connected via invite link").data(using: .utf8)!

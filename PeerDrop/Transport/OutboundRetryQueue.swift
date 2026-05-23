@@ -99,3 +99,41 @@ actor OutboundRetryQueue {
         try blob.write(to: storageURL, options: .atomic)
     }
 }
+
+// MARK: - Retry Tick
+
+extension OutboundRetryQueue {
+
+    public enum RetryResult: Equatable {
+        case success
+        case failure
+        /// Special: the caller already removed the entry (e.g., max attempts hit
+        /// and the caller surfaced an exhausted UI banner). Don't bump
+        /// attemptCount; treat as no-op.
+        case alreadyRemoved
+    }
+
+    /// Iterate every entry, calling `handler` for each. Removes entries on
+    /// `.success`, increments `attemptCount` on `.failure`. Handler is
+    /// responsible for any user-visible side effects (UI banner, metric
+    /// recording, etc.) — the queue only tracks retry counts.
+    ///
+    /// Operates on a snapshot of the entries — handler can safely cause
+    /// new enqueues without interfering with this iteration.
+    public func runRetryTick(handler: (Entry) async -> RetryResult) async {
+        let snapshot = entries
+        for entry in snapshot {
+            let result = await handler(entry)
+            switch result {
+            case .success:
+                try? remove(id: entry.id)
+            case .failure:
+                var updated = entry
+                updated.attemptCount += 1
+                try? update(updated)
+            case .alreadyRemoved:
+                continue
+            }
+        }
+    }
+}
