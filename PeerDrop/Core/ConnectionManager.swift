@@ -284,6 +284,18 @@ final class ConnectionManager: ObservableObject {
     private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
     private(set) lazy var remoteSessionManager = RemoteSessionManager(preKeyStore: preKeyStore)
 
+    // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
+
+    /// Policy store injected at App startup. `nil` in unit-test contexts where
+    /// only specific behaviours are under test. Future tasks (PR3, PR5, PR6)
+    /// read `policyStore?.current` to gate crypto decisions.
+    let policyStore: SecurityPolicyStore?
+
+    /// Metrics sink for the 22 crypto-hardening telemetry events (spec §8.1).
+    /// `nil` in unit-test contexts. Wired by future tasks as each event site
+    /// is instrumented.
+    let cryptoMetrics: CryptoHardeningMetrics?
+
     // MARK: - Typing Indicator State
 
     private var typingDebounceTask: Task<Void, Never>?
@@ -291,7 +303,13 @@ final class ConnectionManager: ObservableObject {
 
     private static let transferHistoryKey = "peerDropTransferHistory"
 
-    init() {
+    init(
+        policyStore: SecurityPolicyStore? = nil,
+        cryptoMetrics: CryptoHardeningMetrics? = nil
+    ) {
+        self.policyStore = policyStore
+        self.cryptoMetrics = cryptoMetrics
+
         let certManager = CertificateManager()
         self.localIdentity = .local(certificateFingerprint: certManager.fingerprint)
 

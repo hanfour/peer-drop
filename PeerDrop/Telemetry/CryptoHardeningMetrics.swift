@@ -1,11 +1,16 @@
 import Foundation
+import Combine
 
 /// Per-process counter store for the 22 crypto-hardening events listed
 /// in spec §8.1. Counters are keyed by `(kind, peerVersion)` so the
 /// flushed snapshot retains the per-peer-version dimension the spec
 /// requires. Thread-safe via NSLock. Snapshots flush through the
 /// existing ConnectionMetrics pipeline (wired in Task 1.10).
-public final class CryptoHardeningMetrics {
+///
+/// Conforms to `ObservableObject` so it can be held as a `@StateObject`
+/// and distributed via `.environmentObject()` in the SwiftUI hierarchy.
+/// No `@Published` properties are needed — consumers read via `snapshot()`.
+public final class CryptoHardeningMetrics: ObservableObject {
 
     public enum EventKind: String, CaseIterable {
         // C1 (5)
