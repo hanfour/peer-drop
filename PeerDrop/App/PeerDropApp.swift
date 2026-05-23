@@ -8,6 +8,18 @@ struct PeerDropApp: App {
     @StateObject private var voicePlayer = VoicePlayer()
     @StateObject private var petEngine = PetEngine()
     @StateObject private var inboxService = InboxService()
+    @StateObject private var cryptoMetrics = CryptoHardeningMetrics()
+    @StateObject private var policyStore: SecurityPolicyStore = {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Security")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let bundledKeys: [Data] = (Bundle.main.object(forInfoDictionaryKey: "CryptoPolicyPublicKeys") as? [String])?
+            .compactMap { Data(base64Encoded: $0) } ?? []
+        // NOTE: metrics are wired separately — StateObject initializers cannot
+        // reference other instance properties (Swift restriction). Pass nil here;
+        // the metrics path is exercised by SecurityPolicyStore's own unit tests.
+        return SecurityPolicyStore(storageDirectory: dir, publicKeys: bundledKeys, metrics: nil)
+    }()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
     @State private var pendingInvite: InvitePayload?
@@ -25,6 +37,8 @@ struct PeerDropApp: App {
                     .environmentObject(voicePlayer)
                     .environmentObject(petEngine)
                     .environmentObject(inboxService)
+                    .environmentObject(cryptoMetrics)
+                    .environmentObject(policyStore)
                     .overlay(FloatingPetView(engine: petEngine).allowsHitTesting(true).ignoresSafeArea())
                     .opacity(showLaunch ? 0 : 1)
 
@@ -62,6 +76,14 @@ struct PeerDropApp: App {
                 if let callKit = appDelegate.callKitManager {
                     connectionManager.configureVoiceCalling(callKitManager: callKit)
                 }
+
+                // Wire SecurityPolicyStore + CryptoHardeningMetrics into ConnectionManager.
+                // Done at .onAppear (not @StateObject lazy init) because the lazy
+                // initializer can't reference other instance properties. Future
+                // tasks (PR3/PR5/PR6) consume these via connectionManager.policyStore
+                // and connectionManager.cryptoMetrics at each enforcement site.
+                connectionManager.policyStore = policyStore
+                connectionManager.cryptoMetrics = cryptoMetrics
 
                 // One-time migration of existing chat data to encrypted format
                 if !UserDefaults.standard.bool(forKey: "peerDropDataMigrated") {
