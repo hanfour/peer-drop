@@ -3,6 +3,19 @@ import Foundation
 /// Immutable value type holding all tunable crypto-hardening thresholds.
 /// Read at every relevant call site; never mutated in-place. Merging is
 /// always stronger-of-two — see `merged(local:remote:)`.
+///
+/// Codable JSON shape matches spec §5.1 — the two OPK exhaustion fields
+/// are encoded as a nested object so the operator-facing policy JSON
+/// reads naturally:
+///
+/// ```json
+/// {
+///   "spkMaxAgeDays": 21,
+///   "spkExpirationBehavior": "warn",
+///   "opkExhaustionBehavior": { "legacy": "proceedWithoutDH4", "strict": "failClosed" },
+///   ...
+/// }
+/// ```
 public struct SecurityPolicy: Equatable, Codable {
 
     public enum OPKExhaustionBehavior: String, Codable, Comparable {
@@ -98,6 +111,61 @@ public struct SecurityPolicy: Equatable, Codable {
         skippedKeyMaxCount: 200,
         consumedOPKPruneWindowDays: 90
     )
+
+    // MARK: - Codable (spec §5.1 nested wire shape)
+
+    private enum CodingKeys: String, CodingKey {
+        case spkMaxAgeDays
+        case spkExpirationBehavior
+        case opkExhaustionBehavior
+        case opkRetryMaxAttempts
+        case opkRetryIntervalSeconds
+        case skippedKeyTTLDays
+        case skippedKeyMaxCount
+        case consumedOPKPruneWindowDays
+    }
+
+    /// Nested wire-format mapping for `opkExhaustionBehavior`. Lives only
+    /// at the Codable boundary; runtime access goes through
+    /// `opkExhaustionBehavior(_ version: PeerVersion)` on `SecurityPolicy`.
+    private struct OPKExhaustionMap: Codable {
+        let legacy: OPKExhaustionBehavior
+        let strict: OPKExhaustionBehavior
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let opk = try c.decode(OPKExhaustionMap.self, forKey: .opkExhaustionBehavior)
+        self.init(
+            spkMaxAgeDays: try c.decode(Int.self, forKey: .spkMaxAgeDays),
+            spkExpirationBehavior: try c.decode(SPKExpirationBehavior.self, forKey: .spkExpirationBehavior),
+            opkExhaustionLegacy: opk.legacy,
+            opkExhaustionStrict: opk.strict,
+            opkRetryMaxAttempts: try c.decode(Int.self, forKey: .opkRetryMaxAttempts),
+            opkRetryIntervalSeconds: try c.decode(Int.self, forKey: .opkRetryIntervalSeconds),
+            skippedKeyTTLDays: try c.decode(Int.self, forKey: .skippedKeyTTLDays),
+            skippedKeyMaxCount: try c.decode(Int.self, forKey: .skippedKeyMaxCount),
+            consumedOPKPruneWindowDays: try c.decode(Int.self, forKey: .consumedOPKPruneWindowDays)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(spkMaxAgeDays, forKey: .spkMaxAgeDays)
+        try c.encode(spkExpirationBehavior, forKey: .spkExpirationBehavior)
+        try c.encode(
+            OPKExhaustionMap(
+                legacy: opkExhaustionBehavior(.legacy),
+                strict: opkExhaustionBehavior(.v5_4_plus)
+            ),
+            forKey: .opkExhaustionBehavior
+        )
+        try c.encode(opkRetryMaxAttempts, forKey: .opkRetryMaxAttempts)
+        try c.encode(opkRetryIntervalSeconds, forKey: .opkRetryIntervalSeconds)
+        try c.encode(skippedKeyTTLDays, forKey: .skippedKeyTTLDays)
+        try c.encode(skippedKeyMaxCount, forKey: .skippedKeyMaxCount)
+        try c.encode(consumedOPKPruneWindowDays, forKey: .consumedOPKPruneWindowDays)
+    }
 }
 
 extension SecurityPolicy {

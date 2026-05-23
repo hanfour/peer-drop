@@ -128,4 +128,96 @@ final class SecurityPolicyTests: XCTestCase {
             }
         }
     }
+
+    func test_merge_opkRetryIntervalSeconds_localWins() {
+        let local = SecurityPolicy(
+            spkMaxAgeDays: 21,
+            spkExpirationBehavior: .warn,
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 5,
+            opkRetryIntervalSeconds: 45,   // local pick
+            skippedKeyTTLDays: 30,
+            skippedKeyMaxCount: 200,
+            consumedOPKPruneWindowDays: 90
+        )
+        let remote = SecurityPolicy(
+            spkMaxAgeDays: 21,
+            spkExpirationBehavior: .warn,
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 5,
+            opkRetryIntervalSeconds: 600,  // remote tries to override
+            skippedKeyTTLDays: 30,
+            skippedKeyMaxCount: 200,
+            consumedOPKPruneWindowDays: 90
+        )
+        let merged = SecurityPolicy.merged(local: local, remote: remote)
+        XCTAssertEqual(merged.opkRetryIntervalSeconds, 45,
+                       "opkRetryIntervalSeconds is pure UX — local wins regardless of remote")
+    }
+
+    // MARK: - Codable wire shape (spec §5.1)
+
+    func test_codable_encodes_nested_opkExhaustionBehavior() throws {
+        let data = try JSONEncoder().encode(SecurityPolicy.bundledDefault)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        // Top-level scalars present
+        XCTAssertEqual(json["spkMaxAgeDays"] as? Int, 21)
+        XCTAssertEqual(json["spkExpirationBehavior"] as? String, "warn")
+        XCTAssertEqual(json["opkRetryMaxAttempts"] as? Int, 5)
+        XCTAssertEqual(json["opkRetryIntervalSeconds"] as? Int, 60)
+        XCTAssertEqual(json["skippedKeyTTLDays"] as? Int, 30)
+        XCTAssertEqual(json["skippedKeyMaxCount"] as? Int, 200)
+        XCTAssertEqual(json["consumedOPKPruneWindowDays"] as? Int, 90)
+
+        // Nested opkExhaustionBehavior (spec §5.1)
+        let opk = json["opkExhaustionBehavior"] as? [String: String]
+        XCTAssertNotNil(opk, "opkExhaustionBehavior must encode as a nested object")
+        XCTAssertEqual(opk?["legacy"], "proceedWithoutDH4")
+        XCTAssertEqual(opk?["strict"], "failClosed")
+
+        // No leaked flat keys from the previous synthesized encoding
+        XCTAssertNil(json["opkExhaustionLegacy"], "flat shape leaked — must be nested")
+        XCTAssertNil(json["opkExhaustionStrict"], "flat shape leaked — must be nested")
+    }
+
+    func test_codable_roundTrip_preservesAllFields() throws {
+        let original = SecurityPolicy(
+            spkMaxAgeDays: 14,
+            spkExpirationBehavior: .reject,
+            opkExhaustionLegacy: .failClosed,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 10,
+            opkRetryIntervalSeconds: 120,
+            skippedKeyTTLDays: 60,
+            skippedKeyMaxCount: 500,
+            consumedOPKPruneWindowDays: 365
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(SecurityPolicy.self, from: data)
+        XCTAssertEqual(decoded, original)
+    }
+
+    func test_codable_decodes_specShape() throws {
+        // Hand-written JSON in the exact shape spec §5.1 documents.
+        let json = """
+        {
+          "spkMaxAgeDays": 21,
+          "spkExpirationBehavior": "warn",
+          "opkExhaustionBehavior": {
+            "legacy": "proceedWithoutDH4",
+            "strict": "failClosed"
+          },
+          "opkRetryMaxAttempts": 5,
+          "opkRetryIntervalSeconds": 60,
+          "skippedKeyTTLDays": 30,
+          "skippedKeyMaxCount": 200,
+          "consumedOPKPruneWindowDays": 90
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SecurityPolicy.self, from: json)
+        XCTAssertEqual(decoded, .bundledDefault)
+    }
 }
