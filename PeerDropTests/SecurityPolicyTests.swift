@@ -70,4 +70,41 @@ final class SecurityPolicyTests: XCTestCase {
         let allInRange = SecurityPolicy.bundledDefault
         XCTAssertEqual(SecurityPolicyBounds.violations(allInRange), [])
     }
+
+    func test_merge_strongerOfTwo_spkMaxAge() {
+        let local = SecurityPolicy.bundledDefault  // spkMaxAge = 21
+        let remote = SecurityPolicy(
+            spkMaxAgeDays: 14,  // stricter
+            spkExpirationBehavior: .warn,
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 5,
+            opkRetryIntervalSeconds: 60,
+            skippedKeyTTLDays: 30,
+            skippedKeyMaxCount: 200,
+            consumedOPKPruneWindowDays: 90
+        )
+        let merged = SecurityPolicy.merged(local: local, remote: remote)
+        XCTAssertEqual(merged.spkMaxAgeDays, 14, "merge picks the shorter (stricter)")
+    }
+
+    func test_merge_strongerOfTwo_neverWeakerThanInput() {
+        let a = SecurityPolicy.bundledDefault
+        let b = SecurityPolicy(
+            spkMaxAgeDays: 60,
+            spkExpirationBehavior: .reject,  // stricter on this field
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 10,
+            opkRetryIntervalSeconds: 60,
+            skippedKeyTTLDays: 60,
+            skippedKeyMaxCount: 100,  // stricter (smaller)
+            consumedOPKPruneWindowDays: 180  // stricter (larger)
+        )
+        let m = SecurityPolicy.merged(local: a, remote: b)
+        XCTAssertLessThanOrEqual(m.spkMaxAgeDays, min(a.spkMaxAgeDays, b.spkMaxAgeDays))
+        XCTAssertGreaterThanOrEqual(m.spkExpirationBehavior, max(a.spkExpirationBehavior, b.spkExpirationBehavior))
+        XCTAssertLessThanOrEqual(m.skippedKeyMaxCount, min(a.skippedKeyMaxCount, b.skippedKeyMaxCount))
+        XCTAssertGreaterThanOrEqual(m.consumedOPKPruneWindowDays, max(a.consumedOPKPruneWindowDays, b.consumedOPKPruneWindowDays))
+    }
 }

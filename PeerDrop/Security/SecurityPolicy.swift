@@ -99,3 +99,30 @@ public struct SecurityPolicy: Equatable, Codable {
         consumedOPKPruneWindowDays: 90
     )
 }
+
+extension SecurityPolicy {
+    /// Stronger-of-two merge: for each field, pick the value that is at
+    /// least as strict as both inputs. This is the core invariant that
+    /// prevents a compromised remote policy from weakening local
+    /// crypto: `merged(local, remote)` is never weaker than `local`.
+    ///
+    /// Field-by-field strictness:
+    /// - shorter maxAge / TTL / count → stricter (use `min`)
+    /// - longer pruneWindow → stricter (use `max`)
+    /// - higher retry max → better UX, equal security (use `max`)
+    /// - `.reject > .warn`, `.failClosed > .proceedWithoutDH4` (use `max`)
+    /// - opkRetryIntervalSeconds is pure UX — local wins
+    public static func merged(local: SecurityPolicy, remote: SecurityPolicy) -> SecurityPolicy {
+        return SecurityPolicy(
+            spkMaxAgeDays: min(local.spkMaxAgeDays, remote.spkMaxAgeDays),
+            spkExpirationBehavior: max(local.spkExpirationBehavior, remote.spkExpirationBehavior),
+            opkExhaustionLegacy: max(local.opkExhaustionBehavior(.legacy), remote.opkExhaustionBehavior(.legacy)),
+            opkExhaustionStrict: max(local.opkExhaustionBehavior(.v5_4_plus), remote.opkExhaustionBehavior(.v5_4_plus)),
+            opkRetryMaxAttempts: max(local.opkRetryMaxAttempts, remote.opkRetryMaxAttempts),
+            opkRetryIntervalSeconds: local.opkRetryIntervalSeconds,
+            skippedKeyTTLDays: min(local.skippedKeyTTLDays, remote.skippedKeyTTLDays),
+            skippedKeyMaxCount: min(local.skippedKeyMaxCount, remote.skippedKeyMaxCount),
+            consumedOPKPruneWindowDays: max(local.consumedOPKPruneWindowDays, remote.consumedOPKPruneWindowDays)
+        )
+    }
+}
