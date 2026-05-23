@@ -123,6 +123,7 @@
 		4B9B72143D9C9EDD4C17A2EA /* PetBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6842DD7730A244B26924472 /* PetBubbleView.swift */; };
 		4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D5D787B4A7EA3EBCFA8015 /* ScreenshotModeProvider.swift */; };
 		4FDC73C86C9E8B30EBD9858A /* InboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11F0174539415CEC21987D6 /* InboxService.swift */; };
+		5012AF7FCAAA9ED401987B5A /* SecurityPolicyBounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = A899A48A9BC942E198F315D7 /* SecurityPolicyBounds.swift */; };
 		5122137663EE951E29F1CC52 /* TailnetPeerEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7276A2479267623395CFB13B /* TailnetPeerEntry.swift */; };
 		53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */; };
 		5404B9ED2402C165C2331399 /* PreKeyBundleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32671B725E75F8B4558D1CFB /* PreKeyBundleTests.swift */; };
@@ -766,6 +767,7 @@
 		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A7F5664B8F455DF7F83AB815 /* SharedRenderedPet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedRenderedPet.swift; sourceTree = "<group>"; };
 		A8034F4F86233093A4E36905 /* FilePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerView.swift; sourceTree = "<group>"; };
+		A899A48A9BC942E198F315D7 /* SecurityPolicyBounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityPolicyBounds.swift; sourceTree = "<group>"; };
 		A979FF3DD437916760AAC312 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
 		A99D2181233A53DB4F388DA3 /* SpriteRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteRequestTests.swift; sourceTree = "<group>"; };
 		AA9DB03196B8791524E4A3BE /* SpriteCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteCache.swift; sourceTree = "<group>"; };
@@ -1525,6 +1527,7 @@
 				1F949A3E8ADDBB690CAC6A02 /* PeerVersion.swift */,
 				371D9C8BCBFCD1265F54D339 /* RelayAuthenticator.swift */,
 				5F7862DD9D7867EF7353A616 /* SecurityPolicy.swift */,
+				A899A48A9BC942E198F315D7 /* SecurityPolicyBounds.swift */,
 				BD44DD0CD9A7014B98365F3B /* SessionKeyManager.swift */,
 				5488BDB916346C1C0D52034F /* TLSConfiguration.swift */,
 				8B757BDE59033909DD1114DB /* TrustedContact.swift */,
@@ -2240,6 +2243,7 @@
 				4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */,
 				A01B7F8249D416A5EE360E68 /* SecurityDashboardView.swift in Sources */,
 				665E4F036D241C3E3986CEE0 /* SecurityPolicy.swift in Sources */,
+				5012AF7FCAAA9ED401987B5A /* SecurityPolicyBounds.swift in Sources */,
 				9B63628268064BF0073D7261 /* SessionKeyManager.swift in Sources */,
 				EC38263A97EFDFA52ACC9377 /* SettingsView.swift in Sources */,
 				606F4D3A864E978123E274F9 /* SharedPetState.swift in Sources */,

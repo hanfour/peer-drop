@@ -57,8 +57,11 @@ public struct SecurityPolicy: Equatable, Codable {
 
     public func opkExhaustionBehavior(_ version: PeerVersion) -> OPKExhaustionBehavior {
         switch version {
-        case .legacy: return opkExhaustionLegacy
-        case .v5_4_plus, .unknown: return opkExhaustionStrict
+        case .legacy:
+            return opkExhaustionLegacy
+        case .v5_4_plus, .unknown:
+            // .unknown: fail-closed by design — no version information = treat as strict.
+            return opkExhaustionStrict
         }
     }
 
