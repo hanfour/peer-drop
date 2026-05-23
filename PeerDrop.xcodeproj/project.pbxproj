@@ -469,6 +469,7 @@
 		E7D669E89E90C7BC29F74660 /* BLESignaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FCCD3E23DDC39D4F37D598C /* BLESignaling.swift */; };
 		E802A802948B73227D408D0F /* FileNameSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C60B2E85560183DBA4CFDB3 /* FileNameSanitizerTests.swift */; };
 		E88F3F87E73BC8FEE5B7A971 /* PetBehaviorControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 982C0858F44441D64C0F6487 /* PetBehaviorControllerTests.swift */; };
+		E9E748EAC391D911FF7CBFBA /* RatchetProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0B3183AA1AEAEF1C32E263 /* RatchetProperties.swift */; };
 		EB33CCE006494C0D7838038F /* CertificateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB3DE12412A72AA37C495B3 /* CertificateManager.swift */; };
 		EC1C004623ED6E90FFA8F605 /* MediaMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BE9C8291174DB9D2A8627E /* MediaMessageTests.swift */; };
 		EC38263A97EFDFA52ACC9377 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DCF1ACEEF25E8262FC1291 /* SettingsView.swift */; };
@@ -950,6 +951,7 @@
 		BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeView.swift; sourceTree = "<group>"; };
 		BBCC3B11AF44BE6CC4610FDA /* PetWelcomeFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeFlagTests.swift; sourceTree = "<group>"; };
 		BC0698F09B49BB70187E0986 /* skipped-006.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "skipped-006.json"; sourceTree = "<group>"; };
+		BC0B3183AA1AEAEF1C32E263 /* RatchetProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatchetProperties.swift; sourceTree = "<group>"; };
 		BD44DD0CD9A7014B98365F3B /* SessionKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
 		BD8E9C2B5AB5AA5D79B06A62 /* PetGenomeSpeciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetGenomeSpeciesTests.swift; sourceTree = "<group>"; };
 		BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadata.swift; sourceTree = "<group>"; };
@@ -1898,6 +1900,7 @@
 		D8489EB8CDD1607B09CED09C /* Properties */ = {
 			isa = PBXGroup;
 			children = (
+				BC0B3183AA1AEAEF1C32E263 /* RatchetProperties.swift */,
 				FC59106BE0C1F2D308BDEC3E /* SecurityPolicyProperties.swift */,
 			);
 			path = Properties;
@@ -2424,6 +2427,7 @@
 				D0C7491ECED0CFEACCADCB25 /* ProofOfWorkTests.swift in Sources */,
 				6060FCE3F163DBEF6485742D /* PropertyTest.swift in Sources */,
 				914DC7E3E5AC3D3FFB71A59C /* PropertyTestHarnessTests.swift in Sources */,
+				E9E748EAC391D911FF7CBFBA /* RatchetProperties.swift in Sources */,
 				44029FFA65E67D9FDDAA8F6B /* RatchetVectorTests.swift in Sources */,
 				8685EB1F6658650B6B97A528 /* ReconnectTests.swift in Sources */,
 				57D71CDA3778DBF7A5CA2AE5 /* RelayAuthenticatorTests.swift in Sources */,
