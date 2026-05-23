@@ -522,6 +522,7 @@
 		FB697A3E85BFD592434A0632 /* SecurityPolicyProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC59106BE0C1F2D308BDEC3E /* SecurityPolicyProperties.swift */; };
 		FB69D4FCF15EAB14357A009F /* ConnectionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4250293A9FCF52B7ABA87AC /* ConnectionContext.swift */; };
 		FC67AF98109EF0010985698A /* DumpV5FramesForVisualCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187C5D699F60FB5F2D01C3E4 /* DumpV5FramesForVisualCheck.swift */; };
+		FCA1B26C6CB19B08780DFBD6 /* PolicyFuzzTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162ADF2A76D02C26818832D8 /* PolicyFuzzTests.swift */; };
 		FCE67D33A5195FA25B4EBB05 /* TipJarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89C720568E6E3EF69A02539 /* TipJarSection.swift */; };
 		FD7F1C498E9D7490143A4CAD /* PetWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A5D1E09D940BB3954B8CF4 /* PetWidget.swift */; };
 		FDE37459844B074486ABFD8D /* DoubleRatchetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D1742C065D8E0995E1931A /* DoubleRatchetTests.swift */; };
@@ -616,6 +617,7 @@
 		12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerActionSheet.swift; sourceTree = "<group>"; };
 		137D4C965D7DFC2C55F1346F /* WorkerSignalingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerSignalingTests.swift; sourceTree = "<group>"; };
 		15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecryptFailureBannerView.swift; sourceTree = "<group>"; };
+		162ADF2A76D02C26818832D8 /* PolicyFuzzTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyFuzzTests.swift; sourceTree = "<group>"; };
 		164E30461F67A2E80FD9DA0A /* ReactionPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPayload.swift; sourceTree = "<group>"; };
 		1650253E0339B14BB1857FBF /* DoubleRatchetPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoubleRatchetPersistenceTests.swift; sourceTree = "<group>"; };
 		17AAAEF08C9D347971BD3E47 /* FeatureSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureSettings.swift; sourceTree = "<group>"; };
@@ -1589,6 +1591,7 @@
 				F80A2A1BE293999C1839EE50 /* FuzzHarnessTests.swift */,
 				AC430360B753FDF2E1FF39D3 /* PropertyTestHarnessTests.swift */,
 				F5E0A0D7767C340A0BB218D5 /* TestVectorLoaderTests.swift */,
+				A10344919FE5135EC67FD6E3 /* Fuzz */,
 				D8489EB8CDD1607B09CED09C /* Properties */,
 				0274B15420107D5715630335 /* Vectors */,
 			);
@@ -1728,6 +1731,14 @@
 			);
 			name = "peer-drop";
 			path = .;
+			sourceTree = "<group>";
+		};
+		A10344919FE5135EC67FD6E3 /* Fuzz */ = {
+			isa = PBXGroup;
+			children = (
+				162ADF2A76D02C26818832D8 /* PolicyFuzzTests.swift */,
+			);
+			path = Fuzz;
 			sourceTree = "<group>";
 		};
 		A1A520854D812BF198400449 /* Purchase */ = {
@@ -2461,6 +2472,7 @@
 				E743CD48BADB6E111D3ECFA1 /* PetWelcomeFlagTests.swift in Sources */,
 				1C8E54CC816A78EEB4F60B58 /* Phase2IntegrationTests.swift in Sources */,
 				70D8368DE6EC1CBC0CF4F260 /* PolicyFixtureTests.swift in Sources */,
+				FCA1B26C6CB19B08780DFBD6 /* PolicyFuzzTests.swift in Sources */,
 				5404B9ED2402C165C2331399 /* PreKeyBundleTests.swift in Sources */,
 				E4C5A1657CFFA5BE10CF6DF4 /* PreKeyStoreConsumedOPKTests.swift in Sources */,
 				6A9DA264CF02A3C230AD31E9 /* PreKeyStoreProperties.swift in Sources */,
