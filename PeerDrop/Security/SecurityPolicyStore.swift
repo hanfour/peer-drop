@@ -2,10 +2,12 @@ import Foundation
 import Combine
 import CryptoKit
 
-/// Boot-time policy loader. In PR1 (this task), `current` is initialized
-/// synchronously from a cached signed-policy file or the bundled
-/// default. PR4 will add the async fetch + Ed25519 signature verification
-/// that updates `current` from the worker endpoint.
+/// Boot-time policy loader and async refresh coordinator.
+///
+/// `current` is initialized synchronously from a cached signed-policy file
+/// (verified on disk) or the bundled default. After init, if `baseURL` is
+/// supplied, an async fetch + 24h periodic refresh task is spawned to keep
+/// the policy up-to-date while the app is running.
 ///
 /// `@MainActor` so SwiftUI consumers can subscribe to `$current` directly
 /// without dispatch dancing.
@@ -14,40 +16,141 @@ public final class SecurityPolicyStore: ObservableObject {
 
     @Published public private(set) var current: SecurityPolicy
 
-    private let storageDirectory: URL
-    private let publicKeys: [Data]   // Ed25519 public keys — used by PR4's signature verification
-    private let metrics: CryptoHardeningMetrics?
+    let storageDirectory: URL
+    let publicKeys: [Data]   // Ed25519 public keys for signature verification
+    let metrics: CryptoHardeningMetrics?
+    private let baseURL: URL?
+    private let urlSession: URLSession
+    private var refreshTask: Task<Void, Never>?
 
     public init(
         storageDirectory: URL,
         publicKeys: [Data],
-        metrics: CryptoHardeningMetrics? = nil
+        metrics: CryptoHardeningMetrics? = nil,
+        baseURL: URL? = nil,
+        urlSession: URLSession = .shared
     ) {
         self.storageDirectory = storageDirectory
         self.publicKeys = publicKeys
         self.metrics = metrics
-        // Synchronous boot load. PR4 will read + signature-verify the
-        // cached blob here; for PR1, always return the bundled default
-        // so the consumer surface is testable end-to-end.
-        self.current = Self.loadFromCacheOrBundled(
+        self.baseURL = baseURL
+        self.urlSession = urlSession
+        // Synchronous boot load — read + verify cache, or fall back to bundled default.
+        self.current = Self.loadFromCacheOrBundledV2(
             directory: storageDirectory,
             publicKeys: publicKeys,
             metrics: metrics
         )
+        // Schedule the async fetch + 24h periodic refresh if a baseURL is
+        // configured. Tests that don't want the network leg leave baseURL nil.
+        if baseURL != nil {
+            self.refreshTask = Task { [weak self] in
+                // Initial fetch.
+                await self?.fetchAndUpdate()
+                // Periodic refresh every 24h until cancelled.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 24 * 3600 * 1_000_000_000)
+                    if Task.isCancelled { break }
+                    await self?.fetchAndUpdate()
+                }
+            }
+        }
     }
 
-    private static func loadFromCacheOrBundled(
+    deinit {
+        refreshTask?.cancel()
+    }
+}
+
+// MARK: - Fetch + Cache
+
+extension SecurityPolicyStore {
+
+    /// One-shot async fetch + parse + publish. Called at boot (after sync
+    /// cache load) and every 24h while the app is foregrounded.
+    public func fetchAndUpdate() async {
+        guard let baseURL = baseURL else { return }
+        let url = baseURL.appendingPathComponent("v2/config/crypto-policy")
+
+        let data: Data
+        do {
+            let (responseData, response) = try await urlSession.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                metrics?.record(.policyFetchFailure)
+                return
+            }
+            data = responseData
+        } catch {
+            metrics?.record(.policyFetchFailure)
+            return
+        }
+
+        // Parse + verify.
+        let parsed: SignedCryptoPolicy
+        do {
+            parsed = try SecurityPolicyStore.parseSignedPolicy(data, publicKeys: publicKeys)
+        } catch SecurityPolicyStore.ParseError.invalidSignature {
+            metrics?.record(.policySignatureInvalid)
+            return
+        } catch SecurityPolicyStore.ParseError.unsupportedSchemaVersion {
+            metrics?.record(.policyVersionUnsupported)
+            return
+        } catch {
+            metrics?.record(.policyFetchFailure)
+            return
+        }
+
+        // Apply local bounds clamping. Telemetry for any out-of-range field.
+        let violations = SecurityPolicyBounds.violations(parsed.policy)
+        if !violations.isEmpty {
+            metrics?.record(.policyValueOutOfBounds)
+        }
+        let clamped = SecurityPolicyBounds.clamp(parsed.policy)
+
+        // Stronger-of-two merge with bundled default. Worker can only strengthen.
+        let merged = SecurityPolicy.merged(local: .bundledDefault, remote: clamped)
+
+        // Persist the original signed blob (NOT the merged result) so the next
+        // boot can re-verify the signature. Merge is recomputed each boot.
+        await persistCache(data)
+
+        // Already on @MainActor — update current directly.
+        self.current = merged
+        metrics?.record(.policyFetchSuccess)
+    }
+
+    private func persistCache(_ blob: Data) async {
+        let cacheURL = storageDirectory.appendingPathComponent("crypto-policy.json")
+        try? blob.write(to: cacheURL, options: .atomic)
+    }
+
+    /// Synchronous boot-time cache read. Called from `init`. Reads the cached
+    /// signed blob from disk, verifies the signature, applies clamp + merge,
+    /// and returns the resulting policy. Any error path falls back to bundled
+    /// default.
+    fileprivate static func loadFromCacheOrBundledV2(
         directory: URL,
         publicKeys: [Data],
         metrics: CryptoHardeningMetrics?
     ) -> SecurityPolicy {
-        // PR4: read `directory/crypto-policy.json`, verify signature
-        // against `publicKeys`, parse, clamp, merge with bundled default.
-        // For PR1, no consumers exist yet, so we always return the
-        // bundled default and record a cache-hit telemetry event so
-        // the metrics wiring is exercised end-to-end.
-        metrics?.record(.policyCacheHit)
-        return .bundledDefault
+        let cacheURL = directory.appendingPathComponent("crypto-policy.json")
+        guard let cached = try? Data(contentsOf: cacheURL) else {
+            // No cache — fall back to bundled default (no cache-hit recorded).
+            return .bundledDefault
+        }
+        do {
+            let parsed = try parseSignedPolicy(cached, publicKeys: publicKeys)
+            metrics?.record(.policyCacheHit)
+            // Track expiry as a sample (used by the eventual UI status panel).
+            if parsed.expiresAt < UInt64(Date().timeIntervalSince1970) {
+                metrics?.record(.policyExpiredInUse)
+            }
+            let clamped = SecurityPolicyBounds.clamp(parsed.policy)
+            return SecurityPolicy.merged(local: .bundledDefault, remote: clamped)
+        } catch {
+            // Cache is corrupt / signature invalid / etc. — bundled default.
+            return .bundledDefault
+        }
     }
 }
 
