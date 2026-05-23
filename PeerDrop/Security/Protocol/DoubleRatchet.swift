@@ -28,7 +28,7 @@ class DoubleRatchetSession: Codable {
     private var previousSendCounter: UInt32 = 0
 
     // Skipped message keys for out-of-order delivery
-    private var skippedKeys: [SkippedKeyIndex: SymmetricKey] = [:]
+    private var skippedKeys: [SkippedKeyIndex: SkippedKeyEntry] = [:]
     private static let maxSkip: UInt32 = 200
 
     private struct SkippedKeyIndex: Hashable, Codable {
@@ -50,12 +50,28 @@ class DoubleRatchetSession: Codable {
         case skippedKeys
     }
 
-    /// Helper struct for serializing the `[SkippedKeyIndex: SymmetricKey]` dictionary
-    /// since `SkippedKeyIndex` cannot serve as a JSON dictionary key directly.
-    private struct SkippedKeyEntry: Codable {
+    /// On-disk archive format for a single skipped-key entry.
+    /// Replaces the old `SkippedKeyEntry` serialization helper.
+    /// `createdAt` is optional so existing session files (written before this field existed)
+    /// decode without error.
+    private struct SkippedKeyArchive: Codable {
         let ratchetKey: Data
         let counter: UInt32
         let messageKey: Data
+        let createdAt: Date?
+    }
+
+    /// Runtime cache entry for a skipped (out-of-order) message key.
+    /// Holds both the key and when we first cached it so the TTL pass in
+    /// `decrypt` can evict entries older than `policy.skippedKeyTTLDays`.
+    public struct SkippedKeyEntry {
+        public let key: SymmetricKey
+        public let createdAt: Date
+
+        public init(key: SymmetricKey, createdAt: Date) {
+            self.key = key
+            self.createdAt = createdAt
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -70,11 +86,12 @@ class DoubleRatchetSession: Codable {
         try container.encode(receiveCounter, forKey: .receiveCounter)
         try container.encode(previousSendCounter, forKey: .previousSendCounter)
 
-        let entries = skippedKeys.map { (index, key) in
-            SkippedKeyEntry(
+        let entries = skippedKeys.map { (index, entry) in
+            SkippedKeyArchive(
                 ratchetKey: index.ratchetKey,
                 counter: index.counter,
-                messageKey: key.withUnsafeBytes { Data($0) }
+                messageKey: entry.key.withUnsafeBytes { Data($0) },
+                createdAt: entry.createdAt
             )
         }
         try container.encode(entries, forKey: .skippedKeys)
@@ -105,10 +122,17 @@ class DoubleRatchetSession: Codable {
         self.receiveCounter = try container.decode(UInt32.self, forKey: .receiveCounter)
         self.previousSendCounter = try container.decode(UInt32.self, forKey: .previousSendCounter)
 
-        let entries = try container.decode([SkippedKeyEntry].self, forKey: .skippedKeys)
-        for entry in entries {
-            let index = SkippedKeyIndex(ratchetKey: entry.ratchetKey, counter: entry.counter)
-            self.skippedKeys[index] = SymmetricKey(data: entry.messageKey)
+        let archives = try container.decode([SkippedKeyArchive].self, forKey: .skippedKeys)
+        for archive in archives {
+            let index = SkippedKeyIndex(ratchetKey: archive.ratchetKey, counter: archive.counter)
+            // Backward-compat: old session files have no createdAt → use Date() so the
+            // entry gets a fresh TTL window (safe — it was already bounded by the
+            // existing 200-cap, so no risk of an out-of-bounds cache from this).
+            let createdAt = archive.createdAt ?? Date()
+            self.skippedKeys[index] = SkippedKeyEntry(
+                key: SymmetricKey(data: archive.messageKey),
+                createdAt: createdAt
+            )
         }
     }
 
@@ -168,11 +192,24 @@ class DoubleRatchetSession: Codable {
 
     // MARK: - Decrypt
 
-    func decrypt(_ message: RatchetMessage) throws -> Data {
+    func decrypt(
+        _ message: RatchetMessage,
+        policy: SecurityPolicy? = nil,
+        metrics: CryptoHardeningMetrics? = nil
+    ) throws -> Data {
+        // Eviction passes — only when policy is provided (no-op for tests with nil policy).
+        if let policy = policy {
+            let ttlEvicted = evictExpiredSkippedKeys(now: Date(), policy: policy)
+            if ttlEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedTTL) }
+            let lruEvicted = evictLRUSkippedKeys(policy: policy)
+            if lruEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedLRU) }
+        }
+
         // Check skipped keys first (out-of-order message)
         let skipIndex = SkippedKeyIndex(ratchetKey: message.ratchetKey, counter: message.counter)
-        if let skippedKey = skippedKeys.removeValue(forKey: skipIndex) {
-            return try decryptWithKey(message.ciphertext, key: skippedKey)
+        if let entry = skippedKeys.removeValue(forKey: skipIndex) {
+            metrics?.record(.c3SkippedKeyHit)
+            return try decryptWithKey(message.ciphertext, key: entry.key)
         }
 
         // Check if this is a new DH ratchet key
@@ -274,7 +311,7 @@ class DoubleRatchetSession: Codable {
         var currentChain = chainKey
         for i in receiveCounter..<target {
             let (msgKey, newChain) = symmetricRatchetStep(chainKey: currentChain)
-            skippedKeys[SkippedKeyIndex(ratchetKey: theirRatchetKey, counter: i)] = msgKey
+            skippedKeys[SkippedKeyIndex(ratchetKey: theirRatchetKey, counter: i)] = SkippedKeyEntry(key: msgKey, createdAt: Date())
             currentChain = newChain
         }
         return currentChain
@@ -283,6 +320,29 @@ class DoubleRatchetSession: Codable {
     /// Exposed for test assertions only — confirms the skipped-keys cache is fully
     /// drained after all out-of-order messages have been consumed.
     var skippedKeysIsEmpty: Bool { skippedKeys.isEmpty }
+
+    /// Remove skipped-key cache entries older than `policy.skippedKeyTTLDays`.
+    /// Returns the number of entries evicted (for telemetry).
+    @discardableResult
+    func evictExpiredSkippedKeys(now: Date, policy: SecurityPolicy) -> Int {
+        let cutoff = now.addingTimeInterval(-Double(policy.skippedKeyTTLDays) * 86400)
+        let before = skippedKeys.count
+        skippedKeys = skippedKeys.filter { $0.value.createdAt >= cutoff }
+        return before - skippedKeys.count
+    }
+
+    /// If `skippedKeys.count > policy.skippedKeyMaxCount`, evict the oldest
+    /// entries by `createdAt` until the count is back within bounds. Returns
+    /// the number of entries evicted (for telemetry).
+    @discardableResult
+    func evictLRUSkippedKeys(policy: SecurityPolicy) -> Int {
+        guard skippedKeys.count > policy.skippedKeyMaxCount else { return 0 }
+        let sorted = skippedKeys.sorted { $0.value.createdAt > $1.value.createdAt }
+        let kept = sorted.prefix(policy.skippedKeyMaxCount)
+        let beforeCount = skippedKeys.count
+        skippedKeys = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        return beforeCount - skippedKeys.count
+    }
 
     private func decryptWithKey(_ ciphertext: Data, key: SymmetricKey) throws -> Data {
         let sealedBox = try AES.GCM.SealedBox(combined: ciphertext)
@@ -296,3 +356,17 @@ class DoubleRatchetSession: Codable {
         case tooManySkippedMessages
     }
 }
+
+#if DEBUG
+extension DoubleRatchetSession {
+    /// Test seam: directly insert a skipped key entry. Production code only
+    /// reaches `skippedKeys` through `skipMessages` and `decrypt`'s removeValue.
+    func setSkippedKeyForTesting(ratchetKey: Data, counter: UInt32, entry: SkippedKeyEntry) {
+        let index = SkippedKeyIndex(ratchetKey: ratchetKey, counter: counter)
+        skippedKeys[index] = entry
+    }
+
+    /// Test seam: count of skipped-key entries.
+    var skippedKeysCountForTesting: Int { skippedKeys.count }
+}
+#endif

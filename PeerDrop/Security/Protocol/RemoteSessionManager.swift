@@ -13,6 +13,13 @@ final class RemoteSessionManager: ObservableObject {
     private let preKeyStore: PreKeyStore
     private let mailboxClient: MailboxClient
 
+    /// Injected by ConnectionManager (or directly in tests). When non-nil, each
+    /// `decrypt` call runs the TTL + LRU eviction passes with these settings.
+    var policyStore: SecurityPolicyStore?
+
+    /// Injected alongside `policyStore`. Records C3 eviction + hit events.
+    var cryptoMetrics: CryptoHardeningMetrics?
+
     init(preKeyStore: PreKeyStore = PreKeyStore(), mailboxClient: MailboxClient = MailboxClient()) {
         self.preKeyStore = preKeyStore
         self.mailboxClient = mailboxClient
@@ -137,7 +144,7 @@ final class RemoteSessionManager: ObservableObject {
         guard let session = sessions[contactId] else {
             throw RemoteSessionError.noSession
         }
-        let result = try session.decrypt(message)
+        let result = try session.decrypt(message, policy: policyStore?.current, metrics: cryptoMetrics)
         saveSession(for: contactId)
         return result
     }
