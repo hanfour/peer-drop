@@ -114,6 +114,47 @@ final class DoubleRatchetSkippedKeysTests: XCTestCase {
         XCTAssertEqual(session.skippedKeysCountForTesting, 100)
     }
 
+    func test_decrypt_evicts_skippedKeys_when_policy_provided() throws {
+        // Build a real Alice/Bob session pair so we can call decrypt with a
+        // genuinely-encrypted message (avoids the try! crash in dhRatchetStep
+        // that would result from fabricating an invalid Curve25519 key).
+        let sharedRootKey = SymmetricKey(size: .bits256)
+        let bobRatchetKey = Curve25519.KeyAgreement.PrivateKey()
+        let alice = DoubleRatchetSession.initializeAsInitiator(
+            rootKey: sharedRootKey,
+            theirRatchetKey: bobRatchetKey.publicKey
+        )
+        let bob = DoubleRatchetSession.initializeAsResponder(
+            rootKey: sharedRootKey,
+            myRatchetKey: bobRatchetKey
+        )
+
+        // Alice sends a message that Bob will decrypt.
+        let ciphertext = try alice.encrypt(Data("hello".utf8))
+
+        let policy = SecurityPolicy.bundledDefault
+        let metrics = CryptoHardeningMetrics()
+
+        // Plant a stale skipped-key entry into Bob's cache (31 days old, past TTL).
+        bob.setSkippedKeyForTesting(
+            ratchetKey: Data([0xAA]),
+            counter: 99,
+            entry: .init(key: SymmetricKey(size: .bits256), createdAt: Date(timeIntervalSinceNow: -86400 * 31))
+        )
+        XCTAssertEqual(bob.skippedKeysCountForTesting, 1)
+
+        // Decrypt with policy — eviction runs first, then normal decrypt succeeds.
+        let plaintext = try bob.decrypt(ciphertext, policy: policy, metrics: metrics)
+        XCTAssertEqual(plaintext, Data("hello".utf8))
+
+        // Stale entry should be gone (TTL pass evicted it before decrypt logic ran).
+        XCTAssertEqual(bob.skippedKeysCountForTesting, 0)
+
+        // TTL eviction metric should be recorded.
+        let snapshot = metrics.snapshot()
+        XCTAssertEqual(snapshot.counters["c3.skipped_key_evicted_ttl"], 1)
+    }
+
     // MARK: - Test Helpers
 
     private func makeTestSession() throws -> DoubleRatchetSession {

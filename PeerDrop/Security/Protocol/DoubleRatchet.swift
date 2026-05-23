@@ -197,10 +197,23 @@ class DoubleRatchetSession: Codable {
 
     // MARK: - Decrypt
 
-    func decrypt(_ message: RatchetMessage) throws -> Data {
+    func decrypt(
+        _ message: RatchetMessage,
+        policy: SecurityPolicy? = nil,
+        metrics: CryptoHardeningMetrics? = nil
+    ) throws -> Data {
+        // Eviction passes — only when policy is provided (no-op for tests with nil policy).
+        if let policy = policy {
+            let ttlEvicted = evictExpiredSkippedKeys(now: Date(), policy: policy)
+            if ttlEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedTTL) }
+            let lruEvicted = evictLRUSkippedKeys(policy: policy)
+            if lruEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedLRU) }
+        }
+
         // Check skipped keys first (out-of-order message)
         let skipIndex = SkippedKeyIndex(ratchetKey: message.ratchetKey, counter: message.counter)
         if let entry = skippedKeys.removeValue(forKey: skipIndex) {
+            metrics?.record(.c3SkippedKeyHit)
             return try decryptWithKey(message.ciphertext, key: entry.key)
         }
 

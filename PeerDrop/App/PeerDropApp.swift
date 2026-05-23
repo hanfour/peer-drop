@@ -84,6 +84,8 @@ struct PeerDropApp: App {
                 // and connectionManager.cryptoMetrics at each enforcement site.
                 connectionManager.policyStore = policyStore
                 connectionManager.cryptoMetrics = cryptoMetrics
+                connectionManager.remoteSessionManager.policyStore = policyStore
+                connectionManager.remoteSessionManager.cryptoMetrics = cryptoMetrics
 
                 // One-time migration of existing chat data to encrypted format
                 if !UserDefaults.standard.bool(forKey: "peerDropDataMigrated") {
