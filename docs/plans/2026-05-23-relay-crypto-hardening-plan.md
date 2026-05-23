@@ -22,7 +22,7 @@
 | `PeerDrop/Security/SecurityPolicyBounds.swift` | Hard local ranges; clamps any incoming value |
 | `PeerDrop/Security/SecurityPolicyStore.swift` | `@MainActor` `ObservableObject`; loads cache → bundled → fetches remote; publishes `current` |
 | `PeerDrop/Security/PeerPolicy.swift` | Resolves effective per-peer policy from `peerProtocolVersion` |
-| `PeerDrop/Security/ProtocolVersion.swift` | Enum `.v5_4_plus / .legacy / .unknown` |
+| `PeerDrop/Security/PeerVersion.swift` | Enum `.v5_4_plus / .legacy / .unknown` (renamed from `ProtocolVersion` in PR1 — see naming note in design.md §3.3) |
 | `PeerDrop/Telemetry/CryptoHardeningMetrics.swift` | 22 named counters + flush integration |
 | `PeerDrop/Transport/OutboundRetryQueue.swift` | Persistent queue for C2 retry-on-OPK-exhaustion |
 | `PeerDrop/UI/Security/CryptoHardeningBanner.swift` | C1/C2 banner views (reuses `decryptFailureBanner` visuals) |
@@ -81,7 +81,7 @@
 | `PeerDrop/Security/Protocol/DoubleRatchet.swift` | C3 TTL+LRU; skipped key value type wrap |
 | `PeerDrop/Security/Protocol/PreKeyBundle.swift` | Add `signedPreKeyTimestamp: UInt64?` + `signedPreKeyTimestampSignature: Data?` |
 | `PeerDrop/Security/Protocol/RemoteMessageEnvelope.swift` | Add `protocolVersion: UInt8?` |
-| `PeerDrop/Core/TrustedContactStore.swift` | Add `peerProtocolVersion: ProtocolVersion?` to `TrustedContact` |
+| `PeerDrop/Core/TrustedContactStore.swift` | Add `peerProtocolVersion: PeerVersion?` to `TrustedContact` |
 | `PeerDrop/Core/ConnectionManager.swift` | Wire `peerProtocolVersion` set on first envelope/first contact; instantiate `SecurityPolicyStore` |
 | `PeerDrop/App/PeerDropApp.swift` | Inject `SecurityPolicyStore` into the env |
 | `PeerDrop/App/Info.plist` | Add `CryptoPolicyPublicKeys` (base64 array) |
@@ -278,20 +278,23 @@ func test_bundledDefault_matchesSpec() {
 
 - [ ] **Step 2: Run, verify failure**
 
-Fails on `bundledDefault`, `spkMaxAgeDays`, `.legacy`, `.v5_4_plus` (the last two need `ProtocolVersion` from a future task — but we'll forward-declare).
+Fails on `bundledDefault`, `spkMaxAgeDays`, `.legacy`, `.v5_4_plus` (the last two need `PeerVersion` from a future task — but we'll forward-declare).
 
-- [ ] **Step 3: First create `ProtocolVersion.swift`**
+- [ ] **Step 3: First create `PeerVersion.swift`**
 
-`PeerDrop/Security/ProtocolVersion.swift`:
+`PeerDrop/Security/PeerVersion.swift`:
 
 ```swift
 import Foundation
 
-/// Identifies the wire-protocol generation of a peer for per-peer policy
+/// Identifies the protocol generation of a peer for per-peer policy
 /// decisions. v5.0–v5.3.x are `.legacy`; v5.4+ are `.v5_4_plus`;
 /// `.unknown` is used before first contact or when the peer hasn't sent
 /// any envelope yet.
-public enum ProtocolVersion: String, Codable {
+///
+/// Distinct from the `ProtocolVersion` UInt8 enum in `PeerDrop/Protocol/`
+/// which identifies the wire envelope format version.
+public enum PeerVersion: String, Codable {
     case legacy
     case v5_4_plus
     case unknown
@@ -316,7 +319,7 @@ public struct SecurityPolicy: Equatable, Codable {
     public let skippedKeyMaxCount: Int
     public let consumedOPKPruneWindowDays: Int
 
-    public func opkExhaustionBehavior(_ version: ProtocolVersion) -> OPKExhaustionBehavior {
+    public func opkExhaustionBehavior(_ version: PeerVersion) -> OPKExhaustionBehavior {
         switch version {
         case .legacy: return opkExhaustionLegacy
         case .v5_4_plus, .unknown: return opkExhaustionStrict
@@ -366,7 +369,7 @@ All three SecurityPolicyTests should pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add PeerDrop/Security/ProtocolVersion.swift PeerDrop/Security/SecurityPolicy.swift PeerDropTests/SecurityPolicyTests.swift project.yml
+git add PeerDrop/Security/PeerVersion.swift PeerDrop/Security/SecurityPolicy.swift PeerDropTests/SecurityPolicyTests.swift PeerDrop.xcodeproj/project.pbxproj
 git commit -m "feat(security): SecurityPolicy struct + bundled defaults
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -704,7 +707,7 @@ public final class CryptoHardeningMetrics {
 
     public struct Key: Hashable {
         public let kind: String
-        public let peerVersion: String?   // ProtocolVersion.rawValue or nil
+        public let peerVersion: String?   // PeerVersion.rawValue or nil
     }
 
     public struct Snapshot {
@@ -721,7 +724,7 @@ public final class CryptoHardeningMetrics {
 
     public init() {}
 
-    public func record(_ kind: EventKind, peerVersion: ProtocolVersion? = nil) {
+    public func record(_ kind: EventKind, peerVersion: PeerVersion? = nil) {
         lock.lock()
         defer { lock.unlock() }
         let key = Key(kind: kind.rawValue, peerVersion: peerVersion?.rawValue)
@@ -827,7 +830,7 @@ import Foundation
 /// local-stronger-of-two-remote; this function applies per-peer
 /// adjustments without weakening it.
 public enum PeerPolicy {
-    public static func policy(for version: ProtocolVersion, base: SecurityPolicy) -> SecurityPolicy {
+    public static func policy(for version: PeerVersion, base: SecurityPolicy) -> SecurityPolicy {
         // Currently a no-op pass-through: per-peer logic is consumed
         // inside the call sites via `base.opkExhaustionBehavior(version)`.
         // This wrapper exists so future per-peer adjustments (e.g.,
@@ -1064,7 +1067,7 @@ gh pr create --base main --title "feat(security): v5.4 PR1 — SecurityPolicy fo
 - Adds `SecurityPolicy` (immutable value type) + `SecurityPolicyBounds` + `merged()` stronger-of-two
 - Adds `SecurityPolicyStore` skeleton (loads bundled defaults; remote fetch lands in PR4)
 - Adds `CryptoHardeningMetrics` with all 22 spec'd event kinds
-- Adds `PeerPolicy` resolver entry point + `ProtocolVersion` enum
+- Adds `PeerPolicy` resolver entry point + `PeerVersion` enum
 - Wires both into `PeerDropApp` and `ConnectionManager`
 - No behavior change — no consumers yet.
 
@@ -3097,7 +3100,7 @@ extension X3DH {
 public static func initiate(
     /* existing params */,
     theirOneTimePreKey: Curve25519.KeyAgreement.PublicKey?,
-    peerProtocolVersion: ProtocolVersion,
+    peerProtocolVersion: PeerVersion,
     policy: SecurityPolicy,
     metrics: CryptoHardeningMetrics?
 ) throws -> KeyAgreementResult {
@@ -3454,7 +3457,7 @@ extension X3DH {
         now: Date,
         policy: SecurityPolicy,
         metrics: CryptoHardeningMetrics?
-    ) throws -> ProtocolVersion {
+    ) throws -> PeerVersion {
 
         let hasTS = bundle.signedPreKeyTimestamp != nil
         let hasSig = bundle.signedPreKeyTimestampSignature != nil
@@ -3497,7 +3500,7 @@ extension X3DH {
 }
 ```
 
-- [ ] **Step 3: Wire into `X3DH.initiate`** — call `verifyBundleFreshness` before the DH computation; capture the returned `ProtocolVersion` and propagate to `OPK exhaustion` check.
+- [ ] **Step 3: Wire into `X3DH.initiate`** — call `verifyBundleFreshness` before the DH computation; capture the returned `PeerVersion` and propagate to `OPK exhaustion` check.
 
 - [ ] **Step 4: Test PASS, commit**
 
@@ -3624,7 +3627,7 @@ func test_trustedContact_storesAndReturns_peerProtocolVersion() async throws {
 ```swift
 public struct TrustedContact: Codable {
     /* existing */
-    public var peerProtocolVersion: ProtocolVersion?
+    public var peerProtocolVersion: PeerVersion?
 }
 ```
 
@@ -3640,7 +3643,7 @@ public struct TrustedContact: Codable {
 In `handleRemoteMessage`:
 
 ```swift
-let detected: ProtocolVersion = {
+let detected: PeerVersion = {
     if envelope.protocolVersion == 1 { return .v5_4_plus }
     if envelope.protocolVersion == nil { return .legacy }
     return .unknown
@@ -3665,7 +3668,7 @@ try await trustedContactStore.upsert(contact)
 **Files:**
 - Modify: `PeerDrop/Core/ConnectionManager.swift`
 
-After `X3DH.verifyBundleFreshness` returns a `ProtocolVersion`, propagate it to the `TrustedContact` (created when handshake completes) and use it for the C2 fail-closed check inside `X3DH.initiate`.
+After `X3DH.verifyBundleFreshness` returns a `PeerVersion`, propagate it to the `TrustedContact` (created when handshake completes) and use it for the C2 fail-closed check inside `X3DH.initiate`.
 
 - [ ] **Test + commit**
 

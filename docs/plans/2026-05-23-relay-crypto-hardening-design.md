@@ -108,7 +108,9 @@ PreKeyStore / X3DH / DoubleRatchet / TrustedContactStore
 
 ### 3.3 Per-peer policy
 
-`TrustedContactStore` gains a new field `peerProtocolVersion: ProtocolVersion?`, populated from the relay path only (C1/C2 enforcement is relay-specific; C3/C4 are local-only and don't need peer version).
+`TrustedContactStore` gains a new field `peerProtocolVersion: PeerVersion?`, populated from the relay path only (C1/C2 enforcement is relay-specific; C3/C4 are local-only and don't need peer version).
+
+> **Naming note (post-PR1):** the type was originally specified as `ProtocolVersion` but renamed to `PeerVersion` during implementation because `PeerDrop/Protocol/ProtocolVersion.swift` already declares a `UInt8`-backed enum for wire envelope format versioning — a distinct concept. The field name `peerProtocolVersion` is kept for readability; only the type name changed.
 
 - **Relay**: new optional `protocolVersion: UInt8?` field on `RemoteMessageEnvelope` (additive, old peers ignore). When the responder receives the first envelope from a new peer, it stores `peerProtocolVersion` on the `TrustedContact` created at first-contact approval. The initiator independently infers the responder's version from the prekey bundle: if `signedPreKeyTimestamp` is present, the responder is `.v5_4_plus`; otherwise `.legacy`.
 - **Local Wi-Fi**: `peerProtocolVersion` stays `nil` for `LocalSecureChannel` peers. This is fine because C1/C2 do not apply to local Wi-Fi (no X3DH, no SPK), and C3/C4 are purely local with no per-peer dependency.
@@ -149,7 +151,7 @@ The legacy SPK signature is preserved verbatim; new fields are tacked on. Old cl
 
 1. Verify legacy SPK signature over `SPK_pubkey` using peer's IK (same as today).
 2. If exactly one of `signedPreKeyTimestamp` / `signedPreKeyTimestampSignature` is present (not both, not neither) → **hard reject** (looks like tampering); telemetry `c1.spk_timestamp_malformed`.
-3. If both are absent → peer is legacy; proceed without freshness check; record `peerProtocolVersion = .legacy`; telemetry `c1.spk_timestamp_missing`.
+3. If both are absent → peer is legacy; proceed without freshness check; record `peerProtocolVersion = PeerVersion.legacy`; telemetry `c1.spk_timestamp_missing`.
 4. If both are present:
    - Verify `signedPreKeyTimestampSignature` over `SPK_pubkey || timestamp_BE_8B` using peer's IK.
    - If invalid → **hard reject**; telemetry `c1.spk_timestamp_invalid_signature`.
@@ -471,7 +473,7 @@ Net uplift: +25 percentage points on the crypto-layer files.
 
 New file `Telemetry/CryptoHardeningMetrics.swift` exposes 22 counters (C1: 5, C2: 4, C3: 4, C4: 2, policy: 7). All events flow through the existing `ConnectionMetrics` → `/debug/metric` pipeline, flushed every 5 minutes or on app background.
 
-**Privacy:** events carry only `kind: String` and optional `peerProtocolVersion: String?`. **No peer IDs, no message IDs, no payload data.** Aligns with the existing Privacy Manifest.
+**Privacy:** events carry only `kind: String` and optional `peerVersion: String?` (`PeerVersion.rawValue` — e.g., `"legacy"`, `"v5_4_plus"`). **No peer IDs, no message IDs, no payload data.** Aligns with the existing Privacy Manifest.
 
 **Schema:**
 
@@ -479,7 +481,7 @@ New file `Telemetry/CryptoHardeningMetrics.swift` exposes 22 counters (C1: 5, C2
 struct CryptoHardeningEvent: Codable {
     let timestamp: Date
     let kind: String                  // e.g. "c1.spk_timestamp_too_old"
-    let peerProtocolVersion: String?  // "legacy" | "v5_4_plus" | "unknown"
+    let peerVersion: String?  // PeerVersion.rawValue: "legacy" | "v5_4_plus" | "unknown"
     let extra: [String: String]?
 }
 ```
