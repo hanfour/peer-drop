@@ -77,6 +77,14 @@ struct PeerDropApp: App {
                     connectionManager.configureVoiceCalling(callKitManager: callKit)
                 }
 
+                // Wire SecurityPolicyStore + CryptoHardeningMetrics into ConnectionManager.
+                // Done at .onAppear (not @StateObject lazy init) because the lazy
+                // initializer can't reference other instance properties. Future
+                // tasks (PR3/PR5/PR6) consume these via connectionManager.policyStore
+                // and connectionManager.cryptoMetrics at each enforcement site.
+                connectionManager.policyStore = policyStore
+                connectionManager.cryptoMetrics = cryptoMetrics
+
                 // One-time migration of existing chat data to encrypted format
                 if !UserDefaults.standard.bool(forKey: "peerDropDataMigrated") {
                     connectionManager.chatManager.migrateExistingDataToEncrypted()

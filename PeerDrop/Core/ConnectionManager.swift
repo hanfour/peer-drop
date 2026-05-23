@@ -286,15 +286,15 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 
-    /// Policy store injected at App startup. `nil` in unit-test contexts where
-    /// only specific behaviours are under test. Future tasks (PR3, PR5, PR6)
-    /// read `policyStore?.current` to gate crypto decisions.
-    let policyStore: SecurityPolicyStore?
+    /// Policy store injected at App startup (PeerDropApp.onAppear) or via the
+    /// `init` argument in unit-test contexts. `nil` until assignment. Future
+    /// tasks (PR3, PR5, PR6) read `policyStore?.current` to gate crypto decisions.
+    var policyStore: SecurityPolicyStore?
 
     /// Metrics sink for the 22 crypto-hardening telemetry events (spec §8.1).
-    /// `nil` in unit-test contexts. Wired by future tasks as each event site
+    /// Same lifecycle as `policyStore`. Wired by future tasks as each event site
     /// is instrumented.
-    let cryptoMetrics: CryptoHardeningMetrics?
+    var cryptoMetrics: CryptoHardeningMetrics?
 
     // MARK: - Typing Indicator State
 
