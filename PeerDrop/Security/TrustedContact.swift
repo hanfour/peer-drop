@@ -17,12 +17,15 @@ struct TrustedContact: Codable, Identifiable {
     /// Bounded to a small number of entries by `TrustedContactStore`.
     var keyHistory: [KeyChangeRecord]
     /// v5.4 PR7: detected protocol generation of this peer. Set from
-    /// RemoteMessageEnvelope.protocolVersion on first inbound contact
-    /// (responder side) or from PreKeyBundle freshness check on
-    /// outbound initiate (initiator side, set by ConnectionManager
-    /// after a successful X3DH). nil for legacy contacts persisted
-    /// before v5.4 (these decode as nil and are treated as `.unknown`
-    /// at use sites).
+    /// `RemoteMessageEnvelope.protocolVersion` on first inbound contact
+    /// or any subsequent inbound message (responder-side; see
+    /// `ConnectionManager.handleRemoteMessage` and `approveFirstContact`).
+    /// Initiator-side persistence is deferred to a follow-up — initiator
+    /// C2 routing uses the live `X3DH.verifyBundleFreshness` result during
+    /// `RemoteSessionManager.initiateSession`, so peerProtocolVersion is
+    /// not strictly required on the initiator side today.
+    /// nil for legacy contacts persisted before v5.4 (these decode as nil
+    /// and are treated as `.unknown` at use sites).
     var peerProtocolVersion: PeerVersion?
 
     init(
