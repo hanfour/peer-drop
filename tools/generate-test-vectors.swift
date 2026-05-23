@@ -497,6 +497,192 @@ func generateSkippedKeyVectors(outputDir: String, encoder: JSONEncoder) throws {
     }
 }
 
+// MARK: - Policy fixture generation
+
+/// A deterministic Ed25519 signing key derived from a fixed 32-byte seed.
+/// The seed is 0xFE repeated 32 times so it is clearly distinct from the
+/// X3DH/ratchet key-agreement seeds (which use 0xAA–0xEE).
+func curve25519SigningKey(seed: Data) -> Curve25519.Signing.PrivateKey {
+    var attempt = seed
+    for _ in 0..<8 {
+        if let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: attempt) {
+            return key
+        }
+        attempt = Data(SHA256.hash(data: attempt))
+    }
+    fatalError("Could not derive Curve25519 signing key from seed after 8 retries")
+}
+
+/// Return the canonical (sorted-keys, no whitespace) JSON bytes for the 4
+/// policy-envelope fields that form the signing target.
+func canonicalPolicyPayload(
+    schemaVersion: Int,
+    issuedAt: Int,
+    expiresAt: Int,
+    policy: [String: Any]
+) throws -> Data {
+    let envelope: [String: Any] = [
+        "schemaVersion": schemaVersion,
+        "issuedAt":      issuedAt,
+        "expiresAt":     expiresAt,
+        "policy":        policy
+    ]
+    return try JSONSerialization.data(
+        withJSONObject: envelope,
+        options: [.sortedKeys]
+    )
+}
+
+/// The canonical policy dictionary used by all 5 fixtures (except where noted).
+let standardPolicy: [String: Any] = [
+    "spkMaxAgeDays":               21,
+    "spkExpirationBehavior":       "warn",
+    "opkExhaustionBehavior":       ["legacy": "proceedWithoutDH4", "strict": "failClosed"],
+    "opkRetryMaxAttempts":         5,
+    "opkRetryIntervalSeconds":     60,
+    "skippedKeyTTLDays":           30,
+    "skippedKeyMaxCount":          200,
+    "consumedOPKPruneWindowDays":  90
+]
+
+/// Produce the 6 files in `outputDir`:
+///   test-signing-key.json  (test-only Ed25519 keypair)
+///   valid.json             (fully-signed, in-date)
+///   expired.json           (valid sig, expired timestamps)
+///   tampered-sig.json      (valid.json with last sig byte flipped)
+///   malformed-json.json    (JSON syntax error before sig check)
+///   unsupported-version.json (schemaVersion=999, valid sig)
+func generatePolicyFixtures(outputDir: String) throws {
+    try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
+
+    // ── Signing key ────────────────────────────────────────────────────────────
+    // Use a fixed seed so the generated fixtures are deterministic across runs.
+    let keySeed = Data(repeating: 0xFE, count: 32)
+    let privateKey = curve25519SigningKey(seed: keySeed)
+    let pubKeyB64  = privateKey.publicKey.rawRepresentation.base64EncodedString()
+    let privKeyB64 = privateKey.rawRepresentation.base64EncodedString()
+
+    let keyJSON: [String: Any] = [
+        "private_key_base64": privKeyB64,
+        "public_key_base64":  pubKeyB64,
+        "comment": "TEST-ONLY key for CryptoTestKit fixtures. Never used in production. Real production signing keys are stored offline per docs/security/crypto-policy-format.md."
+    ]
+    let keyData = try JSONSerialization.data(
+        withJSONObject: keyJSON,
+        options: [.prettyPrinted, .sortedKeys]
+    )
+    let keyPath = (outputDir as NSString).appendingPathComponent("test-signing-key.json")
+    try keyData.write(to: URL(fileURLWithPath: keyPath))
+    print("Generated policy/test-signing-key.json")
+
+    // ── Helper: build + write a complete signed-policy JSON file ──────────────
+    func writeSignedPolicy(
+        filename: String,
+        schemaVersion: Int,
+        issuedAt: Int,
+        expiresAt: Int,
+        policy: [String: Any],
+        signatureOverride: String? = nil
+    ) throws {
+        let payload = try canonicalPolicyPayload(
+            schemaVersion: schemaVersion,
+            issuedAt: issuedAt,
+            expiresAt: expiresAt,
+            policy: policy
+        )
+        let signature = try privateKey.signature(for: payload).base64EncodedString()
+        let finalSig = signatureOverride ?? signature
+
+        let doc: [String: Any] = [
+            "schemaVersion": schemaVersion,
+            "issuedAt":      issuedAt,
+            "expiresAt":     expiresAt,
+            "policy":        policy,
+            "signature":     finalSig
+        ]
+        let jsonData = try JSONSerialization.data(
+            withJSONObject: doc,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        let outPath = (outputDir as NSString).appendingPathComponent(filename)
+        try jsonData.write(to: URL(fileURLWithPath: outPath))
+        print("Generated policy/\(filename)")
+    }
+
+    // ── 1. valid.json ──────────────────────────────────────────────────────────
+    try writeSignedPolicy(
+        filename: "valid.json",
+        schemaVersion: 1,
+        issuedAt: 1748000000,
+        expiresAt: 1750592000,
+        policy: standardPolicy
+    )
+
+    // ── 2. expired.json ────────────────────────────────────────────────────────
+    // Signature is genuinely valid — it covers schemaVersion=1, old timestamps.
+    // PR4 rejects this for time reasons, not signature reasons.
+    try writeSignedPolicy(
+        filename: "expired.json",
+        schemaVersion: 1,
+        issuedAt: 1500000000,
+        expiresAt: 1500100000,
+        policy: standardPolicy
+    )
+
+    // ── 3. tampered-sig.json ───────────────────────────────────────────────────
+    // Generate valid.json's signature then flip the last byte of the raw bytes.
+    let validPayload = try canonicalPolicyPayload(
+        schemaVersion: 1,
+        issuedAt: 1748000000,
+        expiresAt: 1750592000,
+        policy: standardPolicy
+    )
+    let validSigData = try privateKey.signature(for: validPayload)
+    var sigBytes = Data(validSigData)
+    sigBytes[sigBytes.count - 1] ^= 0xFF   // flip all bits of the last byte
+    let tamperedSigB64 = sigBytes.base64EncodedString()
+
+    try writeSignedPolicy(
+        filename: "tampered-sig.json",
+        schemaVersion: 1,
+        issuedAt: 1748000000,
+        expiresAt: 1750592000,
+        policy: standardPolicy,
+        signatureOverride: tamperedSigB64
+    )
+
+    // ── 4. malformed-json.json ────────────────────────────────────────────────
+    // Intentionally invalid JSON: missing closing brace on the outer object.
+    // JSONSerialization.jsonObject() reliably throws on unclosed braces.
+    // Note: JSONSerialization is lenient with trailing commas on Darwin, so
+    // we use a missing closing brace instead — it is consistently rejected.
+    let malformedRaw = """
+    {
+      "schemaVersion": 1,
+      "issuedAt": 1748000000,
+      "expiresAt": 1750592000,
+      "policy": {
+        "spkMaxAgeDays": 21,
+        "spkExpirationBehavior": "warn"
+      },
+      "signature": "dGVzdA=="
+    """
+    let malformedPath = (outputDir as NSString).appendingPathComponent("malformed-json.json")
+    try Data(malformedRaw.utf8).write(to: URL(fileURLWithPath: malformedPath))
+    print("Generated policy/malformed-json.json")
+
+    // ── 5. unsupported-version.json ───────────────────────────────────────────
+    // schemaVersion=999; signature is valid over schemaVersion=999.
+    // PR4 rejects as unsupportedSchemaVersion, not as signatureInvalid.
+    try writeSignedPolicy(
+        filename: "unsupported-version.json",
+        schemaVersion: 999,
+        issuedAt: 1748000000,
+        expiresAt: 1750592000,
+        policy: standardPolicy
+    )
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -569,3 +755,8 @@ print("Done — 30 ratchet vectors written to \(ratchetDir)")
 let skippedDir = (outputDir as NSString).appendingPathComponent("skipped-keys")
 try generateSkippedKeyVectors(outputDir: skippedDir, encoder: encoder)
 print("Done — 10 skipped-key vectors written to \(skippedDir)")
+
+// ── Policy fixtures ───────────────────────────────────────────────────────────
+let policyDir = (outputDir as NSString).appendingPathComponent("policy")
+try generatePolicyFixtures(outputDir: policyDir)
+print("Done — 6 policy fixtures written to \(policyDir)")
