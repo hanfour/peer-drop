@@ -366,6 +366,137 @@ func generateRatchetVectors(outputDir: String, encoder: JSONEncoder) throws {
     }
 }
 
+// MARK: - Skipped-key vector JSON structures
+
+/// A frozen ciphertext for a single Alice message in a skipped-key vector.
+/// Indexed by Alice's sequential send order, not Bob's receive order.
+struct FrozenSkippedMessage: Encodable {
+    let ratchet_key: String        // base64 of Alice's ratchet public key
+    let counter: UInt32
+    let previous_counter: UInt32
+    let ciphertext: String         // base64 of AES-256-GCM .combined bytes (nonce+ct+tag)
+    let plaintext_hex: String      // expected plaintext, stored for test assertion
+}
+
+/// JSON structure for one skipped-key vector.
+struct SkippedKeyVectorJSON: Encodable {
+    let name: String
+    let inputs: Inputs
+    let bob_receive_order: [Int]
+    let messages: [FrozenSkippedMessage]   // indexed in Alice's send order (0, 1, 2, …)
+
+    struct Inputs: Encodable {
+        let root_key_seed: String
+        let alice_initial_ratchet_seed: String
+        let bob_initial_ratchet_seed: String
+        let alice_plaintexts_hex: [String]
+    }
+}
+
+/// Generate all 10 skipped-key vectors into `outputDir`.
+/// Alice sends N messages in order; the vector records Bob's scrambled receive
+/// order so the test can verify skippedKeys cache + catch-up.
+func generateSkippedKeyVectors(outputDir: String, encoder: JSONEncoder) throws {
+    try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
+
+    // Blueprint: (vectorIndex, msgCount, plaintextFillByte, receiveOrder)
+    // fieldByte for seeds: 0x44/0x55/0x66 to keep seeds distinct from ratchet/x3dh families.
+    typealias Blueprint = (idx: Int, msgCount: Int, fillByte: UInt8, order: [Int])
+
+    let blueprints: [Blueprint] = [
+        // ── Small N (3–5 messages), simple swaps ────────────────────────────────
+        // 001: N=3, swap first two
+        (1, 3,  0xA1, [1, 0, 2]),
+        // 002: N=4, reverse
+        (2, 4,  0xA2, [3, 2, 1, 0]),
+        // 003: N=5, last delayed
+        (3, 5,  0xA3, [0, 1, 2, 4, 3]),
+
+        // ── Medium N (8–12 messages), single delay ───────────────────────────────
+        // 004: N=8, receive msg5 first, then 0–4, then 6–7
+        (4, 8,  0xB1, [5, 0, 1, 2, 3, 4, 6, 7]),
+        // 005: N=10, receive last msg first, then rest in order
+        (5, 10, 0xB2, [9, 0, 1, 2, 3, 4, 5, 6, 7, 8]),
+        // 006: N=12, message 11 delayed (received after 0–10)
+        (6, 12, 0xB3, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+        // (vector 006 is in-order by design — skippedKeys shouldn't fire, but
+        //  confirms the generate/replay loop is correct with a trivial permutation)
+
+        // ── Large N (15–25 messages), multiple gaps ──────────────────────────────
+        // 007: N=15, every other message delayed (interleaved: 1,3,5,7,9,11,13 first, then evens)
+        (7, 15, 0xC1, [1, 3, 5, 7, 9, 11, 13, 0, 2, 4, 6, 8, 10, 12, 14]),
+        // 008: N=20, first half reversed, second half in order
+        (8, 20, 0xC2, [9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]),
+        // 009: N=25, last 5 received first, then 0–19 in order
+        (9, 25, 0xC3, [20, 21, 22, 23, 24, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]),
+
+        // ── Stress test: N=50, fully reversed ────────────────────────────────────
+        // 010: 50 messages, receive order [49, 48, …, 0]
+        // Max gap at first receive = 49 — well under maxSkip=200.
+        (10, 50, 0xD1, Array((0..<50).reversed())),
+    ]
+
+    for bp in blueprints {
+        let n = bp.idx
+        let rootSeed  = makeSeed(vectorIndex: n, fieldByte: 0x44)
+        let aliceSeed = makeSeed(vectorIndex: n, fieldByte: 0x55)
+        let bobSeed   = makeSeed(vectorIndex: n, fieldByte: 0x66)
+
+        let rootKey   = deriveRootKey(seed: rootSeed)
+        let aliceKey  = curve25519AgreementKey(seed: aliceSeed)
+        let bobKey    = curve25519AgreementKey(seed: bobSeed)
+
+        // Alice: initializeAsInitiator equivalent (same as generateRatchetVectors).
+        let aliceSession = RatchetSession(rootKey: rootKey, myRatchetKey: aliceKey)
+        aliceSession.theirRatchetKey = bobKey.publicKey
+        let (newRootKey, sendChain) = dhRatchetStep(
+            rootKey: rootKey,
+            myKey: aliceKey,
+            theirKey: bobKey.publicKey
+        )
+        aliceSession.rootKey = newRootKey
+        aliceSession.sendChainKey = sendChain
+
+        // Build deterministic plaintexts (fill with bp.fillByte XOR msgIdx).
+        var plaintextHexes: [String] = []
+        var frozenMessages: [FrozenSkippedMessage] = []
+
+        for msgIdx in 0..<bp.msgCount {
+            let fillByte = UInt8((Int(bp.fillByte) ^ msgIdx) & 0xFF)
+            let plaintext = Data(repeating: fillByte, count: 4)  // 4 bytes each for simplicity
+            plaintextHexes.append(toHex(plaintext))
+
+            let base = try ratchetEncrypt(session: aliceSession, plaintext: plaintext)
+            frozenMessages.append(FrozenSkippedMessage(
+                ratchet_key:      base.ratchet_key,
+                counter:          base.counter,
+                previous_counter: base.previous_counter,
+                ciphertext:       base.ciphertext,
+                plaintext_hex:    base.plaintext_hex
+            ))
+        }
+
+        let vecName = String(format: "skipped-%03d", n)
+        let vector = SkippedKeyVectorJSON(
+            name: vecName,
+            inputs: SkippedKeyVectorJSON.Inputs(
+                root_key_seed:               toHex(rootSeed),
+                alice_initial_ratchet_seed:  toHex(aliceSeed),
+                bob_initial_ratchet_seed:    toHex(bobSeed),
+                alice_plaintexts_hex:        plaintextHexes
+            ),
+            bob_receive_order: bp.order,
+            messages: frozenMessages
+        )
+
+        let jsonData = try encoder.encode(vector)
+        let filename = String(format: "skipped-%03d.json", n)
+        let outPath = (outputDir as NSString).appendingPathComponent(filename)
+        try jsonData.write(to: URL(fileURLWithPath: outPath))
+        print("Generated skipped-keys/\(filename) (\(bp.msgCount) messages, order: \(bp.order))")
+    }
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -433,3 +564,8 @@ print("Done — 20 X3DH vectors written to \(x3dhDir)")
 let ratchetDir = (outputDir as NSString).appendingPathComponent("ratchet")
 try generateRatchetVectors(outputDir: ratchetDir, encoder: encoder)
 print("Done — 30 ratchet vectors written to \(ratchetDir)")
+
+// ── Skipped-key (out-of-order) vectors ────────────────────────────────────────
+let skippedDir = (outputDir as NSString).appendingPathComponent("skipped-keys")
+try generateSkippedKeyVectors(outputDir: skippedDir, encoder: encoder)
+print("Done — 10 skipped-key vectors written to \(skippedDir)")
