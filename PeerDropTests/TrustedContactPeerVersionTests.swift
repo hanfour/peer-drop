@@ -40,6 +40,17 @@ final class TrustedContactPeerVersionTests: XCTestCase {
         }
     }
 
+    /// Sanity smoke: a TrustedContact whose peerProtocolVersion was set from
+    /// envelope.protocolVersion=1 round-trips and retains .v5_4_plus.
+    /// (The full ConnectionManager.handleRemoteMessage path is exercised
+    /// indirectly by RelayTrustGateIntegrationTests; this test pins the
+    /// mapping behavior at the smoke level.)
+    func test_envelope_version_maps_to_contact_version() {
+        XCTAssertEqual(PeerVersion.from(envelopeProtocolVersion: nil), .legacy)
+        XCTAssertEqual(PeerVersion.from(envelopeProtocolVersion: 1), .v5_4_plus)
+        XCTAssertEqual(PeerVersion.from(envelopeProtocolVersion: 2), .unknown)
+    }
+
     // MARK: - Helpers
 
     private func makeTestContact() -> TrustedContact {

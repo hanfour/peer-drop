@@ -1165,6 +1165,10 @@ final class ConnectionManager: ObservableObject {
                 trustedContactStore.updateMailboxId(for: contact.id, mailboxId: envelope.senderMailboxId)
             }
 
+            // Update peer protocol version from the envelope (no-op when unchanged).
+            let detectedVersion = PeerVersion.from(envelopeProtocolVersion: envelope.protocolVersion)
+            trustedContactStore.updatePeerProtocolVersion(for: contact.id, to: detectedVersion)
+
             // Establish session if needed (responder side)
             if !remoteSessionManager.hasSession(for: contact.id.uuidString),
                let ephKey = envelope.ephemeralKey,
@@ -1282,7 +1286,8 @@ final class ConnectionManager: ObservableObject {
             displayName: current.senderDisplayName,
             identityPublicKey: current.senderIdentityKey,
             trustLevel: .linked,
-            mailboxId: pending.envelope.senderMailboxId
+            mailboxId: pending.envelope.senderMailboxId,
+            peerProtocolVersion: PeerVersion.from(envelopeProtocolVersion: pending.envelope.protocolVersion)
         )
         trustedContactStore.add(newContact)
         logger.info("Created first-contact after user approval: \(newContact.displayName)")

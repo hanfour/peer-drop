@@ -84,6 +84,13 @@ final class TrustedContactStore: ObservableObject {
         scheduleSave()
     }
 
+    func updatePeerProtocolVersion(for id: UUID, to version: PeerVersion) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        guard contacts[index].peerProtocolVersion != version else { return }
+        contacts[index].peerProtocolVersion = version
+        scheduleSave()
+    }
+
     // MARK: - Key Change Detection
 
     func detectKeyChange(contactId: UUID, newPublicKey: Data) -> Bool {
