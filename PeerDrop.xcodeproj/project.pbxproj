@@ -77,6 +77,7 @@
 		27538539E3C9506E49455EF5 /* PeerConnectionSecureChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */; };
 		2782480390204B1B5A7D7AB9 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D513DA2C80E63FB9BB413B42 /* CallKitManager.swift */; };
 		27A6618B320BC359BCC8078F /* DeviceRecordRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */; };
+		27E277572AD10A5381AE7884 /* OutboundRetryQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */; };
 		280BF31AA41E3BAC1C08A812 /* TrustLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EDE654A552D9511140C884 /* TrustLevel.swift */; };
 		282143D8C8CB0561FFF26BFF /* SpriteMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0BF9F1EF46F41ED0B114448 /* SpriteMetadata.swift */; };
 		285C6DC2F8C8E3F6A6C21FB4 /* PetSocialEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C973C678BBCA30464FCE38 /* PetSocialEngineTests.swift */; };
@@ -457,6 +458,7 @@
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
 		DF24681F486E8AF718E5875D /* BodyTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34290A3B298585384BF81AE5 /* BodyTemplate.swift */; };
 		DF96C1C5C2F3A91E44F79C66 /* MailboxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F993BA6D5384B7F944865C /* MailboxClient.swift */; };
+		DFBF65321D26B743DF530D83 /* OutboundRetryQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64750A037D7911010C83ED88 /* OutboundRetryQueue.swift */; };
 		E0F49931A713C3C857125441 /* vec-004.json in Resources */ = {isa = PBXBuildFile; fileRef = FB597AFD58B9274F19DE8B30 /* vec-004.json */; };
 		E0FDAF310886E1D33FB82857 /* IdentityKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6319A75CCE98A8A821E35B53 /* IdentityKeyManagerTests.swift */; };
 		E158D469EC4DC2A47D885373 /* MessageEditDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9B97DBDAB6199D70D28408 /* MessageEditDeleteTests.swift */; };
@@ -656,6 +658,7 @@
 		291F720853B1B946C0B4BF9F /* vec-005.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vec-005.json"; sourceTree = "<group>"; };
 		292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayConnectView.swift; sourceTree = "<group>"; };
 		297F36EE901C5CDF82966A0A /* ratchet-024.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-024.json"; sourceTree = "<group>"; };
+		2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundRetryQueueTests.swift; sourceTree = "<group>"; };
 		2AB1F200A5ADD6ED30220611 /* AccessoryOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessoryOverlay.swift; sourceTree = "<group>"; };
 		2ABFC57B318C395448417015 /* PetTimeOfDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetTimeOfDayTests.swift; sourceTree = "<group>"; };
 		2AC40206FC32B2304A187E87 /* Data+Chunking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Chunking.swift"; sourceTree = "<group>"; };
@@ -777,6 +780,7 @@
 		62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerIdentity.swift; sourceTree = "<group>"; };
 		6319A75CCE98A8A821E35B53 /* IdentityKeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityKeyManagerTests.swift; sourceTree = "<group>"; };
 		6333149EDC27AFE4F386D892 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		64750A037D7911010C83ED88 /* OutboundRetryQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundRetryQueue.swift; sourceTree = "<group>"; };
 		6508A043BAB97696443917B9 /* CryptoHardeningMetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoHardeningMetricsTests.swift; sourceTree = "<group>"; };
 		6517F84FBE73BA4E9C72189D /* PeerDropWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDropWidget.entitlements; sourceTree = "<group>"; };
 		651B2EA5C9678F5E4B9673B7 /* ratchet-028.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-028.json"; sourceTree = "<group>"; };
@@ -1279,6 +1283,7 @@
 				D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */,
 				B1A5F174279BDB3232734FF4 /* NearbyInteractionTests.swift */,
 				84ACF719D35D40517BDD7F89 /* NetworkFingerprintTests.swift */,
+				2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */,
 				043E7D352DA50757FD403C6C /* PairingPayloadTests.swift */,
 				8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */,
 				220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */,
@@ -1474,6 +1479,7 @@
 				C4F993BA6D5384B7F944865C /* MailboxClient.swift */,
 				2AC571ACAB71932C18575C55 /* MailboxManager.swift */,
 				C3B151AA8B81196D0B94DFC8 /* MessageFramer.swift */,
+				64750A037D7911010C83ED88 /* OutboundRetryQueue.swift */,
 				73122425C58B15567D7F7F9D /* TCPTransport.swift */,
 				BF403F57E4AFEF57037755B2 /* TransferMetadata.swift */,
 				2688CA0B5DF0712CDB7418FF /* TransferRecord.swift */,
@@ -2422,6 +2428,7 @@
 				DB4F37B564729FC0C5194D00 /* MoodOverlayTests.swift in Sources */,
 				177679DC77E50364286524D4 /* NearbyInteractionTests.swift in Sources */,
 				EDD43CFF5EC727F0F3696DF5 /* NetworkFingerprintTests.swift in Sources */,
+				27E277572AD10A5381AE7884 /* OutboundRetryQueueTests.swift in Sources */,
 				EC619EE7C1A8D81571523362 /* PairingPayloadTests.swift in Sources */,
 				27538539E3C9506E49455EF5 /* PeerConnectionSecureChannelTests.swift in Sources */,
 				06528AA9160E9CF2F6DC7F90 /* PeerIdentitySecurityTests.swift in Sources */,
@@ -2673,6 +2680,7 @@
 				BBC0DE4F2E2D726004FF0149 /* NotificationManager.swift in Sources */,
 				CAC27B1F838C28AE0141FFB7 /* OctopusBehavior.swift in Sources */,
 				F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */,
+				DFBF65321D26B743DF530D83 /* OutboundRetryQueue.swift in Sources */,
 				1603007083612F74127C38CE /* PINVerificationView.swift in Sources */,
 				F466FB89CB8672F3E104263B /* PairingPayload.swift in Sources */,
 				1F91DF18EB139081A02E6519 /* PeerActionSheet.swift in Sources */,
