@@ -64,18 +64,13 @@ class DoubleRatchetSession: Codable {
     /// Runtime cache entry for a skipped (out-of-order) message key.
     /// Holds both the key and when we first cached it so the TTL pass in
     /// `decrypt` can evict entries older than `policy.skippedKeyTTLDays`.
-    public struct SkippedKeyEntry: Equatable {
+    public struct SkippedKeyEntry {
         public let key: SymmetricKey
         public let createdAt: Date
 
         public init(key: SymmetricKey, createdAt: Date) {
             self.key = key
             self.createdAt = createdAt
-        }
-
-        public static func == (lhs: SkippedKeyEntry, rhs: SkippedKeyEntry) -> Bool {
-            lhs.key.withUnsafeBytes { Data($0) } == rhs.key.withUnsafeBytes { Data($0) } &&
-            lhs.createdAt == rhs.createdAt
         }
     }
 

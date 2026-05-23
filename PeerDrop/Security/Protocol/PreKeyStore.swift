@@ -17,19 +17,15 @@ final class PreKeyStore {
     private let lock = NSLock()
 
     /// Injected by `PeerDropApp.onAppear` (and callers in the test suite).
-    /// When set, `saveSync` runs the C4 prune pass before each write.
-    ///
-    /// `SecurityPolicyStore.current` is `@MainActor`-isolated, so the store
-    /// cannot be read directly from `saveSync` (which runs on a background
-    /// `DispatchQueue`). The wiring in `PeerDropApp.onAppear` therefore passes
-    /// `policyStore.current` (a plain value copy) via `activePolicy` below.
-    /// This property is retained only so callers can follow the same injection
-    /// pattern as `RemoteSessionManager.policyStore`.
-    public var policyStore: SecurityPolicyStore? {
-        willSet { /* activePolicy set separately by the wiring site */ }
-    }
-    /// Plain-value snapshot of `policyStore.current`, set by `PeerDropApp.onAppear`
-    /// on the main thread at the same time as `policyStore`. Background-safe.
+    /// Retained for symmetry with `RemoteSessionManager.policyStore`. The
+    /// background-safe value used by `saveSync` is `activePolicy` below.
+    public var policyStore: SecurityPolicyStore?
+
+    /// Plain-value snapshot of `policyStore.current`. `SecurityPolicyStore.current`
+    /// is `@MainActor`-isolated, so `saveSync` (background `DispatchQueue`) can't
+    /// read it directly. `PeerDropApp` subscribes to `policyStore.$current` and
+    /// re-assigns `activePolicy` on every update so the latest worker-supplied
+    /// policy reaches the prune path without restarting the app.
     public var activePolicy: SecurityPolicy?
     /// Injected by `PeerDropApp.onAppear`. Records `c4.consumed_opk_pruned`
     /// and `c4.consumed_opk_size` on every `saveSync`.
@@ -226,7 +222,10 @@ final class PreKeyStore {
         // MARK: Decodable — backward-compat across three on-disk formats:
         //   v3.3-era:  consumedOneTimePreKeyIds absent (nil)
         //   v5.0–v5.3: consumedOneTimePreKeyIds is a JSON array of UInt32
-        //   v5.4+:     consumedOneTimePreKeyIds is a JSON object UInt32→ISO8601 Date
+        //   v5.4+:     consumedOneTimePreKeyIds is a flat JSON array of
+        //              alternating UInt32 keys + ISO8601 Date values — Swift's
+        //              default Codable encoding for `[UInt32: Date]`. Interop
+        //              with non-Swift tools would require manual canonicalization.
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.currentSignedPreKey = try c.decode(PersistedSignedPreKey.self, forKey: .currentSignedPreKey)

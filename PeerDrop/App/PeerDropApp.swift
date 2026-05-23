@@ -52,6 +52,13 @@ struct PeerDropApp: App {
                 guard let userInfo = notification.userInfo else { return }
                 PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
             }
+            .onReceive(policyStore.$current) { newPolicy in
+                // PR3 follow-up: re-snapshot `activePolicy` on every policy update so
+                // PR4's async worker fetch reaches the background-thread C4 prune path
+                // without requiring an app restart. Fires once on subscription (initial
+                // value) and again on every `policyStore.current` mutation.
+                connectionManager.preKeyStore.activePolicy = newPolicy
+            }
             .task {
                 await PushNotificationManager.shared.requestAuthorizationAndRegister()
                 await ConnectionMetrics.shared.fetchRemoteConfig()
@@ -88,11 +95,13 @@ struct PeerDropApp: App {
                 connectionManager.remoteSessionManager.cryptoMetrics = cryptoMetrics
                 // Task 3.8: C4 prune wiring — PreKeyStore runs the consumed-OPK
                 // prune pass on every saveSync when a policy is available.
-                // `policyStore.current` is @MainActor-isolated; we snapshot the
-                // value here (still on main thread) into `activePolicy` so the
-                // background-thread saveSync can read it without an actor hop.
+                // `policyStore` and `cryptoMetrics` are stable references and only
+                // need a one-shot assignment here. `activePolicy` (the value-copy
+                // snapshot consumed from the background-thread saveSync path) is
+                // refreshed reactively via the `.onReceive(policyStore.$current)`
+                // subscription above — so PR4's async worker fetches propagate
+                // without requiring an app restart.
                 connectionManager.preKeyStore.policyStore = policyStore
-                connectionManager.preKeyStore.activePolicy = policyStore.current
                 connectionManager.preKeyStore.cryptoMetrics = cryptoMetrics
 
                 // One-time migration of existing chat data to encrypted format
