@@ -45,6 +45,11 @@ struct PublicSignedPreKey: Codable {
     let id: UInt32
     let publicKey: Data
     let signature: Data
+    /// **NOT verified — informational only.** This `Date` was added before C1
+    /// existed and is purely a hint from the sender's wall clock. For
+    /// security-relevant timestamp checks (freshness against
+    /// `policy.spkMaxAgeDays`), read `PreKeyBundle.signedPreKeyTimestamp` —
+    /// it carries a separate signed Ed25519 attestation per spec §4.1.
     let timestamp: Date
 
     func verify(with signingPublicKey: Curve25519.Signing.PublicKey) -> Bool {
@@ -105,4 +110,37 @@ struct PreKeyBundle: Codable {
     let signingKey: Data                     // Ed25519 signing public key
     let signedPreKey: PublicSignedPreKey      // Medium-term key + signature
     let oneTimePreKeys: [PublicOneTimePreKey] // Single-use keys
+
+    // NEW for v5.4 (Task 6.1 — C1 SPK timestamp binding).
+    // Both fields are optional so bundles emitted by v5.0–v5.3 clients decode
+    // unchanged on new receivers (synthesized Codable returns nil for absent
+    // JSON keys). v5.0–v5.3 receivers also ignore these unknown JSON keys when
+    // decoding bundles emitted by v5.4+ clients.
+    //
+    // signedPreKeyTimestamp            — Unix seconds when the SPK was created/signed.
+    // signedPreKeyTimestampSignature   — Ed25519 signature over
+    //                                    SPK_pubkey || timestamp_BE_8_bytes
+    //                                    using the identity signing key.
+    //                                    Verified by Task 6.3's freshness gate.
+    let signedPreKeyTimestamp: UInt64?
+    let signedPreKeyTimestampSignature: Data?
+
+    /// Memberwise init with defaults for the new v5.4 fields so that all
+    /// existing call sites (v5.0–v5.3 style, no timestamp args) compile
+    /// unchanged. Task 6.2 will supply real values when signing the SPK.
+    init(
+        identityKey: Data,
+        signingKey: Data,
+        signedPreKey: PublicSignedPreKey,
+        oneTimePreKeys: [PublicOneTimePreKey],
+        signedPreKeyTimestamp: UInt64? = nil,
+        signedPreKeyTimestampSignature: Data? = nil
+    ) {
+        self.identityKey = identityKey
+        self.signingKey = signingKey
+        self.signedPreKey = signedPreKey
+        self.oneTimePreKeys = oneTimePreKeys
+        self.signedPreKeyTimestamp = signedPreKeyTimestamp
+        self.signedPreKeyTimestampSignature = signedPreKeyTimestampSignature
+    }
 }

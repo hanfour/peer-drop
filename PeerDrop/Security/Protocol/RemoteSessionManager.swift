@@ -42,11 +42,27 @@ final class RemoteSessionManager: ObservableObject {
     ) async throws -> InitiateResult {
         let bundle = try await mailboxClient.fetchPreKeyBundle(mailboxId: peerMailboxId)
 
-        // Validate signed pre-key signature
+        // Validate signed pre-key signature (legacy — pre-C1, over SPK_pubkey alone).
         let signingPub = try Curve25519.Signing.PublicKey(rawRepresentation: bundle.signingKey)
         guard bundle.signedPreKey.verify(with: signingPub) else {
             throw RemoteSessionError.invalidSignedPreKey
         }
+
+        // C1 freshness gate (PR6 / spec §4.1). 5-branch matrix:
+        //   - legacy peer (both nil) → returns .legacy
+        //   - v5.4+ fresh / .warn-mode expired → returns .v5_4_plus
+        //   - malformed / invalid sig / .reject-mode expired → throws, propagates out
+        // peerVersion is passed to initiatorKeyAgreement below so the C2 OPK gate
+        // (PR5) routes correctly: legacy peer → proceedWithoutDH4, v5.4+ → failClosed.
+        let peerVersion = try X3DH.verifyBundleFreshness(
+            signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+            peerSigningKey: signingPub,
+            now: Date(),
+            policy: policyStore?.current ?? .bundledDefault,
+            metrics: cryptoMetrics
+        )
 
         let theirIdentityKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: bundle.identityKey)
         let theirSignedPreKey = try bundle.signedPreKey.agreementPublicKey()
@@ -62,7 +78,10 @@ final class RemoteSessionManager: ObservableObject {
             myEphemeralKey: ephemeralKey,
             theirIdentityKey: theirIdentityKey,
             theirSignedPreKey: theirSignedPreKey,
-            theirOneTimePreKey: theirOneTimePreKey
+            theirOneTimePreKey: theirOneTimePreKey,
+            peerVersion: peerVersion,
+            policy: policyStore?.current ?? .bundledDefault,
+            metrics: cryptoMetrics
         )
 
         let session = DoubleRatchetSession.initializeAsInitiator(

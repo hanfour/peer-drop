@@ -126,6 +126,10 @@ struct FetchedPreKeyBundle: Codable {
     let signingKey: Data
     let signedPreKey: PublicSignedPreKey
     let oneTimePreKey: PublicOneTimePreKey?
+    // v5.4 C1 — see PreKeyBundle for the wire contract. Optional so legacy
+    // (v5.0–v5.3) responder bundles still decode.
+    let signedPreKeyTimestamp: UInt64?
+    let signedPreKeyTimestampSignature: Data?
 }
 
 struct SendMessageRequest: Codable {
