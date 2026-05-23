@@ -21,10 +21,12 @@ final class PreKeyStore {
     private var oneTimePreKeys: [UInt32: OneTimePreKey] = [:]
     private var nextOneTimePreKeyId: UInt32 = 0
     private var nextSignedPreKeyId: UInt32 = 1
-    /// Ids of one-time pre-keys that have been consumed. Persisted so that a
-    /// crash between in-memory removal and disk persist cannot expose a
-    /// consumed OTP for replay on next launch.
-    private var consumedOneTimePreKeyIds: Set<UInt32> = []
+    /// Ids of one-time pre-keys that have been consumed, keyed by the Date they
+    /// were consumed. Persisted so that a crash between in-memory removal and
+    /// disk persist cannot expose a consumed OTP for replay on next launch.
+    /// The timestamp enables the prune pass (Task 3.8 / C4) to evict entries
+    /// older than `policy.consumedOPKPruneWindowDays` (default 90 days).
+    private var consumedOneTimePreKeyIds: [UInt32: Date] = [:]
 
     var currentSignedPreKey: SignedPreKey {
         lock.lock()
@@ -44,7 +46,7 @@ final class PreKeyStore {
         if let state = Self.loadState(storageKey: storageKey, encryptor: ChatDataEncryptor.shared) {
             self._currentSignedPreKey = state.currentSignedPreKey.toSignedPreKey()
             self.previousSignedPreKeys = state.previousSignedPreKeys.map { $0.toSignedPreKey() }
-            self.consumedOneTimePreKeyIds = state.consumedOneTimePreKeyIds ?? []
+            self.consumedOneTimePreKeyIds = state.consumedOneTimePreKeyIds ?? [:]
             var loaded = Dictionary(uniqueKeysWithValues:
                 state.oneTimePreKeys.map { ($0.id, $0.toOneTimePreKey()) }
             )
@@ -52,10 +54,10 @@ final class PreKeyStore {
             // set, that means we crashed after marking the OTP consumed but
             // before its removal landed on disk. Drop those OTPs now so they
             // are never surfaced for reuse.
-            let crashedConsume = self.consumedOneTimePreKeyIds.intersection(loaded.keys)
-            if !crashedConsume.isEmpty {
-                Self.logger.warning("Evicting \(crashedConsume.count) OTP(s) on load (consumed but not removed before crash)")
-                for id in crashedConsume { loaded.removeValue(forKey: id) }
+            let crashedConsumeIds = self.consumedOneTimePreKeyIds.keys.filter { loaded[$0] != nil }
+            if !crashedConsumeIds.isEmpty {
+                Self.logger.warning("Evicting \(crashedConsumeIds.count) OTP(s) on load (consumed but not removed before crash)")
+                for id in crashedConsumeIds { loaded.removeValue(forKey: id) }
             }
             self.oneTimePreKeys = loaded
             self.nextOneTimePreKeyId = state.nextOneTimePreKeyId
@@ -92,7 +94,7 @@ final class PreKeyStore {
         //  (a) replays of an old initial message after the OTP was consumed
         //  (b) crash-after-mark-consumed-before-evict races (load() drops these
         //      from oneTimePreKeys, but the consumed set still rejects them)
-        if consumedOneTimePreKeyIds.contains(id) {
+        if consumedOneTimePreKeyIds[id] != nil {
             lock.unlock()
             return nil
         }
@@ -103,7 +105,7 @@ final class PreKeyStore {
         // Mark consumed FIRST so that even if the synchronous save below
         // crashes mid-write, the next launch sees the id in the consumed set
         // and won't surface this OTP for reuse.
-        consumedOneTimePreKeyIds.insert(id)
+        consumedOneTimePreKeyIds[id] = Date()
         oneTimePreKeys.removeValue(forKey: id)
         replenishOneTimePreKeysLocked()
         // Snapshot state under the lock; release before file I/O.
@@ -165,19 +167,83 @@ final class PreKeyStore {
 
     // MARK: - Persistence
 
-    private struct PersistedState: Codable {
+    struct PersistedState: Codable {
         let currentSignedPreKey: PersistedSignedPreKey
         let previousSignedPreKeys: [PersistedSignedPreKey]
         let oneTimePreKeys: [PersistedOneTimePreKey]
         let nextOneTimePreKeyId: UInt32
         let nextSignedPreKeyId: UInt32
-        /// Optional for backward compatibility with v3.3-era stores written
-        /// before transactional OTP consumption was introduced. Decoding nil
-        /// means "no consumed set yet" and is treated as empty on load.
-        let consumedOneTimePreKeyIds: Set<UInt32>?
+        /// Consumed OPK IDs mapped to the Date they were consumed.
+        /// Optional for backward compatibility with v3.3-era stores (no consumed
+        /// set) and v5.0–v5.3 stores (array of UInt32). Manual Codable conformance
+        /// handles all three formats transparently.
+        let consumedOneTimePreKeyIds: [UInt32: Date]?
+
+        enum CodingKeys: String, CodingKey {
+            case currentSignedPreKey
+            case previousSignedPreKeys
+            case oneTimePreKeys
+            case nextOneTimePreKeyId
+            case nextSignedPreKeyId
+            case consumedOneTimePreKeyIds
+        }
+
+        init(
+            currentSignedPreKey: PersistedSignedPreKey,
+            previousSignedPreKeys: [PersistedSignedPreKey],
+            oneTimePreKeys: [PersistedOneTimePreKey],
+            nextOneTimePreKeyId: UInt32,
+            nextSignedPreKeyId: UInt32,
+            consumedOneTimePreKeyIds: [UInt32: Date]?
+        ) {
+            self.currentSignedPreKey = currentSignedPreKey
+            self.previousSignedPreKeys = previousSignedPreKeys
+            self.oneTimePreKeys = oneTimePreKeys
+            self.nextOneTimePreKeyId = nextOneTimePreKeyId
+            self.nextSignedPreKeyId = nextSignedPreKeyId
+            self.consumedOneTimePreKeyIds = consumedOneTimePreKeyIds
+        }
+
+        // MARK: Decodable — backward-compat across three on-disk formats:
+        //   v3.3-era:  consumedOneTimePreKeyIds absent (nil)
+        //   v5.0–v5.3: consumedOneTimePreKeyIds is a JSON array of UInt32
+        //   v5.4+:     consumedOneTimePreKeyIds is a JSON object UInt32→ISO8601 Date
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.currentSignedPreKey = try c.decode(PersistedSignedPreKey.self, forKey: .currentSignedPreKey)
+            self.previousSignedPreKeys = try c.decodeIfPresent([PersistedSignedPreKey].self, forKey: .previousSignedPreKeys) ?? []
+            self.oneTimePreKeys = try c.decodeIfPresent([PersistedOneTimePreKey].self, forKey: .oneTimePreKeys) ?? []
+            self.nextOneTimePreKeyId = try c.decode(UInt32.self, forKey: .nextOneTimePreKeyId)
+            self.nextSignedPreKeyId = try c.decodeIfPresent(UInt32.self, forKey: .nextSignedPreKeyId) ?? 1
+
+            // Three-way backward-compat decode for consumedOneTimePreKeyIds:
+            if let asDict = try? c.decode([UInt32: Date].self, forKey: .consumedOneTimePreKeyIds) {
+                // v5.4+ format: JSON object {"42": "2026-05-23T08:00:00Z", ...}
+                self.consumedOneTimePreKeyIds = asDict
+            } else if let asArray = try? c.decode([UInt32].self, forKey: .consumedOneTimePreKeyIds) {
+                // v5.0–v5.3 format: JSON array [1, 2, 3]
+                // Assign a fresh timestamp so the prune window starts from now.
+                let now = Date()
+                self.consumedOneTimePreKeyIds = Dictionary(uniqueKeysWithValues: asArray.map { ($0, now) })
+            } else {
+                // v3.3-era: field absent (nil treated as empty on load)
+                self.consumedOneTimePreKeyIds = nil
+            }
+        }
+
+        // MARK: Encodable — always write the v5.4+ format going forward.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(currentSignedPreKey, forKey: .currentSignedPreKey)
+            try c.encode(previousSignedPreKeys, forKey: .previousSignedPreKeys)
+            try c.encode(oneTimePreKeys, forKey: .oneTimePreKeys)
+            try c.encode(nextOneTimePreKeyId, forKey: .nextOneTimePreKeyId)
+            try c.encode(nextSignedPreKeyId, forKey: .nextSignedPreKeyId)
+            try c.encode(consumedOneTimePreKeyIds, forKey: .consumedOneTimePreKeyIds)
+        }
     }
 
-    private struct PersistedSignedPreKey: Codable {
+    struct PersistedSignedPreKey: Codable {
         let id: UInt32
         let publicKey: Data
         let privateKey: Data
@@ -195,7 +261,7 @@ final class PreKeyStore {
         }
     }
 
-    private struct PersistedOneTimePreKey: Codable {
+    struct PersistedOneTimePreKey: Codable {
         let id: UInt32
         let publicKey: Data
         let privateKey: Data
@@ -208,6 +274,8 @@ final class PreKeyStore {
             OneTimePreKey(id: id, publicKey: publicKey, privateKey: privateKey)
         }
     }
+
+    // MARK: - Persistence (continued)
 
     private var pendingSave: DispatchWorkItem?
 
@@ -284,4 +352,21 @@ final class PreKeyStore {
         let url = dir.appendingPathComponent("\(storageKey).enc")
         try? FileManager.default.removeItem(at: url)
     }
+
+    // MARK: - Testing Support
+
+#if DEBUG
+    /// Returns a snapshot of the current persisted state for test assertions.
+    /// Only available in DEBUG builds (i.e., unit tests).
+    func snapshotForTesting() -> PersistedState {
+        lock.lock()
+        defer { lock.unlock() }
+        return makePersistedStateLocked()
+    }
+
+    /// Decodes a `PersistedState` from raw JSON — used by legacy-format tests.
+    static func decodeStateForTesting(from data: Data) throws -> PersistedState {
+        return try JSONDecoder().decode(PersistedState.self, from: data)
+    }
+#endif
 }
