@@ -90,6 +90,15 @@ struct DecryptFailureBanner: Identifiable, Equatable {
     var id: String { contactId }
 }
 
+/// Surfaced banner state for C2 OPK events. Drives `CryptoHardeningBanner`
+/// in the chat UI. Cleared on retry success or explicit user dismissal.
+enum C2BannerState: Equatable {
+    /// A retry is in progress for the given recipient mailbox.
+    case retrying(attempts: Int, max: Int, recipientMailboxId: String)
+    /// The retry cap was hit — recipient must open the app to replenish OPKs.
+    case exhausted(recipientMailboxId: String)
+}
+
 /// An envelope from an unknown peer awaiting user consent before X3DH session
 /// establishment. The fingerprint is the short human-readable hex string the
 /// user compares out-of-band to defend against MITM at first contact.
@@ -164,6 +173,10 @@ final class ConnectionManager: ObservableObject {
     /// cross `decryptFailureBannerThreshold`. Cleared on successful decrypt
     /// from the same peer or explicit user dismissal.
     @Published var decryptFailureBanner: DecryptFailureBanner?
+
+    /// Surfaced banner for C2 OPK events: either a retry-in-progress or a
+    /// final exhausted state. Cleared on retry success or explicit user action.
+    @Published var pendingC2Banner: C2BannerState?
 
     /// Per-contact running count of consecutive decrypt failures. Reset to 0
     /// on a successful decrypt from the same peer. Keyed by `contact.id.uuidString`.
@@ -342,14 +355,28 @@ final class ConnectionManager: ObservableObject {
             if entry.attemptCount >= maxAttempts {
                 self.cryptoMetrics?.record(.c2OpkRetryExhausted, peerVersion: .unknown)
                 try? await queue.remove(id: entry.id)
-                // Task 5.4 will wire the UI banner here.
                 await self.surfaceC2ExhaustedBanner(for: entry)
                 return .alreadyRemoved
+            }
+            // Update retry-in-progress banner before attempting.
+            await MainActor.run {
+                self.pendingC2Banner = .retrying(
+                    attempts: entry.attemptCount + 1,
+                    max: maxAttempts,
+                    recipientMailboxId: entry.recipientMailboxId
+                )
             }
             // Otherwise attempt to re-send.
             do {
                 try await self.retrySendEnvelope(entry)
                 self.cryptoMetrics?.record(.c2OpkRetrySucceeded, peerVersion: .unknown)
+                // Clear banner on success.
+                await MainActor.run {
+                    if case .retrying(_, _, let mb) = self.pendingC2Banner,
+                       mb == entry.recipientMailboxId {
+                        self.pendingC2Banner = nil
+                    }
+                }
                 return .success
             } catch {
                 return .failure
@@ -357,12 +384,12 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// Hook for the C2-exhausted UI banner. Concrete implementation lands
-    /// in Task 5.4; for PR5 it logs only.
+    /// Surfaces the C2 OPK exhausted banner. Called from `tickRetryQueue`
+    /// after an entry's retry cap is hit. Sets `pendingC2Banner` to `.exhausted`
+    /// so the UI can prompt the user to ask the recipient to open the app.
     @MainActor
     private func surfaceC2ExhaustedBanner(for entry: OutboundRetryQueue.Entry) async {
-        // Task 5.4: assign to a @Published `pendingC2ExhaustedBanner` property
-        // that the UI subscribes to. For now, log + record metric only.
+        self.pendingC2Banner = .exhausted(recipientMailboxId: entry.recipientMailboxId)
     }
 
     /// Attempt to re-encrypt + send a queue entry.

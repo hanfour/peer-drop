@@ -9481,6 +9481,150 @@
         }
       }
     },
+    "c2.opk.exhausted.body": {
+      "comment": "Banner body for C2 OPK exhaustion — instructs user to ask recipient to open the app.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask them to open the app to replenish"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを開いて補充してもらってください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱을 열어 보충하도록 요청하세요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请对方开启 app 补充"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請對方開啟 app 補充"
+          }
+        }
+      }
+    },
+    "c2.opk.exhausted.title": {
+      "comment": "Banner title for C2 OPK exhaustion — recipient's one-time pre-keys are depleted.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipient's encryption keys exhausted"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手の暗号化鍵が不足しています"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상대방의 암호화 키가 부족합니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方加密密钥不足"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方加密金鑰存量不足"
+          }
+        }
+      }
+    },
+    "c2.opk.retry.body": {
+      "comment": "Banner body for C2 OPK retry in progress. First %@ is current attempt number, second is max attempts.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retrying… (%1$@/%2$@)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再試行中…（%1$@/%2$@）"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재시도 중…（%1$@/%2$@）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试中…（%1$@/%2$@）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重試中…（%1$@/%2$@）"
+          }
+        }
+      }
+    },
+    "c2.opk.retry.title": {
+      "comment": "Banner title shown while the app is retrying OPK-exhausted message sends.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipient can't receive messages right now"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手は一時的にメッセージを受信できません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상대방이 일시적으로 메시지를 받을 수 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方暂时无法接收消息"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方暫時無法接收訊息"
+          }
+        }
+      }
+    },
     "edited": {
       "extractionState": "manual",
       "localizations": {
