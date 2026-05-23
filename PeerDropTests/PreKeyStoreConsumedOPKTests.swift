@@ -175,6 +175,59 @@ final class PreKeyStoreConsumedOPKTests: XCTestCase {
         }
     }
 
+    // MARK: - Test 6: pruneConsumedOPK removes expired entries (Task 3.8)
+
+    func test_prune_removes_expired_entries() {
+        var state = PreKeyStore.emptyStateForTesting()
+        let now = Date()
+        // 100 days old → should be pruned (beyond 90-day window)
+        state = withConsumed(state, id: 1, at: now.addingTimeInterval(-86400 * 100))
+        // 30 days old → should be kept
+        state = withConsumed(state, id: 2, at: now.addingTimeInterval(-86400 * 30))
+        // fresh → should be kept
+        state = withConsumed(state, id: 3, at: now)
+
+        let policy = SecurityPolicy.bundledDefault  // consumedOPKPruneWindowDays = 90
+
+        let prunedCount = PreKeyStore.pruneConsumedOPK(in: &state, now: now, policy: policy)
+        XCTAssertEqual(prunedCount, 1, "exactly one entry (100 days old) should be pruned")
+        XCTAssertNil(state.consumedOneTimePreKeyIds?[1], "100-day-old entry must be evicted")
+        XCTAssertNotNil(state.consumedOneTimePreKeyIds?[2], "30-day-old entry must be kept")
+        XCTAssertNotNil(state.consumedOneTimePreKeyIds?[3], "fresh entry must be kept")
+    }
+
+    // MARK: - Test 7: pruneConsumedOPK is a no-op when all entries are fresh (Task 3.8)
+
+    func test_prune_noOp_whenAllFresh() {
+        var state = PreKeyStore.emptyStateForTesting()
+        let now = Date()
+        state = withConsumed(state, id: 1, at: now.addingTimeInterval(-86400 * 30))
+        state = withConsumed(state, id: 2, at: now)
+
+        let policy = SecurityPolicy.bundledDefault
+        let prunedCount = PreKeyStore.pruneConsumedOPK(in: &state, now: now, policy: policy)
+        XCTAssertEqual(prunedCount, 0, "no entries should be pruned when all are within the window")
+        XCTAssertEqual(state.consumedOneTimePreKeyIds?.count, 2,
+            "both entries must survive the prune pass")
+    }
+
+    // MARK: - Helpers
+
+    /// Returns a copy of `state` with `id` inserted into `consumedOneTimePreKeyIds` at `date`.
+    /// Uses `PersistedState`'s full initialiser because the field is `let`.
+    private func withConsumed(_ state: PreKeyStore.PersistedState, id: UInt32, at date: Date) -> PreKeyStore.PersistedState {
+        var ids = state.consumedOneTimePreKeyIds ?? [:]
+        ids[id] = date
+        return PreKeyStore.PersistedState(
+            currentSignedPreKey: state.currentSignedPreKey,
+            previousSignedPreKeys: state.previousSignedPreKeys,
+            oneTimePreKeys: state.oneTimePreKeys,
+            nextOneTimePreKeyId: state.nextOneTimePreKeyId,
+            nextSignedPreKeyId: state.nextSignedPreKeyId,
+            consumedOneTimePreKeyIds: ids
+        )
+    }
+
     // MARK: - Test 5: double-consume still returns nil after migration
 
     func test_doubleConsume_stillRejectsAfterMigration() throws {

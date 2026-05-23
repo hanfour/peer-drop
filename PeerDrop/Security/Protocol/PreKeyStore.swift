@@ -16,6 +16,25 @@ final class PreKeyStore {
     private let encryptor = ChatDataEncryptor.shared
     private let lock = NSLock()
 
+    /// Injected by `PeerDropApp.onAppear` (and callers in the test suite).
+    /// When set, `saveSync` runs the C4 prune pass before each write.
+    ///
+    /// `SecurityPolicyStore.current` is `@MainActor`-isolated, so the store
+    /// cannot be read directly from `saveSync` (which runs on a background
+    /// `DispatchQueue`). The wiring in `PeerDropApp.onAppear` therefore passes
+    /// `policyStore.current` (a plain value copy) via `activePolicy` below.
+    /// This property is retained only so callers can follow the same injection
+    /// pattern as `RemoteSessionManager.policyStore`.
+    public var policyStore: SecurityPolicyStore? {
+        willSet { /* activePolicy set separately by the wiring site */ }
+    }
+    /// Plain-value snapshot of `policyStore.current`, set by `PeerDropApp.onAppear`
+    /// on the main thread at the same time as `policyStore`. Background-safe.
+    public var activePolicy: SecurityPolicy?
+    /// Injected by `PeerDropApp.onAppear`. Records `c4.consumed_opk_pruned`
+    /// and `c4.consumed_opk_size` on every `saveSync`.
+    public var cryptoMetrics: CryptoHardeningMetrics?
+
     private var _currentSignedPreKey: SignedPreKey
     private var previousSignedPreKeys: [SignedPreKey] = []
     private var oneTimePreKeys: [UInt32: OneTimePreKey] = [:]
@@ -275,6 +294,38 @@ final class PreKeyStore {
         }
     }
 
+    // MARK: - C4: Consumed-OPK Prune
+
+    /// Drops consumed-OPK entries older than `policy.consumedOPKPruneWindowDays`.
+    /// Mutates `state` in place. Returns the number of entries pruned (for telemetry).
+    ///
+    /// Safety: callers MUST enforce the cross-field invariant
+    /// `policy.consumedOPKPruneWindowDays >= policy.spkMaxAgeDays * 4` (enforced
+    /// globally by SecurityPolicy.validateInvariants() — see spec §4.4). Without
+    /// the margin, an attacker could replay a bundle whose consumed-OPK record
+    /// has been pruned while the SPK is still in the responder's previous-3 list.
+    @discardableResult
+    static func pruneConsumedOPK(
+        in state: inout PersistedState,
+        now: Date,
+        policy: SecurityPolicy
+    ) -> Int {
+        let cutoff = now.addingTimeInterval(-Double(policy.consumedOPKPruneWindowDays) * 86400)
+        let before = state.consumedOneTimePreKeyIds?.count ?? 0
+        // Keep only entries whose timestamp is within the prune window.
+        let retained = state.consumedOneTimePreKeyIds?.filter { $0.value >= cutoff }
+        state = PersistedState(
+            currentSignedPreKey: state.currentSignedPreKey,
+            previousSignedPreKeys: state.previousSignedPreKeys,
+            oneTimePreKeys: state.oneTimePreKeys,
+            nextOneTimePreKeyId: state.nextOneTimePreKeyId,
+            nextSignedPreKeyId: state.nextSignedPreKeyId,
+            consumedOneTimePreKeyIds: retained
+        )
+        let after = state.consumedOneTimePreKeyIds?.count ?? 0
+        return before - after
+    }
+
     // MARK: - Persistence (continued)
 
     private var pendingSave: DispatchWorkItem?
@@ -307,6 +358,17 @@ final class PreKeyStore {
     /// Synchronous write. Lock MUST NOT be held while this runs — file I/O on
     /// the lock would serialise consumers behind disk latency.
     private func saveSync(state: PersistedState) {
+        // C4 prune — drops consumed-OPK entries older than policy.consumedOPKPruneWindowDays.
+        // No-op if no policy is available (e.g., in unit tests that don't inject one).
+        var state = state
+        if let policy = activePolicy {
+            let pruned = Self.pruneConsumedOPK(in: &state, now: Date(), policy: policy)
+            if pruned > 0 {
+                cryptoMetrics?.record(.c4ConsumedOpkPruned)
+            }
+            cryptoMetrics?.record(.c4ConsumedOpkSize)
+        }
+
         do {
             let data = try JSONEncoder().encode(state)
             let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -367,6 +429,21 @@ final class PreKeyStore {
     /// Decodes a `PersistedState` from raw JSON — used by legacy-format tests.
     static func decodeStateForTesting(from data: Data) throws -> PersistedState {
         return try JSONDecoder().decode(PersistedState.self, from: data)
+    }
+
+    /// Builds a minimal empty `PersistedState` for use in unit tests that exercise
+    /// prune / serialisation logic without a full store. Uses a freshly generated
+    /// signed pre-key so the Codable round-trip is always valid.
+    static func emptyStateForTesting() -> PersistedState {
+        let spk = try! SignedPreKey.generate(id: 0, signingKey: IdentityKeyManager.shared)
+        return PersistedState(
+            currentSignedPreKey: PersistedSignedPreKey(from: spk),
+            previousSignedPreKeys: [],
+            oneTimePreKeys: [],
+            nextOneTimePreKeyId: 0,
+            nextSignedPreKeyId: 1,
+            consumedOneTimePreKeyIds: [:]
+        )
     }
 #endif
 }

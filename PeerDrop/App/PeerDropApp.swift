@@ -86,6 +86,14 @@ struct PeerDropApp: App {
                 connectionManager.cryptoMetrics = cryptoMetrics
                 connectionManager.remoteSessionManager.policyStore = policyStore
                 connectionManager.remoteSessionManager.cryptoMetrics = cryptoMetrics
+                // Task 3.8: C4 prune wiring — PreKeyStore runs the consumed-OPK
+                // prune pass on every saveSync when a policy is available.
+                // `policyStore.current` is @MainActor-isolated; we snapshot the
+                // value here (still on main thread) into `activePolicy` so the
+                // background-thread saveSync can read it without an actor hop.
+                connectionManager.preKeyStore.policyStore = policyStore
+                connectionManager.preKeyStore.activePolicy = policyStore.current
+                connectionManager.preKeyStore.cryptoMetrics = cryptoMetrics
 
                 // One-time migration of existing chat data to encrypted format
                 if !UserDefaults.standard.bool(forKey: "peerDropDataMigrated") {
