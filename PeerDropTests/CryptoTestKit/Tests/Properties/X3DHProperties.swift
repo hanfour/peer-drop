@@ -209,7 +209,9 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 let v = try X3DH.verifyBundleFreshness(
-                    bundle: bundle,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
                     peerSigningKey: signingKey,
                     now: Date(),
                     policy: .bundledDefault,
@@ -229,7 +231,10 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 _ = try X3DH.verifyBundleFreshness(
-                    bundle: bundle, peerSigningKey: signingKey,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+                    peerSigningKey: signingKey,
                     now: Date(), policy: .bundledDefault, metrics: nil
                 )
                 return false
@@ -248,7 +253,10 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 _ = try X3DH.verifyBundleFreshness(
-                    bundle: bundle, peerSigningKey: signingKey,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+                    peerSigningKey: signingKey,
                     now: Date(), policy: .bundledDefault, metrics: nil
                 )
                 return false
@@ -267,7 +275,10 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 _ = try X3DH.verifyBundleFreshness(
-                    bundle: bundle, peerSigningKey: signingKey,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+                    peerSigningKey: signingKey,
                     now: Date(), policy: .bundledDefault, metrics: nil
                 )
                 return false
@@ -290,7 +301,10 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 let v = try X3DH.verifyBundleFreshness(
-                    bundle: bundle, peerSigningKey: signingKey,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+                    peerSigningKey: signingKey,
                     now: Date(), policy: .bundledDefault, metrics: nil
                 )
                 return v == .v5_4_plus
@@ -321,7 +335,10 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 _ = try X3DH.verifyBundleFreshness(
-                    bundle: bundle, peerSigningKey: signingKey,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+                    peerSigningKey: signingKey,
                     now: Date(), policy: strictPolicy, metrics: nil
                 )
                 return false
@@ -344,7 +361,10 @@ final class X3DHProperties: XCTestCase {
             )
             do {
                 let v = try X3DH.verifyBundleFreshness(
-                    bundle: bundle, peerSigningKey: signingKey,
+                    signedPreKeyPublicKey: bundle.signedPreKey.publicKey,
+                    signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                    signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature,
+                    peerSigningKey: signingKey,
                     now: Date(), policy: .bundledDefault, metrics: nil
                 )
                 return v == .v5_4_plus

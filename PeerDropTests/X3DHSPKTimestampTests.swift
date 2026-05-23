@@ -64,7 +64,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
         let tb = makeBundle(includeTimestamp: false, includeSignature: false)
         let metrics = CryptoHardeningMetrics()
         let result = try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: .bundledDefault,
@@ -80,7 +82,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
         let tb = makeBundle(includeTimestamp: true, includeSignature: false)
         let metrics = CryptoHardeningMetrics()
         XCTAssertThrowsError(try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: .bundledDefault,
@@ -96,7 +100,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
     func test_only_signature_present_throws_malformed() {
         let tb = makeBundle(includeTimestamp: false, includeSignature: true)
         XCTAssertThrowsError(try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: .bundledDefault,
@@ -114,7 +120,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
         let tb = makeBundle(includeTimestamp: true, includeSignature: true, tamperSignature: true)
         let metrics = CryptoHardeningMetrics()
         XCTAssertThrowsError(try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: .bundledDefault,
@@ -136,7 +144,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
         let metrics = CryptoHardeningMetrics()
         // bundledDefault has spkExpirationBehavior = .warn
         let result = try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: .bundledDefault,
@@ -163,7 +173,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
             consumedOPKPruneWindowDays: 90
         )
         XCTAssertThrowsError(try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: strictPolicy,
@@ -181,7 +193,9 @@ final class X3DHSPKTimestampTests: XCTestCase {
         let tb = makeBundle(includeTimestamp: true, includeSignature: true)  // timestamp = now
         let metrics = CryptoHardeningMetrics()
         let result = try X3DH.verifyBundleFreshness(
-            bundle: tb.bundle,
+            signedPreKeyPublicKey: tb.bundle.signedPreKey.publicKey,
+            signedPreKeyTimestamp: tb.bundle.signedPreKeyTimestamp,
+            signedPreKeyTimestampSignature: tb.bundle.signedPreKeyTimestampSignature,
             peerSigningKey: tb.identitySigningKey.publicKey,
             now: Date(),
             policy: .bundledDefault,

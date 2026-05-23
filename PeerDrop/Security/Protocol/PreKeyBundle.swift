@@ -45,6 +45,11 @@ struct PublicSignedPreKey: Codable {
     let id: UInt32
     let publicKey: Data
     let signature: Data
+    /// **NOT verified — informational only.** This `Date` was added before C1
+    /// existed and is purely a hint from the sender's wall clock. For
+    /// security-relevant timestamp checks (freshness against
+    /// `policy.spkMaxAgeDays`), read `PreKeyBundle.signedPreKeyTimestamp` —
+    /// it carries a separate signed Ed25519 attestation per spec §4.1.
     let timestamp: Date
 
     func verify(with signingPublicKey: Curve25519.Signing.PublicKey) -> Bool {

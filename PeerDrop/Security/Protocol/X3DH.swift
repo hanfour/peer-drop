@@ -172,15 +172,17 @@ extension X3DH {
     /// Returns the detected `PeerVersion` so the caller can pass it through
     /// to `initiatorKeyAgreement` (PR7 wires the actual call sites).
     public static func verifyBundleFreshness(
-        bundle: PreKeyBundle,
+        signedPreKeyPublicKey: Data,
+        signedPreKeyTimestamp: UInt64?,
+        signedPreKeyTimestampSignature: Data?,
         peerSigningKey: Curve25519.Signing.PublicKey,
         now: Date,
         policy: SecurityPolicy,
         metrics: CryptoHardeningMetrics?
     ) throws -> PeerVersion {
 
-        let ts = bundle.signedPreKeyTimestamp
-        let sig = bundle.signedPreKeyTimestampSignature
+        let ts = signedPreKeyTimestamp
+        let sig = signedPreKeyTimestampSignature
 
         // Branch 1: both absent → legacy peer.
         if ts == nil && sig == nil {
@@ -196,7 +198,7 @@ extension X3DH {
 
         // Reconstruct the signed payload: SPK_pubkey || timestamp_BE_8B.
         var payload = Data()
-        payload.append(bundle.signedPreKey.publicKey)
+        payload.append(signedPreKeyPublicKey)
         var beTs = timestamp.bigEndian
         payload.append(Data(bytes: &beTs, count: 8))
 
@@ -206,14 +208,28 @@ extension X3DH {
             throw InitiationError.timestampSignatureInvalid
         }
 
-        // Compute age in seconds.
+        // Compute age in seconds, with clock-skew tolerance for slightly-future
+        // timestamps. A malicious responder cannot pin a far-future timestamp
+        // to evade the freshness check forever — beyond the tolerance we treat
+        // it as expired so the rotation-required behavior still applies.
+        let clockSkewToleranceSeconds: UInt64 = 60
         let nowTs = UInt64(now.timeIntervalSince1970)
         let ageSeconds: Int64
-        if nowTs > timestamp {
+        if nowTs >= timestamp {
             ageSeconds = Int64(nowTs - timestamp)
         } else {
-            // Future-dated SPK — treat as fresh.
-            ageSeconds = 0
+            // Future-dated: tolerate small skew (clocks drift); reject anything beyond.
+            let skewSeconds = timestamp - nowTs
+            if skewSeconds > clockSkewToleranceSeconds {
+                metrics?.record(.c1SpkTimestampTooOld, peerVersion: .v5_4_plus)
+                switch policy.spkExpirationBehavior {
+                case .warn:
+                    return .v5_4_plus
+                case .reject:
+                    throw InitiationError.timestampTooOld
+                }
+            }
+            ageSeconds = 0   // within skew tolerance — treat as fresh
         }
         let maxAgeSeconds = Int64(policy.spkMaxAgeDays) * 86400
 
