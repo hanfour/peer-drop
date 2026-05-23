@@ -8,6 +8,10 @@ public struct CryptoHardeningBanner: View {
     public enum Kind: Equatable {
         case c2OPKRetry(attempts: Int, max: Int)
         case c2OPKExhausted
+        /// Peer's signed-prekey timestamp is past `policy.spkMaxAgeDays` and
+        /// the policy is set to `.warn` (proceed but notify the user).
+        /// Surfaces from `X3DH.verifyBundleFreshness` (branch 4a in spec §4.1).
+        case c1SPKExpired
     }
 
     public let kind: Kind
@@ -51,6 +55,7 @@ public struct CryptoHardeningBanner: View {
         switch kind {
         case .c2OPKRetry:      return "arrow.triangle.2.circlepath"
         case .c2OPKExhausted:  return "exclamationmark.triangle"
+        case .c1SPKExpired:    return "clock.badge.exclamationmark"
         }
     }
 
@@ -58,6 +63,7 @@ public struct CryptoHardeningBanner: View {
         switch kind {
         case .c2OPKRetry:      return "c2.opk.retry.title"
         case .c2OPKExhausted:  return "c2.opk.exhausted.title"
+        case .c1SPKExpired:    return "c1.spk.expired.title"
         }
     }
 
@@ -74,6 +80,8 @@ public struct CryptoHardeningBanner: View {
             )
         case .c2OPKExhausted:
             return String(localized: "c2.opk.exhausted.body")
+        case .c1SPKExpired:
+            return String(localized: "c1.spk.expired.body")
         }
     }
 
@@ -81,6 +89,7 @@ public struct CryptoHardeningBanner: View {
         switch kind {
         case .c2OPKRetry:      return "c2.opk.action.cancel"
         case .c2OPKExhausted:  return "c2.opk.action.retry"
+        case .c1SPKExpired:    return "c1.spk.expired.action"
         }
     }
 }

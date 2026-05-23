@@ -9481,6 +9481,114 @@
         }
       }
     },
+    "c1.spk.expired.action": {
+      "comment": "Banner action label for C1 SPK expiration — user dismisses the warning.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じる"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "닫기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉"
+          }
+        }
+      }
+    },
+    "c1.spk.expired.body": {
+      "comment": "Banner body for C1 SPK timestamp expiration — explains the user should ask the recipient to reopen the app.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask them to reopen the app to refresh their keys"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを再起動して鍵を更新してもらってください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱을 다시 열어 키를 갱신하도록 요청하세요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请对方重新打开 app 以刷新金钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請對方重新開啟 app 以更新金鑰"
+          }
+        }
+      }
+    },
+    "c1.spk.expired.title": {
+      "comment": "Banner title for C1 SPK timestamp expiration — peer's signed pre-key is past its freshness window.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peer's encryption key is stale"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手の暗号化鍵が古くなっています"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상대방의 암호화 키가 오래되었습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方加密密钥已过期"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方加密金鑰已過期"
+          }
+        }
+      }
+    },
     "c2.opk.action.cancel": {
       "comment": "Banner action label — cancel the in-progress retry.",
       "extractionState": "manual",

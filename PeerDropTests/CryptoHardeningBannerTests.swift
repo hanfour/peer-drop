@@ -39,4 +39,20 @@ final class CryptoHardeningBannerTests: XCTestCase {
         XCTAssertNotEqual(a, c)
         XCTAssertNotEqual(a, .c2OPKExhausted)
     }
+
+    func test_c1SPKExpired_kind_setsActionAndIsEquatable() {
+        var fired = false
+        let view = CryptoHardeningBanner(
+            kind: .c1SPKExpired,
+            onPrimaryAction: { fired = true }
+        )
+        XCTAssertEqual(view.kind, .c1SPKExpired)
+        view.invokeActionForTesting()
+        XCTAssertTrue(fired)
+    }
+
+    func test_c1SPKExpired_kindEquatable() {
+        XCTAssertEqual(CryptoHardeningBanner.Kind.c1SPKExpired, .c1SPKExpired)
+        XCTAssertNotEqual(CryptoHardeningBanner.Kind.c1SPKExpired, .c2OPKExhausted)
+    }
 }
