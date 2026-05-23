@@ -502,6 +502,7 @@
 		F422276653E0728E859B9BC9 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C17EA9E6BE4797FC20EBBBC /* WebRTC */; };
 		F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
 		F466FB89CB8672F3E104263B /* PairingPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06B83396F6C34EDDDD268A60 /* PairingPayload.swift */; };
+		F4D15DDFD772A3836FD148A6 /* X3DHOPKFailClosedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E74FD4D52A5F2CFBEBDB8DB /* X3DHOPKFailClosedTests.swift */; };
 		F4F3A543DFA4B865A642B14C /* ratchet-027.json in Resources */ = {isa = PBXBuildFile; fileRef = F6E4ED0B880F40278323E3FF /* ratchet-027.json */; };
 		F4F4293A5A8616CB1AE18CF7 /* PetEvolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76246879247CD18F2ABD6E1 /* PetEvolutionTests.swift */; };
 		F515C26C8D07196F4AA8D239 /* V4UpgradeOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 674960103D286E03D524A8CF /* V4UpgradeOnboardingTests.swift */; };
@@ -606,6 +607,7 @@
 		0D98B7E882918091D8A90224 /* DisconnectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisconnectSheet.swift; sourceTree = "<group>"; };
 		0E081294F0B851802A3C3599 /* PetPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPayload.swift; sourceTree = "<group>"; };
 		0E5998CF743055DF9A9596FF /* SpeciesCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeciesCatalogTests.swift; sourceTree = "<group>"; };
+		0E74FD4D52A5F2CFBEBDB8DB /* X3DHOPKFailClosedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X3DHOPKFailClosedTests.swift; sourceTree = "<group>"; };
 		0E9DA7C8850E4CB799DB91AF /* RabbitBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RabbitBehavior.swift; sourceTree = "<group>"; };
 		0F97E28AE05420CF10F681A8 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		0F9D3D4930C252C03A72423C /* test-signing-key.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "test-signing-key.json"; sourceTree = "<group>"; };
@@ -1353,6 +1355,7 @@
 				F88C13753314A0B506433A46 /* TrustGateTests.swift */,
 				CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */,
 				137D4C965D7DFC2C55F1346F /* WorkerSignalingTests.swift */,
+				0E74FD4D52A5F2CFBEBDB8DB /* X3DHOPKFailClosedTests.swift */,
 				88918D3F2CE1EE17919B8C32 /* X3DHTests.swift */,
 				E8F936DDEB99D472330175C9 /* CryptoTestKit */,
 				CE49B580FF5FD25E8461F508 /* Helpers */,
@@ -2537,6 +2540,7 @@
 				43D47A8427F614A5F0ABDBB3 /* V5UpgradeOnboardingTests.swift in Sources */,
 				88D96706BDF419E491ECD3A0 /* VariantTraitsTests.swift in Sources */,
 				A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */,
+				F4D15DDFD772A3836FD148A6 /* X3DHOPKFailClosedTests.swift in Sources */,
 				9CAA195089A2102D816EF96F /* X3DHTests.swift in Sources */,
 				A568EEEC4C3ED3F65B26BE04 /* X3DHVectorTests.swift in Sources */,
 			);

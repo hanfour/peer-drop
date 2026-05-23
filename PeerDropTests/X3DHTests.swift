@@ -57,7 +57,8 @@ final class X3DHTests: XCTestCase {
             myEphemeralKey: aliceEphemeral,
             theirIdentityKey: bobIdentity.publicKey,
             theirSignedPreKey: bobSignedPreKey.publicKey,
-            theirOneTimePreKey: nil
+            theirOneTimePreKey: nil,
+            peerVersion: .legacy   // legacy peer: nil OPK proceeds without DH4
         )
 
         let bobResult = try X3DH.responderKeyAgreement(
@@ -81,14 +82,16 @@ final class X3DHTests: XCTestCase {
             myEphemeralKey: Curve25519.KeyAgreement.PrivateKey(),
             theirIdentityKey: bobIdentity.publicKey,
             theirSignedPreKey: bobSignedPreKey.publicKey,
-            theirOneTimePreKey: nil
+            theirOneTimePreKey: nil,
+            peerVersion: .legacy   // legacy peer: nil OPK proceeds without DH4
         )
         let result2 = try X3DH.initiatorKeyAgreement(
             myIdentityKey: aliceIdentity,
             myEphemeralKey: Curve25519.KeyAgreement.PrivateKey(),
             theirIdentityKey: bobIdentity.publicKey,
             theirSignedPreKey: bobSignedPreKey.publicKey,
-            theirOneTimePreKey: nil
+            theirOneTimePreKey: nil,
+            peerVersion: .legacy   // legacy peer: nil OPK proceeds without DH4
         )
 
         XCTAssertNotEqual(result1, result2)
