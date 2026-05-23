@@ -508,6 +508,7 @@
 		FA7DBC025AABD4F810726E46 /* ratchet-015.json in Resources */ = {isa = PBXBuildFile; fileRef = D0958A60CC73D10E23DABC8E /* ratchet-015.json */; };
 		FA86F407E38041676D1C7D84 /* PeerGridItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6E1809532A651DA46008F31 /* PeerGridItemView.swift */; };
 		FA9D8003FC4D433F2146445C /* TestVectorLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E0A0D7767C340A0BB218D5 /* TestVectorLoaderTests.swift */; };
+		FB697A3E85BFD592434A0632 /* SecurityPolicyProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC59106BE0C1F2D308BDEC3E /* SecurityPolicyProperties.swift */; };
 		FB69D4FCF15EAB14357A009F /* ConnectionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4250293A9FCF52B7ABA87AC /* ConnectionContext.swift */; };
 		FC67AF98109EF0010985698A /* DumpV5FramesForVisualCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187C5D699F60FB5F2D01C3E4 /* DumpV5FramesForVisualCheck.swift */; };
 		FCE67D33A5195FA25B4EBB05 /* TipJarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89C720568E6E3EF69A02539 /* TipJarSection.swift */; };
@@ -1062,6 +1063,7 @@
 		FB4A45DAA580281EE47354C5 /* SpriteAtlasTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteAtlasTests.swift; sourceTree = "<group>"; };
 		FB597AFD58B9274F19DE8B30 /* vec-004.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vec-004.json"; sourceTree = "<group>"; };
 		FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerTransportTests.swift; sourceTree = "<group>"; };
+		FC59106BE0C1F2D308BDEC3E /* SecurityPolicyProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityPolicyProperties.swift; sourceTree = "<group>"; };
 		FC682C14084D950A4869B2CE /* TransferHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferHistoryView.swift; sourceTree = "<group>"; };
 		FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualConnectView.swift; sourceTree = "<group>"; };
 		FDEFB10837D03E2A6B1E6EB2 /* vec-017.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vec-017.json"; sourceTree = "<group>"; };
@@ -1555,6 +1557,7 @@
 				F80A2A1BE293999C1839EE50 /* FuzzHarnessTests.swift */,
 				AC430360B753FDF2E1FF39D3 /* PropertyTestHarnessTests.swift */,
 				F5E0A0D7767C340A0BB218D5 /* TestVectorLoaderTests.swift */,
+				D8489EB8CDD1607B09CED09C /* Properties */,
 				0274B15420107D5715630335 /* Vectors */,
 			);
 			path = Tests;
@@ -1887,6 +1890,14 @@
 				0E081294F0B851802A3C3599 /* PetPayload.swift */,
 			);
 			path = Protocol;
+			sourceTree = "<group>";
+		};
+		D8489EB8CDD1607B09CED09C /* Properties */ = {
+			isa = PBXGroup;
+			children = (
+				FC59106BE0C1F2D308BDEC3E /* SecurityPolicyProperties.swift */,
+			);
+			path = Properties;
 			sourceTree = "<group>";
 		};
 		DAA3FF01175A72873C312CFA /* TestVectors */ = {
@@ -2417,6 +2428,7 @@
 				2AAEF4E107833F689035E728 /* RemoteMessageEnvelopeTests.swift in Sources */,
 				978E31C0C7B3CD2349FE8525 /* RenderedImageVersionTests.swift in Sources */,
 				899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */,
+				FB697A3E85BFD592434A0632 /* SecurityPolicyProperties.swift in Sources */,
 				14B9CC7EC2C7DC187954D32B /* SecurityPolicyStoreTests.swift in Sources */,
 				5DB223C573B923A1EA235DA6 /* SecurityPolicyTests.swift in Sources */,
 				F5CCE99629FF1B1F7BE70261 /* SessionKeyManagerTests.swift in Sources */,
