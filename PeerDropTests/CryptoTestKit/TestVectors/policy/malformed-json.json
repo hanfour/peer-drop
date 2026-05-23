@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "issuedAt": 1748000000,
+  "expiresAt": 1750592000,
+  "policy": {
+    "spkMaxAgeDays": 21,
+    "spkExpirationBehavior": "warn"
+  },
+  "signature": "dGVzdA=="

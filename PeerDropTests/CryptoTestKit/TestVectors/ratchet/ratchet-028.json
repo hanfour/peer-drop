@@ -1,0 +1,80 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "3e1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+    "bob_initial_ratchet_seed" : "2f1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+    "root_key_seed" : "0d1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "LiPhwdcCxoACcKgHPRKfRaqpAZr\/TvuPhgTS7r215Pw=",
+      "counter" : 0,
+      "plaintext_hex" : "1c1c1c1c",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "WUXnL\/o1T\/H0ZomjtxZAggS\/jyiNYXjY2Lr94MWwaLA=",
+      "counter" : 1,
+      "plaintext_hex" : "1d1d1d1d",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "dT5Qj0mihtq71\/EHoyCErxBO408STA3OVQukMmHw1Rw=",
+      "counter" : 2,
+      "plaintext_hex" : "1e1e1e1e",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "Vb0vuaIKkUvsIoZrA1RhC\/WdjpdijZGT1cYtlXzJHG8=",
+      "counter" : 3,
+      "plaintext_hex" : "1f1f1f1f",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "vQh23tA8aZh5+ncevqDzNaFzH\/8iIs6OtjUoviPbA5o=",
+      "counter" : 4,
+      "plaintext_hex" : "18181818",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "31iJBzrmxwkHu8eYl8TLMgxmxgcUH2C7bk5K0Lb+ZbI=",
+      "counter" : 5,
+      "plaintext_hex" : "19191919",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "oreOW6dtYGQKV9\/ikB9o1AvHPzIgTmLarLiUM3R73vc=",
+      "counter" : 6,
+      "plaintext_hex" : "1a1a1a1a",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "xkTRNwcJUrR\/hcwEofdv7nnkOAY+z0LEs7G0KL2aquk=",
+      "counter" : 7,
+      "plaintext_hex" : "1b1b1b1b",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "GYWM2Z8BaPSg53HI+YEBQWaVoXPZ1LLGrPam9PwDRx4=",
+      "counter" : 8,
+      "plaintext_hex" : "14141414",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    },
+    {
+      "ciphertext" : "g4U1BKOjnisIsyAwyNBZ3ZGOL2qhc7QgjXJLjbbWZEU=",
+      "counter" : 9,
+      "plaintext_hex" : "15151515",
+      "previous_counter" : 0,
+      "ratchet_key" : "2HQpTyZ7COH6NygG6fclMrmTb8bx1vOhLbNoB\/c1vhk="
+    }
+  ],
+  "name" : "ratchet-028"
+}

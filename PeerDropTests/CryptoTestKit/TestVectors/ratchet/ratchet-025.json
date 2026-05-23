@@ -1,0 +1,59 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "3b19191919191919191919191919191919191919191919191919191919191919",
+    "bob_initial_ratchet_seed" : "2a19191919191919191919191919191919191919191919191919191919191919",
+    "root_key_seed" : "0819191919191919191919191919191919191919191919191919191919191919"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "JaegOloVXgoGaPRGT7l9frbPU0VKfag23QpeiCqBVD8=",
+      "counter" : 0,
+      "plaintext_hex" : "19191919",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    },
+    {
+      "ciphertext" : "xmVPcHqiGt\/EAPzWRv5kJkD1uN7TDLvp0tO7V1RRLDA=",
+      "counter" : 1,
+      "plaintext_hex" : "18181818",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    },
+    {
+      "ciphertext" : "YOuGx7u4+45xFseYSGIeE9eEWa\/ezpOGVtDA2\/DpNnY=",
+      "counter" : 2,
+      "plaintext_hex" : "1b1b1b1b",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    },
+    {
+      "ciphertext" : "vAPw1ph\/RGO3MeDEbn31HRDaORGgzYRve7BYEL4pmzQ=",
+      "counter" : 3,
+      "plaintext_hex" : "1a1a1a1a",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    },
+    {
+      "ciphertext" : "trqcO7QAE\/u56yK7lEMzmCskTzoMgzPGeOrRVen6Ifo=",
+      "counter" : 4,
+      "plaintext_hex" : "1d1d1d1d",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    },
+    {
+      "ciphertext" : "10lkB7SseCAeGuXiFojo3I8FmAIKCqDAFtdryG38j6k=",
+      "counter" : 5,
+      "plaintext_hex" : "1c1c1c1c",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    },
+    {
+      "ciphertext" : "Un98DRtfB\/zwHpdGFmIQhQkPrP\/nD36coFX2TljGCpo=",
+      "counter" : 6,
+      "plaintext_hex" : "1f1f1f1f",
+      "previous_counter" : 0,
+      "ratchet_key" : "ovXsfhubYQW5\/s+0\/gRDVHOSAcV0PgJq3WIECK596Wc="
+    }
+  ],
+  "name" : "ratchet-025"
+}

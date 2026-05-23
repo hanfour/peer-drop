@@ -1,0 +1,5 @@
+{
+  "comment" : "TEST-ONLY key for CryptoTestKit fixtures. Never used in production. Real production signing keys are stored offline per docs\/security\/crypto-policy-format.md.",
+  "private_key_base64" : "\/v7+\/v7+\/v7+\/v7+\/v7+\/v7+\/v7+\/v7+\/v7+\/v7+\/v4=",
+  "public_key_base64" : "yph\/emzYY0JGQdRQDcfeupeCUz7gccXwC8MAvIVFJDc="
+}

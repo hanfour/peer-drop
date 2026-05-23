@@ -1,0 +1,41 @@
+{
+  "bob_receive_order" : [
+    1,
+    0,
+    2
+  ],
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "5401010101010101010101010101010101010101010101010101010101010101",
+    "alice_plaintexts_hex" : [
+      "a1a1a1a1",
+      "a0a0a0a0",
+      "a3a3a3a3"
+    ],
+    "bob_initial_ratchet_seed" : "6701010101010101010101010101010101010101010101010101010101010101",
+    "root_key_seed" : "4501010101010101010101010101010101010101010101010101010101010101"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "Il7mKgUylKlHNqygGz0HxcrlpPvf+2ytbTLux9q2H2U=",
+      "counter" : 0,
+      "plaintext_hex" : "a1a1a1a1",
+      "previous_counter" : 0,
+      "ratchet_key" : "OMHZhnwxCbnxGvaE9SLevcfJiFC5mYTwwjAenUoB8wA="
+    },
+    {
+      "ciphertext" : "TlwC4oBrs95XBUxApicgQxaurCFESlRtjo842B1yYE4=",
+      "counter" : 1,
+      "plaintext_hex" : "a0a0a0a0",
+      "previous_counter" : 0,
+      "ratchet_key" : "OMHZhnwxCbnxGvaE9SLevcfJiFC5mYTwwjAenUoB8wA="
+    },
+    {
+      "ciphertext" : "NaUsflLL00aJjbN6T23pm29mG4rG5qQ\/hR5expmbarU=",
+      "counter" : 2,
+      "plaintext_hex" : "a3a3a3a3",
+      "previous_counter" : 0,
+      "ratchet_key" : "OMHZhnwxCbnxGvaE9SLevcfJiFC5mYTwwjAenUoB8wA="
+    }
+  ],
+  "name" : "skipped-001"
+}

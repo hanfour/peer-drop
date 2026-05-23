@@ -1,0 +1,80 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "280a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "bob_initial_ratchet_seed" : "390a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "root_key_seed" : "1b0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "eoL8DwPpfCZZsYB2hnE+60K6uxSYpnfD2fNzETUemxg=",
+      "counter" : 0,
+      "plaintext_hex" : "0a0a0a0a",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "d1c7GpCBACzOCp2prTYekDrD51jDuBHq80fbcQKNk0A=",
+      "counter" : 1,
+      "plaintext_hex" : "0b0b0b0b",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "KThrkiEWGwtR708EFHaNskE4WHnVazdkwLZHwwmzcavf21cb",
+      "counter" : 2,
+      "plaintext_hex" : "0808080808080808",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "wB2WHooSGCh97y1j\/5C3+rNmSdraQu2HJjCvEPqfwF4=",
+      "counter" : 3,
+      "plaintext_hex" : "09090909",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "DEdM\/EcFg8dx8jecs5w2eKQns7WeDEHFakZ9PFPwuw0=",
+      "counter" : 4,
+      "plaintext_hex" : "0e0e0e0e",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "zO7fPCM2IaGQXD5XVSFEQ07sTdfh0YGB0R9HFYcZQHtGnJ1h",
+      "counter" : 5,
+      "plaintext_hex" : "0f0f0f0f0f0f0f0f",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "dygw9aGjkSqOMRFOC0F9ij96EWvKJRSQrwiBTXlGJ64=",
+      "counter" : 6,
+      "plaintext_hex" : "0c0c0c0c",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "rg3ggxMNJODnPexcZvJeAGSeqjwpG4LJOJvEEy5Lxc0=",
+      "counter" : 7,
+      "plaintext_hex" : "0d0d0d0d",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "VIQQc\/QQzbbVaPQqr5YLP5FBdIHjZ9S7V7fKbOHdcndn4Qn3",
+      "counter" : 8,
+      "plaintext_hex" : "0202020202020202",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    },
+    {
+      "ciphertext" : "S6Hw7YgP42zkaYWULhR2ggxeaU0+tXymfcAK7ni8RHw=",
+      "counter" : 9,
+      "plaintext_hex" : "03030303",
+      "previous_counter" : 0,
+      "ratchet_key" : "o0E2R30z2DM9M+do32XI\/r2LdjSWdH83qiy5tolVTSQ="
+    }
+  ],
+  "name" : "ratchet-010"
+}

@@ -1,0 +1,59 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "3f1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d",
+    "bob_initial_ratchet_seed" : "2e1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d",
+    "root_key_seed" : "0c1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "AFBY405tTz79f9MUbJzaRNfrGjHDs7iWIjGerCiiPVM=",
+      "counter" : 0,
+      "plaintext_hex" : "1d1d1d1d",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    },
+    {
+      "ciphertext" : "WTJNLRe\/bK\/qtK\/3T6eEiyJiTWQDwC7eevB8TiJL6A00xFfZ",
+      "counter" : 1,
+      "plaintext_hex" : "1c1c1c1c1c1c1c1c",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    },
+    {
+      "ciphertext" : "yd\/E+VZA007kVY0gKaL8PV6eCr39X2++JPE0N+1IQp7wejcXH4g0bw==",
+      "counter" : 2,
+      "plaintext_hex" : "1f1f1f1f1f1f1f1f1f1f1f1f",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    },
+    {
+      "ciphertext" : "fnzXJ0yJYf1k8ayOOjKRcbyHUGTqQfQ2li3RtjoW\/phHbhlOR68fOSZye64=",
+      "counter" : 3,
+      "plaintext_hex" : "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    },
+    {
+      "ciphertext" : "CVjJ7dD8sm9mCMAK+5CB8gftnz0m1iDRRPmMHBc7ns6uKesNfVqmYA==",
+      "counter" : 4,
+      "plaintext_hex" : "191919191919191919191919",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    },
+    {
+      "ciphertext" : "ZtEvMsfSJt7VLRDvkD2W7k7UaWtTteHYkYxK\/+PVaCxf25ru",
+      "counter" : 5,
+      "plaintext_hex" : "1818181818181818",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    },
+    {
+      "ciphertext" : "j\/ELw2s7yxxUyNRskfpU65l6dm5W9zVuO6wa4X1\/g3E=",
+      "counter" : 6,
+      "plaintext_hex" : "1b1b1b1b",
+      "previous_counter" : 0,
+      "ratchet_key" : "CB7ErYZy7zpS50xmi\/KbIwVt8dFa2ZtCjIhTD9tU6xI="
+    }
+  ],
+  "name" : "ratchet-029"
+}

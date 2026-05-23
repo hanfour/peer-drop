@@ -280,6 +280,10 @@ class DoubleRatchetSession: Codable {
         return currentChain
     }
 
+    /// Exposed for test assertions only — confirms the skipped-keys cache is fully
+    /// drained after all out-of-order messages have been consumed.
+    var skippedKeysIsEmpty: Bool { skippedKeys.isEmpty }
+
     private func decryptWithKey(_ ciphertext: Data, key: SymmetricKey) throws -> Data {
         let sealedBox = try AES.GCM.SealedBox(combined: ciphertext)
         return try AES.GCM.open(sealedBox, using: key)

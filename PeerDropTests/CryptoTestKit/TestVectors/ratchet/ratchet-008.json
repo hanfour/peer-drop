@@ -1,0 +1,66 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "2a08080808080808080808080808080808080808080808080808080808080808",
+    "bob_initial_ratchet_seed" : "3b08080808080808080808080808080808080808080808080808080808080808",
+    "root_key_seed" : "1908080808080808080808080808080808080808080808080808080808080808"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "iv0dTfyvzl9dRUAOLfb+VihjGlAigWfFLFIVVeZ0Xd4=",
+      "counter" : 0,
+      "plaintext_hex" : "08080808",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "f3OWlAc9Qo6oqc1dPU5b4B3O+g420lMH7ZR8EK+8\/Hs=",
+      "counter" : 1,
+      "plaintext_hex" : "09090909",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "aYVIaA0YaVLBJRyCyDDSZjSoOdPyLJQrnZaMMV35yR4=",
+      "counter" : 2,
+      "plaintext_hex" : "0a0a0a0a",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "Q\/tWuQzHMuNw1H5Ekzu+ABCHoBdWTqpI7b5WJze2SAc=",
+      "counter" : 3,
+      "plaintext_hex" : "0b0b0b0b",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "7UFO\/ORcD37PKvwgB3Tp4MWg+EBqQP8Z0Xav93qJ2+g=",
+      "counter" : 4,
+      "plaintext_hex" : "0c0c0c0c",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "JWQ+ViWdKS3gk\/mdyUl\/laAVgQIU5CyOOm3WOANU2Bs=",
+      "counter" : 5,
+      "plaintext_hex" : "0d0d0d0d",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "naoyYIgDxZfGk+Ql6Ha23Jbcjhj+9nzPebEfh71p8Nc=",
+      "counter" : 6,
+      "plaintext_hex" : "0e0e0e0e",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    },
+    {
+      "ciphertext" : "wujGfl5iNV9T\/e0D8B7YD\/ZQVwfuPlwnxTuGQ2i\/1g0=",
+      "counter" : 7,
+      "plaintext_hex" : "0f0f0f0f",
+      "previous_counter" : 0,
+      "ratchet_key" : "hExSLh+0POfoQz6Mlv3QaDi562U9AoFDj\/2HvL987UM="
+    }
+  ],
+  "name" : "ratchet-008"
+}

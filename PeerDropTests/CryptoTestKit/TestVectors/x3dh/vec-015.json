@@ -1,0 +1,14 @@
+{
+  "expected" : {
+    "chain_key" : "FBdcs8alKahNrbb11f2IeM7JLWnlSKN16MP6o4ruOlI=",
+    "root_key" : "288eHha+eVZ94FxIR6gU30sLxHKVI\/Op\/RttJhe2Onc="
+  },
+  "inputs" : {
+    "alice_ek_seed" : "e10f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "alice_ik_seed" : "a50f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "bob_ik_seed" : "b40f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "bob_opk_seed" : "d20f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "bob_spk_seed" : "c30f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+  },
+  "name" : "x3dh_vec_015"
+}

@@ -1,0 +1,149 @@
+{
+  "bob_receive_order" : [
+    1,
+    3,
+    5,
+    7,
+    9,
+    11,
+    13,
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14
+  ],
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "5207070707070707070707070707070707070707070707070707070707070707",
+    "alice_plaintexts_hex" : [
+      "c1c1c1c1",
+      "c0c0c0c0",
+      "c3c3c3c3",
+      "c2c2c2c2",
+      "c5c5c5c5",
+      "c4c4c4c4",
+      "c7c7c7c7",
+      "c6c6c6c6",
+      "c9c9c9c9",
+      "c8c8c8c8",
+      "cbcbcbcb",
+      "cacacaca",
+      "cdcdcdcd",
+      "cccccccc",
+      "cfcfcfcf"
+    ],
+    "bob_initial_ratchet_seed" : "6107070707070707070707070707070707070707070707070707070707070707",
+    "root_key_seed" : "4307070707070707070707070707070707070707070707070707070707070707"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "gxeOxdmXFhQJdeeejLtMdeCfMSgB\/+yyGPE5D8Ctag4=",
+      "counter" : 0,
+      "plaintext_hex" : "c1c1c1c1",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "ntM92d+8PbpAg4nvmR8lG2M6ktw9Du\/xwuTfN\/F6m7s=",
+      "counter" : 1,
+      "plaintext_hex" : "c0c0c0c0",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "QUK7UR+fD38thd03col1cPDEPwu2kbImJO9yopT\/e7M=",
+      "counter" : 2,
+      "plaintext_hex" : "c3c3c3c3",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "y0EsODkUCoVE20\/fgI0VZRt2D40LA\/P2FvIvtq3OvOI=",
+      "counter" : 3,
+      "plaintext_hex" : "c2c2c2c2",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "Dik0ir4U+emFi2sNcpd32p2VXIL4+Ogz\/dKvqhS5wBM=",
+      "counter" : 4,
+      "plaintext_hex" : "c5c5c5c5",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "jH4VFuOD18DWxi4gg64bYDJJIFJ1Xnl9WMjiLboV1H8=",
+      "counter" : 5,
+      "plaintext_hex" : "c4c4c4c4",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "1wiNtztSzcbED4\/9fqWwKp9m0bfPBb2cE8NN154tOGQ=",
+      "counter" : 6,
+      "plaintext_hex" : "c7c7c7c7",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "vNHPQ\/ILRts7v8niwgVNlIpsGxuLJR0FTjxuQ+zrZPc=",
+      "counter" : 7,
+      "plaintext_hex" : "c6c6c6c6",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "jHF9Re9o12KWI6CIdQwDMfFzTunCuABahqbWsLP7zRI=",
+      "counter" : 8,
+      "plaintext_hex" : "c9c9c9c9",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "GtELG3jzm+Uq7Wz8B7JF7P4wg5GdCHEtfKU+d9Uk\/Ew=",
+      "counter" : 9,
+      "plaintext_hex" : "c8c8c8c8",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "8FfuzA6\/2O2IBIZkTP+31WsolFX0prMI522QEP8\/N+I=",
+      "counter" : 10,
+      "plaintext_hex" : "cbcbcbcb",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "eMDqh5CgI64\/KpeL3ZtoQreQXmtJ6pkANWDTEL5oseU=",
+      "counter" : 11,
+      "plaintext_hex" : "cacacaca",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "rvo+hZR5Dc7xW8EovUOaGWRbmgtd3P9EJFGc9JPvj6U=",
+      "counter" : 12,
+      "plaintext_hex" : "cdcdcdcd",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "6DgLDRe+DShYLfzJiz6WY9n8L4ggNkj6TTC7Xs7NoOA=",
+      "counter" : 13,
+      "plaintext_hex" : "cccccccc",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    },
+    {
+      "ciphertext" : "3pqFne+VTeOWCsDzZ8ssyiooNxX9nLU8OGwPv9E+n0Y=",
+      "counter" : 14,
+      "plaintext_hex" : "cfcfcfcf",
+      "previous_counter" : 0,
+      "ratchet_key" : "p1ZLNTaXauswLzaQtKDRGE5jOUxtounVqnkly7LUggA="
+    }
+  ],
+  "name" : "skipped-007"
+}

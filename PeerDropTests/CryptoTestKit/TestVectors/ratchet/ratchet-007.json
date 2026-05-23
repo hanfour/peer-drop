@@ -1,0 +1,59 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "2507070707070707070707070707070707070707070707070707070707070707",
+    "bob_initial_ratchet_seed" : "3407070707070707070707070707070707070707070707070707070707070707",
+    "root_key_seed" : "1607070707070707070707070707070707070707070707070707070707070707"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "dOAv+vQ28i+Cu37Vmn\/17kOOHcu\/zC31QeRfFtQF4dE=",
+      "counter" : 0,
+      "plaintext_hex" : "07070707",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    },
+    {
+      "ciphertext" : "NQ629ikVssxC2pSiKYzJl9uNfCcKL\/0JN0GvX7DKrMyTC2ls",
+      "counter" : 1,
+      "plaintext_hex" : "0606060606060606",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    },
+    {
+      "ciphertext" : "4z4mFLz86w3fJ2wTm9k3dZPJkWW0UJYrjy2JgKclXYdVguzF4ZXqiw==",
+      "counter" : 2,
+      "plaintext_hex" : "050505050505050505050505",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    },
+    {
+      "ciphertext" : "4lBn5yPIqhzf5cMJbn6zhbUTAK6OjF\/vNXSh\/Q4\/AjGFS4S9",
+      "counter" : 3,
+      "plaintext_hex" : "0404040404040404",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    },
+    {
+      "ciphertext" : "ZM+KhWnxaYrMSJHyTVx+bLTmVjbHK8Wak\/EFE8rs9+c=",
+      "counter" : 4,
+      "plaintext_hex" : "03030303",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    },
+    {
+      "ciphertext" : "c5S4KUY87epEDXVcbQHuREs+Fla+0+ua9ciXw9sevGUTh0GH",
+      "counter" : 5,
+      "plaintext_hex" : "0202020202020202",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    },
+    {
+      "ciphertext" : "7WgYXhPr+id0tyHJJc1lERhkh7qesR07XqyCaRz+4vA=",
+      "counter" : 6,
+      "plaintext_hex" : "01010101",
+      "previous_counter" : 0,
+      "ratchet_key" : "uwEp8Q9hnxvJPwe205O7ZhgBmG\/znecU6PXm\/6IglQI="
+    }
+  ],
+  "name" : "ratchet-007"
+}

@@ -1,0 +1,101 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "2f0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+    "bob_initial_ratchet_seed" : "3e0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+    "root_key_seed" : "1c0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "UT11WUQJ9CDtX4ye2qBDpUZ8irtYX3f3C5lm1abHFpE=",
+      "counter" : 0,
+      "plaintext_hex" : "0d0d0d0d",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "0BUiIrOf6MQT6bpmawQToU9JkbtoNpDUyv+\/c6Z6DzA=",
+      "counter" : 1,
+      "plaintext_hex" : "0c0c0c0c",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "myh2376wvjbjlQ4uHRPIiQjJeCEBJO\/HMDuB8jKB7ow=",
+      "counter" : 2,
+      "plaintext_hex" : "0f0f0f0f",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "9n+mrGlcCXz+d4xHlFkO0A6\/R4nMHeH4+1+R99pwrHs=",
+      "counter" : 3,
+      "plaintext_hex" : "0e0e0e0e",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "ADavxU0FzTn6w\/crfika4u9kJU7dtu2osaXuD++NSe4=",
+      "counter" : 4,
+      "plaintext_hex" : "09090909",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "xcRVwDQWbBpiKb6fSkfgTjnrPHASSZxutgx+bMBoZVM=",
+      "counter" : 5,
+      "plaintext_hex" : "08080808",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "tMRY1LneN5EAtEDGHKYWGmOq79Mm4pan+YdnzJXvY24=",
+      "counter" : 6,
+      "plaintext_hex" : "0b0b0b0b",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "RJKVSNuQOpRgkQp7FwYv+E\/MD5\/vpALMvynZNsSs7Pc=",
+      "counter" : 7,
+      "plaintext_hex" : "0a0a0a0a",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "BpPWpvb7AGAL9ghN4nuIvxA5pCrunNgcG20et+pRWUo=",
+      "counter" : 8,
+      "plaintext_hex" : "05050505",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "sauYWVKPUuED1vvMbBdUz6X205cYFfnqsJCRRhqey8Y=",
+      "counter" : 9,
+      "plaintext_hex" : "04040404",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "wRxOiwNewWKuREZA9AoC464AwKOkn5vYrpKnlJn5LJI=",
+      "counter" : 10,
+      "plaintext_hex" : "07070707",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "HwHjf2NLhWedsA2+md3ORDzgs\/vnFDVoynxberC9R+U=",
+      "counter" : 11,
+      "plaintext_hex" : "06060606",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    },
+    {
+      "ciphertext" : "yONDy3PMZ+PR5y5VuBaDlDlOP9WNZKX5\/hgm7pXcW1g=",
+      "counter" : 12,
+      "plaintext_hex" : "01010101",
+      "previous_counter" : 0,
+      "ratchet_key" : "c43qPQ2J+tA7Gwci69u4sCqEkT9KZM3CLn19GE+jRH8="
+    }
+  ],
+  "name" : "ratchet-013"
+}

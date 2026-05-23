@@ -1,0 +1,19 @@
+{
+  "expiresAt" : 1750592000,
+  "issuedAt" : 1748000000,
+  "policy" : {
+    "consumedOPKPruneWindowDays" : 90,
+    "opkExhaustionBehavior" : {
+      "legacy" : "proceedWithoutDH4",
+      "strict" : "failClosed"
+    },
+    "opkRetryIntervalSeconds" : 60,
+    "opkRetryMaxAttempts" : 5,
+    "skippedKeyMaxCount" : 200,
+    "skippedKeyTTLDays" : 30,
+    "spkExpirationBehavior" : "warn",
+    "spkMaxAgeDays" : 21
+  },
+  "schemaVersion" : 1,
+  "signature" : "A8iwfqkobA9edLFy8PpbN\/FitDSlDe0Oj2d6j3Vj4uSuFjqtVOUTtwiq9VSqh5SQF5NKvsBTTbyiAETteT1g\/g=="
+}
