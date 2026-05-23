@@ -94,6 +94,8 @@ targets:
         NSCameraUsageDescription: "PeerDrop needs camera access to capture photos for sharing in chats."
         NSPhotoLibraryUsageDescription: "PeerDrop needs photo library access to share photos and videos in chats."
         PeerDropWorkerAPIKey: "$(PEERDROP_WORKER_API_KEY)"
+        CryptoPolicyPublicKeys:
+          - PLACEHOLDER_REPLACED_IN_PR4
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSSupportsLiveActivities: true
