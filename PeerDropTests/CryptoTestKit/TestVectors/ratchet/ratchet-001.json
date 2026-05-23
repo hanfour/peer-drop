@@ -1,0 +1,17 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "2301010101010101010101010101010101010101010101010101010101010101",
+    "bob_initial_ratchet_seed" : "3201010101010101010101010101010101010101010101010101010101010101",
+    "root_key_seed" : "1001010101010101010101010101010101010101010101010101010101010101"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "OJxh7QGY2O0Vs3v7SK4BvP+Gts5Vo14TTSqEh9rLpNE=",
+      "counter" : 0,
+      "plaintext_hex" : "01010101",
+      "previous_counter" : 0,
+      "ratchet_key" : "8EhdQJEhg4fwKcF6e82T1GLW0THFdUDzV7rVPPlInzw="
+    }
+  ],
+  "name" : "ratchet-001"
+}

@@ -1,0 +1,24 @@
+{
+  "inputs" : {
+    "alice_initial_ratchet_seed" : "2002020202020202020202020202020202020202020202020202020202020202",
+    "bob_initial_ratchet_seed" : "3102020202020202020202020202020202020202020202020202020202020202",
+    "root_key_seed" : "1302020202020202020202020202020202020202020202020202020202020202"
+  },
+  "messages" : [
+    {
+      "ciphertext" : "yLVAr8KGXjbWG7+nFtf4WYro285GMWUDUYyuy2REBYA=",
+      "counter" : 0,
+      "plaintext_hex" : "02020202",
+      "previous_counter" : 0,
+      "ratchet_key" : "NmXV1FzhW\/97ZAPwjdL7BR79j89eKHRTfeK+hoplChE="
+    },
+    {
+      "ciphertext" : "25mG4e3ul6NwFEo8XJgvcNqP616oJ1Ihbl\/kW1XFMyg=",
+      "counter" : 1,
+      "plaintext_hex" : "03030303",
+      "previous_counter" : 0,
+      "ratchet_key" : "NmXV1FzhW\/97ZAPwjdL7BR79j89eKHRTfeK+hoplChE="
+    }
+  ],
+  "name" : "ratchet-002"
+}
