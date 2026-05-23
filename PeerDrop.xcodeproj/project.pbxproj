@@ -310,6 +310,7 @@
 		BF9B0B0E3477A3910950E1F5 /* ChatManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54FE8864F1DAC5AE51A9F6F3 /* ChatManager.swift */; };
 		BFE46EB28FD7D1F79F8C130B /* ConnectionOptionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF42E03015C3D6F22BB2BA9 /* ConnectionOptionsSheet.swift */; };
 		C04869472EE279917CD2231E /* SpriteAssetResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D0D0A65D48B4EAD10A21B7 /* SpriteAssetResolver.swift */; };
+		C10EB9819361218B7CBE9E93 /* PeerVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F949A3E8ADDBB690CAC6A02 /* PeerVersion.swift */; };
 		C134F6183870B18F25D66B1B /* DiscoveryE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D0644790BDA63B2309997A1 /* DiscoveryE2ETests.swift */; };
 		C1A720FFD1EB4CC3168F0088 /* FeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B198ADBAA38DB5D0B76D37A4 /* FeatureVerificationTests.swift */; };
 		C1B15C98CAFFB74D7883071B /* InviteAcceptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */; };
@@ -529,6 +530,7 @@
 		1DD1035C987434358B87AFCD /* DisabledFeatureUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledFeatureUXTests.swift; sourceTree = "<group>"; };
 		1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteAcceptView.swift; sourceTree = "<group>"; };
 		1E5ABCC55FDF18BE085B2AC3 /* ArchiveManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveManager.swift; sourceTree = "<group>"; };
+		1F949A3E8ADDBB690CAC6A02 /* PeerVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerVersion.swift; sourceTree = "<group>"; };
 		2021539898896A9A26B2F9E6 /* SpeciesCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeciesCatalog.swift; sourceTree = "<group>"; };
 		20D0D0A65D48B4EAD10A21B7 /* SpriteAssetResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteAssetResolver.swift; sourceTree = "<group>"; };
 		20DA3B652914D8CEE8844CE7 /* PetStateCloudSyncCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetStateCloudSyncCompatTests.swift; sourceTree = "<group>"; };
@@ -1520,6 +1522,7 @@
 				3DD0E22D4FE38D3FEDAF3DBD /* IdentityKeyManager.swift */,
 				3B2EC5B7004AC05E752320A5 /* KeyExchangeMessage.swift */,
 				06B83396F6C34EDDDD268A60 /* PairingPayload.swift */,
+				1F949A3E8ADDBB690CAC6A02 /* PeerVersion.swift */,
 				371D9C8BCBFCD1265F54D339 /* RelayAuthenticator.swift */,
 				5F7862DD9D7867EF7353A616 /* SecurityPolicy.swift */,
 				BD44DD0CD9A7014B98365F3B /* SessionKeyManager.swift */,
@@ -2181,6 +2184,7 @@
 				F21394B4FF3FCF7E66AE4035 /* PeerIdentity.swift in Sources */,
 				DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */,
 				086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */,
+				C10EB9819361218B7CBE9E93 /* PeerVersion.swift in Sources */,
 				0C0DC097E67A0553F61B2A11 /* PetAction+AnimationKey.swift in Sources */,
 				7BE6739E622B19394DCAC5CA /* PetAction.swift in Sources */,
 				2E70E1011E0A12A9AE18E618 /* PetActivityAttributes.swift in Sources */,
