@@ -126,3 +126,38 @@ extension SecurityPolicy {
         )
     }
 }
+
+extension SecurityPolicy {
+
+    /// Errors thrown by `validateInvariants()`. Each case represents a
+    /// constraint that a `SecurityPolicy` must satisfy to be considered
+    /// internally consistent regardless of where it came from (bundled,
+    /// cache, or remote fetch).
+    public enum InvariantError: Error, Equatable {
+        /// `consumedOPKPruneWindowDays` must be at least `spkMaxAgeDays * 4`.
+        ///
+        /// Reasoning: C1 (SPK timestamp binding) rejects any prekey bundle
+        /// older than `spkMaxAgeDays`. C4 (consumed-OPK prune) drops the
+        /// "this OPK was consumed" memory after `consumedOPKPruneWindowDays`.
+        /// If the prune window is shorter than ~4× the SPK max age, an
+        /// attacker could replay a bundle whose OPK has been pruned from
+        /// the consumed set. The 4× safety margin guarantees the bundle's
+        /// SPK is rejected by C1 before the OPK becomes replayable via C4.
+        case pruneWindowTooShort(prune: Int, required: Int)
+    }
+
+    /// Validate the cross-field invariants that must hold for any
+    /// `SecurityPolicy` instance used at runtime. Called by
+    /// `SecurityPolicyStore` after fetch + clamp + merge, before
+    /// publishing the new policy as `current`. A policy that fails
+    /// validation falls back to bundled defaults.
+    public func validateInvariants() throws {
+        let required = spkMaxAgeDays * 4
+        if consumedOPKPruneWindowDays < required {
+            throw InvariantError.pruneWindowTooShort(
+                prune: consumedOPKPruneWindowDays,
+                required: required
+            )
+        }
+    }
+}

@@ -107,4 +107,25 @@ final class SecurityPolicyTests: XCTestCase {
         XCTAssertLessThanOrEqual(m.skippedKeyMaxCount, min(a.skippedKeyMaxCount, b.skippedKeyMaxCount))
         XCTAssertGreaterThanOrEqual(m.consumedOPKPruneWindowDays, max(a.consumedOPKPruneWindowDays, b.consumedOPKPruneWindowDays))
     }
+
+    func test_invariant_pruneWindow_geq_spkMaxAge_times_4() {
+        XCTAssertNoThrow(try SecurityPolicy.bundledDefault.validateInvariants())
+
+        let bad = SecurityPolicy(
+            spkMaxAgeDays: 30,
+            spkExpirationBehavior: .warn,
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 5,
+            opkRetryIntervalSeconds: 60,
+            skippedKeyTTLDays: 30,
+            skippedKeyMaxCount: 200,
+            consumedOPKPruneWindowDays: 90  // 90 < 30*4=120 → violation
+        )
+        XCTAssertThrowsError(try bad.validateInvariants()) { error in
+            guard case SecurityPolicy.InvariantError.pruneWindowTooShort = error else {
+                return XCTFail("expected pruneWindowTooShort, got \(error)")
+            }
+        }
+    }
 }
