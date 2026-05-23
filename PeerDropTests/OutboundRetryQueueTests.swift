@@ -21,6 +21,7 @@ final class OutboundRetryQueueTests: XCTestCase {
         let entry = OutboundRetryQueue.Entry(
             id: UUID(),
             recipientMailboxId: "mailbox-123",
+            senderContactId: UUID().uuidString,
             payloadData: Data("hello".utf8),
             attemptCount: 0,
             firstAttemptAt: Date()
@@ -35,6 +36,7 @@ final class OutboundRetryQueueTests: XCTestCase {
         let entry = OutboundRetryQueue.Entry(
             id: UUID(),
             recipientMailboxId: "mb-1",
+            senderContactId: UUID().uuidString,
             payloadData: Data([0xAA, 0xBB, 0xCC]),
             attemptCount: 0,
             firstAttemptAt: Date()
@@ -56,6 +58,7 @@ final class OutboundRetryQueueTests: XCTestCase {
         let entry = OutboundRetryQueue.Entry(
             id: id,
             recipientMailboxId: "mb-x",
+            senderContactId: UUID().uuidString,
             payloadData: Data(),
             attemptCount: 0,
             firstAttemptAt: Date()
@@ -72,6 +75,7 @@ final class OutboundRetryQueueTests: XCTestCase {
         let original = OutboundRetryQueue.Entry(
             id: id,
             recipientMailboxId: "mb-update",
+            senderContactId: UUID().uuidString,
             payloadData: Data(),
             attemptCount: 0,
             firstAttemptAt: Date()
@@ -96,8 +100,8 @@ final class OutboundRetryQueueTests: XCTestCase {
 
     func test_retryTick_invokesCallback_perEntry() async throws {
         let queue = try await OutboundRetryQueue(storageURL: tmpURL)
-        let e1 = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
-        let e2 = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "b", payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
+        let e1 = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", senderContactId: UUID().uuidString, payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
+        let e2 = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "b", senderContactId: UUID().uuidString, payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
         try await queue.enqueue(e1)
         try await queue.enqueue(e2)
 
@@ -113,7 +117,7 @@ final class OutboundRetryQueueTests: XCTestCase {
 
     func test_retryTick_failure_incrementsAttemptCount() async throws {
         let queue = try await OutboundRetryQueue(storageURL: tmpURL)
-        let entry = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
+        let entry = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", senderContactId: UUID().uuidString, payloadData: Data(), attemptCount: 0, firstAttemptAt: Date())
         try await queue.enqueue(entry)
 
         await queue.runRetryTick { _ in .failure }
@@ -123,7 +127,7 @@ final class OutboundRetryQueueTests: XCTestCase {
 
     func test_retryTick_alreadyRemoved_doesNotBumpCount() async throws {
         let queue = try await OutboundRetryQueue(storageURL: tmpURL)
-        let entry = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", payloadData: Data(), attemptCount: 3, firstAttemptAt: Date())
+        let entry = OutboundRetryQueue.Entry(id: UUID(), recipientMailboxId: "a", senderContactId: UUID().uuidString, payloadData: Data(), attemptCount: 3, firstAttemptAt: Date())
         try await queue.enqueue(entry)
 
         await queue.runRetryTick { e in

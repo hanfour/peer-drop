@@ -79,8 +79,8 @@ public struct CryptoHardeningBanner: View {
 
     private var primaryActionKey: LocalizedStringKey {
         switch kind {
-        case .c2OPKRetry:      return "Cancel"
-        case .c2OPKExhausted:  return "Retry now"
+        case .c2OPKRetry:      return "c2.opk.action.cancel"
+        case .c2OPKExhausted:  return "c2.opk.action.retry"
         }
     }
 }

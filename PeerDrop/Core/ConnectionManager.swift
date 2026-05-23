@@ -350,7 +350,12 @@ final class ConnectionManager: ObservableObject {
         let policy = activePolicyOrDefault
         let maxAttempts = policy.opkRetryMaxAttempts
         await queue.runRetryTick { [weak self] entry in
-            guard let self = self else { return .failure }
+            // If `self` is gone (ConnectionManager deallocated mid-tick — should
+            // never happen in production but possible in test teardown), don't
+            // bump attemptCount with a phantom failure. `.alreadyRemoved` is a
+            // no-op as far as the queue is concerned, so the entry survives for
+            // the next tick of a fresh ConnectionManager.
+            guard let self = self else { return .alreadyRemoved }
             // Check max-attempts BEFORE retrying — don't re-attempt past the cap.
             if entry.attemptCount >= maxAttempts {
                 self.cryptoMetrics?.record(.c2OpkRetryExhausted, peerVersion: .unknown)
@@ -392,26 +397,57 @@ final class ConnectionManager: ObservableObject {
         self.pendingC2Banner = .exhausted(recipientMailboxId: entry.recipientMailboxId)
     }
 
-    /// Attempt to re-encrypt + send a queue entry.
+    /// Attempt to re-encrypt + send a queue entry. Lifts the same flow used by
+    /// `acceptRemoteInvite` step 7:
+    ///   1. Re-call `remoteSessionManager.initiateSession(contactId:peerMailboxId:)`
+    ///      — this internally re-fetches the recipient's prekey bundle. If OPK
+    ///      is now present, X3DH succeeds; if still nil, throws
+    ///      `X3DH.InitiationError.opkExhausted` which propagates out so the
+    ///      retry loop records `.failure` and bumps attemptCount.
+    ///   2. `remoteSessionManager.encrypt(data:for:)` produces the ratchet message.
+    ///   3. Build envelope + PoW, then `MailboxClient().sendMessage(...)`.
     ///
-    /// Production path (lands in the send-path refactor alongside PR7 peer-version
-    /// detection):
-    ///   1. Re-fetch recipient's pre-key bundle via MailboxClient.
-    ///   2. Call remoteSessionManager.initiateSession(contactId:peerMailboxId:).
-    ///   3. If OPK still nil → throws X3DH.InitiationError.opkExhausted → caller re-enqueues.
-    ///   4. If success → encrypt via remoteSessionManager.encrypt + send via MailboxClient.
-    ///
-    /// For PR5, this stub always throws so the retry loop keeps attempting until
-    /// max-attempts are hit; the full implementation will replace this when the
-    /// per-peer version detection lands in PR7.
+    /// Throws on any failure — the caller (tickRetryQueue) translates to
+    /// `.failure` and the queue handles attemptCount + cap-hit semantics.
     private func retrySendEnvelope(_ entry: OutboundRetryQueue.Entry) async throws {
-        // TODO(PR7): implement full re-initiation + send once per-peer version
-        // detection is available. The retry queue + loop infrastructure ships
-        // here so Task 5.4 (UI) and PR7 (send-path) can piggyback.
-        throw RetrySendError.notImplemented
-    }
+        guard let myMailboxId = mailboxManager.mailboxId else {
+            throw OutboundRetryError.mailboxNotReady
+        }
 
-    private enum RetrySendError: Error { case notImplemented }
+        // Re-initiate X3DH — fetches a fresh bundle from the mailbox each call.
+        // If the responder has replenished OPKs since the original failure, this
+        // succeeds and we proceed to encrypt + send. If still empty, this throws
+        // X3DH.InitiationError.opkExhausted which the retry loop catches.
+        let result = try await remoteSessionManager.initiateSession(
+            contactId: entry.senderContactId,
+            peerMailboxId: entry.recipientMailboxId
+        )
+
+        // Encrypt + envelope + send — identical structure to acceptRemoteInvite step 7.
+        let encrypted = try remoteSessionManager.encrypt(
+            data: entry.payloadData,
+            for: entry.senderContactId
+        )
+        let envelope = RemoteMessageEnvelope(
+            senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
+            senderMailboxId: myMailboxId,
+            senderDisplayName: PeerIdentity.local().displayName,
+            ephemeralKey: result.ephemeralPublicKey,
+            usedSignedPreKeyId: result.usedSignedPreKeyId,
+            usedOneTimePreKeyId: result.usedOneTimePreKeyId,
+            ratchetMessage: encrypted
+        )
+        let envelopeData = try JSONEncoder().encode(envelope)
+        let challenge = UUID().uuidString
+        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+            throw MailboxError.invalidResponse
+        }
+        try await MailboxClient().sendMessage(
+            to: entry.recipientMailboxId,
+            ciphertext: envelopeData,
+            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
+        )
+    }
 
     // MARK: - Typing Indicator State
 
@@ -1397,6 +1433,7 @@ final class ConnectionManager: ObservableObject {
                 let entry = OutboundRetryQueue.Entry(
                     id: UUID(),
                     recipientMailboxId: invite.mailboxId,
+                    senderContactId: fetchedContact.id.uuidString,
                     payloadData: greetingBytes,
                     attemptCount: 0,
                     firstAttemptAt: Date()

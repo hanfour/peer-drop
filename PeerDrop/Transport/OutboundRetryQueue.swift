@@ -16,6 +16,10 @@ actor OutboundRetryQueue {
     struct Entry: Codable, Identifiable, Equatable {
         let id: UUID
         let recipientMailboxId: String
+        /// `TrustedContact.id.uuidString` of the recipient — needed by
+        /// `RemoteSessionManager.encrypt(data:for:)` and `.initiateSession(contactId:peerMailboxId:)`
+        /// on retry.
+        let senderContactId: String
         /// Plaintext message bytes — encryption happens after X3DH succeeds.
         let payloadData: Data
         var attemptCount: Int
@@ -24,12 +28,14 @@ actor OutboundRetryQueue {
         init(
             id: UUID,
             recipientMailboxId: String,
+            senderContactId: String,
             payloadData: Data,
             attemptCount: Int,
             firstAttemptAt: Date
         ) {
             self.id = id
             self.recipientMailboxId = recipientMailboxId
+            self.senderContactId = senderContactId
             self.payloadData = payloadData
             self.attemptCount = attemptCount
             self.firstAttemptAt = firstAttemptAt
@@ -136,4 +142,15 @@ extension OutboundRetryQueue {
             }
         }
     }
+}
+
+// MARK: - Errors
+
+enum OutboundRetryError: Error {
+    /// `ConnectionManager` was deallocated mid-retry. The entry is left
+    /// unchanged (no attemptCount bump) so a future tick can retry cleanly.
+    case ownerGone
+    /// Mailbox isn't ready yet (no mailboxId provisioned). Same handling
+    /// as `.ownerGone` — no attemptCount bump, retry later.
+    case mailboxNotReady
 }
