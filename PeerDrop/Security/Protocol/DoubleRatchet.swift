@@ -313,6 +313,16 @@ class DoubleRatchetSession: Codable {
     /// drained after all out-of-order messages have been consumed.
     var skippedKeysIsEmpty: Bool { skippedKeys.isEmpty }
 
+    /// Remove skipped-key cache entries older than `policy.skippedKeyTTLDays`.
+    /// Returns the number of entries evicted (for telemetry).
+    @discardableResult
+    func evictExpiredSkippedKeys(now: Date, policy: SecurityPolicy) -> Int {
+        let cutoff = now.addingTimeInterval(-Double(policy.skippedKeyTTLDays) * 86400)
+        let before = skippedKeys.count
+        skippedKeys = skippedKeys.filter { $0.value.createdAt >= cutoff }
+        return before - skippedKeys.count
+    }
+
     private func decryptWithKey(_ ciphertext: Data, key: SymmetricKey) throws -> Data {
         let sealedBox = try AES.GCM.SealedBox(combined: ciphertext)
         return try AES.GCM.open(sealedBox, using: key)
@@ -325,3 +335,17 @@ class DoubleRatchetSession: Codable {
         case tooManySkippedMessages
     }
 }
+
+#if DEBUG
+extension DoubleRatchetSession {
+    /// Test seam: directly insert a skipped key entry. Production code only
+    /// reaches `skippedKeys` through `skipMessages` and `decrypt`'s removeValue.
+    func setSkippedKeyForTesting(ratchetKey: Data, counter: UInt32, entry: SkippedKeyEntry) {
+        let index = SkippedKeyIndex(ratchetKey: ratchetKey, counter: counter)
+        skippedKeys[index] = entry
+    }
+
+    /// Test seam: count of skipped-key entries.
+    var skippedKeysCountForTesting: Int { skippedKeys.count }
+}
+#endif

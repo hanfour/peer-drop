@@ -39,4 +39,52 @@ final class DoubleRatchetSkippedKeysTests: XCTestCase {
         // Don't replay it here — SkippedKeyVectorTests does that. We just verify
         // the fixture is loadable, ensuring the test bundle is still complete.
     }
+
+    func test_TTLEviction_removesExpiredEntries() throws {
+        let session = try makeTestSession()
+        let policy = SecurityPolicy.bundledDefault  // skippedKeyTTLDays = 30
+
+        // Insert one old entry + one fresh entry directly.
+        let oldKey = SymmetricKey(size: .bits256)
+        let newKey = SymmetricKey(size: .bits256)
+        session.setSkippedKeyForTesting(
+            ratchetKey: Data([0x01]),
+            counter: 0,
+            entry: .init(key: oldKey, createdAt: Date(timeIntervalSinceNow: -86400 * 31))
+        )
+        session.setSkippedKeyForTesting(
+            ratchetKey: Data([0x02]),
+            counter: 0,
+            entry: .init(key: newKey, createdAt: Date(timeIntervalSinceNow: -86400 * 5))
+        )
+
+        session.evictExpiredSkippedKeys(now: Date(), policy: policy)
+
+        XCTAssertFalse(session.skippedKeysIsEmpty)
+        XCTAssertEqual(session.skippedKeysCountForTesting, 1, "31-day-old entry should be evicted, 5-day-old kept")
+    }
+
+    func test_TTLEviction_isNoOp_whenAllEntriesFresh() throws {
+        let session = try makeTestSession()
+        let policy = SecurityPolicy.bundledDefault
+        session.setSkippedKeyForTesting(
+            ratchetKey: Data([0x03]),
+            counter: 0,
+            entry: .init(key: SymmetricKey(size: .bits256), createdAt: Date())
+        )
+        session.evictExpiredSkippedKeys(now: Date(), policy: policy)
+        XCTAssertEqual(session.skippedKeysCountForTesting, 1)
+    }
+
+    // MARK: - Test Helpers
+
+    private func makeTestSession() throws -> DoubleRatchetSession {
+        let rootKey = SymmetricKey(size: .bits256)
+        let bobRatchetKey = Curve25519.KeyAgreement.PrivateKey()
+        // Responder constructor
+        return DoubleRatchetSession.initializeAsResponder(
+            rootKey: rootKey,
+            myRatchetKey: bobRatchetKey
+        )
+    }
 }
