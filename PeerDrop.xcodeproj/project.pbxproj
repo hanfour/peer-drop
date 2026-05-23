@@ -487,6 +487,7 @@
 		E802A802948B73227D408D0F /* FileNameSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C60B2E85560183DBA4CFDB3 /* FileNameSanitizerTests.swift */; };
 		E88F3F87E73BC8FEE5B7A971 /* PetBehaviorControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 982C0858F44441D64C0F6487 /* PetBehaviorControllerTests.swift */; };
 		E9E748EAC391D911FF7CBFBA /* RatchetProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC0B3183AA1AEAEF1C32E263 /* RatchetProperties.swift */; };
+		EA44F6746C69E9376A57540F /* RemoteMessageEnvelopeProtocolVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05DB099863B41884389C009A /* RemoteMessageEnvelopeProtocolVersionTests.swift */; };
 		EB33CCE006494C0D7838038F /* CertificateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB3DE12412A72AA37C495B3 /* CertificateManager.swift */; };
 		EC1C004623ED6E90FFA8F605 /* MediaMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BE9C8291174DB9D2A8627E /* MediaMessageTests.swift */; };
 		EC38263A97EFDFA52ACC9377 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DCF1ACEEF25E8262FC1291 /* SettingsView.swift */; };
@@ -589,6 +590,7 @@
 		043E7D352DA50757FD403C6C /* PairingPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingPayloadTests.swift; sourceTree = "<group>"; };
 		051FD1881B74D827B86CE257 /* BLEDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEDiscoveryTests.swift; sourceTree = "<group>"; };
 		0534DED90744E8FA532E266A /* ratchet-026.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-026.json"; sourceTree = "<group>"; };
+		05DB099863B41884389C009A /* RemoteMessageEnvelopeProtocolVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMessageEnvelopeProtocolVersionTests.swift; sourceTree = "<group>"; };
 		0694CAF31BEAB2BA98E99ECB /* EdgeCaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeCaseTests.swift; sourceTree = "<group>"; };
 		06B83396F6C34EDDDD268A60 /* PairingPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingPayload.swift; sourceTree = "<group>"; };
 		075AF882FE67177B700BCDDC /* PetLevelPromotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLevelPromotionTests.swift; sourceTree = "<group>"; };
@@ -1347,6 +1349,7 @@
 				6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */,
 				931B479F1EE7DDCA9BA41340 /* RelaySessionTests.swift */,
 				686D5DFA5FC5C87756722DFF /* RelayTrustGateIntegrationTests.swift */,
+				05DB099863B41884389C009A /* RemoteMessageEnvelopeProtocolVersionTests.swift */,
 				08E34DBB3DB0C3B54507D3E5 /* RemoteMessageEnvelopeTests.swift */,
 				0D66F32C1146402F70397940 /* RetryPolicyTests.swift */,
 				85B5616645BA86E8FE8923BA /* SecurityPolicyStoreFetchTests.swift */,
@@ -2518,6 +2521,7 @@
 				57D71CDA3778DBF7A5CA2AE5 /* RelayAuthenticatorTests.swift in Sources */,
 				9943044243ED5841DD651575 /* RelaySessionTests.swift in Sources */,
 				B3F822E89DC1925AE31F7B87 /* RelayTrustGateIntegrationTests.swift in Sources */,
+				EA44F6746C69E9376A57540F /* RemoteMessageEnvelopeProtocolVersionTests.swift in Sources */,
 				2AAEF4E107833F689035E728 /* RemoteMessageEnvelopeTests.swift in Sources */,
 				978E31C0C7B3CD2349FE8525 /* RenderedImageVersionTests.swift in Sources */,
 				899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */,
