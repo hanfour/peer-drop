@@ -64,7 +64,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             storageDirectory: tmpDir,
             publicKeys: [pubKey],
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         await store.fetchAndUpdate()
         // The bundled default and the fetched blob's policy are the same;
@@ -90,7 +91,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             publicKeys: [pubKey],
             metrics: metrics,
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         await store.fetchAndUpdate()
         // current stays at bundled (cache miss → bundled default).
@@ -109,7 +111,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             publicKeys: [pubKey],
             metrics: metrics,
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         await store.fetchAndUpdate()
         XCTAssertEqual(store.current, .bundledDefault)
@@ -168,7 +171,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             publicKeys: [pubKey],
             metrics: metrics,
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         _ = await store.fetchAndUpdate()
         XCTAssertEqual(store.current, .bundledDefault, "invalid policy must NOT replace bundled default")
