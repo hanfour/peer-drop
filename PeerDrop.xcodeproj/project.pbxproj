@@ -64,6 +64,7 @@
 		1ED854B7E26F365F457DC276 /* BodyGene+SpeciesID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ADED9CD12A8556762E899C0 /* BodyGene+SpeciesID.swift */; };
 		1F91DF18EB139081A02E6519 /* PeerActionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */; };
 		1FDB7A9992C1FE104BC8BF5C /* vec-001.json in Resources */ = {isa = PBXBuildFile; fileRef = E127F0CA8FB6C76E5805A7D0 /* vec-001.json */; };
+		1FE493D21DDBBF744E1E6A58 /* X3DHSPKTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 594BE6C21114D12A066B7786 /* X3DHSPKTimestampTests.swift */; };
 		202AEE36D66263D6678979B4 /* LibraryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */; };
 		2060965FB75B4253BB7F3589 /* FuzzHarnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80A2A1BE293999C1839EE50 /* FuzzHarnessTests.swift */; };
 		2078B7690C0DCDCAA83118BB /* SpriteSheetLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E29EC77ADD9F60FE69C40C0D /* SpriteSheetLoader.swift */; };
@@ -759,6 +760,7 @@
 		55B012CC64A47A86BB25EBD9 /* PetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetState.swift; sourceTree = "<group>"; };
 		5767B6A73DE0E5BA62C8BCC1 /* PetPalettesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPalettesTests.swift; sourceTree = "<group>"; };
 		58F3005A9E449EBBACE6AA13 /* RatchetVectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatchetVectorTests.swift; sourceTree = "<group>"; };
+		594BE6C21114D12A066B7786 /* X3DHSPKTimestampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X3DHSPKTimestampTests.swift; sourceTree = "<group>"; };
 		59D1742C065D8E0995E1931A /* DoubleRatchetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoubleRatchetTests.swift; sourceTree = "<group>"; };
 		59D34B375F7221644B1C8836 /* ratchet-013.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-013.json"; sourceTree = "<group>"; };
 		5A112125C84CFC3B0BEFB3A5 /* LocalSecureChannelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSecureChannelTests.swift; sourceTree = "<group>"; };
@@ -1369,6 +1371,7 @@
 				CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */,
 				137D4C965D7DFC2C55F1346F /* WorkerSignalingTests.swift */,
 				0E74FD4D52A5F2CFBEBDB8DB /* X3DHOPKFailClosedTests.swift */,
+				594BE6C21114D12A066B7786 /* X3DHSPKTimestampTests.swift */,
 				88918D3F2CE1EE17919B8C32 /* X3DHTests.swift */,
 				E8F936DDEB99D472330175C9 /* CryptoTestKit */,
 				CE49B580FF5FD25E8461F508 /* Helpers */,
@@ -2560,6 +2563,7 @@
 				A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */,
 				F4D15DDFD772A3836FD148A6 /* X3DHOPKFailClosedTests.swift in Sources */,
 				0D70DA1BAB640D5084219EC4 /* X3DHProperties.swift in Sources */,
+				1FE493D21DDBBF744E1E6A58 /* X3DHSPKTimestampTests.swift in Sources */,
 				9CAA195089A2102D816EF96F /* X3DHTests.swift in Sources */,
 				A568EEEC4C3ED3F65B26BE04 /* X3DHVectorTests.swift in Sources */,
 			);

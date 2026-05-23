@@ -135,5 +135,101 @@ extension X3DH {
         /// for this peer's version returned `.failClosed`. The caller should
         /// enqueue the message into `OutboundRetryQueue` for later retry.
         case opkExhausted
+
+        /// Bundle has exactly one of (timestamp, signature) present — looks
+        /// like wire tampering or a partially-upgraded sender.
+        case timestampMalformed
+
+        /// Bundle has both timestamp + signature fields but the signature
+        /// does not verify against the peer's identity signing key using the
+        /// payload `SPK_pubkey || timestamp_BE_8B`.
+        case timestampSignatureInvalid
+
+        /// Bundle is validly signed but the timestamp is older than
+        /// `policy.spkMaxAgeDays` AND `policy.spkExpirationBehavior == .reject`.
+        case timestampTooOld
+    }
+}
+
+extension X3DH {
+
+    /// Verify the freshness gate on a peer's PreKeyBundle (C1).
+    ///
+    /// Per spec §4.1 — 5 decision branches based on which of the optional
+    /// timestamp fields are present, whether the signature verifies, and
+    /// whether the timestamp is within `policy.spkMaxAgeDays`:
+    ///
+    /// 1. Both fields absent → return `.legacy` (legacy peer).
+    /// 2. Exactly one field present → throw `.timestampMalformed`.
+    /// 3. Both present, signature invalid → throw `.timestampSignatureInvalid`.
+    /// 4a. Both present, valid, too old, policy `.warn` → return `.v5_4_plus`.
+    /// 4b. Both present, valid, too old, policy `.reject` → throw `.timestampTooOld`.
+    /// 5. Both present, valid, fresh → return `.v5_4_plus`.
+    ///
+    /// The signature payload is `SPK_pubkey_bytes || timestamp_BE_8_bytes`,
+    /// matching the signing layout used by Task 6.2's `PreKeyStore`.
+    ///
+    /// Returns the detected `PeerVersion` so the caller can pass it through
+    /// to `initiatorKeyAgreement` (PR7 wires the actual call sites).
+    public static func verifyBundleFreshness(
+        bundle: PreKeyBundle,
+        peerSigningKey: Curve25519.Signing.PublicKey,
+        now: Date,
+        policy: SecurityPolicy,
+        metrics: CryptoHardeningMetrics?
+    ) throws -> PeerVersion {
+
+        let ts = bundle.signedPreKeyTimestamp
+        let sig = bundle.signedPreKeyTimestampSignature
+
+        // Branch 1: both absent → legacy peer.
+        if ts == nil && sig == nil {
+            metrics?.record(.c1SpkTimestampMissing, peerVersion: .legacy)
+            return .legacy
+        }
+
+        // Branch 2: exactly one present → malformed.
+        guard let timestamp = ts, let signature = sig else {
+            metrics?.record(.c1SpkTimestampMalformed, peerVersion: .v5_4_plus)
+            throw InitiationError.timestampMalformed
+        }
+
+        // Reconstruct the signed payload: SPK_pubkey || timestamp_BE_8B.
+        var payload = Data()
+        payload.append(bundle.signedPreKey.publicKey)
+        var beTs = timestamp.bigEndian
+        payload.append(Data(bytes: &beTs, count: 8))
+
+        // Branch 3: signature invalid → reject.
+        guard peerSigningKey.isValidSignature(signature, for: payload) else {
+            metrics?.record(.c1SpkTimestampInvalidSignature, peerVersion: .v5_4_plus)
+            throw InitiationError.timestampSignatureInvalid
+        }
+
+        // Compute age in seconds.
+        let nowTs = UInt64(now.timeIntervalSince1970)
+        let ageSeconds: Int64
+        if nowTs > timestamp {
+            ageSeconds = Int64(nowTs - timestamp)
+        } else {
+            // Future-dated SPK — treat as fresh.
+            ageSeconds = 0
+        }
+        let maxAgeSeconds = Int64(policy.spkMaxAgeDays) * 86400
+
+        if ageSeconds > maxAgeSeconds {
+            // Too old: record telemetry + branch on policy.
+            metrics?.record(.c1SpkTimestampTooOld, peerVersion: .v5_4_plus)
+            switch policy.spkExpirationBehavior {
+            case .warn:
+                return .v5_4_plus       // Branch 4a: warn and proceed.
+            case .reject:
+                throw InitiationError.timestampTooOld   // Branch 4b: hard reject.
+            }
+        }
+
+        // Branch 5: fresh + valid.
+        metrics?.record(.c1SpkTimestampValid, peerVersion: .v5_4_plus)
+        return .v5_4_plus
     }
 }
