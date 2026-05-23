@@ -114,6 +114,22 @@ struct PeerDropApp: App {
                 connectionManager.preKeyStore.policyStore = policyStore
                 connectionManager.preKeyStore.cryptoMetrics = cryptoMetrics
 
+                // Task 5.3: async-init the OPK retry queue + start the periodic
+                // retry loop. Mirrors the policyStore / cryptoMetrics pattern —
+                // OutboundRetryQueue.init is async throws so it must be constructed
+                // outside the synchronous @StateObject initializer.
+                Task {
+                    let securityDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent("Security")
+                    try? FileManager.default.createDirectory(at: securityDir, withIntermediateDirectories: true)
+                    let queueURL = securityDir.appendingPathComponent("outbound-retry-queue.enc")
+                    let queue = try? await OutboundRetryQueue(storageURL: queueURL)
+                    await MainActor.run {
+                        connectionManager.outboundRetryQueue = queue
+                        connectionManager.startRetryLoop()
+                    }
+                }
+
                 // One-time migration of existing chat data to encrypted format
                 if !UserDefaults.standard.bool(forKey: "peerDropDataMigrated") {
                     connectionManager.chatManager.migrateExistingDataToEncrypted()

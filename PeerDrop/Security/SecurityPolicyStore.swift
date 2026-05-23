@@ -28,7 +28,8 @@ public final class SecurityPolicyStore: ObservableObject {
         publicKeys: [Data],
         metrics: CryptoHardeningMetrics? = nil,
         baseURL: URL? = nil,
-        urlSession: URLSession = .shared
+        urlSession: URLSession = .shared,
+        autoStartRefresh: Bool = true
     ) {
         self.storageDirectory = storageDirectory
         self.publicKeys = publicKeys
@@ -42,13 +43,15 @@ public final class SecurityPolicyStore: ObservableObject {
             metrics: metrics
         )
         // Schedule the async fetch + adaptive refresh loop if a baseURL is
-        // configured. Tests that don't want the network leg leave baseURL nil.
+        // configured. Tests that don't want the network leg leave baseURL nil,
+        // or pass autoStartRefresh: false to construct the store with a baseURL
+        // but drive fetches manually (avoids double-metric in unit tests).
         //
         // The loop runs at 24h cadence on success. After a failure, switches to
         // exponential backoff (1m → 2m → 4m → ... capped at 1h) until the next
         // success resets the counter. This means a transient boot-time network
         // hiccup doesn't strand the client on bundled defaults for 24h.
-        if baseURL != nil {
+        if baseURL != nil && autoStartRefresh {
             self.refreshTask = Task { [weak self] in
                 var consecutiveFailures = 0
                 // Initial fetch.

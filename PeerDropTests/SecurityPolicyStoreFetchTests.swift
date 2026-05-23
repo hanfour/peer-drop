@@ -60,6 +60,9 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
         MockURLProtocol.responseData = signedBlob
         MockURLProtocol.responseStatusCode = 200
 
+        // autoStartRefresh: true (default) — exercises the Task-spawn branch for
+        // coverage. The explicit fetchAndUpdate below may see count=2 if the Task
+        // also runs; we only assert on store.current (idempotent) and file existence.
         let store = SecurityPolicyStore(
             storageDirectory: tmpDir,
             publicKeys: [pubKey],
@@ -90,7 +93,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             publicKeys: [pubKey],
             metrics: metrics,
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         await store.fetchAndUpdate()
         // current stays at bundled (cache miss → bundled default).
@@ -109,7 +113,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             publicKeys: [pubKey],
             metrics: metrics,
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         await store.fetchAndUpdate()
         XCTAssertEqual(store.current, .bundledDefault)
@@ -168,7 +173,8 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
             publicKeys: [pubKey],
             metrics: metrics,
             baseURL: URL(string: "https://example.com")!,
-            urlSession: makeSession()
+            urlSession: makeSession(),
+            autoStartRefresh: false
         )
         _ = await store.fetchAndUpdate()
         XCTAssertEqual(store.current, .bundledDefault, "invalid policy must NOT replace bundled default")
@@ -194,5 +200,215 @@ final class SecurityPolicyStoreFetchTests: XCTestCase {
         )
         XCTAssertEqual(store.current, .bundledDefault, "cached blob has policy == bundledDefault, merge stays bundled")
         XCTAssertEqual(metrics.snapshot().counters["policy.cache_hit"], 1)
+    }
+
+    func test_fetchAndUpdate_withNilBaseURL_returnsFalse() async throws {
+        // Covers the `guard let baseURL` early-return path in fetchAndUpdate.
+        let store = SecurityPolicyStore(storageDirectory: tmpDir, publicKeys: [])
+        // No baseURL → fetchAndUpdate returns false immediately.
+        let result = await store.fetchAndUpdate()
+        XCTAssertFalse(result)
+    }
+
+    func test_fetch_malformedJSON_recordsFetchFailure() async throws {
+        // Sends garbage JSON so parseSignedPolicy throws .malformedJSON,
+        // which falls through to the generic `catch` in fetchAndUpdate.
+        MockURLProtocol.responseData = Data("{{not json}}".utf8)
+        MockURLProtocol.responseStatusCode = 200
+
+        let pubKey = try loadDevPublicKey()
+        let metrics = CryptoHardeningMetrics()
+        let store = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics,
+            baseURL: URL(string: "https://example.com")!,
+            urlSession: makeSession(),
+            autoStartRefresh: false
+        )
+        let succeeded = await store.fetchAndUpdate()
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(metrics.snapshot().counters["policy.fetch_failure"], 1,
+                       "malformed JSON from server must route to the generic fetch_failure bucket")
+    }
+
+    func test_fetch_non2xxResponse_recordsFetchFailure() async throws {
+        let pubKey = try loadDevPublicKey()
+        // 500 status → non-2xx guard triggers policyFetchFailure.
+        MockURLProtocol.responseData = Data()
+        MockURLProtocol.responseStatusCode = 500
+
+        let metrics = CryptoHardeningMetrics()
+        let store = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics,
+            baseURL: URL(string: "https://example.com")!,
+            urlSession: makeSession(),
+            autoStartRefresh: false
+        )
+        let succeeded = await store.fetchAndUpdate()
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(metrics.snapshot().counters["policy.fetch_failure"], 1)
+    }
+
+    func test_fetch_unsupportedSchemaVersion_recordsMetric() async throws {
+        // Send a blob with schemaVersion = 999 (but valid base64 signature shape
+        // so we hit the version gate, not the JSON-parse gate).
+        var blobDict = try JSONSerialization.jsonObject(with: loadSignedBundledDefault()) as! [String: Any]
+        blobDict["schemaVersion"] = 999
+        let tampered = try JSONSerialization.data(withJSONObject: blobDict, options: [.sortedKeys])
+        MockURLProtocol.responseData = tampered
+        MockURLProtocol.responseStatusCode = 200
+
+        let pubKey = try loadDevPublicKey()
+        let metrics = CryptoHardeningMetrics()
+        let store = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics,
+            baseURL: URL(string: "https://example.com")!,
+            urlSession: makeSession(),
+            autoStartRefresh: false
+        )
+        let succeeded = await store.fetchAndUpdate()
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(metrics.snapshot().counters["policy.version_unsupported"], 1)
+    }
+
+    // MARK: - Coverage-gap closers (loadFromCacheOrBundled + fetchAndUpdate paths)
+
+    func test_boot_expiredCache_recordsExpiredInUseMetric() throws {
+        // Build and sign a blob with expiresAt in the past.
+        let workspaceURL = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        struct Key: Codable { let private_key_base64: String; let public_key_base64: String }
+        let key = try JSONDecoder().decode(Key.self, from: try Data(contentsOf: workspaceURL.appendingPathComponent("cloudflare-worker/dev-signing-key.json")))
+        let privKey = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(base64Encoded: key.private_key_base64)!)
+        let pubKey = Data(base64Encoded: key.public_key_base64)!
+
+        let policy = SecurityPolicy.bundledDefault
+        let policyJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(policy)) as! [String: Any]
+        // expiresAt = 1 (far in the past)
+        let payloadDict: [String: Any] = [
+            "schemaVersion": 1,
+            "issuedAt": 0,
+            "expiresAt": 1,
+            "policy": policyJSON
+        ]
+        let canonical = try CanonicalJSON.serialize(payloadDict)
+        let signature = try privKey.signature(for: canonical).base64EncodedString()
+        var blobDict = payloadDict
+        blobDict["signature"] = signature
+        let expiredBlob = try JSONSerialization.data(withJSONObject: blobDict, options: [.sortedKeys])
+
+        let cacheURL = tmpDir.appendingPathComponent("crypto-policy.json")
+        try expiredBlob.write(to: cacheURL)
+
+        let metrics = CryptoHardeningMetrics()
+        _ = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics
+        )
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.counters["policy.cache_hit"], 1, "expired-but-valid blob still records a cache hit")
+        XCTAssertEqual(snap.counters["policy.expired_in_use"], 1, "expired blob must record policyExpiredInUse metric")
+    }
+
+    func test_boot_corruptCache_fallsBackToBundledDefault() throws {
+        // Write garbage bytes as the cache file.
+        let cacheURL = tmpDir.appendingPathComponent("crypto-policy.json")
+        try Data("not valid json at all !!@#$".utf8).write(to: cacheURL)
+
+        let pubKey = try loadDevPublicKey()
+        let metrics = CryptoHardeningMetrics()
+        let store = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics
+        )
+        // Corrupt cache → catch block → bundledDefault (no cache-hit metric).
+        XCTAssertEqual(store.current, .bundledDefault)
+        XCTAssertNil(metrics.snapshot().counters["policy.cache_hit"], "corrupt cache must NOT record a cache hit")
+    }
+
+    func test_fetch_outOfBoundsPolicy_recordsMetricAndClamps() async throws {
+        // Build and sign a policy where spkMaxAgeDays is above the max bound.
+        let workspaceURL = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        struct Key: Codable { let private_key_base64: String; let public_key_base64: String }
+        let key = try JSONDecoder().decode(Key.self, from: try Data(contentsOf: workspaceURL.appendingPathComponent("cloudflare-worker/dev-signing-key.json")))
+        let privKey = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(base64Encoded: key.private_key_base64)!)
+        let pubKey = Data(base64Encoded: key.public_key_base64)!
+
+        // spkMaxAgeDays = 9999 exceeds SecurityPolicyBounds.maxSPKMaxAgeDays.
+        // consumedOPKPruneWindowDays must stay ≥ spkMaxAge*4 to pass invariants:
+        // use the clamped max (365) * 4 = 1460 but the invariant checks BEFORE
+        // clamping, so we need a value that keeps the invariant on the RAW policy.
+        // Actually invariant is pruneWindow ≥ spkMaxAge×4 on decoded values,
+        // so with spkMaxAge=9999, pruneWindow must be ≥ 39996. We also want to
+        // trigger policyValueOutOfBounds (violations.isEmpty == false) which just
+        // requires ANY out-of-range field — keep spkMaxAge big enough to violate
+        // bounds but satisfy invariant via a big pruneWindow too.
+        //
+        // Simpler: use spkMaxAgeDays=999, consumedOPKPruneWindowDays=9999
+        // which satisfies invariant (9999 ≥ 999*4=3996) but both exceed bounds.
+        let outOfBoundsPolicy = SecurityPolicy(
+            spkMaxAgeDays: 999,
+            spkExpirationBehavior: .warn,
+            opkExhaustionLegacy: .proceedWithoutDH4,
+            opkExhaustionStrict: .failClosed,
+            opkRetryMaxAttempts: 5,
+            opkRetryIntervalSeconds: 60,
+            skippedKeyTTLDays: 30,
+            skippedKeyMaxCount: 200,
+            consumedOPKPruneWindowDays: 9999
+        )
+        let policyJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(outOfBoundsPolicy)) as! [String: Any]
+        let payloadDict: [String: Any] = [
+            "schemaVersion": 1,
+            "issuedAt": 1_748_000_000,
+            "expiresAt": 1_850_000_000,
+            "policy": policyJSON
+        ]
+        let canonical = try CanonicalJSON.serialize(payloadDict)
+        let signature = try privKey.signature(for: canonical).base64EncodedString()
+        var blobDict = payloadDict
+        blobDict["signature"] = signature
+        let blob = try JSONSerialization.data(withJSONObject: blobDict, options: [.sortedKeys])
+        MockURLProtocol.responseData = blob
+        MockURLProtocol.responseStatusCode = 200
+
+        let metrics = CryptoHardeningMetrics()
+        let store = SecurityPolicyStore(
+            storageDirectory: tmpDir,
+            publicKeys: [pubKey],
+            metrics: metrics,
+            baseURL: URL(string: "https://example.com")!,
+            urlSession: makeSession(),
+            autoStartRefresh: false
+        )
+        let succeeded = await store.fetchAndUpdate()
+        XCTAssertTrue(succeeded, "out-of-bounds values are clamped, fetch must still succeed")
+        XCTAssertEqual(metrics.snapshot().counters["policy.value_out_of_bounds"], 1,
+                       "out-of-range field must record policyValueOutOfBounds metric")
+        XCTAssertEqual(metrics.snapshot().counters["policy.fetch_success"], 1)
+    }
+
+    func test_parseSignedPolicy_invalidBase64Signature_throwsInvalidSignature() throws {
+        // Covers the `guard let sigBytes = Data(base64Encoded: ...)` path in
+        // parseSignedPolicy (distinct from a valid-base64 but wrong-key tamper).
+        var blobDict = try JSONSerialization.jsonObject(with: loadSignedBundledDefault()) as! [String: Any]
+        blobDict["signature"] = "!!!NOT BASE64!!!"   // cannot be decoded as base64
+        let tampered = try JSONSerialization.data(withJSONObject: blobDict, options: [.sortedKeys])
+        let pubKey = try loadDevPublicKey()
+        XCTAssertThrowsError(
+            try SecurityPolicyStore.parseSignedPolicy(tampered, publicKeys: [pubKey])
+        ) { error in
+            XCTAssertEqual(error as? SecurityPolicyStore.ParseError, .invalidSignature)
+        }
     }
 }

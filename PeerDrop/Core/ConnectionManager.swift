@@ -90,6 +90,15 @@ struct DecryptFailureBanner: Identifiable, Equatable {
     var id: String { contactId }
 }
 
+/// Surfaced banner state for C2 OPK events. Drives `CryptoHardeningBanner`
+/// in the chat UI. Cleared on retry success or explicit user dismissal.
+enum C2BannerState: Equatable {
+    /// A retry is in progress for the given recipient mailbox.
+    case retrying(attempts: Int, max: Int, recipientMailboxId: String)
+    /// The retry cap was hit — recipient must open the app to replenish OPKs.
+    case exhausted(recipientMailboxId: String)
+}
+
 /// An envelope from an unknown peer awaiting user consent before X3DH session
 /// establishment. The fingerprint is the short human-readable hex string the
 /// user compares out-of-band to defend against MITM at first contact.
@@ -164,6 +173,10 @@ final class ConnectionManager: ObservableObject {
     /// cross `decryptFailureBannerThreshold`. Cleared on successful decrypt
     /// from the same peer or explicit user dismissal.
     @Published var decryptFailureBanner: DecryptFailureBanner?
+
+    /// Surfaced banner for C2 OPK events: either a retry-in-progress or a
+    /// final exhausted state. Cleared on retry success or explicit user action.
+    @Published var pendingC2Banner: C2BannerState?
 
     /// Per-contact running count of consecutive decrypt failures. Reset to 0
     /// on a successful decrypt from the same peer. Keyed by `contact.id.uuidString`.
@@ -295,6 +308,146 @@ final class ConnectionManager: ObservableObject {
     /// Same lifecycle as `policyStore`. Wired by future tasks as each event site
     /// is instrumented.
     var cryptoMetrics: CryptoHardeningMetrics?
+
+    // MARK: - OPK Retry Queue (Task 5.3 / PR5)
+
+    /// Persistent queue for messages whose X3DH initiation failed due to OPK
+    /// exhaustion. Assigned async-post-init from PeerDropApp.onAppear, mirroring
+    /// the policyStore / cryptoMetrics wiring pattern.
+    var outboundRetryQueue: OutboundRetryQueue?
+
+    /// Background task driving periodic retry ticks.
+    private var retryLoopTask: Task<Void, Never>?
+
+    private var activePolicyOrDefault: SecurityPolicy {
+        policyStore?.current ?? .bundledDefault
+    }
+
+    /// Start the periodic OPK retry loop. Called from `PeerDropApp.onAppear`
+    /// after the queue is assigned. Idempotent — calling twice cancels and
+    /// re-starts the previous loop.
+    func startRetryLoop() {
+        retryLoopTask?.cancel()
+        retryLoopTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let intervalSeconds = self?.activePolicyOrDefault.opkRetryIntervalSeconds ?? 60
+                try? await Task.sleep(nanoseconds: UInt64(intervalSeconds) * 1_000_000_000)
+                if Task.isCancelled { break }
+                await self?.tickRetryQueue()
+            }
+        }
+    }
+
+    /// Cancel the periodic retry loop. Called when the app moves to background
+    /// (or from tests).
+    func stopRetryLoop() {
+        retryLoopTask?.cancel()
+        retryLoopTask = nil
+    }
+
+    private func tickRetryQueue() async {
+        guard let queue = outboundRetryQueue else { return }
+        let policy = activePolicyOrDefault
+        let maxAttempts = policy.opkRetryMaxAttempts
+        await queue.runRetryTick { [weak self] entry in
+            // If `self` is gone (ConnectionManager deallocated mid-tick — should
+            // never happen in production but possible in test teardown), don't
+            // bump attemptCount with a phantom failure. `.alreadyRemoved` is a
+            // no-op as far as the queue is concerned, so the entry survives for
+            // the next tick of a fresh ConnectionManager.
+            guard let self = self else { return .alreadyRemoved }
+            // Check max-attempts BEFORE retrying — don't re-attempt past the cap.
+            if entry.attemptCount >= maxAttempts {
+                self.cryptoMetrics?.record(.c2OpkRetryExhausted, peerVersion: .unknown)
+                try? await queue.remove(id: entry.id)
+                await self.surfaceC2ExhaustedBanner(for: entry)
+                return .alreadyRemoved
+            }
+            // Update retry-in-progress banner before attempting.
+            await MainActor.run {
+                self.pendingC2Banner = .retrying(
+                    attempts: entry.attemptCount + 1,
+                    max: maxAttempts,
+                    recipientMailboxId: entry.recipientMailboxId
+                )
+            }
+            // Otherwise attempt to re-send.
+            do {
+                try await self.retrySendEnvelope(entry)
+                self.cryptoMetrics?.record(.c2OpkRetrySucceeded, peerVersion: .unknown)
+                // Clear banner on success.
+                await MainActor.run {
+                    if case .retrying(_, _, let mb) = self.pendingC2Banner,
+                       mb == entry.recipientMailboxId {
+                        self.pendingC2Banner = nil
+                    }
+                }
+                return .success
+            } catch {
+                return .failure
+            }
+        }
+    }
+
+    /// Surfaces the C2 OPK exhausted banner. Called from `tickRetryQueue`
+    /// after an entry's retry cap is hit. Sets `pendingC2Banner` to `.exhausted`
+    /// so the UI can prompt the user to ask the recipient to open the app.
+    @MainActor
+    private func surfaceC2ExhaustedBanner(for entry: OutboundRetryQueue.Entry) async {
+        self.pendingC2Banner = .exhausted(recipientMailboxId: entry.recipientMailboxId)
+    }
+
+    /// Attempt to re-encrypt + send a queue entry. Lifts the same flow used by
+    /// `acceptRemoteInvite` step 7:
+    ///   1. Re-call `remoteSessionManager.initiateSession(contactId:peerMailboxId:)`
+    ///      — this internally re-fetches the recipient's prekey bundle. If OPK
+    ///      is now present, X3DH succeeds; if still nil, throws
+    ///      `X3DH.InitiationError.opkExhausted` which propagates out so the
+    ///      retry loop records `.failure` and bumps attemptCount.
+    ///   2. `remoteSessionManager.encrypt(data:for:)` produces the ratchet message.
+    ///   3. Build envelope + PoW, then `MailboxClient().sendMessage(...)`.
+    ///
+    /// Throws on any failure — the caller (tickRetryQueue) translates to
+    /// `.failure` and the queue handles attemptCount + cap-hit semantics.
+    private func retrySendEnvelope(_ entry: OutboundRetryQueue.Entry) async throws {
+        guard let myMailboxId = mailboxManager.mailboxId else {
+            throw OutboundRetryError.mailboxNotReady
+        }
+
+        // Re-initiate X3DH — fetches a fresh bundle from the mailbox each call.
+        // If the responder has replenished OPKs since the original failure, this
+        // succeeds and we proceed to encrypt + send. If still empty, this throws
+        // X3DH.InitiationError.opkExhausted which the retry loop catches.
+        let result = try await remoteSessionManager.initiateSession(
+            contactId: entry.senderContactId,
+            peerMailboxId: entry.recipientMailboxId
+        )
+
+        // Encrypt + envelope + send — identical structure to acceptRemoteInvite step 7.
+        let encrypted = try remoteSessionManager.encrypt(
+            data: entry.payloadData,
+            for: entry.senderContactId
+        )
+        let envelope = RemoteMessageEnvelope(
+            senderIdentityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
+            senderMailboxId: myMailboxId,
+            senderDisplayName: PeerIdentity.local().displayName,
+            ephemeralKey: result.ephemeralPublicKey,
+            usedSignedPreKeyId: result.usedSignedPreKeyId,
+            usedOneTimePreKeyId: result.usedOneTimePreKeyId,
+            ratchetMessage: encrypted
+        )
+        let envelopeData = try JSONEncoder().encode(envelope)
+        let challenge = UUID().uuidString
+        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+            throw MailboxError.invalidResponse
+        }
+        try await MailboxClient().sendMessage(
+            to: entry.recipientMailboxId,
+            ciphertext: envelopeData,
+            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
+        )
+    }
 
     // MARK: - Typing Indicator State
 
@@ -1264,11 +1417,33 @@ final class ConnectionManager: ObservableObject {
         // 5. Add trusted contact
         trustedContactStore.add(fetchedContact)
 
-        // 6. Initiate X3DH session
-        let result = try await remoteSessionManager.initiateSession(
-            contactId: fetchedContact.id.uuidString,
-            peerMailboxId: invite.mailboxId
-        )
+        // 6. Initiate X3DH session — may throw opkExhausted when peer's OPK list
+        // is empty AND the fail-closed policy applies. Catch and enqueue so the
+        // retry loop (Task 5.3) will re-attempt once OPKs are replenished.
+        let result: RemoteSessionManager.InitiateResult
+        do {
+            result = try await remoteSessionManager.initiateSession(
+                contactId: fetchedContact.id.uuidString,
+                peerMailboxId: invite.mailboxId
+            )
+        } catch X3DH.InitiationError.opkExhausted {
+            // Greeting bytes to re-send once X3DH succeeds on retry.
+            let greetingBytes = String(localized: "Connected via invite link").data(using: .utf8) ?? Data()
+            if let queue = outboundRetryQueue {
+                let entry = OutboundRetryQueue.Entry(
+                    id: UUID(),
+                    recipientMailboxId: invite.mailboxId,
+                    senderContactId: fetchedContact.id.uuidString,
+                    payloadData: greetingBytes,
+                    attemptCount: 0,
+                    firstAttemptAt: Date()
+                )
+                try? await queue.enqueue(entry)
+            }
+            // Task 5.4: surface a "queued for retry" UI banner here.
+            // Bail out — the retry loop will complete the handshake.
+            return
+        }
 
         // 7. Send initial encrypted greeting
         let greeting = String(localized: "Connected via invite link").data(using: .utf8)!

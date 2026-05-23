@@ -12,13 +12,34 @@ enum X3DH {
     }
 
     /// Alice (initiator) computes the shared secret using Bob's pre-key bundle.
+    ///
+    /// - Parameters:
+    ///   - peerVersion: Detected version of the remote peer. Defaults to `.unknown` so
+    ///     existing callers compile unchanged; `.unknown` routes to the strict (fail-closed)
+    ///     policy for nil OPK, which is the intended production default.
+    ///   - policy: Active `SecurityPolicy`. Defaults to `.bundledDefault`.
+    ///   - metrics: Optional telemetry sink. Records C2 events when OPK is absent.
     static func initiatorKeyAgreement(
         myIdentityKey: Curve25519.KeyAgreement.PrivateKey,      // IK_A
         myEphemeralKey: Curve25519.KeyAgreement.PrivateKey,      // EK_A
         theirIdentityKey: Curve25519.KeyAgreement.PublicKey,     // IK_B
         theirSignedPreKey: Curve25519.KeyAgreement.PublicKey,    // SPK_B
-        theirOneTimePreKey: Curve25519.KeyAgreement.PublicKey?   // OPK_B (optional)
+        theirOneTimePreKey: Curve25519.KeyAgreement.PublicKey?,  // OPK_B (optional)
+        peerVersion: PeerVersion = .unknown,
+        policy: SecurityPolicy = .bundledDefault,
+        metrics: CryptoHardeningMetrics? = nil
     ) throws -> KeyAgreementResult {
+        // Fail-closed gate (C2): if OPK is missing, consult policy for this peer version.
+        if theirOneTimePreKey == nil {
+            metrics?.record(.c2OpkMissing, peerVersion: peerVersion)
+            let behavior = policy.opkExhaustionBehavior(peerVersion)
+            if behavior == .failClosed {
+                metrics?.record(.c2OpkFailedInitiation, peerVersion: peerVersion)
+                throw InitiationError.opkExhausted
+            }
+            // .proceedWithoutDH4: fall through, skip DH4 below.
+        }
+
         // DH1 = DH(IK_A, SPK_B)
         let dh1 = try myIdentityKey.sharedSecretFromKeyAgreement(with: theirSignedPreKey)
         // DH2 = DH(EK_A, IK_B)
@@ -104,5 +125,15 @@ enum X3DH {
             rootKey: SymmetricKey(data: t1),
             chainKey: SymmetricKey(data: t2)
         )
+    }
+}
+
+extension X3DH {
+    /// Errors thrown by the initiator side of X3DH.
+    public enum InitiationError: Error, Equatable {
+        /// Responder's OPK list is empty AND `policy.opkExhaustionBehavior`
+        /// for this peer's version returned `.failClosed`. The caller should
+        /// enqueue the message into `OutboundRetryQueue` for later retry.
+        case opkExhausted
     }
 }
