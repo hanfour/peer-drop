@@ -13,12 +13,35 @@ public struct SecurityPolicy: Equatable, Codable {
         /// v5.4+ behavior: refuse to initiate X3DH, schedule retry.
         case failClosed
 
+        private var rank: Int {
+            switch self {
+            case .proceedWithoutDH4: return 0
+            case .failClosed:        return 1
+            }
+        }
+
         /// Strictness ordering: failClosed > proceedWithoutDH4.
         public static func < (lhs: Self, rhs: Self) -> Bool {
-            switch (lhs, rhs) {
-            case (.proceedWithoutDH4, .failClosed): return true
-            default: return false
+            lhs.rank < rhs.rank
+        }
+    }
+
+    public enum SPKExpirationBehavior: String, Codable, Comparable {
+        /// Warn on expiration but allow proceed.
+        case warn
+
+        /// Reject if SPK is expired.
+        case reject
+
+        private var rank: Int {
+            switch self {
+            case .warn:   return 0
+            case .reject: return 1
             }
+        }
+
+        public static func < (lhs: Self, rhs: Self) -> Bool {
+            lhs.rank < rhs.rank
         }
     }
 }

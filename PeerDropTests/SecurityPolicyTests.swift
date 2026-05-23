@@ -9,4 +9,12 @@ final class SecurityPolicyTests: XCTestCase {
             "failClosed is strictly stronger than proceedWithoutDH4"
         )
     }
+
+    func test_SPKExpirationBehavior_strictness_ordering() {
+        XCTAssertGreaterThan(
+            SecurityPolicy.SPKExpirationBehavior.reject,
+            SecurityPolicy.SPKExpirationBehavior.warn,
+            "reject is strictly stronger than warn"
+        )
+    }
 }
