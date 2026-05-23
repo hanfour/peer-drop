@@ -108,9 +108,10 @@ PreKeyStore / X3DH / DoubleRatchet / TrustedContactStore
 
 ### 3.3 Per-peer policy
 
-`TrustedContactStore` gains a new field `peerProtocolVersion: ProtocolVersion?`, populated from:
-- **Local Wi-Fi**: existing `LocalSecureChannel.HandshakeBundle.version` byte
-- **Relay**: new optional `protocolVersion: UInt8?` field on `RemoteMessageEnvelope` (additive, old peers ignore)
+`TrustedContactStore` gains a new field `peerProtocolVersion: ProtocolVersion?`, populated from the relay path only (C1/C2 enforcement is relay-specific; C3/C4 are local-only and don't need peer version).
+
+- **Relay**: new optional `protocolVersion: UInt8?` field on `RemoteMessageEnvelope` (additive, old peers ignore). When the responder receives the first envelope from a new peer, it stores `peerProtocolVersion` on the `TrustedContact` created at first-contact approval. The initiator independently infers the responder's version from the prekey bundle: if `signedPreKeyTimestamp` is present, the responder is `.v5_4_plus`; otherwise `.legacy`.
+- **Local Wi-Fi**: `peerProtocolVersion` stays `nil` for `LocalSecureChannel` peers. This is fine because C1/C2 do not apply to local Wi-Fi (no X3DH, no SPK), and C3/C4 are purely local with no per-peer dependency.
 
 `PeerPolicy.policy(for:base:)` resolves the effective policy:
 
@@ -118,7 +119,7 @@ PreKeyStore / X3DH / DoubleRatchet / TrustedContactStore
 |---|---|---|
 | `.v5_4_plus` | strict | strict |
 | `.legacy` | no timestamp check, no fail-closed | strict (purely local, always applies) |
-| `.unknown` | same as `.v5_4_plus` | strict |
+| `.unknown` / `nil` | same as `.v5_4_plus` | strict |
 
 ### 3.4 Why this split
 
@@ -131,23 +132,31 @@ PreKeyStore / X3DH / DoubleRatchet / TrustedContactStore
 
 ### 4.1 — C1: SPK timestamp binding
 
-**Wire change (additive):** `PreKeyBundle` gains `signedPreKeyTimestamp: UInt64?` (Unix seconds since epoch). The signature payload for `SignedPreKey` is redefined to:
+**Wire change (strictly additive):** `PreKeyBundle` gains **two** new optional fields. The existing SPK signature is **unchanged** — this is what preserves wire compatibility for old initiators verifying new responders' bundles.
 
 ```
-signaturePayload = SPK_pubkey_bytes || timestamp_BE_8_bytes
+PreKeyBundle (v5.4+ adds two optional fields):
+  identityKey:                     pubkey                              (unchanged)
+  signedPreKey:                    pubkey + legacy_spk_signature       (unchanged: signed by IK over SPK_pubkey)
+  oneTimePreKey:                   pubkey                              (unchanged, optional)
+  signedPreKeyTimestamp:           UInt64?                             (NEW, Unix seconds since epoch)
+  signedPreKeyTimestampSignature:  Data?                               (NEW, Ed25519 over SPK_pubkey || timestamp_BE_8B, signed by IK)
 ```
 
-Old clients sign and verify without the timestamp (legacy payload = `SPK_pubkey_bytes` only). New clients detect the presence of `signedPreKeyTimestamp` in the bundle and switch verification to the new payload. Both formats coexist; verification picks based on whether the timestamp field is present.
+The legacy SPK signature is preserved verbatim; new fields are tacked on. Old clients ignore unknown JSON keys and verify only the legacy SPK signature — wire compat holds in **both directions** (old↔new, new↔old).
 
 **Verification flow (initiator-side, in `X3DH.initiate`):**
 
-| Condition | Action | Telemetry |
-|---|---|---|
-| `timestamp == nil` | Peer is legacy; proceed without timestamp check; record `peerProtocolVersion = .legacy` | `c1.spk_timestamp_missing` |
-| Signature invalid | **Hard reject**; surface "cannot establish encrypted connection" banner | `c1.spk_timestamp_invalid_signature` |
-| `now - timestamp > policy.spkMaxAgeDays` and `policy.spkExpirationBehavior == .warn` | Proceed; show C1 UI banner | `c1.spk_timestamp_too_old` |
-| `now - timestamp > policy.spkMaxAgeDays` and `policy.spkExpirationBehavior == .reject` | **Hard reject** | `c1.spk_timestamp_too_old` (+ rejection sub-event) |
-| Otherwise | Normal X3DH | `c1.spk_timestamp_valid` |
+1. Verify legacy SPK signature over `SPK_pubkey` using peer's IK (same as today).
+2. If exactly one of `signedPreKeyTimestamp` / `signedPreKeyTimestampSignature` is present (not both, not neither) → **hard reject** (looks like tampering); telemetry `c1.spk_timestamp_malformed`.
+3. If both are absent → peer is legacy; proceed without freshness check; record `peerProtocolVersion = .legacy`; telemetry `c1.spk_timestamp_missing`.
+4. If both are present:
+   - Verify `signedPreKeyTimestampSignature` over `SPK_pubkey || timestamp_BE_8B` using peer's IK.
+   - If invalid → **hard reject**; telemetry `c1.spk_timestamp_invalid_signature`.
+   - If valid, check `now - timestamp > policy.spkMaxAgeDays`:
+     - In `.warn` mode → proceed; show C1 UI banner; telemetry `c1.spk_timestamp_too_old`.
+     - In `.reject` mode → **hard reject**; telemetry `c1.spk_timestamp_too_old` (with `extra.action = "reject"`).
+   - If fresh → normal X3DH; telemetry `c1.spk_timestamp_valid`.
 
 **Default threshold:** `spkMaxAgeDays = 21` (matches existing SPK rotation: 7-day interval × 3 retained). Remote policy may tighten to 14.
 
@@ -169,7 +178,7 @@ Old clients sign and verify without the timestamp (legacy payload = `SPK_pubkey_
 | `.unknown` | nil | Same as `.v5_4_plus` |
 | Any | present | Normal X3DH |
 
-**Retry mechanism:** new `OutboundRetryQueue` (sibling to existing `MailboxManager`) holds pending sends. On every retry tick:
+**Retry mechanism:** new `OutboundRetryQueue` (sibling to existing `MailboxManager`) holds pending sends. The queue is persisted to disk (`~/Documents/Security/outbound-retry-queue.enc`, encrypted via `ChatDataEncryptor`) so retries survive app restart. On every retry tick:
 1. Re-fetch the recipient's prekey bundle.
 2. If OPK is now present, proceed with X3DH and drain the queued envelope.
 3. If still missing after 5 attempts → permanent failure; surface "OPK exhausted" banner.
@@ -369,8 +378,12 @@ Any remote value outside its range is clamped to the bound; telemetry records `p
 ### 6.1 Property tests (non-negotiable invariants)
 
 **C1:**
-- `∀ bundle. validSig(bundle) ∧ fresh(bundle) ⇒ initiate(bundle).ok`
-- `∀ bundle. ¬validSig(bundle) ⇒ initiate(bundle).fails`
+- `∀ bundle. legacySpkSigValid(bundle) ∧ noTimestamp(bundle) ⇒ initiate(bundle).ok` (peer is legacy)
+- `∀ bundle. legacySpkSigValid(bundle) ∧ timestampSigValid(bundle) ∧ fresh(bundle) ⇒ initiate(bundle).ok`
+- `∀ bundle. ¬legacySpkSigValid(bundle) ⇒ initiate(bundle).fails` (unchanged from today)
+- `∀ bundle. hasTimestamp(bundle) ∧ ¬hasTimestampSig(bundle) ⇒ initiate(bundle).fails` (malformed)
+- `∀ bundle. ¬hasTimestamp(bundle) ∧ hasTimestampSig(bundle) ⇒ initiate(bundle).fails` (malformed)
+- `∀ bundle. hasTimestamp(bundle) ∧ ¬timestampSigValid(bundle) ⇒ initiate(bundle).fails`
 - `∀ bundle. expired(bundle) ∧ policy.expirationBehavior == .reject ⇒ initiate(bundle).fails`
 
 **C2:**
@@ -456,7 +469,7 @@ Net uplift: +25 percentage points on the crypto-layer files.
 
 ### 8.1 Telemetry pipeline
 
-New file `Telemetry/CryptoHardeningMetrics.swift` exposes 21 counters (C1: 4, C2: 4, C3: 4, C4: 2, policy: 7). All events flow through the existing `ConnectionMetrics` → `/debug/metric` pipeline, flushed every 5 minutes or on app background.
+New file `Telemetry/CryptoHardeningMetrics.swift` exposes 22 counters (C1: 5, C2: 4, C3: 4, C4: 2, policy: 7). All events flow through the existing `ConnectionMetrics` → `/debug/metric` pipeline, flushed every 5 minutes or on app background.
 
 **Privacy:** events carry only `kind: String` and optional `peerProtocolVersion: String?`. **No peer IDs, no message IDs, no payload data.** Aligns with the existing Privacy Manifest.
 
