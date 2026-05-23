@@ -92,13 +92,30 @@ final class PreKeyStore {
 
     func generatePreKeyBundle() -> PreKeyBundle {
         lock.lock()
-        defer { lock.unlock() }
+        let spkPublicKey = _currentSignedPreKey.publicKey
+        let publicSignedPreKey = _currentSignedPreKey.asPublic()
+        let oneTimePublicKeys = oneTimePreKeys.values.map { $0.asPublic() }.sorted { $0.id < $1.id }
+        lock.unlock()
+
+        let timestamp = UInt64(Date().timeIntervalSince1970)
+        var timestampPayload = spkPublicKey
+        timestampPayload.append(uint64BigEndian(timestamp))
+        let timestampSignature = try? IdentityKeyManager.shared.sign(timestampPayload)
+
         return PreKeyBundle(
             identityKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
             signingKey: IdentityKeyManager.shared.signingPublicKey.rawRepresentation,
-            signedPreKey: _currentSignedPreKey.asPublic(),
-            oneTimePreKeys: oneTimePreKeys.values.map { $0.asPublic() }.sorted { $0.id < $1.id }
+            signedPreKey: publicSignedPreKey,
+            oneTimePreKeys: oneTimePublicKeys,
+            signedPreKeyTimestamp: timestamp,
+            signedPreKeyTimestampSignature: timestampSignature
         )
+    }
+
+    /// Encodes a UInt64 as 8 big-endian bytes.
+    private func uint64BigEndian(_ value: UInt64) -> Data {
+        var be = value.bigEndian
+        return Data(bytes: &be, count: 8)
     }
 
     // MARK: - One-Time Pre-Key Management
