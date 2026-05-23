@@ -22,6 +22,7 @@
 		0C0DC097E67A0553F61B2A11 /* PetAction+AnimationKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EFB0FFA7A2462D7EC7DEF40 /* PetAction+AnimationKey.swift */; };
 		0CC504EF1BCDE08A7C0FC29B /* ClipboardSyncPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6177991133811D150A9C63BB /* ClipboardSyncPayload.swift */; };
 		0D2565A5A50735DE1770DDE4 /* GhostMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67684221A9BBA3BB585A866E /* GhostMigrationTests.swift */; };
+		0D70DA1BAB640D5084219EC4 /* X3DHProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB055E8A6F92EFE838630CE1 /* X3DHProperties.swift */; };
 		0EA206190D6C15E8362C65F6 /* PeerDropWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E58E671AF75C790526DDCDB /* PeerDropWidgetBundle.swift */; };
 		0EB449EE2838A44505508B07 /* DataChannelTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CF2ADC56F3918BA1B6A59B /* DataChannelTransport.swift */; };
 		0EFBCD47C0D33D744EE2EB6C /* V5UpgradeOnboardingHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5883B9C4565535B9BECDC1 /* V5UpgradeOnboardingHost.swift */; };
@@ -1005,6 +1006,7 @@
 		C9190D8D82A73DD7F86B2EAA /* ClipboardSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSyncTests.swift; sourceTree = "<group>"; };
 		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
 		CAED5F8373D498D847E54328 /* ChatBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
+		CB055E8A6F92EFE838630CE1 /* X3DHProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X3DHProperties.swift; sourceTree = "<group>"; };
 		CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordRow.swift; sourceTree = "<group>"; };
 		CC56FC4BE1D6C42C70F72148 /* ratchet-010.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-010.json"; sourceTree = "<group>"; };
 		CD26CBA615E045C381EC2019 /* PetStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetStatsTests.swift; sourceTree = "<group>"; };
@@ -1966,6 +1968,7 @@
 				528D79971776865AA42C0840 /* PreKeyStoreProperties.swift */,
 				BC0B3183AA1AEAEF1C32E263 /* RatchetProperties.swift */,
 				FC59106BE0C1F2D308BDEC3E /* SecurityPolicyProperties.swift */,
+				CB055E8A6F92EFE838630CE1 /* X3DHProperties.swift */,
 			);
 			path = Properties;
 			sourceTree = "<group>";
@@ -2548,6 +2551,7 @@
 				88D96706BDF419E491ECD3A0 /* VariantTraitsTests.swift in Sources */,
 				A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */,
 				F4D15DDFD772A3836FD148A6 /* X3DHOPKFailClosedTests.swift in Sources */,
+				0D70DA1BAB640D5084219EC4 /* X3DHProperties.swift in Sources */,
 				9CAA195089A2102D816EF96F /* X3DHTests.swift in Sources */,
 				A568EEEC4C3ED3F65B26BE04 /* X3DHVectorTests.swift in Sources */,
 			);
