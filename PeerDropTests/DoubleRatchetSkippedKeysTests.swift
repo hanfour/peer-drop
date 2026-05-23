@@ -76,6 +76,44 @@ final class DoubleRatchetSkippedKeysTests: XCTestCase {
         XCTAssertEqual(session.skippedKeysCountForTesting, 1)
     }
 
+    func test_LRUEviction_keepsNewestNCap() throws {
+        let session = try makeTestSession()
+        let now = Date()
+        // Insert 250 entries with progressively older timestamps.
+        // Entry i has createdAt = now - i seconds (so i=0 is newest, i=249 is oldest).
+        for i in 0..<250 {
+            session.setSkippedKeyForTesting(
+                ratchetKey: Data([UInt8(i & 0xFF), UInt8((i >> 8) & 0xFF)]),
+                counter: UInt32(i),
+                entry: .init(
+                    key: SymmetricKey(size: .bits256),
+                    createdAt: now.addingTimeInterval(-Double(i))
+                )
+            )
+        }
+        let policy = SecurityPolicy.bundledDefault  // skippedKeyMaxCount = 200
+        XCTAssertEqual(session.skippedKeysCountForTesting, 250)
+        let evicted = session.evictLRUSkippedKeys(policy: policy)
+        XCTAssertEqual(evicted, 50, "should evict the 50 oldest")
+        XCTAssertEqual(session.skippedKeysCountForTesting, 200)
+    }
+
+    func test_LRUEviction_isNoOp_belowCap() throws {
+        let session = try makeTestSession()
+        let now = Date()
+        for i in 0..<100 {
+            session.setSkippedKeyForTesting(
+                ratchetKey: Data([UInt8(i)]),
+                counter: UInt32(i),
+                entry: .init(key: SymmetricKey(size: .bits256), createdAt: now)
+            )
+        }
+        let policy = SecurityPolicy.bundledDefault
+        let evicted = session.evictLRUSkippedKeys(policy: policy)
+        XCTAssertEqual(evicted, 0)
+        XCTAssertEqual(session.skippedKeysCountForTesting, 100)
+    }
+
     // MARK: - Test Helpers
 
     private func makeTestSession() throws -> DoubleRatchetSession {

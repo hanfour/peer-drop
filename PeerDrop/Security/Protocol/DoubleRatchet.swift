@@ -323,6 +323,19 @@ class DoubleRatchetSession: Codable {
         return before - skippedKeys.count
     }
 
+    /// If `skippedKeys.count > policy.skippedKeyMaxCount`, evict the oldest
+    /// entries by `createdAt` until the count is back within bounds. Returns
+    /// the number of entries evicted (for telemetry).
+    @discardableResult
+    func evictLRUSkippedKeys(policy: SecurityPolicy) -> Int {
+        guard skippedKeys.count > policy.skippedKeyMaxCount else { return 0 }
+        let sorted = skippedKeys.sorted { $0.value.createdAt > $1.value.createdAt }
+        let kept = sorted.prefix(policy.skippedKeyMaxCount)
+        let beforeCount = skippedKeys.count
+        skippedKeys = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        return beforeCount - skippedKeys.count
+    }
+
     private func decryptWithKey(_ ciphertext: Data, key: SymmetricKey) throws -> Data {
         let sealedBox = try AES.GCM.SealedBox(combined: ciphertext)
         return try AES.GCM.open(sealedBox, using: key)
