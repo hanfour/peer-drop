@@ -288,6 +288,7 @@
 		AE598409867401DE1F4D1AA1 /* PetPhysicsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A377C32AF8942AE36D4989 /* PetPhysicsEngine.swift */; };
 		AEE67600A2BEE9B8893E176C /* PetRendererV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082C69D6D5041CA69DD58945 /* PetRendererV3Tests.swift */; };
 		AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */; };
+		B102D431C7C224BF01E8760F /* DeterministicCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFE3440F55A18172848FD7E /* DeterministicCrypto.swift */; };
 		B36F8B1945DEA4594AC1744E /* SpriteAtlas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180708BD0C681CCEBF8E17F5 /* SpriteAtlas.swift */; };
 		B3F822E89DC1925AE31F7B87 /* RelayTrustGateIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 686D5DFA5FC5C87756722DFF /* RelayTrustGateIntegrationTests.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
@@ -412,6 +413,7 @@
 		F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90A9DA5F16B00839A9012834 /* FileTransferTests.swift */; };
 		F197E8CFA4067CF49BC85B16 /* DeviceRecordStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */; };
 		F21394B4FF3FCF7E66AE4035 /* PeerIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EF3D4E1027C808D9C31741 /* PeerIdentity.swift */; };
+		F2F3986906BA431CACB1A3C9 /* DeterministicCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E334C0248856933204752F8 /* DeterministicCryptoTests.swift */; };
 		F377575793BC39A79422CA05 /* NearbyInteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FE9642235E04A824571838 /* NearbyInteractionManager.swift */; };
 		F422276653E0728E859B9BC9 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C17EA9E6BE4797FC20EBBBC /* WebRTC */; };
 		F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
@@ -699,6 +701,7 @@
 		7AA9EC0CC7FB157C94672BA8 /* BirdBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BirdBehavior.swift; sourceTree = "<group>"; };
 		7BE30BAD21DDB022E0E0F577 /* PixelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelView.swift; sourceTree = "<group>"; };
 		7D97F2265143FCF6522CEB72 /* PetGreetingProtocolVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetGreetingProtocolVersionTests.swift; sourceTree = "<group>"; };
+		7E334C0248856933204752F8 /* DeterministicCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeterministicCryptoTests.swift; sourceTree = "<group>"; };
 		7E80BF242E333D7D9042575E /* PetActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetActivityAttributes.swift; sourceTree = "<group>"; };
 		7EB2DE318C4EE011A85C7A5A /* ConnectedTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectedTab.swift; sourceTree = "<group>"; };
 		7ECC605BD759FF63C543E56B /* PetAnimationControllerV2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetAnimationControllerV2Tests.swift; sourceTree = "<group>"; };
@@ -738,6 +741,7 @@
 		8E1B04801475A25AA9A25BAF /* DoubleRatchet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoubleRatchet.swift; sourceTree = "<group>"; };
 		8E336AAC74502665926EF051 /* PetParticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetParticle.swift; sourceTree = "<group>"; };
 		8E40BB49EFF6A5BF904D15A8 /* PetPalettes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetPalettes.swift; sourceTree = "<group>"; };
+		8EFE3440F55A18172848FD7E /* DeterministicCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeterministicCrypto.swift; sourceTree = "<group>"; };
 		8F2323104D4377FDEEF337CB /* TransferMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadataTests.swift; sourceTree = "<group>"; };
 		8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupRow.swift; sourceTree = "<group>"; };
 		8FB79B8FB4BA9C025C703233 /* PetFeedingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetFeedingTests.swift; sourceTree = "<group>"; };
@@ -1143,6 +1147,7 @@
 		3FD8E2C3B68393E3C8D23542 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				8EFE3440F55A18172848FD7E /* DeterministicCrypto.swift */,
 				0D897F26BFF80E2539C9ADAA /* PropertyTest.swift */,
 			);
 			path = Sources;
@@ -1339,6 +1344,7 @@
 		865B2F6DBF4A41A770F2157B /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				7E334C0248856933204752F8 /* DeterministicCryptoTests.swift */,
 				AC430360B753FDF2E1FF39D3 /* PropertyTestHarnessTests.swift */,
 			);
 			path = Tests;
@@ -1965,6 +1971,8 @@
 				5BD25C6F8D17B4AB4AF8966C /* DataChannelTransportReassemblyTests.swift in Sources */,
 				FA0FFE153DDBF58EC23F9419 /* DataChannelTransportTests.swift in Sources */,
 				0860AFDB158802DF211AEC3F /* DecryptFailureBannerTests.swift in Sources */,
+				B102D431C7C224BF01E8760F /* DeterministicCrypto.swift in Sources */,
+				F2F3986906BA431CACB1A3C9 /* DeterministicCryptoTests.swift in Sources */,
 				160727C51F606D20EB362D28 /* DeviceIdentityTests.swift in Sources */,
 				F197E8CFA4067CF49BC85B16 /* DeviceRecordStoreTests.swift in Sources */,
 				3BD6BDEACD112B57E75D5A84 /* DeviceRecordTests.swift in Sources */,
