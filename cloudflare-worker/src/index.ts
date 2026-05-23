@@ -50,6 +50,12 @@ export interface Env {
   // worker should leave this unset / "false" so dev-build attestations
   // never produce real tokens.
   APP_ATTEST_ALLOW_DEV?: string;
+  // Operator override for the signed crypto-policy blob served at
+  // GET /v2/config/crypto-policy. When set, this value is returned
+  // verbatim (e.g. a stricter post-soak policy). When unset, the
+  // bundled default (inlined at build time) is served.
+  // Set via: cat <policy>.signed.json | wrangler secret put CRYPTO_POLICY_JSON
+  CRYPTO_POLICY_JSON?: string;
 }
 
 // Room code: 6 chars, alphanumeric excluding ambiguous chars (0/O/1/I/l)
@@ -1043,6 +1049,15 @@ export default {
       }
 
       return jsonResponse({ ok: true, delivered: doResult.delivered });
+    }
+
+    // GET /v2/config/crypto-policy — serve the signed crypto-policy blob.
+    // No auth required — the response is already signed with the operator's
+    // Ed25519 key; any tampering is caught client-side. Auth would add
+    // complexity without improving security here.
+    if (path === "/v2/config/crypto-policy" && request.method === "GET") {
+      const { handleCryptoPolicy } = await import("./cryptoPolicy");
+      return handleCryptoPolicy(env);
     }
 
     return new Response("Not Found", { status: 404, headers: corsHeaders });
