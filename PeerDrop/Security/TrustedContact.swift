@@ -16,6 +16,17 @@ struct TrustedContact: Codable, Identifiable {
     /// Audit trail of identity-key rotations observed on this contact.
     /// Bounded to a small number of entries by `TrustedContactStore`.
     var keyHistory: [KeyChangeRecord]
+    /// v5.4 PR7: detected protocol generation of this peer. Set from
+    /// `RemoteMessageEnvelope.protocolVersion` on first inbound contact
+    /// or any subsequent inbound message (responder-side; see
+    /// `ConnectionManager.handleRemoteMessage` and `approveFirstContact`).
+    /// Initiator-side persistence is deferred to a follow-up — initiator
+    /// C2 routing uses the live `X3DH.verifyBundleFreshness` result during
+    /// `RemoteSessionManager.initiateSession`, so peerProtocolVersion is
+    /// not strictly required on the initiator side today.
+    /// nil for legacy contacts persisted before v5.4 (these decode as nil
+    /// and are treated as `.unknown` at use sites).
+    var peerProtocolVersion: PeerVersion?
 
     init(
         id: UUID = UUID(),
@@ -29,7 +40,8 @@ struct TrustedContact: Codable, Identifiable {
         userId: String? = nil,
         petSnapshot: Data? = nil,
         isBlocked: Bool = false,
-        keyHistory: [KeyChangeRecord] = []
+        keyHistory: [KeyChangeRecord] = [],
+        peerProtocolVersion: PeerVersion? = nil
     ) {
         self.id = id
         self.deviceId = deviceId
@@ -43,6 +55,7 @@ struct TrustedContact: Codable, Identifiable {
         self.petSnapshot = petSnapshot
         self.isBlocked = isBlocked
         self.keyHistory = keyHistory
+        self.peerProtocolVersion = peerProtocolVersion
     }
 
     // Custom decode so legacy on-disk records (no `keyHistory`, no `isBlocked`)
@@ -61,6 +74,7 @@ struct TrustedContact: Codable, Identifiable {
         self.petSnapshot = try c.decodeIfPresent(Data.self, forKey: .petSnapshot)
         self.isBlocked = try c.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
         self.keyHistory = try c.decodeIfPresent([KeyChangeRecord].self, forKey: .keyHistory) ?? []
+        self.peerProtocolVersion = try c.decodeIfPresent(PeerVersion.self, forKey: .peerProtocolVersion)
     }
 
     var keyFingerprint: String {

@@ -12,3 +12,17 @@ public enum PeerVersion: String, Codable {
     case v5_4_plus
     case unknown
 }
+
+extension PeerVersion {
+    /// Map a `RemoteMessageEnvelope.protocolVersion` byte to a `PeerVersion`.
+    /// - `nil` → `.legacy` (sender is v5.0–v5.3.x; field absent)
+    /// - `1`   → `.v5_4_plus`
+    /// - anything else → `.unknown` (future schema we don't yet handle)
+    public static func from(envelopeProtocolVersion: UInt8?) -> PeerVersion {
+        switch envelopeProtocolVersion {
+        case nil:        return .legacy
+        case 1:          return .v5_4_plus
+        default:         return .unknown
+        }
+    }
+}
