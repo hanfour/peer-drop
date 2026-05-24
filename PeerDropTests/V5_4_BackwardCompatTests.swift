@@ -152,15 +152,16 @@ final class V5_4_BackwardCompatTests: XCTestCase {
 
     // MARK: - Cell 3: legacy initiator ↔ v5.4 responder bundle
 
-    /// Bob (v5.4) emits a bundle with timestamp + signature. A legacy initiator
-    /// only validates the legacy SPK signature and ignores the new timestamp fields.
+    /// Bob (v5.4) emits a bundle with timestamp + signature populated. The
+    /// test exercises the v5.4 X3DH code path tagged with `peerVersion: .legacy`
+    /// (e.g. per-peer policy override resolving to legacy) against that bundle.
     ///
     /// Expected:
-    ///   - The classic SPK signature (`signedPreKey.signature`) still verifies against
-    ///     Bob's signing public key (backward-compat: legacy clients can still validate).
-    ///   - Calling `initiatorKeyAgreement` with `peerVersion: .legacy` (mimicking a
-    ///     legacy initiator that doesn't run the freshness gate) succeeds and derives
-    ///     a non-empty root key.
+    ///   - The classic SPK signature (`signedPreKey.signature`) still verifies
+    ///     against Bob's signing public key, so an actual v5.3.x binary's
+    ///     legacy validation path would succeed as well.
+    ///   - The v5.4 X3DH path with `peerVersion: .legacy` still derives a
+    ///     usable shared secret against a v5.4 bundle.
     func test_cell3_legacy_initiator_v5_4_responder_bundle() throws {
         let k = freshKeys()
         let spkPub = k.bobSPK.publicKey.rawRepresentation
@@ -202,7 +203,7 @@ final class V5_4_BackwardCompatTests: XCTestCase {
             theirIdentityKey:   k.bobIdentityKA.publicKey,
             theirSignedPreKey:  k.bobSPK.publicKey,
             theirOneTimePreKey: k.bobOPK.publicKey,
-            peerVersion:        .legacy,   // legacy initiator doesn't set .v5_4_plus
+            peerVersion:        .legacy,   // v5.4 path tagged as legacy peer
             policy:             .bundledDefault,
             metrics:            nil
         )
