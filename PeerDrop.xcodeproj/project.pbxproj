@@ -367,6 +367,7 @@
 		ADC3A11FF7051AFAD8D48337 /* InviteBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */; };
 		AE598409867401DE1F4D1AA1 /* PetPhysicsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A377C32AF8942AE36D4989 /* PetPhysicsEngine.swift */; };
 		AEE67600A2BEE9B8893E176C /* PetRendererV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082C69D6D5041CA69DD58945 /* PetRendererV3Tests.swift */; };
+		AF1BD633DA32FBE5FBAD5C48 /* AudioSessionConfiguring.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B4E3B9DBA5B4948BD12F2E /* AudioSessionConfiguring.swift */; };
 		AF1F4D2606ADEF0973BEBBC7 /* CallProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72DA94F01EF1459C5D4419D /* CallProvider.swift */; };
 		AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */; };
 		AFC43DC7452C196DC9262B2E /* vec-009.json in Resources */ = {isa = PBXBuildFile; fileRef = 5CACD2175E7B24050D76DDD5 /* vec-009.json */; };
@@ -689,6 +690,7 @@
 		241EB76E1E7FE3EF1839011A /* MetadataV3SchemaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataV3SchemaTests.swift; sourceTree = "<group>"; };
 		246752F17DF326BC833C33C1 /* DeviceRecordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordStore.swift; sourceTree = "<group>"; };
 		24C268A0C1963AF7348AA876 /* PetLifeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLifeState.swift; sourceTree = "<group>"; };
+		25B4E3B9DBA5B4948BD12F2E /* AudioSessionConfiguring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSessionConfiguring.swift; sourceTree = "<group>"; };
 		2601334C35CC97A1F3CA9542 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		26204406BF0EB84A54256B9E /* PlatformImageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformImageTests.swift; sourceTree = "<group>"; };
 		2688CA0B5DF0712CDB7418FF /* TransferRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRecord.swift; sourceTree = "<group>"; };
@@ -1972,6 +1974,7 @@
 		BEDBE542AD4552DD1BC50071 /* Platform */ = {
 			isa = PBXGroup;
 			children = (
+				25B4E3B9DBA5B4948BD12F2E /* AudioSessionConfiguring.swift */,
 				C72DA94F01EF1459C5D4419D /* CallProvider.swift */,
 				13AAC623D14B95C45CC5D0A9 /* DeviceNameProvider.swift */,
 				F1AAEE951B1EFA8B24EB5C7D /* HapticFeedback.swift */,
@@ -2717,6 +2720,7 @@
 				874F53371173F39758963EA1 /* ArchiveManager.swift in Sources */,
 				452533F98EE28AB04B5C7420 /* AssetSpec.swift in Sources */,
 				9A0AE6490AE9C3A6306B7D62 /* AssignGroupSheet.swift in Sources */,
+				AF1BD633DA32FBE5FBAD5C48 /* AudioSessionConfiguring.swift in Sources */,
 				CC145E5DBBC74F156B5EDBEB /* BLEDiscovery.swift in Sources */,
 				E7D669E89E90C7BC29F74660 /* BLESignaling.swift in Sources */,
 				3B8C23FCE45A7BAA19CA5CD6 /* BackupRecordListView.swift in Sources */,
