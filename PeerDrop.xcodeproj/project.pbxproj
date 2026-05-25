@@ -11,6 +11,7 @@
 		00B142038F40DF47651DE3FC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6333149EDC27AFE4F386D892 /* ContentView.swift */; };
 		00C71861E40FFC5245556578 /* PetStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF6954BED36B5DD0A9937D1 /* PetStoreTests.swift */; };
 		00CFD959EDD837574FE0F487 /* PetInteractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D5C63D877A41DD6C687DCF1 /* PetInteractionTests.swift */; };
+		01360B7517F00310E107820E /* UIKitHapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09D5B23CA0569F8B02474675 /* UIKitHapticFeedback.swift */; };
 		015C7CB8BE2D6B445BF98CE3 /* TipJarManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B71A06E3C254432BBCF700 /* TipJarManagerTests.swift */; };
 		035E2F34D5E9A5EA47410611 /* AccessoryOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB1F200A5ADD6ED30220611 /* AccessoryOverlay.swift */; };
 		0452C14B3597C8D5108977EA /* MockPlatformDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1645655AF1530B5121896FEA /* MockPlatformDependencies.swift */; };
@@ -63,6 +64,7 @@
 		1D2D5FAE4893C5D84F9C1A20 /* TCPTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73122425C58B15567D7F7F9D /* TCPTransport.swift */; };
 		1EA6328B53F8E3CB67E0D401 /* PeerTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */; };
 		1ED854B7E26F365F457DC276 /* BodyGene+SpeciesID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ADED9CD12A8556762E899C0 /* BodyGene+SpeciesID.swift */; };
+		1EE0C2C1356B311ED552D14B /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AAEE951B1EFA8B24EB5C7D /* HapticFeedback.swift */; };
 		1F91DF18EB139081A02E6519 /* PeerActionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */; };
 		1FDB7A9992C1FE104BC8BF5C /* vec-001.json in Resources */ = {isa = PBXBuildFile; fileRef = E127F0CA8FB6C76E5805A7D0 /* vec-001.json */; };
 		1FE493D21DDBBF744E1E6A58 /* X3DHSPKTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 594BE6C21114D12A066B7786 /* X3DHSPKTimestampTests.swift */; };
@@ -612,6 +614,7 @@
 		08E34DBB3DB0C3B54507D3E5 /* RemoteMessageEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMessageEnvelopeTests.swift; sourceTree = "<group>"; };
 		09172CEE390C95A62A857CDD /* TypingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorView.swift; sourceTree = "<group>"; };
 		099E518626BF1EDB713724B8 /* PetSpeciesIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSpeciesIntegrationTests.swift; sourceTree = "<group>"; };
+		09D5B23CA0569F8B02474675 /* UIKitHapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIKitHapticFeedback.swift; sourceTree = "<group>"; };
 		09E6D1AB82AE388169BE0266 /* TailnetPeerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerStore.swift; sourceTree = "<group>"; };
 		09FE9642235E04A824571838 /* NearbyInteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyInteractionManager.swift; sourceTree = "<group>"; };
 		0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteBanner.swift; sourceTree = "<group>"; };
@@ -1106,6 +1109,7 @@
 		F1547C59857B7BD88CF8516D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F15558483B16C63DDF73CC01 /* KeyExchangeMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyExchangeMessageTests.swift; sourceTree = "<group>"; };
 		F17F381DEA22E3ED41BB5BCF /* ratchet-005.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-005.json"; sourceTree = "<group>"; };
+		F1AAEE951B1EFA8B24EB5C7D /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
 		F1E0326F5D9180F9D6580BC1 /* TrustedContactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedContactTests.swift; sourceTree = "<group>"; };
 		F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F3369C6D619A47A28F3F58EA /* Pets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Pets; path = PeerDrop/Resources/Pets; sourceTree = SOURCE_ROOT; };
@@ -1851,6 +1855,7 @@
 		A7FCA30538A058ACFCF1DC67 /* iOS */ = {
 			isa = PBXGroup;
 			children = (
+				09D5B23CA0569F8B02474675 /* UIKitHapticFeedback.swift */,
 				4B38A82BD32E6546DDF1BA65 /* UIKitPasteboard.swift */,
 			);
 			path = iOS;
@@ -1939,6 +1944,7 @@
 		BEDBE542AD4552DD1BC50071 /* Platform */ = {
 			isa = PBXGroup;
 			children = (
+				F1AAEE951B1EFA8B24EB5C7D /* HapticFeedback.swift */,
 				F3DA40C391595F39F897615E /* PlatformDependencies.swift */,
 				AAA9B5E8618A1024B49BBEA4 /* PlatformImage.swift */,
 				A9DAE3BDBEAD816508721554 /* PlatformPasteboard.swift */,
@@ -2751,6 +2757,7 @@
 				D7A85C61F57646A64E170080 /* GroupRow.swift in Sources */,
 				A6B1CB07120DD34B949937E7 /* GuestPetView.swift in Sources */,
 				7D93FB0E5753A08AC030A5B2 /* GuidanceCard.swift in Sources */,
+				1EE0C2C1356B311ED552D14B /* HapticFeedback.swift in Sources */,
 				E6A5A1F6F088625901B7665A /* HapticManager.swift in Sources */,
 				9469CA1EC0E6DCCE708ED7E6 /* HashVerifier.swift in Sources */,
 				704D5D1818C0922B7E9F4CC6 /* ICEConfigurationProvider.swift in Sources */,
@@ -2898,6 +2905,7 @@
 				1933A3EE381E900B0A426C5B /* TrustedContactStore.swift in Sources */,
 				DC36D0D22B9764100D164C35 /* TypingIndicatorPayload.swift in Sources */,
 				239DB398541A3E45203962AF /* TypingIndicatorView.swift in Sources */,
+				01360B7517F00310E107820E /* UIKitHapticFeedback.swift in Sources */,
 				39822BCA067338029749F022 /* UIKitPasteboard.swift in Sources */,
 				A74847A67B418445595E82AF /* URL+Zip.swift in Sources */,
 				AC282EF4C7E2C8E7F1A87ABE /* UserProfile.swift in Sources */,

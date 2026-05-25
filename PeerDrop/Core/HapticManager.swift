@@ -1,53 +1,19 @@
-import UIKit
+import Foundation
 
 /// Centralized haptic feedback for key app events.
+///
+/// Static facade preserved for call-site compatibility; the actual
+/// implementation comes from `PlatformDependencies.shared.haptics()`.
 enum HapticManager {
-    private static let impact = UIImpactFeedbackGenerator(style: .medium)
-    private static let notification = UINotificationFeedbackGenerator()
-    private static let selection = UISelectionFeedbackGenerator()
+    private static var feedback: HapticFeedback { PlatformDependencies.shared.haptics() }
 
-    /// Peer discovered on the network.
-    static func peerDiscovered() {
-        selection.selectionChanged()
-    }
-
-    /// Connection accepted by peer.
-    static func connectionAccepted() {
-        notification.notificationOccurred(.success)
-    }
-
-    /// Connection rejected by peer.
-    static func connectionRejected() {
-        notification.notificationOccurred(.error)
-    }
-
-    /// File transfer completed successfully.
-    static func transferComplete() {
-        notification.notificationOccurred(.success)
-    }
-
-    /// File transfer failed.
-    static func transferFailed() {
-        notification.notificationOccurred(.warning)
-    }
-
-    /// Incoming connection request received.
-    static func incomingRequest() {
-        impact.impactOccurred()
-    }
-
-    /// Voice call started.
-    static func callStarted() {
-        impact.impactOccurred()
-    }
-
-    /// Voice call ended.
-    static func callEnded() {
-        selection.selectionChanged()
-    }
-
-    /// Button tap feedback.
-    static func tap() {
-        impact.impactOccurred(intensity: 0.5)
-    }
+    static func peerDiscovered() { feedback.peerDiscovered() }
+    static func connectionAccepted() { feedback.connectionAccepted() }
+    static func connectionRejected() { feedback.connectionRejected() }
+    static func transferComplete() { feedback.transferComplete() }
+    static func transferFailed() { feedback.transferFailed() }
+    static func incomingRequest() { feedback.incomingRequest() }
+    static func callStarted() { feedback.callStarted() }
+    static func callEnded() { feedback.callEnded() }
+    static func tap() { feedback.tap() }
 }

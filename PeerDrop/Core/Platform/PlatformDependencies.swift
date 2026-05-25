@@ -2,11 +2,14 @@ import Foundation
 
 public struct PlatformDependencies {
     public var pasteboard: () -> PlatformPasteboard
+    public var haptics: () -> HapticFeedback
 
     public init(
-        pasteboard: (() -> PlatformPasteboard)? = nil
+        pasteboard: (() -> PlatformPasteboard)? = nil,
+        haptics: (() -> HapticFeedback)? = nil
     ) {
         self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
+        self.haptics = haptics ?? { PlatformDependencies.makeHaptics() }
     }
 
     public static var shared = PlatformDependencies()
@@ -20,6 +23,14 @@ public struct PlatformDependencies {
         return NoOpPasteboard()
         #endif
     }
+
+    private static func makeHaptics() -> HapticFeedback {
+        #if canImport(UIKit)
+        return UIKitHapticFeedback()
+        #else
+        return NoOpHapticFeedback()
+        #endif
+    }
 }
 
 #if !canImport(UIKit)
@@ -28,5 +39,17 @@ private final class NoOpPasteboard: PlatformPasteboard {
     var stringContent: String? { get { nil } set { } }
     var imageContent: PlatformImage? { get { nil } set { } }
     var changedNotificationName: Notification.Name { Notification.Name("NoOpPasteboardChanged") }
+}
+
+private final class NoOpHapticFeedback: HapticFeedback {
+    func peerDiscovered() {}
+    func connectionAccepted() {}
+    func connectionRejected() {}
+    func transferComplete() {}
+    func transferFailed() {}
+    func incomingRequest() {}
+    func callStarted() {}
+    func callEnded() {}
+    func tap() {}
 }
 #endif

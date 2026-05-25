@@ -16,12 +16,46 @@ final class MockPasteboard: PlatformPasteboard {
     }
 }
 
+final class MockHaptics: HapticFeedback {
+    private(set) var invocations: [String] = []
+
+    func peerDiscovered() { invocations.append("peerDiscovered") }
+    func connectionAccepted() { invocations.append("connectionAccepted") }
+    func connectionRejected() { invocations.append("connectionRejected") }
+    func transferComplete() { invocations.append("transferComplete") }
+    func transferFailed() { invocations.append("transferFailed") }
+    func incomingRequest() { invocations.append("incomingRequest") }
+    func callStarted() { invocations.append("callStarted") }
+    func callEnded() { invocations.append("callEnded") }
+    func tap() { invocations.append("tap") }
+}
+
 extension PlatformDependencies {
     /// Convenience factory for tests. Returns a registry with all-mock factories.
     static func mock(
-        pasteboard: MockPasteboard = MockPasteboard()
+        pasteboard: MockPasteboard = MockPasteboard(),
+        haptics: MockHaptics = MockHaptics()
     ) -> PlatformDependencies {
-        PlatformDependencies(pasteboard: { pasteboard })
+        PlatformDependencies(
+            pasteboard: { pasteboard },
+            haptics: { haptics }
+        )
+    }
+}
+
+@MainActor
+final class HapticManagerInjectionTests: XCTestCase {
+    func test_tapForwardsToInjectedFeedback() {
+        let originalDeps = PlatformDependencies.shared
+        defer { PlatformDependencies.shared = originalDeps }
+
+        let mock = MockHaptics()
+        PlatformDependencies.shared = .mock(haptics: mock)
+
+        HapticManager.tap()
+        HapticManager.transferComplete()
+
+        XCTAssertEqual(mock.invocations, ["tap", "transferComplete"])
     }
 }
 
