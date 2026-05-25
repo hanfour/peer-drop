@@ -6,7 +6,7 @@ import os
 
 /// Wraps CXProvider for native iOS call UI integration.
 /// CallKit is disabled in China per MIIT regulations (App Store Guideline 5.0).
-final class CallKitManager: NSObject, ObservableObject {
+final class CallKitManager: NSObject, ObservableObject, CallProvider {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CallKitManager")
     private let provider: CXProvider?
     private let callController: CXCallController?
@@ -116,11 +116,21 @@ final class CallKitManager: NSObject, ObservableObject {
         activeCallUUID = nil
     }
 
-    func reportCallEnded(reason: CXCallEndedReason = .remoteEnded) {
+    func reportCallEnded(reason: CallEndReason) {
         guard !Self.isCallKitDisabled, let provider else { return }
         guard let uuid = activeCallUUID else { return }
-        provider.reportCall(with: uuid, endedAt: Date(), reason: reason)
+        let cxReason = Self.mapToCXReason(reason)
+        provider.reportCall(with: uuid, endedAt: Date(), reason: cxReason)
         activeCallUUID = nil
+    }
+
+    private static func mapToCXReason(_ reason: CallEndReason) -> CXCallEndedReason {
+        switch reason {
+        case .remoteEnded:       return .remoteEnded
+        case .declinedElsewhere: return .declinedElsewhere
+        case .failed:            return .failed
+        case .unanswered:        return .unanswered
+        }
     }
 
     // MARK: - Audio
