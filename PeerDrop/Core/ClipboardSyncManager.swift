@@ -1,4 +1,4 @@
-import UIKit
+import Foundation
 import Combine
 import os.log
 
@@ -7,23 +7,29 @@ final class ClipboardSyncManager: ObservableObject {
     @Published private(set) var lastSyncedContent: String?
     @Published var pendingClipboardContent: ClipboardSyncPayload?
 
-    private var changeCount: Int = UIPasteboard.general.changeCount
+    private let pasteboard: PlatformPasteboard
+    private var changeCount: Int
     private var pollTimer: Timer?
     private let maxImageSize: Int = 1_024_000 // 1MB
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ClipboardSync")
 
     var onClipboardChanged: ((ClipboardSyncPayload) -> Void)?
 
+    init(pasteboard: PlatformPasteboard = PlatformDependencies.shared.pasteboard()) {
+        self.pasteboard = pasteboard
+        self.changeCount = pasteboard.changeCount
+    }
+
     func startMonitoring() {
         guard FeatureSettings.isClipboardSyncEnabled else { return }
         stopMonitoring()
 
-        changeCount = UIPasteboard.general.changeCount
+        changeCount = pasteboard.changeCount
 
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(pasteboardChanged),
-            name: UIPasteboard.changedNotification,
+            name: pasteboard.changedNotificationName,
             object: nil
         )
 
@@ -38,7 +44,7 @@ final class ClipboardSyncManager: ObservableObject {
     }
 
     func stopMonitoring() {
-        NotificationCenter.default.removeObserver(self, name: UIPasteboard.changedNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: pasteboard.changedNotificationName, object: nil)
         pollTimer?.invalidate()
         pollTimer = nil
     }
@@ -50,7 +56,7 @@ final class ClipboardSyncManager: ObservableObject {
     }
 
     private func checkPasteboardChange() {
-        let currentCount = UIPasteboard.general.changeCount
+        let currentCount = pasteboard.changeCount
         guard currentCount != changeCount else { return }
         changeCount = currentCount
 
@@ -63,22 +69,20 @@ final class ClipboardSyncManager: ObservableObject {
     }
 
     private func buildPayload() -> ClipboardSyncPayload? {
-        let pasteboard = UIPasteboard.general
-
-        if let string = pasteboard.string, !string.isEmpty {
+        if let string = pasteboard.stringContent, !string.isEmpty {
             if let url = URL(string: string), url.scheme != nil {
                 return ClipboardSyncPayload(contentType: .url, textContent: string)
             }
             return ClipboardSyncPayload(contentType: .text, textContent: string)
         }
 
-        if let image = pasteboard.image,
-           let data = image.jpegData(compressionQuality: 0.7) {
+        if let image = pasteboard.imageContent,
+           let data = image.platformJPEGData(compressionQuality: 0.7) {
             if data.count <= maxImageSize {
                 return ClipboardSyncPayload(contentType: .image, imageData: data)
             } else {
                 // Try lower quality
-                if let compressed = image.jpegData(compressionQuality: 0.3),
+                if let compressed = image.platformJPEGData(compressionQuality: 0.3),
                    compressed.count <= maxImageSize {
                     return ClipboardSyncPayload(contentType: .image, imageData: compressed)
                 }
@@ -93,16 +97,16 @@ final class ClipboardSyncManager: ObservableObject {
         switch payload.contentType {
         case .text, .url:
             if let text = payload.textContent {
-                UIPasteboard.general.string = text
+                pasteboard.stringContent = text
                 lastSyncedContent = text
                 // Update changeCount so we don't re-broadcast what we just received
-                changeCount = UIPasteboard.general.changeCount
+                changeCount = pasteboard.changeCount
             }
         case .image:
-            if let data = payload.imageData, let image = UIImage(data: data) {
-                UIPasteboard.general.image = image
+            if let data = payload.imageData, let image = PlatformImage(data: data) {
+                pasteboard.imageContent = image
                 lastSyncedContent = "[\(NSLocalizedString("Image", comment: ""))]"
-                changeCount = UIPasteboard.general.changeCount
+                changeCount = pasteboard.changeCount
             }
         }
     }

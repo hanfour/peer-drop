@@ -1,17 +1,32 @@
-// PeerDrop/Core/Platform/PlatformDependencies.swift
 import Foundation
 
-/// Process-wide injection point for platform-specific dependencies. iOS
-/// implementations are wired in `PeerDropApp` at launch; tests substitute mocks
-/// in `setUp`. Each property is added incrementally as M0 introduces the
-/// corresponding protocol (see docs/superpowers/plans/2026-05-25-m0-core-uikit-decoupling.md).
 public struct PlatformDependencies {
-    // Properties added in subsequent tasks. Empty for now so the file
-    // compiles standalone.
+    public var pasteboard: () -> PlatformPasteboard
 
-    public init() {}
+    public init(
+        pasteboard: (() -> PlatformPasteboard)? = nil
+    ) {
+        self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
+    }
 
-    /// Mutable singleton. App startup replaces this with iOS-wired
-    /// implementations; tests replace with mocks.
     public static var shared = PlatformDependencies()
+
+    // Default factories — iOS adapter on iOS, falls back to a no-op on
+    // other platforms until M2 wires AppKit adapters.
+    private static func makePasteboard() -> PlatformPasteboard {
+        #if canImport(UIKit)
+        return UIKitPasteboard()
+        #else
+        return NoOpPasteboard()
+        #endif
+    }
 }
+
+#if !canImport(UIKit)
+private final class NoOpPasteboard: PlatformPasteboard {
+    var changeCount: Int { 0 }
+    var stringContent: String? { get { nil } set { } }
+    var imageContent: PlatformImage? { get { nil } set { } }
+    var changedNotificationName: Notification.Name { Notification.Name("NoOpPasteboardChanged") }
+}
+#endif
