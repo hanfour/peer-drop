@@ -127,7 +127,6 @@ final class VoiceCallSession: ObservableObject {
 
     private func updateAudioOutput() {
         do {
-            try audioSession.activate(.voiceChat)
             try audioSession.overrideOutputToSpeaker(isSpeakerOn)
         } catch {
             logger.error("Audio output error: \(error.localizedDescription)")
