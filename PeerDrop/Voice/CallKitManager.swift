@@ -120,6 +120,7 @@ final class CallKitManager: NSObject, ObservableObject, CallProvider {
         guard !Self.isCallKitDisabled, let provider else { return }
         guard let uuid = activeCallUUID else { return }
         let cxReason = Self.mapToCXReason(reason)
+        logger.info("Reporting call ended: \(cxReason.rawValue)")
         provider.reportCall(with: uuid, endedAt: Date(), reason: cxReason)
         activeCallUUID = nil
     }
