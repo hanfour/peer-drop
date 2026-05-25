@@ -38,6 +38,15 @@ struct PeerDropApp: App {
     @State private var showV5UpgradeOnboarding = false
     @AppStorage("renderedImageVersion") private var renderedImageVersion: String = ""
 
+    init() {
+        // Explicit wiring of platform dependencies. The struct defaults already
+        // resolve to iOS adapters on iOS, but binding the registry here makes
+        // M2 (macOS) wiring trivially symmetric: replace with .init(
+        //   pasteboard: { AppKitPasteboard() }, ...) and the rest of the app
+        // is untouched.
+        PlatformDependencies.shared = PlatformDependencies()
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
