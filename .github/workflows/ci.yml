@@ -7,13 +7,13 @@ on:
 
 jobs:
   lint-imports:
-    name: Lint — no UIKit in Core/
+    name: Lint — no UIKit in Core/ or Pet/ (non-UI)
     runs-on: macos-15
-    continue-on-error: true  # warn-only at M0; flipped to false in M1
+    continue-on-error: false  # enforced from M1a onward
     steps:
       - uses: actions/checkout@v4
 
-      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in Core/
+      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in Core/ and Pet/ (excluding Pet/UI/)
         run: |
           set -e
           violations=""
@@ -35,10 +35,11 @@ jobs:
                 fi
               done < <(grep -n -E "^import (UIKit|AppKit|WidgetKit)" "$file" | cut -d: -f1)
             fi
-          done < <(find PeerDrop/Core -name "*.swift" -not -path "*/Platform/iOS/*")
+          done < <(find PeerDrop/Core PeerDrop/Pet -name "*.swift" -not -path "*/Platform/iOS/*" -not -path "*/Pet/UI/*")
           if [ -n "$violations" ]; then
-            echo "::warning::Unguarded UI-framework imports in Core/:"
+            echo "::error::Unguarded UI-framework imports in Core/ or Pet/ (non-UI):"
             printf "%b" "$violations"
+            exit 1
           else
-            echo "Clean: PeerDrop/Core/ has no unguarded UI-framework imports."
+            echo "Clean: PeerDrop/Core/ and PeerDrop/Pet/ (non-UI) have no unguarded UI-framework imports."
           fi
