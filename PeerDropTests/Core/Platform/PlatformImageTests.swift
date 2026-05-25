@@ -18,4 +18,38 @@ final class PlatformImageTests: XCTestCase {
         XCTAssertNotNil(data)
         XCTAssertGreaterThan(data?.count ?? 0, 0)
     }
+
+    func test_initWithCGImage_roundTrips() {
+        // 2x2 red pixel CGImage
+        let width = 2, height = 2
+        let bitsPerComponent = 8
+        let bytesPerRow = width * 4
+        var bytes: [UInt8] = [
+            255, 0, 0, 255,   255, 0, 0, 255,
+            255, 0, 0, 255,   255, 0, 0, 255,
+        ]
+        let provider = CGDataProvider(data: Data(bytes: &bytes, count: bytes.count) as CFData)!
+        let cgImage = CGImage(
+            width: width, height: height,
+            bitsPerComponent: bitsPerComponent, bitsPerPixel: 32,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false,
+            intent: .defaultIntent
+        )!
+
+        let image = PlatformImage(platformCGImage: cgImage, size: CGSize(width: 2, height: 2))
+        XCTAssertNotNil(image)
+    }
+
+    func test_initWithSystemName_returnsImageForKnownSymbol() {
+        let image = PlatformImage(platformSystemName: "circle.fill")
+        XCTAssertNotNil(image, "circle.fill should resolve to an SF Symbol")
+    }
+
+    func test_initWithSystemName_returnsNilForUnknownSymbol() {
+        let image = PlatformImage(platformSystemName: "this.symbol.does.not.exist.12345")
+        XCTAssertNil(image)
+    }
 }
