@@ -12,5 +12,6 @@ public protocol HapticFeedback {
     func incomingRequest()
     func callStarted()
     func callEnded()
+    func evolutionTriggered()
     func tap()
 }

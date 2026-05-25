@@ -91,6 +91,7 @@ private final class NoOpHapticFeedback: HapticFeedback {
     func incomingRequest() {}
     func callStarted() {}
     func callEnded() {}
+    func evolutionTriggered() {}
     func tap() {}
 }
 
