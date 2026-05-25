@@ -10,10 +10,12 @@ final class VoicePlayer: NSObject, ObservableObject {
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var currentMessageID: String?
 
+    private let audioSession: AudioSessionConfiguring
     private var audioPlayer: AVAudioPlayer?
     private var progressTimer: Timer?
 
-    override init() {
+    init(audioSession: AudioSessionConfiguring = PlatformDependencies.shared.audioSession()) {
+        self.audioSession = audioSession
         super.init()
     }
 
@@ -22,9 +24,7 @@ final class VoicePlayer: NSObject, ObservableObject {
         stop()
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
-            try session.setActive(true)
+            try audioSession.activate(.playback)
 
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             audioPlayer?.delegate = self
@@ -47,9 +47,7 @@ final class VoicePlayer: NSObject, ObservableObject {
         stop()
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
-            try session.setActive(true)
+            try audioSession.activate(.playback)
 
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.delegate = self
