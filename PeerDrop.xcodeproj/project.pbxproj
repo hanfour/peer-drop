@@ -110,6 +110,7 @@
 		36FA607C123E15E115270D78 /* InteractionType.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02B75A4974AB0C59CB9A7CD /* InteractionType.swift */; };
 		380BAF60EE61B6A08CC086F2 /* CryptoHardeningBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC6F021A1186DAB8EE559D9 /* CryptoHardeningBanner.swift */; };
 		39A034332CB5376E39A50C65 /* FeatureSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17AAAEF08C9D347971BD3E47 /* FeatureSettings.swift */; };
+		3B17FF521ED5D7A480FF1754 /* PlatformDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3DA40C391595F39F897615E /* PlatformDependencies.swift */; };
 		3B1C9C7E585B12D66582DF45 /* FileResumePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA47165FC60DE16D51823B6 /* FileResumePayload.swift */; };
 		3B6359D8C4AAD94403CC319F /* PetSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85FF54E4B04D525691B3B6B /* PetSnapshotTests.swift */; };
 		3B6CBECC4834397AF772570E /* ratchet-026.json in Resources */ = {isa = PBXBuildFile; fileRef = 0534DED90744E8FA532E266A /* ratchet-026.json */; };
@@ -380,6 +381,7 @@
 		BBC3ABA8898D6F3DB5247641 /* SpriteCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66B736251C552179958517FA /* SpriteCacheTests.swift */; };
 		BC36880D49020290230785A6 /* MediaMessagePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90A00FA64ADA77E29D17065 /* MediaMessagePayload.swift */; };
 		BC6156CC6CA44233F862B5A6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */; };
+		BC8884CBC796D5ECA1875ED5 /* PlatformDependenciesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5388885DE7F28A755BDDFEA /* PlatformDependenciesTests.swift */; };
 		BCA7CC236E57C9DA467866E7 /* LocalFirstTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1D13034674D26767D38013 /* LocalFirstTrustTests.swift */; };
 		BD3EB30691E992D94440936F /* ratchet-020.json in Resources */ = {isa = PBXBuildFile; fileRef = B732273E88FC1EF6556C2647 /* ratchet-020.json */; };
 		BD7FA62F6682F65AF321BCAD /* PetGenome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91D9B2343FE5F8E807D1765F /* PetGenome.swift */; };
@@ -942,6 +944,7 @@
 		A3DEBE03E5EDAD5B8CA5C7DC /* TipJarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarManager.swift; sourceTree = "<group>"; };
 		A4C80BFCC4EAF2CB326660AA /* DataChannelTransportReassemblyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportReassemblyTests.swift; sourceTree = "<group>"; };
 		A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewView.swift; sourceTree = "<group>"; };
+		A5388885DE7F28A755BDDFEA /* PlatformDependenciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformDependenciesTests.swift; sourceTree = "<group>"; };
 		A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifierTests.swift; sourceTree = "<group>"; };
 		A58E46F49381937D21F420B9 /* TailnetPeerEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntryTests.swift; sourceTree = "<group>"; };
 		A66627015EA72FE3A1E350F5 /* SpriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteService.swift; sourceTree = "<group>"; };
@@ -1098,6 +1101,7 @@
 		F3369C6D619A47A28F3F58EA /* Pets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Pets; path = PeerDrop/Resources/Pets; sourceTree = SOURCE_ROOT; };
 		F3BD4AA727465183ED9D10FC /* MessageEditPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageEditPayload.swift; sourceTree = "<group>"; };
 		F3CA96BC128E78B23F9EFE48 /* ratchet-006.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ratchet-006.json"; sourceTree = "<group>"; };
+		F3DA40C391595F39F897615E /* PlatformDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformDependencies.swift; sourceTree = "<group>"; };
 		F427214EEBA73CA18792822C /* vec-015.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vec-015.json"; sourceTree = "<group>"; };
 		F4EDE654A552D9511140C884 /* TrustLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustLevel.swift; sourceTree = "<group>"; };
 		F54D0BBEF964AFC6DD1DEAE2 /* ImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCache.swift; sourceTree = "<group>"; };
@@ -1195,6 +1199,14 @@
 				01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */,
 			);
 			path = Library;
+			sourceTree = "<group>";
+		};
+		12D923E9AEBB7B4CB54DE632 /* Platform */ = {
+			isa = PBXGroup;
+			children = (
+				A5388885DE7F28A755BDDFEA /* PlatformDependenciesTests.swift */,
+			);
+			path = Platform;
 			sourceTree = "<group>";
 		};
 		15DD6F727B147CC074C15AA6 /* Snapshots */ = {
@@ -1388,6 +1400,7 @@
 				0E74FD4D52A5F2CFBEBDB8DB /* X3DHOPKFailClosedTests.swift */,
 				594BE6C21114D12A066B7786 /* X3DHSPKTimestampTests.swift */,
 				88918D3F2CE1EE17919B8C32 /* X3DHTests.swift */,
+				EDA45E9AABDD6FF9EF7F0511 /* Core */,
 				E8F936DDEB99D472330175C9 /* CryptoTestKit */,
 				CE49B580FF5FD25E8461F508 /* Helpers */,
 				A66FD4290A348E85E7D37D0F /* Mocks */,
@@ -1903,6 +1916,14 @@
 			path = Security;
 			sourceTree = "<group>";
 		};
+		BEDBE542AD4552DD1BC50071 /* Platform */ = {
+			isa = PBXGroup;
+			children = (
+				F3DA40C391595F39F897615E /* PlatformDependencies.swift */,
+			);
+			path = Platform;
+			sourceTree = "<group>";
+		};
 		C2873D29D406748E397C4CD4 /* ratchet */ = {
 			isa = PBXGroup;
 			children = (
@@ -2107,6 +2128,15 @@
 				7276A2479267623395CFB13B /* TailnetPeerEntry.swift */,
 				09E6D1AB82AE388169BE0266 /* TailnetPeerStore.swift */,
 				BF554150AAF6288377FCA57C /* UserProfile.swift */,
+				BEDBE542AD4552DD1BC50071 /* Platform */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		EDA45E9AABDD6FF9EF7F0511 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				12D923E9AEBB7B4CB54DE632 /* Platform */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -2517,6 +2547,7 @@
 				2F1C78C76EA2EF85DCD15FA6 /* PetTimeOfDayTests.swift in Sources */,
 				E743CD48BADB6E111D3ECFA1 /* PetWelcomeFlagTests.swift in Sources */,
 				1C8E54CC816A78EEB4F60B58 /* Phase2IntegrationTests.swift in Sources */,
+				BC8884CBC796D5ECA1875ED5 /* PlatformDependenciesTests.swift in Sources */,
 				70D8368DE6EC1CBC0CF4F260 /* PolicyFixtureTests.swift in Sources */,
 				FCA1B26C6CB19B08780DFBD6 /* PolicyFuzzTests.swift in Sources */,
 				5404B9ED2402C165C2331399 /* PreKeyBundleTests.swift in Sources */,
@@ -2776,6 +2807,7 @@
 				40AE28E8A989BDFC76547990 /* PetWelcomeFlag.swift in Sources */,
 				AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */,
 				3C5928F07C37607D2B5A64C0 /* PixelView.swift in Sources */,
+				3B17FF521ED5D7A480FF1754 /* PlatformDependencies.swift in Sources */,
 				ECB8D45C76EA920EDB363861 /* PoopState.swift in Sources */,
 				B44417BE29FC6CEB9D97B671 /* PreKeyBundle.swift in Sources */,
 				1C0921424BFC4EC71DC66DBC /* PreKeyStore.swift in Sources */,
