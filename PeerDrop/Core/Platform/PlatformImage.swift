@@ -24,6 +24,27 @@ extension PlatformImage {
 }
 
 extension PlatformImage {
+    /// Cross-platform tinted image. iOS forwards to `UIImage.withTintColor(_:renderingMode: .alwaysOriginal)`;
+    /// macOS composites the tint via a destinationIn blend pass.
+    func platformWithTintColor(_ color: PlatformColor) -> PlatformImage {
+        #if canImport(UIKit)
+        return self.withTintColor(color, renderingMode: .alwaysOriginal)
+        #elseif canImport(AppKit)
+        let tinted = NSImage(size: self.size)
+        tinted.lockFocus()
+        defer { tinted.unlockFocus() }
+        let rect = NSRect(origin: .zero, size: self.size)
+        self.draw(in: rect)
+        color.set()
+        rect.fill(using: .sourceAtop)
+        return tinted
+        #else
+        return self
+        #endif
+    }
+}
+
+extension PlatformImage {
     /// Cross-platform CGImage adapter. iOS uses `UIImage(cgImage:)` (size derived
     /// from CGImage); macOS uses `NSImage(cgImage:size:)` (size must be supplied).
     convenience init?(platformCGImage cgImage: CGImage, size: CGSize) {

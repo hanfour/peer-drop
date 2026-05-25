@@ -52,4 +52,14 @@ final class PlatformImageTests: XCTestCase {
         let image = PlatformImage(platformSystemName: "this.symbol.does.not.exist.12345")
         XCTAssertNil(image)
     }
+
+    func test_withTintColor_returnsNonNilImage() {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10))
+        let source: PlatformImage = renderer.image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 10, height: 10))
+        }
+        let tinted = source.platformWithTintColor(PlatformColor.red)
+        XCTAssertNotNil(tinted)
+    }
 }
