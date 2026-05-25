@@ -45,6 +45,21 @@ extension PlatformImage {
 }
 
 extension PlatformImage {
+    /// Cross-platform CGImage accessor. iOS forwards to `UIImage.cgImage`;
+    /// macOS forwards to `NSImage.cgImage(forProposedRect:context:hints:)`.
+    var platformCGImage: CGImage? {
+        #if canImport(UIKit)
+        return self.cgImage
+        #elseif canImport(AppKit)
+        var rect = CGRect(origin: .zero, size: self.size)
+        return self.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+        #else
+        return nil
+        #endif
+    }
+}
+
+extension PlatformImage {
     /// Cross-platform CGImage adapter. iOS uses `UIImage(cgImage:)` (size derived
     /// from CGImage); macOS uses `NSImage(cgImage:size:)` (size must be supplied).
     convenience init?(platformCGImage cgImage: CGImage, size: CGSize) {
