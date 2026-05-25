@@ -102,6 +102,7 @@
 		313D171E903E165B5BC87B12 /* MessageReceiptPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7705F837CE0206F184A116 /* MessageReceiptPayload.swift */; };
 		31607B6672EA3068E6F6DE4E /* SpriteServiceAnimationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BDC58C1DE4D5C9C2EA9843 /* SpriteServiceAnimationTests.swift */; };
 		31D3EBDE917954BDB7B24BC1 /* PreKeyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */; };
+		32B33E0F067A0E24BA5619F0 /* RemoteNotificationRegistering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030889E774911017A000D80B /* RemoteNotificationRegistering.swift */; };
 		3403A25FBE9065753255202C /* ConnectedTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EB2DE318C4EE011A85C7A5A /* ConnectedTab.swift */; };
 		342D25E7C0F456718E67300B /* GroupReadReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */; };
 		355F941546F26D60E202FC5B /* PetPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBB53153F52CB6914A016F98 /* PetPayloadTests.swift */; };
@@ -480,6 +481,7 @@
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
 		DF24681F486E8AF718E5875D /* BodyTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34290A3B298585384BF81AE5 /* BodyTemplate.swift */; };
 		DF96C1C5C2F3A91E44F79C66 /* MailboxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F993BA6D5384B7F944865C /* MailboxClient.swift */; };
+		DFB042F610247F7B8DDB5CD2 /* UIKitRemoteNotificationRegistering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3938B679B6FF482DEAC7CB8C /* UIKitRemoteNotificationRegistering.swift */; };
 		DFBF65321D26B743DF530D83 /* OutboundRetryQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64750A037D7911010C83ED88 /* OutboundRetryQueue.swift */; };
 		E0F49931A713C3C857125441 /* vec-004.json in Resources */ = {isa = PBXBuildFile; fileRef = FB597AFD58B9274F19DE8B30 /* vec-004.json */; };
 		E0FDAF310886E1D33FB82857 /* IdentityKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6319A75CCE98A8A821E35B53 /* IdentityKeyManagerTests.swift */; };
@@ -603,6 +605,7 @@
 /* Begin PBXFileReference section */
 		0159886D5A574BC55DD31FCC /* PetCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCloudSync.swift; sourceTree = "<group>"; };
 		01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTab.swift; sourceTree = "<group>"; };
+		030889E774911017A000D80B /* RemoteNotificationRegistering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteNotificationRegistering.swift; sourceTree = "<group>"; };
 		0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManagerTests.swift; sourceTree = "<group>"; };
 		043E7D352DA50757FD403C6C /* PairingPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingPayloadTests.swift; sourceTree = "<group>"; };
 		051FD1881B74D827B86CE257 /* BLEDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEDiscoveryTests.swift; sourceTree = "<group>"; };
@@ -719,6 +722,7 @@
 		3823673D5A46544596C830A9 /* Pets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Pets; path = PeerDropTests/Resources/Pets; sourceTree = SOURCE_ROOT; };
 		38C2478F20C10D5FB383E756 /* TransferProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferProgressView.swift; sourceTree = "<group>"; };
 		39271AF06ECA9C7A3A4E88D0 /* V5CrossVersionCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5CrossVersionCompatTests.swift; sourceTree = "<group>"; };
+		3938B679B6FF482DEAC7CB8C /* UIKitRemoteNotificationRegistering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIKitRemoteNotificationRegistering.swift; sourceTree = "<group>"; };
 		395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		3B2EC5B7004AC05E752320A5 /* KeyExchangeMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyExchangeMessage.swift; sourceTree = "<group>"; };
 		3B5484E17328BF9C97A68F15 /* TestSpriteHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSpriteHelper.swift; sourceTree = "<group>"; };
@@ -1866,6 +1870,7 @@
 				A717B1ACB1D8E79E20666193 /* UIKitDeviceNameProvider.swift */,
 				09D5B23CA0569F8B02474675 /* UIKitHapticFeedback.swift */,
 				4B38A82BD32E6546DDF1BA65 /* UIKitPasteboard.swift */,
+				3938B679B6FF482DEAC7CB8C /* UIKitRemoteNotificationRegistering.swift */,
 				6F1C8516682FC8B7938B5718 /* UIKitSystemInfoProvider.swift */,
 			);
 			path = iOS;
@@ -1959,6 +1964,7 @@
 				F3DA40C391595F39F897615E /* PlatformDependencies.swift */,
 				AAA9B5E8618A1024B49BBEA4 /* PlatformImage.swift */,
 				A9DAE3BDBEAD816508721554 /* PlatformPasteboard.swift */,
+				030889E774911017A000D80B /* RemoteNotificationRegistering.swift */,
 				72E1CC55E540F6C1A5451A1F /* SystemInfoProvider.swift */,
 				A7FCA30538A058ACFCF1DC67 /* iOS */,
 			);
@@ -2871,6 +2877,7 @@
 				685569D40A9B15C0758899AF /* RelaySession.swift in Sources */,
 				417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */,
 				F6FB04C0F328317D1CDDCD1A /* RemoteMessageEnvelope.swift in Sources */,
+				32B33E0F067A0E24BA5619F0 /* RemoteNotificationRegistering.swift in Sources */,
 				C9DC96C0189F59682746A8D3 /* RemoteSessionManager.swift in Sources */,
 				FEE61C94B5009E0D2BE14302 /* SDPSignaling.swift in Sources */,
 				4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */,
@@ -2922,6 +2929,7 @@
 				800BFDB7167CA9FC1ABF5676 /* UIKitDeviceNameProvider.swift in Sources */,
 				01360B7517F00310E107820E /* UIKitHapticFeedback.swift in Sources */,
 				39822BCA067338029749F022 /* UIKitPasteboard.swift in Sources */,
+				DFB042F610247F7B8DDB5CD2 /* UIKitRemoteNotificationRegistering.swift in Sources */,
 				74F0F1EEBB530CB16AEA0CA0 /* UIKitSystemInfoProvider.swift in Sources */,
 				A74847A67B418445595E82AF /* URL+Zip.swift in Sources */,
 				AC282EF4C7E2C8E7F1A87ABE /* UserProfile.swift in Sources */,

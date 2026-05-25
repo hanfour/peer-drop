@@ -48,19 +48,30 @@ final class MockSystemInfoProvider: SystemInfoProvider {
     var osVersion: String { os }
 }
 
+final class MockRemoteNotificationRegistering: RemoteNotificationRegistering {
+    private(set) var registerCalled = false
+
+    @MainActor
+    func registerForRemoteNotifications() {
+        registerCalled = true
+    }
+}
+
 extension PlatformDependencies {
     /// Convenience factory for tests. Returns a registry with all-mock factories.
     static func mock(
         pasteboard: MockPasteboard = MockPasteboard(),
         haptics: MockHaptics = MockHaptics(),
         deviceName: MockDeviceNameProvider = MockDeviceNameProvider(),
-        systemInfo: MockSystemInfoProvider = MockSystemInfoProvider()
+        systemInfo: MockSystemInfoProvider = MockSystemInfoProvider(),
+        remoteNotifications: MockRemoteNotificationRegistering = MockRemoteNotificationRegistering()
     ) -> PlatformDependencies {
         PlatformDependencies(
             pasteboard: { pasteboard },
             haptics: { haptics },
             deviceName: { deviceName },
-            systemInfo: { systemInfo }
+            systemInfo: { systemInfo },
+            remoteNotifications: { remoteNotifications }
         )
     }
 }

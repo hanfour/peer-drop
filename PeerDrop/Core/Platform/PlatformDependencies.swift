@@ -5,17 +5,20 @@ public struct PlatformDependencies {
     public var haptics: () -> HapticFeedback
     public var deviceName: () -> DeviceNameProvider
     public var systemInfo: () -> SystemInfoProvider
+    public var remoteNotifications: () -> RemoteNotificationRegistering
 
     public init(
         pasteboard: (() -> PlatformPasteboard)? = nil,
         haptics: (() -> HapticFeedback)? = nil,
         deviceName: (() -> DeviceNameProvider)? = nil,
-        systemInfo: (() -> SystemInfoProvider)? = nil
+        systemInfo: (() -> SystemInfoProvider)? = nil,
+        remoteNotifications: (() -> RemoteNotificationRegistering)? = nil
     ) {
         self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
         self.haptics = haptics ?? { PlatformDependencies.makeHaptics() }
         self.deviceName = deviceName ?? { PlatformDependencies.makeDeviceName() }
         self.systemInfo = systemInfo ?? { PlatformDependencies.makeSystemInfo() }
+        self.remoteNotifications = remoteNotifications ?? { PlatformDependencies.makeRemoteNotifications() }
     }
 
     public static var shared = PlatformDependencies()
@@ -59,6 +62,16 @@ public struct PlatformDependencies {
     }()
 
     private static func makeSystemInfo() -> SystemInfoProvider { _defaultSystemInfo }
+
+    private static let _defaultRemoteNotifications: RemoteNotificationRegistering = {
+        #if canImport(UIKit)
+        return UIKitRemoteNotificationRegistering()
+        #else
+        return NoOpRemoteNotificationRegistering()
+        #endif
+    }()
+
+    private static func makeRemoteNotifications() -> RemoteNotificationRegistering { _defaultRemoteNotifications }
 }
 
 #if !canImport(UIKit)
@@ -98,5 +111,12 @@ private final class SysctlSystemInfoProvider: SystemInfoProvider {
 
     @MainActor
     var osVersion: String { ProcessInfo.processInfo.operatingSystemVersionString }
+}
+
+private final class NoOpRemoteNotificationRegistering: RemoteNotificationRegistering {
+    @MainActor
+    func registerForRemoteNotifications() {
+        // M2 replaces with NSApplication.shared.registerForRemoteNotifications()
+    }
 }
 #endif
