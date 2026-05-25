@@ -1,6 +1,7 @@
 import XCTest
 @testable import PeerDrop
 
+@MainActor
 final class PeerIdentitySecurityTests: XCTestCase {
 
     func testPeerIdentityIncludesIdentityPublicKey() {

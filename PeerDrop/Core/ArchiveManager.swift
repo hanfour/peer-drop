@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 enum ArchiveManager {
     struct Manifest: Codable {
@@ -25,7 +24,7 @@ enum ArchiveManager {
         try? fm.removeItem(at: archiveDir)
         try fm.createDirectory(at: archiveDir, withIntermediateDirectories: true)
 
-        let manifest = Manifest(version: 1, exportDate: Date(), deviceName: UIDevice.current.name)
+        let manifest = Manifest(version: 1, exportDate: Date(), deviceName: PlatformDependencies.shared.deviceName().currentName)
         try JSONEncoder().encode(manifest).write(to: archiveDir.appendingPathComponent("manifest.json"))
         try JSONEncoder().encode(deviceStore.records).write(to: archiveDir.appendingPathComponent("device_records.json"))
         try JSONEncoder().encode(transferHistory).write(to: archiveDir.appendingPathComponent("transfer_history.json"))

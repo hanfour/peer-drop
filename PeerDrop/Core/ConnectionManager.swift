@@ -2419,7 +2419,7 @@ final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            let senderName = await MainActor.run { UIDevice.current.name }
+            let senderName = await MainActor.run { PlatformDependencies.shared.deviceName().currentName }
             try await signaling.sendInvite(
                 toDeviceId: peerDeviceId,
                 roomCode: room.roomCode,

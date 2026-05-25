@@ -30,15 +30,24 @@ final class MockHaptics: HapticFeedback {
     func tap() { invocations.append("tap") }
 }
 
+final class MockDeviceNameProvider: DeviceNameProvider {
+    var name: String = "Mock Device"
+
+    @MainActor
+    var currentName: String { name }
+}
+
 extension PlatformDependencies {
     /// Convenience factory for tests. Returns a registry with all-mock factories.
     static func mock(
         pasteboard: MockPasteboard = MockPasteboard(),
-        haptics: MockHaptics = MockHaptics()
+        haptics: MockHaptics = MockHaptics(),
+        deviceName: MockDeviceNameProvider = MockDeviceNameProvider()
     ) -> PlatformDependencies {
         PlatformDependencies(
             pasteboard: { pasteboard },
-            haptics: { haptics }
+            haptics: { haptics },
+            deviceName: { deviceName }
         )
     }
 }
@@ -56,6 +65,24 @@ final class HapticManagerInjectionTests: XCTestCase {
         HapticManager.transferComplete()
 
         XCTAssertEqual(mock.invocations, ["tap", "transferComplete"])
+    }
+}
+
+@MainActor
+final class DeviceNameInjectionTests: XCTestCase {
+    func test_userProfileCurrentReadsFromInjectedDeviceName() {
+        let originalDeps = PlatformDependencies.shared
+        defer { PlatformDependencies.shared = originalDeps }
+
+        // Clear any saved display name so the fallback is exercised
+        UserDefaults.standard.removeObject(forKey: "peerDropDisplayName")
+        defer { UserDefaults.standard.removeObject(forKey: "peerDropDisplayName") }
+
+        let mock = MockDeviceNameProvider()
+        mock.name = "Test Mac"
+        PlatformDependencies.shared = .mock(deviceName: mock)
+
+        XCTAssertEqual(UserProfile.current.displayName, "Test Mac")
     }
 }
 

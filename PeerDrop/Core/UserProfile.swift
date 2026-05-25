@@ -1,12 +1,13 @@
 import Foundation
-import UIKit
 
 struct UserProfile: Codable {
     var displayName: String
     var avatarData: Data?
 
+    @MainActor
     static var current: UserProfile {
-        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName") ?? UIDevice.current.name
+        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName")
+            ?? PlatformDependencies.shared.deviceName().currentName
         let avatar = UserDefaults.standard.data(forKey: "peerDropAvatarData")
         return UserProfile(displayName: name, avatarData: avatar)
     }

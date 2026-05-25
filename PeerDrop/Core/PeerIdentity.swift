@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 struct PeerIdentity: Codable, Identifiable, Hashable {
     let id: String
@@ -59,10 +58,13 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
     private static let localIDKey = "peerDropLocalIdentityID"
 
     /// Alias for `local()` — returns the current device's identity.
+    @MainActor
     static var current: PeerIdentity { local() }
 
+    @MainActor
     static func local(certificateFingerprint: String? = nil) -> PeerIdentity {
-        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName") ?? UIDevice.current.name
+        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName")
+            ?? PlatformDependencies.shared.deviceName().currentName
 
         // Persist local identity ID so message history survives across launches
         let stableID: String
