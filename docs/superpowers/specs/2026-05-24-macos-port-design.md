@@ -303,8 +303,18 @@ Five PR stages; main is shippable after every merge.
 ### M0 — Core UIKit decoupling
 Scope: §3 work (9 files, protocol abstractions, `PlatformImage` typealias, `#if os(iOS)` isolation). Single PR, 3–5 days. iOS behaviour identical to v5.4; 913 existing tests still pass; `lint-imports` CI added in warn-only mode. Ships as iOS v5.5 internal refactor (no ASC submission needed).
 
-### M1 — SPM package split
-Scope: §1 — create `PeerDropKit/`, move code into 5 modules, Pet resources to SPM bundle, Widget target consumes SPM, `lint-imports` upgraded to error. Single large PR (5 commits, one per module). 5–7 days. Both app targets build; ~820 tests in SPM bundles + ~90 in app targets.
+### M1 — SPM package split (split into 4 sub-milestones, 2026-05-25)
+
+Investigation during M1 planning surfaced that the original spec underestimated this work — the spec assumed Pet renderer was UIKit-free (wrong) and only counted 5 of the 13 top-level dirs in `PeerDrop/`. M1 is restructured as four PRs that each ship independently and keep `main` always-shippable:
+
+- **M1a — Pet UIKit decoupling.** Apply M0-style platform abstraction to `Pet/Renderer/*` (5 files) + `Pet/Engine/PetEngine.swift`. Extend `PlatformImage` extension family with a `platformGraphicsContext` helper (cross-platform equivalent of `UIGraphicsImageRenderer`). `PetPalettes` already uses SwiftUI.Color which is cross-platform — no work needed there. ~3–4 days, ~12 tasks.
+- **M1b — Voice cleanup.** Split `Voice/` along the CallKit boundary. iOS-only (`CallKitManager`, the CallKit-specific paths inside `VoiceCallManager`) stays in app target. Cross-platform (`WebRTCClient`, `SDPSignaling`, `VoicePlayer`, `VoiceRecorder`, the transport-layer parts of `VoiceCallManager`/`VoiceCallSession`) gets ready to move into `PeerDropTransport`. ~2–3 days, ~6 tasks.
+- **M1c — SPM scaffold + empty modules.** Create `PeerDropKit/Package.swift` with the 5 product modules + dependency graph. Modules are EMPTY at this point — just compile. `lint-imports` upgraded to error. ~2 days, ~6 tasks.
+- **M1d — File migration into modules.** Move ~90 files into their target modules (including new top-level dirs `Discovery/`, `Voice/` transport-side, `Telemetry/`, etc.), fix imports, update `@testable import` in tests, refactor `project.yml` so both app target + widget consume the SPM package instead of path-referencing individual `.swift` files. Move Pet/ resources into SPM resource bundle. ~3–4 days, ~10 tasks.
+
+Total realistic M1: **~10–13 working days, ~34 tasks across 4 PRs**. Original "5–7 days, 1 PR" estimate was wildly optimistic.
+
+Both app targets build after M1d; ~820 tests in SPM bundles + ~90 in app targets.
 
 ### M2 — macOS UI shell (no calling)
 Scope: §4 — create `PeerDropApp-macOS` target, SwiftUI shell, `NavigationSplitView`, `MenuBarExtra`, AppDelegate (Dock drop / reopen), menu commands, NSOpenPanel/NSSavePanel, `NSPasteboard`, Pet sprite in menu bar. 7–10 days. **Alpha milestone** — pairing, cross-platform chat, file transfer (incl. relay), Pet display all work. Voice UI hidden. Internal TestFlight Mac group opens.
@@ -320,11 +330,16 @@ Scope: Mac screenshots (3 sizes × modes × 5 languages), metadata translation (
 | Stage | Days | Cumulative |
 |---|---|---|
 | M0 | 3–5 | 1 wk |
-| M1 | 5–7 | 2–2.5 wk |
-| M2 | 7–10 | 3.5–4.5 wk |
-| M3 | 5–7 | 4.5–5.5 wk |
-| M4 | 4–6 | 5.5–7 wk |
-| Apple review buffer | 1–2 wk | **7–9 wk** |
+| M1a Pet decoupling | 3–4 | 1.5–2 wk |
+| M1b Voice cleanup | 2–3 | 2–2.5 wk |
+| M1c SPM scaffold | 2 | 2.5–3 wk |
+| M1d File migration | 3–4 | 3–4 wk |
+| M2 | 7–10 | 5–6 wk |
+| M3 | 5–7 | 6–7 wk |
+| M4 | 4–6 | 7–8.5 wk |
+| Apple review buffer | 1–2 wk | **8–10.5 wk** |
+
+(Original spec estimated 7–9 wk total. The M1 underestimation pushes the realistic ship target by ~2 weeks.)
 
 ### Parallelization
 
