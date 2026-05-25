@@ -3,6 +3,7 @@ import UIKit
 
 final class UIKitHapticFeedback: HapticFeedback {
     private let impact = UIImpactFeedbackGenerator(style: .medium)
+    private let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
     private let notification = UINotificationFeedbackGenerator()
     private let selection = UISelectionFeedbackGenerator()
 
@@ -14,6 +15,7 @@ final class UIKitHapticFeedback: HapticFeedback {
     func incomingRequest() { impact.impactOccurred() }
     func callStarted() { impact.impactOccurred() }
     func callEnded() { selection.selectionChanged() }
+    func evolutionTriggered() { heavyImpact.impactOccurred() }
     func tap() { impact.impactOccurred(intensity: 0.5) }
 }
 #endif

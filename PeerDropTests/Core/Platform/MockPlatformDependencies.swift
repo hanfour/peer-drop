@@ -27,6 +27,7 @@ final class MockHaptics: HapticFeedback {
     func incomingRequest() { invocations.append("incomingRequest") }
     func callStarted() { invocations.append("callStarted") }
     func callEnded() { invocations.append("callEnded") }
+    func evolutionTriggered() { invocations.append("evolutionTriggered") }
     func tap() { invocations.append("tap") }
 }
 
@@ -89,6 +90,18 @@ final class HapticManagerInjectionTests: XCTestCase {
         HapticManager.transferComplete()
 
         XCTAssertEqual(mock.invocations, ["tap", "transferComplete"])
+    }
+
+    func test_evolutionTriggeredForwardsToInjectedFeedback() {
+        let originalDeps = PlatformDependencies.shared
+        defer { PlatformDependencies.shared = originalDeps }
+
+        let mock = MockHaptics()
+        PlatformDependencies.shared = .mock(haptics: mock)
+
+        HapticManager.evolutionTriggered()
+
+        XCTAssertEqual(mock.invocations, ["evolutionTriggered"])
     }
 }
 

@@ -22,3 +22,65 @@ extension PlatformImage {
         #endif
     }
 }
+
+extension PlatformImage {
+    /// Cross-platform tinted image. iOS forwards to `UIImage.withTintColor(_:renderingMode: .alwaysOriginal)`;
+    /// macOS composites the tint via a destinationIn blend pass.
+    func platformWithTintColor(_ color: PlatformColor) -> PlatformImage {
+        #if canImport(UIKit)
+        return self.withTintColor(color, renderingMode: .alwaysOriginal)
+        #elseif canImport(AppKit)
+        let tinted = NSImage(size: self.size)
+        tinted.lockFocus()
+        defer { tinted.unlockFocus() }
+        let rect = NSRect(origin: .zero, size: self.size)
+        self.draw(in: rect)
+        color.set()
+        rect.fill(using: .sourceAtop)
+        return tinted
+        #else
+        return self
+        #endif
+    }
+}
+
+extension PlatformImage {
+    /// Cross-platform CGImage accessor. iOS forwards to `UIImage.cgImage`;
+    /// macOS forwards to `NSImage.cgImage(forProposedRect:context:hints:)`.
+    var platformCGImage: CGImage? {
+        #if canImport(UIKit)
+        return self.cgImage
+        #elseif canImport(AppKit)
+        var rect = CGRect(origin: .zero, size: self.size)
+        return self.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+        #else
+        return nil
+        #endif
+    }
+}
+
+extension PlatformImage {
+    /// Cross-platform CGImage adapter. iOS uses `UIImage(cgImage:)` (size derived
+    /// from CGImage); macOS uses `NSImage(cgImage:size:)` (size must be supplied).
+    convenience init?(platformCGImage cgImage: CGImage, size: CGSize) {
+        #if canImport(UIKit)
+        self.init(cgImage: cgImage)
+        #elseif canImport(AppKit)
+        self.init(cgImage: cgImage, size: size)
+        #else
+        return nil
+        #endif
+    }
+
+    /// Cross-platform SF Symbol loader. iOS uses `UIImage(systemName:)`;
+    /// macOS uses `NSImage(systemSymbolName:accessibilityDescription:)` (macOS 11+).
+    convenience init?(platformSystemName name: String) {
+        #if canImport(UIKit)
+        self.init(systemName: name)
+        #elseif canImport(AppKit)
+        self.init(systemSymbolName: name, accessibilityDescription: nil)
+        #else
+        return nil
+        #endif
+    }
+}

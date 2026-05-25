@@ -15,5 +15,6 @@ enum HapticManager {
     static func incomingRequest() { feedback.incomingRequest() }
     static func callStarted() { feedback.callStarted() }
     static func callEnded() { feedback.callEnded() }
+    static func evolutionTriggered() { feedback.evolutionTriggered() }
     static func tap() { feedback.tap() }
 }

@@ -1,4 +1,5 @@
-import UIKit
+import CoreGraphics
+import Foundation
 
 enum SpriteSheetError: Error {
     case invalidStripWidth

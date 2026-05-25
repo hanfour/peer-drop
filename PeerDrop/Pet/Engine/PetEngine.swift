@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import CoreGraphics
 import OSLog
-import UIKit
 
 private let petEngineLog = Logger(subsystem: "com.hanfour.peerdrop", category: "PetEngine")
 
@@ -398,8 +397,7 @@ class PetEngine: ObservableObject {
         updateRenderedImage()
 
         showEvolutionFlash = true
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
+        HapticManager.evolutionTriggered()
         Task {
             try? await Task.sleep(nanoseconds: 300_000_000)
             showEvolutionFlash = false

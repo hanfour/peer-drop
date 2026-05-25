@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Mood → SF Symbol icon + tint color mapping for the v4.0 mood overlay.
 ///
@@ -23,7 +27,7 @@ enum MoodOverlay {
         }
     }
 
-    static func tintColor(_ mood: PetMood) -> UIColor {
+    static func tintColor(_ mood: PetMood) -> PlatformColor {
         switch mood {
         case .happy:    return .systemYellow
         case .curious:  return .systemTeal

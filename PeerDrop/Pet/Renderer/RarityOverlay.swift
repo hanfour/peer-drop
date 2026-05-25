@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Per-variant collection-tier overlay (Phase V hook C — see
 /// docs/plans/2026-05-17-variant-traits.md).
@@ -18,7 +22,7 @@ enum RarityOverlay {
 
     /// Border color for the given species ID, or nil if rarity is `.common`
     /// (no border drawn) or no rarity trait is declared.
-    static func borderColor(for speciesID: SpeciesID) -> UIColor? {
+    static func borderColor(for speciesID: SpeciesID) -> PlatformColor? {
         switch rarity(for: speciesID) {
         case .common:    return nil
         case .rare:      return .systemGray3       // subtle silver
