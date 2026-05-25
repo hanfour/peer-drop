@@ -1,6 +1,5 @@
 import Foundation
 import CoreGraphics
-import UIKit
 import OSLog
 
 private let rendererLogger = Logger(subsystem: "com.hanfour.peerdrop", category: "PetRendererV3")
@@ -174,32 +173,38 @@ final class PetRendererV3 {
     /// no .neutral case — it's always one of the 6 active moods, so the
     /// overlay always renders.
     ///
-    /// Determinism: UIGraphicsImageRenderer produces byte-identical output for
+    /// Determinism: PlatformGraphicsRenderer produces byte-identical output for
     /// identical inputs. The M4.3 caching contract (and the lastComposite
     /// memoization above) relies on this — don't substitute a non-deterministic
     /// primitive (e.g. CIContext) without also revisiting those tests.
     private func composite(basePNG: CGImage, species: SpeciesID, mood: PetMood) -> CGImage {
         let size = CGSize(width: basePNG.width, height: basePNG.height)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let renderer = PlatformGraphicsRenderer(size: size)
 
-        let composited = renderer.image { ctx in
-            UIImage(cgImage: basePNG).draw(in: CGRect(origin: .zero, size: size))
+        let composited = renderer.image { cgCtx in
+            // 1) Base sprite — draw the basePNG via CGContext directly.
+            // CoreGraphics's coordinate system is bottom-left origin so we
+            // flip the Y axis to match the top-left convention before drawing,
+            // matching the prior UIImage(cgImage:).draw(in:) behavior.
+            cgCtx.saveGState()
+            cgCtx.translateBy(x: 0, y: size.height)
+            cgCtx.scaleBy(x: 1, y: -1)
+            cgCtx.draw(basePNG, in: CGRect(origin: .zero, size: size))
+            cgCtx.restoreGState()
 
-            // Rarity border draws BETWEEN the base sprite and the mood
+            // 2) Rarity border draws BETWEEN the base sprite and the mood
             // overlay so it sits on the sprite edge but doesn't occlude
             // the mood icon at the top-right. Returns nil for .common
             // tier (no border).
             if let borderColor = RarityOverlay.borderColor(for: species) {
                 let width = RarityOverlay.borderWidth(for: species)
                 let rect = CGRect(origin: .zero, size: size).insetBy(dx: width / 2, dy: width / 2)
-                ctx.cgContext.setStrokeColor(borderColor.cgColor)
-                ctx.cgContext.setLineWidth(width)
-                ctx.cgContext.stroke(rect)
+                cgCtx.setStrokeColor(borderColor.cgColor)
+                cgCtx.setLineWidth(width)
+                cgCtx.stroke(rect)
             }
 
+            // 3) Mood overlay — SF Symbol composited at top-right corner.
             let side = Self.overlaySidePixels(forBaseWidth: size.width)
             let iconRect = CGRect(
                 x: size.width - side,
@@ -209,18 +214,22 @@ final class PetRendererV3 {
             )
             let iconName = MoodOverlay.iconName(mood)
             let tint = MoodOverlay.tintColor(mood)
-            UIImage(systemName: iconName)?
-                .withTintColor(tint, renderingMode: .alwaysOriginal)
-                .draw(in: iconRect)
+            if let icon = PlatformImage(platformSystemName: iconName)?.platformWithTintColor(tint) {
+                // Draw via PlatformImage's draw(in:) which respects the
+                // current graphics context. UIImage.draw(in:) works on iOS;
+                // NSImage.draw(in:) works on macOS — both honor the current
+                // graphics context set by PlatformGraphicsRenderer.
+                icon.draw(in: iconRect)
+            }
         }
 
-        if let cg = composited.cgImage {
+        if let cg = composited.platformCGImage {
             return cg
         }
-        // UIGraphicsImageRenderer.image normally produces a CGImage-backed
-        // UIImage. If it doesn't (some color-space edge cases), the mood
-        // overlay vanishes silently — log so the issue is at least visible.
-        rendererLogger.warning("UIGraphicsImageRenderer returned UIImage with nil cgImage; mood overlay dropped for mood=\(mood.rawValue, privacy: .public)")
+        // PlatformGraphicsRenderer normally produces a CGImage-backed
+        // PlatformImage. If it doesn't (some color-space edge cases), the
+        // mood overlay vanishes silently — log so the issue is at least visible.
+        rendererLogger.warning("PlatformGraphicsRenderer returned PlatformImage with nil cgImage; mood overlay dropped for mood=\(mood.rawValue, privacy: .public)")
         return basePNG
     }
 }
