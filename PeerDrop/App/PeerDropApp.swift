@@ -100,7 +100,7 @@ struct PeerDropApp: App {
 
                 // Wire CallKit into ConnectionManager
                 if let callKit = appDelegate.callKitManager {
-                    connectionManager.configureVoiceCalling(callKitManager: callKit)
+                    connectionManager.configureVoiceCalling(callProvider: callKit)
                 }
 
                 // Wire SecurityPolicyStore + CryptoHardeningMetrics into ConnectionManager.
