@@ -117,17 +117,18 @@ final class ClipboardSyncManagerInjectionTests: XCTestCase {
         mock.stringContent = "https://example.com/test"
         let manager = ClipboardSyncManager(pasteboard: mock)
 
+        let exp = expectation(description: "payload arrives")
         var received: ClipboardSyncPayload?
-        manager.onClipboardChanged = { received = $0 }
+        manager.onClipboardChanged = {
+            received = $0
+            exp.fulfill()
+        }
         manager.startMonitoring()
         defer { manager.stopMonitoring() }
 
         mock.simulateChange(string: "https://example.com/test")
 
-        // Allow the @objc selector + Task @MainActor to run
-        let exp = expectation(description: "payload arrives")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        wait(for: [exp], timeout: 1.0)
+        wait(for: [exp], timeout: 2.0)
 
         XCTAssertEqual(received?.contentType, .url)
         XCTAssertEqual(received?.textContent, "https://example.com/test")

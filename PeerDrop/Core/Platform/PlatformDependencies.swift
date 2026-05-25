@@ -103,9 +103,9 @@ private final class SysctlSystemInfoProvider: SystemInfoProvider {
     @MainActor
     var deviceModel: String {
         var size: Int = 0
-        sysctlbyname("hw.model", nil, &size, nil, 0)
+        guard sysctlbyname("hw.model", nil, &size, nil, 0) == 0, size > 0 else { return "Unknown" }
         var bytes = [CChar](repeating: 0, count: size)
-        sysctlbyname("hw.model", &bytes, &size, nil, 0)
+        guard sysctlbyname("hw.model", &bytes, &size, nil, 0) == 0 else { return "Unknown" }
         return String(cString: bytes)
     }
 
