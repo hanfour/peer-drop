@@ -300,6 +300,7 @@
 		9110550525FA92103FF5B86A /* DiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB9C675EFD739621740F9F9 /* DiscoveryService.swift */; };
 		912EDC4A9509498C5AD65FD4 /* ImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54D0BBEF964AFC6DD1DEAE2 /* ImageCache.swift */; };
 		914DC7E3E5AC3D3FFB71A59C /* PropertyTestHarnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC430360B753FDF2E1FF39D3 /* PropertyTestHarnessTests.swift */; };
+		914FC04A8C66262E8EA34CEE /* UIKitAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43118E7C552F596A9B6CDC9B /* UIKitAudioSession.swift */; };
 		91CAFCE77CB2258986637357 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B620D00284A700C480C5E5 /* ConnectionManager.swift */; };
 		930812C42B19DF71819EB73B /* PetGenome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91D9B2343FE5F8E807D1765F /* PetGenome.swift */; };
 		933A5132CE181FDE4C6FBAFE /* vec-014.json in Resources */ = {isa = PBXBuildFile; fileRef = 946ACA00A66DFB9164D322F8 /* vec-014.json */; };
@@ -751,6 +752,7 @@
 		41DCF1ACEEF25E8262FC1291 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		420320526B18E15D11A63B4C /* GroupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDetailView.swift; sourceTree = "<group>"; };
 		424419C1F0F84A4C3D299D15 /* vec-011.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vec-011.json"; sourceTree = "<group>"; };
+		43118E7C552F596A9B6CDC9B /* UIKitAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIKitAudioSession.swift; sourceTree = "<group>"; };
 		43FAA91FE4F666B4E773BA43 /* skipped-004.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "skipped-004.json"; sourceTree = "<group>"; };
 		453F20DBDA714A7B590261F6 /* PetStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetStats.swift; sourceTree = "<group>"; };
 		45FF0F69838110928284D8EC /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
@@ -1881,6 +1883,7 @@
 		A7FCA30538A058ACFCF1DC67 /* iOS */ = {
 			isa = PBXGroup;
 			children = (
+				43118E7C552F596A9B6CDC9B /* UIKitAudioSession.swift */,
 				A717B1ACB1D8E79E20666193 /* UIKitDeviceNameProvider.swift */,
 				C82EAA742566828416CE3C9D /* UIKitGraphicsRenderer.swift */,
 				09D5B23CA0569F8B02474675 /* UIKitHapticFeedback.swift */,
@@ -2949,6 +2952,7 @@
 				1933A3EE381E900B0A426C5B /* TrustedContactStore.swift in Sources */,
 				DC36D0D22B9764100D164C35 /* TypingIndicatorPayload.swift in Sources */,
 				239DB398541A3E45203962AF /* TypingIndicatorView.swift in Sources */,
+				914FC04A8C66262E8EA34CEE /* UIKitAudioSession.swift in Sources */,
 				800BFDB7167CA9FC1ABF5676 /* UIKitDeviceNameProvider.swift in Sources */,
 				8B014AAB4483393CA0352569 /* UIKitGraphicsRenderer.swift in Sources */,
 				01360B7517F00310E107820E /* UIKitHapticFeedback.swift in Sources */,
