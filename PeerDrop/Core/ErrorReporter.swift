@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 import os.log
 
 /// Sends error reports to the Cloudflare Worker for remote debugging.
@@ -29,11 +28,9 @@ enum ErrorReporter {
             ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
         guard let url = URL(string: "\(baseURL)/debug/report") else { return }
 
-        // UIDevice properties are @MainActor-isolated in Swift 6 — read them
-        // once on the main actor instead of capturing UIDevice.current across
-        // the async boundary.
-        let deviceModel = await MainActor.run { UIDevice.current.model }
-        let systemVersion = await MainActor.run { UIDevice.current.systemVersion }
+        let info = PlatformDependencies.shared.systemInfo()
+        let deviceModel = await MainActor.run { info.deviceModel }
+        let systemVersion = await MainActor.run { info.osVersion }
         var body: [String: Any] = [
             "error": error,
             "context": context,

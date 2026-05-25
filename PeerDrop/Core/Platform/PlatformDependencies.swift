@@ -4,15 +4,18 @@ public struct PlatformDependencies {
     public var pasteboard: () -> PlatformPasteboard
     public var haptics: () -> HapticFeedback
     public var deviceName: () -> DeviceNameProvider
+    public var systemInfo: () -> SystemInfoProvider
 
     public init(
         pasteboard: (() -> PlatformPasteboard)? = nil,
         haptics: (() -> HapticFeedback)? = nil,
-        deviceName: (() -> DeviceNameProvider)? = nil
+        deviceName: (() -> DeviceNameProvider)? = nil,
+        systemInfo: (() -> SystemInfoProvider)? = nil
     ) {
         self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
         self.haptics = haptics ?? { PlatformDependencies.makeHaptics() }
         self.deviceName = deviceName ?? { PlatformDependencies.makeDeviceName() }
+        self.systemInfo = systemInfo ?? { PlatformDependencies.makeSystemInfo() }
     }
 
     public static var shared = PlatformDependencies()
@@ -46,6 +49,16 @@ public struct PlatformDependencies {
     }()
 
     private static func makeDeviceName() -> DeviceNameProvider { _defaultDeviceName }
+
+    private static let _defaultSystemInfo: SystemInfoProvider = {
+        #if canImport(UIKit)
+        return UIKitSystemInfoProvider()
+        #else
+        return SysctlSystemInfoProvider()
+        #endif
+    }()
+
+    private static func makeSystemInfo() -> SystemInfoProvider { _defaultSystemInfo }
 }
 
 #if !canImport(UIKit)
@@ -71,5 +84,19 @@ private final class NoOpHapticFeedback: HapticFeedback {
 private final class HostnameDeviceNameProvider: DeviceNameProvider {
     @MainActor
     var currentName: String { Host.current().localizedName ?? ProcessInfo.processInfo.hostName }
+}
+
+private final class SysctlSystemInfoProvider: SystemInfoProvider {
+    @MainActor
+    var deviceModel: String {
+        var size: Int = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        var bytes = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.model", &bytes, &size, nil, 0)
+        return String(cString: bytes)
+    }
+
+    @MainActor
+    var osVersion: String { ProcessInfo.processInfo.operatingSystemVersionString }
 }
 #endif

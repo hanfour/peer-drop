@@ -232,8 +232,10 @@
 		736FF60E9C3A56A10966FCDA /* PetParticleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18F1E75EEFA27967224E035C /* PetParticleView.swift */; };
 		73CD3DE41E81D4F529AEE566 /* ratchet-010.json in Resources */ = {isa = PBXBuildFile; fileRef = CC56FC4BE1D6C42C70F72148 /* ratchet-010.json */; };
 		74DA55958F74974AA3086DC6 /* ConnectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D629FA007356EBA90D5F5A /* ConnectionState.swift */; };
+		74F0F1EEBB530CB16AEA0CA0 /* UIKitSystemInfoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1C8516682FC8B7938B5718 /* UIKitSystemInfoProvider.swift */; };
 		75009F47B2CC0393E2403FCB /* test-signing-key.json in Resources */ = {isa = PBXBuildFile; fileRef = 0F9D3D4930C252C03A72423C /* test-signing-key.json */; };
 		76F2478B902DE4DE1BCF7C80 /* unsupported-version.json in Resources */ = {isa = PBXBuildFile; fileRef = 9FFE23934BA5184578AB7016 /* unsupported-version.json */; };
+		77CA5F327890498564C6A7A7 /* SystemInfoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E1CC55E540F6C1A5451A1F /* SystemInfoProvider.swift */; };
 		788CDADD13EB08DA5D36B340 /* PlatformImageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26204406BF0EB84A54256B9E /* PlatformImageTests.swift */; };
 		78ADE146102313D4C28AE68C /* KeyExchangeMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2EC5B7004AC05E752320A5 /* KeyExchangeMessage.swift */; };
 		78EF5354C89CF51473FD7D49 /* FilePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8034F4F86233093A4E36905 /* FilePickerView.swift */; };
@@ -843,6 +845,7 @@
 		6E06927E83F57264F730DDE2 /* PoopState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoopState.swift; sourceTree = "<group>"; };
 		6F0C689FF05F24AEE8FEB9D1 /* RarityOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityOverlay.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
+		6F1C8516682FC8B7938B5718 /* UIKitSystemInfoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIKitSystemInfoProvider.swift; sourceTree = "<group>"; };
 		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
@@ -851,6 +854,7 @@
 		7232A7A0BA24C480CCF1112E /* PetChatInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetChatInteractionTests.swift; sourceTree = "<group>"; };
 		7268557E80C7DE40187E361B /* WorkerAuthHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerAuthHelper.swift; sourceTree = "<group>"; };
 		7276A2479267623395CFB13B /* TailnetPeerEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntry.swift; sourceTree = "<group>"; };
+		72E1CC55E540F6C1A5451A1F /* SystemInfoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemInfoProvider.swift; sourceTree = "<group>"; };
 		73122425C58B15567D7F7F9D /* TCPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCPTransport.swift; sourceTree = "<group>"; };
 		73383ABF5706CAEE306977CA /* ConnectionMetricTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionMetricTests.swift; sourceTree = "<group>"; };
 		739D02C5763EE45B3BC54940 /* CatBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatBehavior.swift; sourceTree = "<group>"; };
@@ -1862,6 +1866,7 @@
 				A717B1ACB1D8E79E20666193 /* UIKitDeviceNameProvider.swift */,
 				09D5B23CA0569F8B02474675 /* UIKitHapticFeedback.swift */,
 				4B38A82BD32E6546DDF1BA65 /* UIKitPasteboard.swift */,
+				6F1C8516682FC8B7938B5718 /* UIKitSystemInfoProvider.swift */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -1954,6 +1959,7 @@
 				F3DA40C391595F39F897615E /* PlatformDependencies.swift */,
 				AAA9B5E8618A1024B49BBEA4 /* PlatformImage.swift */,
 				A9DAE3BDBEAD816508721554 /* PlatformPasteboard.swift */,
+				72E1CC55E540F6C1A5451A1F /* SystemInfoProvider.swift */,
 				A7FCA30538A058ACFCF1DC67 /* iOS */,
 			);
 			path = Platform;
@@ -2891,6 +2897,7 @@
 				2078B7690C0DCDCAA83118BB /* SpriteSheetLoader.swift in Sources */,
 				B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */,
 				EF397F7C55CD03C40EB060CC /* StatusToastView.swift in Sources */,
+				77CA5F327890498564C6A7A7 /* SystemInfoProvider.swift in Sources */,
 				1D2D5FAE4893C5D84F9C1A20 /* TCPTransport.swift in Sources */,
 				88DEFED6EF2E7F1872648030 /* TLSConfiguration.swift in Sources */,
 				5122137663EE951E29F1CC52 /* TailnetPeerEntry.swift in Sources */,
@@ -2915,6 +2922,7 @@
 				800BFDB7167CA9FC1ABF5676 /* UIKitDeviceNameProvider.swift in Sources */,
 				01360B7517F00310E107820E /* UIKitHapticFeedback.swift in Sources */,
 				39822BCA067338029749F022 /* UIKitPasteboard.swift in Sources */,
+				74F0F1EEBB530CB16AEA0CA0 /* UIKitSystemInfoProvider.swift in Sources */,
 				A74847A67B418445595E82AF /* URL+Zip.swift in Sources */,
 				AC282EF4C7E2C8E7F1A87ABE /* UserProfile.swift in Sources */,
 				BB0A876963F26D7D52EECB7A /* UserProfileView.swift in Sources */,

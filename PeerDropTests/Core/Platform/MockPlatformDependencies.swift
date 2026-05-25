@@ -37,17 +37,30 @@ final class MockDeviceNameProvider: DeviceNameProvider {
     var currentName: String { name }
 }
 
+final class MockSystemInfoProvider: SystemInfoProvider {
+    var model: String = "MockDevice"
+    var os: String = "MockOS 1.0"
+
+    @MainActor
+    var deviceModel: String { model }
+
+    @MainActor
+    var osVersion: String { os }
+}
+
 extension PlatformDependencies {
     /// Convenience factory for tests. Returns a registry with all-mock factories.
     static func mock(
         pasteboard: MockPasteboard = MockPasteboard(),
         haptics: MockHaptics = MockHaptics(),
-        deviceName: MockDeviceNameProvider = MockDeviceNameProvider()
+        deviceName: MockDeviceNameProvider = MockDeviceNameProvider(),
+        systemInfo: MockSystemInfoProvider = MockSystemInfoProvider()
     ) -> PlatformDependencies {
         PlatformDependencies(
             pasteboard: { pasteboard },
             haptics: { haptics },
-            deviceName: { deviceName }
+            deviceName: { deviceName },
+            systemInfo: { systemInfo }
         )
     }
 }
