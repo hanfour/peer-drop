@@ -29,8 +29,7 @@ enum ErrorReporter {
         guard let url = URL(string: "\(baseURL)/debug/report") else { return }
 
         let info = PlatformDependencies.shared.systemInfo()
-        let deviceModel = await MainActor.run { info.deviceModel }
-        let systemVersion = await MainActor.run { info.osVersion }
+        let (deviceModel, systemVersion) = await MainActor.run { (info.deviceModel, info.osVersion) }
         var body: [String: Any] = [
             "error": error,
             "context": context,
