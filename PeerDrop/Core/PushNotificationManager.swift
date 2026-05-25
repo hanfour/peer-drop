@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 import UserNotifications
 import os.log
 
@@ -62,7 +61,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
             }
             registrationState = .registering
             await MainActor.run {
-                UIApplication.shared.registerForRemoteNotifications()
+                PlatformDependencies.shared.remoteNotifications().registerForRemoteNotifications()
             }
         } catch {
             logger.error("Push authorization failed: \(error.localizedDescription)")

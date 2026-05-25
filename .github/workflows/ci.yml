@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint-imports:
+    name: Lint — no UIKit in Core/
+    runs-on: macos-15
+    continue-on-error: true  # warn-only at M0; flipped to false in M1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in Core/
+        run: |
+          set -e
+          violations=""
+          while IFS= read -r file; do
+            if grep -E "^import (UIKit|AppKit|WidgetKit)" "$file" > /dev/null 2>&1; then
+              while IFS= read -r line_no; do
+                prev_line=$((line_no - 1))
+                prev=$(sed -n "${prev_line}p" "$file" | tr -d '[:space:]')
+                # Accept both #if and #elseif guard forms
+                if [ "$prev" != "#ifos(iOS)" ] && \
+                   [ "$prev" != "#ifcanImport(UIKit)" ] && \
+                   [ "$prev" != "#ifcanImport(AppKit)" ] && \
+                   [ "$prev" != "#ifcanImport(WidgetKit)" ] && \
+                   [ "$prev" != "#elseifcanImport(UIKit)" ] && \
+                   [ "$prev" != "#elseifcanImport(AppKit)" ] && \
+                   [ "$prev" != "#elseifcanImport(WidgetKit)" ] && \
+                   [ "$prev" != "#elseifos(iOS)" ]; then
+                  violations+="$file:$line_no: $(sed -n "${line_no}p" "$file")\n"
+                fi
+              done < <(grep -n -E "^import (UIKit|AppKit|WidgetKit)" "$file" | cut -d: -f1)
+            fi
+          done < <(find PeerDrop/Core -name "*.swift" -not -path "*/Platform/iOS/*")
+          if [ -n "$violations" ]; then
+            echo "::warning::Unguarded UI-framework imports in Core/:"
+            printf "%b" "$violations"
+          else
+            echo "Clean: PeerDrop/Core/ has no unguarded UI-framework imports."
+          fi
