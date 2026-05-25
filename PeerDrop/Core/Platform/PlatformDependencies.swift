@@ -24,13 +24,15 @@ public struct PlatformDependencies {
         #endif
     }
 
-    private static func makeHaptics() -> HapticFeedback {
+    private static let _defaultHaptics: HapticFeedback = {
         #if canImport(UIKit)
         return UIKitHapticFeedback()
         #else
         return NoOpHapticFeedback()
         #endif
-    }
+    }()
+
+    private static func makeHaptics() -> HapticFeedback { _defaultHaptics }
 }
 
 #if !canImport(UIKit)
