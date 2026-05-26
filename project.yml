@@ -38,6 +38,16 @@ targets:
     dependencies:
       - package: WebRTC
       - package: ZIPFoundation
+      - package: PeerDropKit
+        product: PeerDropCore
+      - package: PeerDropKit
+        product: PeerDropTransport
+      - package: PeerDropKit
+        product: PeerDropSecurity
+      - package: PeerDropKit
+        product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropPet
       - target: PeerDropWidget
     settings:
       base:
@@ -128,6 +138,16 @@ targets:
     dependencies:
       - target: PeerDrop
       - package: ZIPFoundation
+      - package: PeerDropKit
+        product: PeerDropCore
+      - package: PeerDropKit
+        product: PeerDropTransport
+      - package: PeerDropKit
+        product: PeerDropSecurity
+      - package: PeerDropKit
+        product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropPet
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.tests

@@ -126,6 +126,7 @@
 		3BD6BDEACD112B57E75D5A84 /* DeviceRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1240CE114D649D9D23131928 /* DeviceRecordTests.swift */; };
 		3C45BDD04E13DFB3A648AEAE /* DogBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5497CDF38D7323399B3EE36E /* DogBehavior.swift */; };
 		3C5928F07C37607D2B5A64C0 /* PixelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE30BAD21DDB022E0E0F577 /* PixelView.swift */; };
+		3CA5FD0AC5927C80A9702704 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 2CC1FAC04667D89A31D6A9B0 /* PeerDropPet */; };
 		3CDEA63C47A1920273915736 /* ratchet-008.json in Resources */ = {isa = PBXBuildFile; fileRef = 21664D42235239D9103D37E2 /* ratchet-008.json */; };
 		3DBAADE0DE08B777BFAD3C14 /* PetPoopCycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84C45EC77892FDEFC587804 /* PetPoopCycleTests.swift */; };
 		3E676289E0FFEB46AC1FC7B1 /* PushNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45FF0F69838110928284D8EC /* PushNotificationManager.swift */; };
@@ -136,9 +137,11 @@
 		401FC8122FEB4D13F9C4A025 /* RelayAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371D9C8BCBFCD1265F54D339 /* RelayAuthenticator.swift */; };
 		402668C766BED0AC8C7E4529 /* E2EIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613B66E2077223EA0560E336 /* E2EIntegrationTests.swift */; };
 		40AE28E8A989BDFC76547990 /* PetWelcomeFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8710FC1E6E5A083ECACA9480 /* PetWelcomeFlag.swift */; };
+		40F720FA53C330BB0E0D9925 /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D956D3F0B546F8A036FC44C /* PeerDropCore */; };
 		40FA6A324E7CF8801AC53D10 /* TestVectorLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511A38C848619CCFA952DF1A /* TestVectorLoader.swift */; };
 		4133DCC23F3984CC9048905E /* PetFeedingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB79B8FB4BA9C025C703233 /* PetFeedingTests.swift */; };
 		417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
+		41C366502C800AE0951321B9 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */; };
 		420825CB3F471B49A5A92C33 /* ratchet-005.json in Resources */ = {isa = PBXBuildFile; fileRef = F17F381DEA22E3ED41BB5BCF /* ratchet-005.json */; };
 		422B1D0653742266E75E000D /* CatBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 739D02C5763EE45B3BC54940 /* CatBehavior.swift */; };
 		4268B5D7D7320DD32176AC4E /* VoiceCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21815A246EC26999D8D31534 /* VoiceCallManager.swift */; };
@@ -154,6 +157,7 @@
 		4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */; };
 		4B9B72143D9C9EDD4C17A2EA /* PetBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6842DD7730A244B26924472 /* PetBubbleView.swift */; };
 		4D615852553B955BE08BF60C /* valid.json in Resources */ = {isa = PBXBuildFile; fileRef = 195449058CFBB61C107DEF52 /* valid.json */; };
+		4F2B1D72E1F3244E4B80B685 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 910E85D475F0267020B97E22 /* PeerDropPet */; };
 		4F7C9220F1F5BFC1CCE311CE /* ScreenshotModeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D5D787B4A7EA3EBCFA8015 /* ScreenshotModeProvider.swift */; };
 		4FDC73C86C9E8B30EBD9858A /* InboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11F0174539415CEC21987D6 /* InboxService.swift */; };
 		5012AF7FCAAA9ED401987B5A /* SecurityPolicyBounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = A899A48A9BC942E198F315D7 /* SecurityPolicyBounds.swift */; };
@@ -177,6 +181,7 @@
 		5805E2645C1FBD562457CACD /* KeyExchangeMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F15558483B16C63DDF73CC01 /* KeyExchangeMessageTests.swift */; };
 		5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */; };
 		5869553DAA2A2C0975800025 /* DisconnectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D98B7E882918091D8A90224 /* DisconnectSheet.swift */; };
+		588C4858607A127F21B93F02 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */; };
 		58CCDE59D5C7D77BF7E5BA3C /* ratchet-006.json in Resources */ = {isa = PBXBuildFile; fileRef = F3CA96BC128E78B23F9EFE48 /* ratchet-006.json */; };
 		594B5200E66E8D0241FB43BB /* vec-016.json in Resources */ = {isa = PBXBuildFile; fileRef = DE67E7ADA33959F372776D2D /* vec-016.json */; };
 		5979A61B244DDF555E19417F /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1713F4AE44609FEDEE8E499 /* DeviceIdentity.swift */; };
@@ -195,8 +200,10 @@
 		606F4D3A864E978123E274F9 /* SharedPetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED3725529064EC164D81F20 /* SharedPetState.swift */; };
 		61C5755BCACA92C8D909B00B /* GroupEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */; };
 		61F540C2737776133B133258 /* MainBundleAssetCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA02D376D28E600A1C08D87F /* MainBundleAssetCoverageTests.swift */; };
+		629ACA86353FAA0329245240 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 15B2346137F7B0E7DD7695FD /* PeerDropProtocol */; };
 		62EE3D9CDBDADC0A2D8DC24B /* FileTransferSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD1B2B945FCDC84E81364EED /* FileTransferSession.swift */; };
 		6309076E3D2F3BB15C6C675B /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EF1CBD311D71DDF863068E4 /* ChatMessage.swift */; };
+		6338A2FF8A0771415405A458 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = C7783ACE48B9EEFD6653EADF /* PeerDropTransport */; };
 		6352E5CBE89C2E1B123E88B5 /* PerformanceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46984ED073D1B5356FEAEF0A /* PerformanceE2ETests.swift */; };
 		63B4B61C43697D43422E78B3 /* ratchet-023.json in Resources */ = {isa = PBXBuildFile; fileRef = 3CFEED0B91A7AAC86181F3C2 /* ratchet-023.json */; };
 		63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */; };
@@ -282,6 +289,7 @@
 		8AFFC7E3BD6EE4BC5CB0A613 /* PetSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65ADAF51BA3374DFEA836F17 /* PetSurface.swift */; };
 		8B014AAB4483393CA0352569 /* UIKitGraphicsRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82EAA742566828416CE3C9D /* UIKitGraphicsRenderer.swift */; };
 		8B2A9EC970F186EEC1910490 /* SpriteServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E33C1BC6573E3E1CDA67E8A1 /* SpriteServiceTests.swift */; };
+		8B8DA92E60D440AA8C8A3CD3 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = F551826FCACD53BCDB32C130 /* PeerDropProtocol */; };
 		8BBBA409C0EF6B832DA6F848 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */; };
 		8BBBC171DD5BE5CC117979FB /* skipped-005.json in Resources */ = {isa = PBXBuildFile; fileRef = 36AD73169FEE1210723A05EF /* skipped-005.json */; };
 		8BC3810CF841D9EC60F5E0B0 /* SpriteAtlasIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AE22E8DC12A9BEC47B71CAC /* SpriteAtlasIntegrationTests.swift */; };
@@ -386,6 +394,7 @@
 		B67BE936119A20744D591C90 /* TransferRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2688CA0B5DF0712CDB7418FF /* TransferRecord.swift */; };
 		B6AA22CF965C693A6EC66A68 /* PetInteractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46C6B8AC8121322C451DEEC7 /* PetInteractionView.swift */; };
 		B6AA279E067D0436C682A559 /* PlatformImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAA9B5E8618A1024B49BBEA4 /* PlatformImage.swift */; };
+		B780D4E60ABD239D066BBDE5 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = 8EB4547F381A228E30EC05C3 /* PeerDropSecurity */; };
 		B79F1D2D3B47C8B62B8A269F /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712CCBDE5A63978DD474D214 /* GroupChatView.swift */; };
 		B8F9E453A9F2F1CB96266282 /* GuidanceCardSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */; };
 		B9549AC149F44480D7D0A855 /* TrustedContactStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B89BD71945BA764EC9C6B8A9 /* TrustedContactStoreTests.swift */; };
@@ -477,6 +486,7 @@
 		DA42DB23C8EA7A302D500E58 /* PeerMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F68921A1EFE5717EFF8690 /* PeerMessage.swift */; };
 		DAF0872294A78635ED2BD12A /* TimeoutConsentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */; };
 		DB0AFCFF5E049E2BA0B83B2C /* PetAnimationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829734910FC0A9179C752C30 /* PetAnimationLifecycleTests.swift */; };
+		DB1E542D2CA6C8AABAF99E3D /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = F5806FE6474E32B719CDE2D8 /* PeerDropCore */; };
 		DB4F37B564729FC0C5194D00 /* MoodOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C01274A5C117761FFDD094 /* MoodOverlayTests.swift */; };
 		DB9F13A8597DFF80A5947F32 /* PetBehaviorProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0D5CB4C84E2B9D9B7ED45B /* PetBehaviorProviderTests.swift */; };
 		DBF80B5A20B2184D02125A26 /* DoubleRatchetSkippedKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999896E37979D0C01EF9D825 /* DoubleRatchetSkippedKeysTests.swift */; };
@@ -1175,6 +1185,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				82C7A6EA7BFAC3B16FD167EE /* ZIPFoundation in Frameworks */,
+				DB1E542D2CA6C8AABAF99E3D /* PeerDropCore in Frameworks */,
+				6338A2FF8A0771415405A458 /* PeerDropTransport in Frameworks */,
+				B780D4E60ABD239D066BBDE5 /* PeerDropSecurity in Frameworks */,
+				629ACA86353FAA0329245240 /* PeerDropProtocol in Frameworks */,
+				3CA5FD0AC5927C80A9702704 /* PeerDropPet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1184,6 +1199,11 @@
 			files = (
 				F422276653E0728E859B9BC9 /* WebRTC in Frameworks */,
 				BDC78AF7F36123EE19BFBE0F /* ZIPFoundation in Frameworks */,
+				40F720FA53C330BB0E0D9925 /* PeerDropCore in Frameworks */,
+				41C366502C800AE0951321B9 /* PeerDropTransport in Frameworks */,
+				588C4858607A127F21B93F02 /* PeerDropSecurity in Frameworks */,
+				8B8DA92E60D440AA8C8A3CD3 /* PeerDropProtocol in Frameworks */,
+				4F2B1D72E1F3244E4B80B685 /* PeerDropPet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2263,6 +2283,11 @@
 			packageProductDependencies = (
 				4C17EA9E6BE4797FC20EBBBC /* WebRTC */,
 				D2B442B92A45CC1B46325B9A /* ZIPFoundation */,
+				7D956D3F0B546F8A036FC44C /* PeerDropCore */,
+				79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */,
+				CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */,
+				F551826FCACD53BCDB32C130 /* PeerDropProtocol */,
+				910E85D475F0267020B97E22 /* PeerDropPet */,
 			);
 			productName = PeerDrop;
 			productReference = F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */;
@@ -2303,6 +2328,11 @@
 			name = PeerDropTests;
 			packageProductDependencies = (
 				698E55080DD1EE036F00BF24 /* ZIPFoundation */,
+				F5806FE6474E32B719CDE2D8 /* PeerDropCore */,
+				C7783ACE48B9EEFD6653EADF /* PeerDropTransport */,
+				8EB4547F381A228E30EC05C3 /* PeerDropSecurity */,
+				15B2346137F7B0E7DD7695FD /* PeerDropProtocol */,
+				2CC1FAC04667D89A31D6A9B0 /* PeerDropPet */,
 			);
 			productName = PeerDropTests;
 			productReference = 107432E165DB757DDBC416BC /* PeerDropTests.xctest */;
@@ -3364,6 +3394,14 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		15B2346137F7B0E7DD7695FD /* PeerDropProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropProtocol;
+		};
+		2CC1FAC04667D89A31D6A9B0 /* PeerDropPet */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropPet;
+		};
 		4C17EA9E6BE4797FC20EBBBC /* WebRTC */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */;
@@ -3374,10 +3412,42 @@
 			package = 49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
 		};
+		79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropTransport;
+		};
+		7D956D3F0B546F8A036FC44C /* PeerDropCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropCore;
+		};
+		8EB4547F381A228E30EC05C3 /* PeerDropSecurity */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropSecurity;
+		};
+		910E85D475F0267020B97E22 /* PeerDropPet */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropPet;
+		};
+		C7783ACE48B9EEFD6653EADF /* PeerDropTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropTransport;
+		};
+		CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropSecurity;
+		};
 		D2B442B92A45CC1B46325B9A /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		F551826FCACD53BCDB32C130 /* PeerDropProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropProtocol;
+		};
+		F5806FE6474E32B719CDE2D8 /* PeerDropCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

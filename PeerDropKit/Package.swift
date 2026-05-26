@@ -50,5 +50,13 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ]
         ),
+        // Test targets — one per product module. Each tests its corresponding
+        // module via `@testable import`. Empty in M1d-1; real tests migrate
+        // here in M1d-2 onwards alongside production source files.
+        .testTarget(name: "PeerDropCoreTests", dependencies: ["PeerDropCore"]),
+        .testTarget(name: "PeerDropTransportTests", dependencies: ["PeerDropTransport"]),
+        .testTarget(name: "PeerDropSecurityTests", dependencies: ["PeerDropSecurity"]),
+        .testTarget(name: "PeerDropProtocolTests", dependencies: ["PeerDropProtocol"]),
+        .testTarget(name: "PeerDropPetTests", dependencies: ["PeerDropPet"]),
     ]
 )

@@ -310,11 +310,15 @@ Investigation during M1 planning surfaced that the original spec underestimated 
 - **M1a — Pet UIKit decoupling.** Apply M0-style platform abstraction to `Pet/Renderer/*` (5 files) + `Pet/Engine/PetEngine.swift`. Extend `PlatformImage` extension family with a `platformGraphicsContext` helper (cross-platform equivalent of `UIGraphicsImageRenderer`). `PetPalettes` already uses SwiftUI.Color which is cross-platform — no work needed there. ~3–4 days, ~12 tasks.
 - **M1b — Voice cleanup.** Split `Voice/` along the CallKit boundary. iOS-only (`CallKitManager`, the CallKit-specific paths inside `VoiceCallManager`) stays in app target. Cross-platform (`WebRTCClient`, `SDPSignaling`, `VoicePlayer`, `VoiceRecorder`, the transport-layer parts of `VoiceCallManager`/`VoiceCallSession`) gets ready to move into `PeerDropTransport`. ~2–3 days, ~6 tasks.
 - **M1c — SPM scaffold + empty modules.** Create `PeerDropKit/Package.swift` with the 5 product modules + dependency graph. Modules are EMPTY at this point — just compile. `lint-imports` upgraded to error. ~2 days, ~6 tasks.
-- **M1d — File migration into modules.** Move ~90 files into their target modules (including new top-level dirs `Discovery/`, `Voice/` transport-side, `Telemetry/`, etc.), fix imports, update `@testable import` in tests, refactor `project.yml` so both app target + widget consume the SPM package instead of path-referencing individual `.swift` files. Move Pet/ resources into SPM resource bundle. ~3–4 days, ~10 tasks.
+- **M1d — File migration into modules** (split into 4 sub-PRs, 2026-05-26). Real scope: **175 source files** (not 90 — Discovery, Voice transport-side, Telemetry, Pet renderer all undercounted) + **324 Pet resource zips** + **~87 test files** needing `@testable import` updates + 3 reviewer follow-ups from M1c (CallKitManager path placement, `swift build` CI gate, per-module `Tests/` targets). Each module migration is atomic — `internal` access breaks across module boundaries, so files move in groups. Restructured as four PRs that each ship independently:
+  - **M1d-1 — Wire + scaffolding** (no source migration). Add `- package: PeerDropKit` to PeerDrop + PeerDropTests target dependencies so subsequent migrations can `import PeerDropX`. Add per-module `.testTarget(...)` entries to `Package.swift`. Add `swift build` macOS gate to CI. ~5 tasks, ~1 day.
+  - **M1d-2 — Leaf modules migration**: PeerDropProtocol (11 files), PeerDropSecurity (28 files), PeerDropPet (61 source + 324 resources). Three independent leaves, can be done as 3 atomic commits in one PR. Mark types `public`, update all consumers' imports, move Pet resources to SPM `.process` bundle. ~3-4 days.
+  - **M1d-3 — Transport + Voice migration**: PeerDropTransport (28 files: Transport 16 + Discovery 6 + Voice transport-side 6). CallKitManager stays in app target (consistent with `CallProvider` abstraction from M1b — reviewer's follow-up). ~1-2 days.
+  - **M1d-4 — Core migration + final cleanup**: PeerDropCore (47 files), Widget rewire from path-references to `- package: PeerDropPet`, remove now-unused direct WebRTC/ZIPFoundation deps from app target. ~2-3 days.
 
-Total realistic M1: **~10–13 working days, ~34 tasks across 4 PRs**. Original "5–7 days, 1 PR" estimate was wildly optimistic.
+Total realistic M1: **~14-18 working days, ~50+ tasks across 7 PRs (M1a/b/c/d-1/d-2/d-3/d-4)**. Original "5–7 days, 1 PR" estimate was wildly optimistic (~3x off).
 
-Both app targets build after M1d; ~820 tests in SPM bundles + ~90 in app targets.
+Both app targets build after M1d-4; ~820 tests in SPM bundles + ~90 in app targets.
 
 ### M2 — macOS UI shell (no calling)
 Scope: §4 — create `PeerDropApp-macOS` target, SwiftUI shell, `NavigationSplitView`, `MenuBarExtra`, AppDelegate (Dock drop / reopen), menu commands, NSOpenPanel/NSSavePanel, `NSPasteboard`, Pet sprite in menu bar. 7–10 days. **Alpha milestone** — pairing, cross-platform chat, file transfer (incl. relay), Pet display all work. Voice UI hidden. Internal TestFlight Mac group opens.
@@ -333,13 +337,16 @@ Scope: Mac screenshots (3 sizes × modes × 5 languages), metadata translation (
 | M1a Pet decoupling | 3–4 | 1.5–2 wk |
 | M1b Voice cleanup | 2–3 | 2–2.5 wk |
 | M1c SPM scaffold | 2 | 2.5–3 wk |
-| M1d File migration | 3–4 | 3–4 wk |
-| M2 | 7–10 | 5–6 wk |
-| M3 | 5–7 | 6–7 wk |
-| M4 | 4–6 | 7–8.5 wk |
-| Apple review buffer | 1–2 wk | **8–10.5 wk** |
+| M1d-1 Wire + scaffolding | 1 | ~3 wk |
+| M1d-2 Leaf modules | 3–4 | 3.5–4 wk |
+| M1d-3 Transport migration | 1–2 | 4–4.5 wk |
+| M1d-4 Core + cleanup | 2–3 | 4.5–5.5 wk |
+| M2 | 7–10 | 6–7 wk |
+| M3 | 5–7 | 7–8 wk |
+| M4 | 4–6 | 8–9.5 wk |
+| Apple review buffer | 1–2 wk | **9–11.5 wk** |
 
-(Original spec estimated 7–9 wk total. The M1 underestimation pushes the realistic ship target by ~2 weeks.)
+(Original spec estimated 7–9 wk total. The M1 underestimation (2 rounds — first M1 → M1a/b/c/d, then M1d → M1d-1/2/3/4) pushes the realistic ship target by ~3 weeks.)
 
 ### Parallelization
 
