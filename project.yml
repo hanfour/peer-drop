@@ -129,14 +129,10 @@ targets:
     platform: iOS
     sources:
       - path: PeerDropTests
-        # Same folder-reference treatment as the main app for the test fixtures
-        # at PeerDropTests/Resources/Pets/. M0's spike loader and M3.3's decoder
-        # tests load via subdirectory: "Pets" (matching the production layout).
+        # Pet test files and their fixture zips moved to PeerDropPetTests (M1d-3b Task 6).
+        # PeerDropTests/Pet/ directory removed; PeerDropTests/Resources/Pets/ removed.
         excludes:
-          - "Resources/Pets/**"
           - "Pet/Fixtures/**"
-      - path: PeerDropTests/Resources/Pets
-        type: folder
     dependencies:
       - target: PeerDrop
       - package: ZIPFoundation

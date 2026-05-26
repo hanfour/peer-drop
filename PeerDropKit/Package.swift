@@ -83,6 +83,16 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PeerDropProtocolTests", dependencies: ["PeerDropProtocol"]),
-        .testTarget(name: "PeerDropPetTests", dependencies: ["PeerDropPet"]),
+        .testTarget(
+            name: "PeerDropPetTests",
+            dependencies: [
+                "PeerDropPet",
+                "PeerDropPlatform",
+                "PeerDropProtocol",
+            ],
+            resources: [
+                .copy("Resources"),
+            ]
+        ),
     ]
 )
