@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Pins the wire + crypto contract for `LocalSecureChannel`. The class

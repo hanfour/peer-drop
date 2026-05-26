@@ -2,8 +2,8 @@ import Foundation
 import CryptoKit
 import Security
 
-final class ChatDataEncryptor {
-    static let shared = ChatDataEncryptor()
+public final class ChatDataEncryptor {
+    public static let shared = ChatDataEncryptor()
 
     private static let magic: [UInt8] = [0x50, 0x44, 0x45, 0x4B] // "PDEK"
     private static let formatVersion: UInt8 = 0x01
@@ -22,7 +22,7 @@ final class ChatDataEncryptor {
 
     // MARK: - Key Management
 
-    func getOrCreateKey() throws -> SymmetricKey {
+    public func getOrCreateKey() throws -> SymmetricKey {
         lock.lock()
         defer { lock.unlock() }
 
@@ -78,7 +78,7 @@ final class ChatDataEncryptor {
 
     // MARK: - Encrypt / Decrypt
 
-    func encrypt(_ data: Data) throws -> Data {
+    public func encrypt(_ data: Data) throws -> Data {
         let key = try getOrCreateKey()
         let nonce = AES.GCM.Nonce()
         let sealed = try AES.GCM.seal(data, using: key, nonce: nonce)
@@ -92,7 +92,7 @@ final class ChatDataEncryptor {
         return result
     }
 
-    func decrypt(_ data: Data) throws -> Data {
+    public func decrypt(_ data: Data) throws -> Data {
         guard isEncrypted(data) else { return data }
 
         let key = try getOrCreateKey()
@@ -112,7 +112,7 @@ final class ChatDataEncryptor {
         return try AES.GCM.open(sealedBox, using: key)
     }
 
-    func isEncrypted(_ data: Data) -> Bool {
+    public func isEncrypted(_ data: Data) -> Bool {
         guard data.count >= Self.overhead else { return false }
         return data[0] == Self.magic[0]
             && data[1] == Self.magic[1]
@@ -123,17 +123,17 @@ final class ChatDataEncryptor {
 
     // MARK: - File Operations
 
-    func encryptAndWrite(_ data: Data, to url: URL) throws {
+    public func encryptAndWrite(_ data: Data, to url: URL) throws {
         let encrypted = try encrypt(data)
         try encrypted.write(to: url, options: .atomic)
     }
 
-    func readAndDecrypt(from url: URL) throws -> Data {
+    public func readAndDecrypt(from url: URL) throws -> Data {
         let data = try Data(contentsOf: url)
         return try decrypt(data)
     }
 
-    func migrateFileIfNeeded(at url: URL) throws {
+    public func migrateFileIfNeeded(at url: URL) throws {
         let data = try Data(contentsOf: url)
         guard !isEncrypted(data) else { return }
         try encryptAndWrite(data, to: url)
@@ -141,11 +141,11 @@ final class ChatDataEncryptor {
 
     // MARK: - Errors
 
-    enum EncryptionError: Error, LocalizedError {
+    public enum EncryptionError: Error, LocalizedError {
         case keychainError(OSStatus)
         case invalidFormat
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .keychainError(let status):
                 return "Keychain error: \(status)"

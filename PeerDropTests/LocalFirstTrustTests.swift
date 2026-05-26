@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Tests for the local-Wi-Fi first-trust consent gate (Item #14 Stage 1).

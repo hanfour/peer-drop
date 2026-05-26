@@ -1,11 +1,11 @@
 import Foundation
 
-enum TrustLevel: String, Codable, Comparable {
+public enum TrustLevel: String, Codable, Comparable {
     case verified   // lock.shield — face-to-face QR verified
     case linked     // link.circle — remote connected, not verified
     case unknown    // exclamationmark.triangle — unknown source
 
-    var sfSymbol: String {
+    public var sfSymbol: String {
         switch self {
         case .verified: return "lock.shield"
         case .linked: return "link.circle"
@@ -13,7 +13,7 @@ enum TrustLevel: String, Codable, Comparable {
         }
     }
 
-    var localizedLabel: String {
+    public var localizedLabel: String {
         switch self {
         case .verified: return String(localized: "Verified")
         case .linked: return String(localized: "Linked")
@@ -21,7 +21,7 @@ enum TrustLevel: String, Codable, Comparable {
         }
     }
 
-    func isAtLeast(_ level: TrustLevel) -> Bool {
+    public func isAtLeast(_ level: TrustLevel) -> Bool {
         self >= level
     }
 
@@ -33,7 +33,7 @@ enum TrustLevel: String, Codable, Comparable {
         }
     }
 
-    static func < (lhs: TrustLevel, rhs: TrustLevel) -> Bool {
+    public static func < (lhs: TrustLevel, rhs: TrustLevel) -> Bool {
         lhs.rank < rhs.rank
     }
 }

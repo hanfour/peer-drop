@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 final class X3DHOPKFailClosedTests: XCTestCase {

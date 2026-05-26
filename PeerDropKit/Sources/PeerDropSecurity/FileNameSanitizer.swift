@@ -16,13 +16,13 @@ import Foundation
 /// This utility produces a safe basename — never a path. Callers are still
 /// responsible for using `appendingPathComponent` on the sanitized string,
 /// never string interpolation.
-enum FileNameSanitizer {
+public enum FileNameSanitizer {
 
     /// Maximum filename length in bytes (UTF-8). APFS allows 255 bytes; we
     /// cap lower so we have room for `UUID().uuidString.prefix(8)` prefixes
     /// (9 bytes) and `" (N).ext"` collision suffixes (~10 bytes) without
     /// overflowing.
-    static let maxBytes = 200
+    public static let maxBytes = 200
 
     /// Sanitize a filename from an untrusted peer. Returns a basename
     /// suitable for use with `appendingPathComponent`. Never returns a
@@ -34,7 +34,7 @@ enum FileNameSanitizer {
     /// (emoji-only filenames, RTL text, etc.); replacement keeps the
     /// transfer flowing and surfaces a usable-if-different name to the
     /// user.
-    static func sanitize(_ raw: String) -> String {
+    public static func sanitize(_ raw: String) -> String {
         // 1. Strip any directory traversal: drop everything up to and
         //    including the last forward or back slash. PixelLab and many
         //    other senders include the original path; we want only the

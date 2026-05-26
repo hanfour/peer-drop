@@ -1,5 +1,6 @@
 import Foundation
 import PeerDropProtocol
+import PeerDropSecurity
 
 extension PeerMessage {
     /// Factory that constructs a hello-type message from a PeerIdentity.

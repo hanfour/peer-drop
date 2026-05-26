@@ -4,11 +4,11 @@ import os.log
 
 /// Manages local pre-key generation, rotation, and encrypted persistence.
 /// Pre-keys are uploaded to the relay server so peers can initiate X3DH offline.
-final class PreKeyStore {
+public final class PreKeyStore {
 
-    static let initialOneTimePreKeyCount = 100
-    static let replenishThreshold = 25
-    static let signedPreKeyRotationInterval: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+    public static let initialOneTimePreKeyCount = 100
+    public static let replenishThreshold = 25
+    public static let signedPreKeyRotationInterval: TimeInterval = 7 * 24 * 60 * 60 // 7 days
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PreKeyStore")
 
@@ -43,19 +43,19 @@ final class PreKeyStore {
     /// older than `policy.consumedOPKPruneWindowDays` (default 90 days).
     private var consumedOneTimePreKeyIds: [UInt32: Date] = [:]
 
-    var currentSignedPreKey: SignedPreKey {
+    public var currentSignedPreKey: SignedPreKey {
         lock.lock()
         defer { lock.unlock() }
         return _currentSignedPreKey
     }
 
-    var availableOneTimePreKeyCount: Int {
+    public var availableOneTimePreKeyCount: Int {
         lock.lock()
         defer { lock.unlock() }
         return oneTimePreKeys.count
     }
 
-    init(storageKey: String = "prekey-store") {
+    public init(storageKey: String = "prekey-store") {
         self.storageKey = storageKey
 
         if let state = Self.loadState(storageKey: storageKey, encryptor: ChatDataEncryptor.shared) {
@@ -90,7 +90,7 @@ final class PreKeyStore {
 
     // MARK: - Pre-Key Bundle Generation
 
-    func generatePreKeyBundle() -> PreKeyBundle {
+    public func generatePreKeyBundle() -> PreKeyBundle {
         lock.lock()
         let spkPublicKey = _currentSignedPreKey.publicKey
         let publicSignedPreKey = _currentSignedPreKey.asPublic()
@@ -120,7 +120,7 @@ final class PreKeyStore {
 
     // MARK: - One-Time Pre-Key Management
 
-    func consumeOneTimePreKey(id: UInt32) throws -> OneTimePreKey? {
+    public func consumeOneTimePreKey(id: UInt32) throws -> OneTimePreKey? {
         lock.lock()
         // Reject re-consumption attempts. This guards against:
         //  (a) replays of an old initial message after the OTP was consumed
@@ -147,7 +147,7 @@ final class PreKeyStore {
         return key
     }
 
-    func replenishOneTimePreKeysIfNeeded() {
+    public func replenishOneTimePreKeysIfNeeded() {
         lock.lock()
         defer { lock.unlock() }
         replenishOneTimePreKeysLocked()
@@ -167,7 +167,7 @@ final class PreKeyStore {
 
     // MARK: - Signed Pre-Key Rotation
 
-    func rotateSignedPreKeyIfNeeded(forceRotate: Bool = false) {
+    public func rotateSignedPreKeyIfNeeded(forceRotate: Bool = false) {
         lock.lock()
         defer { lock.unlock() }
         let age = Date().timeIntervalSince(_currentSignedPreKey.timestamp)
@@ -190,7 +190,7 @@ final class PreKeyStore {
         Self.logger.info("Rotated signed pre-key to id \(self._currentSignedPreKey.id)")
     }
 
-    func signedPreKey(for id: UInt32) throws -> SignedPreKey? {
+    public func signedPreKey(for id: UInt32) throws -> SignedPreKey? {
         lock.lock()
         defer { lock.unlock() }
         if _currentSignedPreKey.id == id { return _currentSignedPreKey }
@@ -199,19 +199,19 @@ final class PreKeyStore {
 
     // MARK: - Persistence
 
-    struct PersistedState: Codable {
-        let currentSignedPreKey: PersistedSignedPreKey
-        let previousSignedPreKeys: [PersistedSignedPreKey]
-        let oneTimePreKeys: [PersistedOneTimePreKey]
-        let nextOneTimePreKeyId: UInt32
-        let nextSignedPreKeyId: UInt32
+    public struct PersistedState: Codable {
+        public let currentSignedPreKey: PersistedSignedPreKey
+        public let previousSignedPreKeys: [PersistedSignedPreKey]
+        public let oneTimePreKeys: [PersistedOneTimePreKey]
+        public let nextOneTimePreKeyId: UInt32
+        public let nextSignedPreKeyId: UInt32
         /// Consumed OPK IDs mapped to the Date they were consumed.
         /// Optional for backward compatibility with v3.3-era stores (no consumed
         /// set) and v5.0–v5.3 stores (array of UInt32). Manual Codable conformance
         /// handles all three formats transparently.
-        let consumedOneTimePreKeyIds: [UInt32: Date]?
+        public let consumedOneTimePreKeyIds: [UInt32: Date]?
 
-        enum CodingKeys: String, CodingKey {
+        public enum CodingKeys: String, CodingKey {
             case currentSignedPreKey
             case previousSignedPreKeys
             case oneTimePreKeys
@@ -220,7 +220,7 @@ final class PreKeyStore {
             case consumedOneTimePreKeyIds
         }
 
-        init(
+        public init(
             currentSignedPreKey: PersistedSignedPreKey,
             previousSignedPreKeys: [PersistedSignedPreKey],
             oneTimePreKeys: [PersistedOneTimePreKey],
@@ -243,7 +243,7 @@ final class PreKeyStore {
         //              alternating UInt32 keys + ISO8601 Date values — Swift's
         //              default Codable encoding for `[UInt32: Date]`. Interop
         //              with non-Swift tools would require manual canonicalization.
-        init(from decoder: Decoder) throws {
+        public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.currentSignedPreKey = try c.decode(PersistedSignedPreKey.self, forKey: .currentSignedPreKey)
             self.previousSignedPreKeys = try c.decodeIfPresent([PersistedSignedPreKey].self, forKey: .previousSignedPreKeys) ?? []
@@ -267,7 +267,7 @@ final class PreKeyStore {
         }
 
         // MARK: Encodable — always write the v5.4+ format going forward.
-        func encode(to encoder: Encoder) throws {
+        public func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(currentSignedPreKey, forKey: .currentSignedPreKey)
             try c.encode(previousSignedPreKeys, forKey: .previousSignedPreKeys)
@@ -278,34 +278,34 @@ final class PreKeyStore {
         }
     }
 
-    struct PersistedSignedPreKey: Codable {
-        let id: UInt32
-        let publicKey: Data
-        let privateKey: Data
-        let signature: Data
-        let timestamp: Date
+    public struct PersistedSignedPreKey: Codable {
+        public let id: UInt32
+        public let publicKey: Data
+        public let privateKey: Data
+        public let signature: Data
+        public let timestamp: Date
 
-        init(from key: SignedPreKey) {
+        public init(from key: SignedPreKey) {
             self.id = key.id; self.publicKey = key.publicKey
             self.privateKey = key.privateKey; self.signature = key.signature
             self.timestamp = key.timestamp
         }
 
-        func toSignedPreKey() -> SignedPreKey {
+        public func toSignedPreKey() -> SignedPreKey {
             SignedPreKey(id: id, publicKey: publicKey, privateKey: privateKey, signature: signature, timestamp: timestamp)
         }
     }
 
-    struct PersistedOneTimePreKey: Codable {
-        let id: UInt32
-        let publicKey: Data
-        let privateKey: Data
+    public struct PersistedOneTimePreKey: Codable {
+        public let id: UInt32
+        public let publicKey: Data
+        public let privateKey: Data
 
-        init(from key: OneTimePreKey) {
+        public init(from key: OneTimePreKey) {
             self.id = key.id; self.publicKey = key.publicKey; self.privateKey = key.privateKey
         }
 
-        func toOneTimePreKey() -> OneTimePreKey {
+        public func toOneTimePreKey() -> OneTimePreKey {
             OneTimePreKey(id: id, publicKey: publicKey, privateKey: privateKey)
         }
     }
@@ -321,7 +321,7 @@ final class PreKeyStore {
     /// the margin, an attacker could replay a bundle whose consumed-OPK record
     /// has been pruned while the SPK is still in the responder's previous-3 list.
     @discardableResult
-    static func pruneConsumedOPK(
+    public static func pruneConsumedOPK(
         in state: inout PersistedState,
         now: Date,
         policy: SecurityPolicy
@@ -353,7 +353,7 @@ final class PreKeyStore {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5, execute: item)
     }
 
-    func flush() {
+    public func flush() {
         pendingSave?.cancel()
         save()
     }
@@ -418,7 +418,7 @@ final class PreKeyStore {
         }
     }
 
-    func deleteAll() {
+    public func deleteAll() {
         lock.lock()
         oneTimePreKeys.removeAll()
         previousSignedPreKeys.removeAll()
@@ -436,21 +436,21 @@ final class PreKeyStore {
 #if DEBUG
     /// Returns a snapshot of the current persisted state for test assertions.
     /// Only available in DEBUG builds (i.e., unit tests).
-    func snapshotForTesting() -> PersistedState {
+    public func snapshotForTesting() -> PersistedState {
         lock.lock()
         defer { lock.unlock() }
         return makePersistedStateLocked()
     }
 
     /// Decodes a `PersistedState` from raw JSON — used by legacy-format tests.
-    static func decodeStateForTesting(from data: Data) throws -> PersistedState {
+    public static func decodeStateForTesting(from data: Data) throws -> PersistedState {
         return try JSONDecoder().decode(PersistedState.self, from: data)
     }
 
     /// Builds a minimal empty `PersistedState` for use in unit tests that exercise
     /// prune / serialisation logic without a full store. Uses a freshly generated
     /// signed pre-key so the Codable round-trip is always valid.
-    static func emptyStateForTesting() -> PersistedState {
+    public static func emptyStateForTesting() -> PersistedState {
         let spk = try! SignedPreKey.generate(id: 0, signingKey: IdentityKeyManager.shared)
         return PersistedState(
             currentSignedPreKey: PersistedSignedPreKey(from: spk),

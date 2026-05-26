@@ -7,9 +7,9 @@ import os
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TLSConfiguration")
 
 /// Creates NWProtocolTLS.Options with certificate pinning for peer connections.
-enum TLSConfiguration {
+public enum TLSConfiguration {
     /// Create TLS options for the listener (server role) with the local certificate.
-    static func serverOptions(identity: SecIdentity) -> NWProtocolTLS.Options {
+    public static func serverOptions(identity: SecIdentity) -> NWProtocolTLS.Options {
         let options = NWProtocolTLS.Options()
 
         guard let secIdentity = sec_identity_create(identity) else {
@@ -39,7 +39,7 @@ enum TLSConfiguration {
     }
 
     /// Create TLS options for the client with optional certificate pinning.
-    static func clientOptions(
+    public static func clientOptions(
         identity: SecIdentity?,
         expectedFingerprint: String? = nil
     ) -> NWProtocolTLS.Options {

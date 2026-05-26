@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 struct ConnectedTab: View {
     @EnvironmentObject var connectionManager: ConnectionManager

@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Verifies the transactional consume path added in v3.4 (Task A.3):

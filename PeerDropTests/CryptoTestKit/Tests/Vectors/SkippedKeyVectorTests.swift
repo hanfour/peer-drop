@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Replays 10 frozen out-of-order Double Ratchet vectors against the production

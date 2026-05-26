@@ -7,11 +7,11 @@ private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "RelayA
 /// Handles authentication for relay connections.
 /// - Known devices: auto-authenticated via stored certificate fingerprint.
 /// - New devices: 4-digit PIN derived from DTLS fingerprints.
-enum RelayAuthenticator {
+public enum RelayAuthenticator {
 
     /// Derive a 4-digit PIN from the local and remote DTLS fingerprints.
     /// The PIN is deterministic — both sides compute the same value.
-    static func derivePIN(localFingerprint: String, remoteFingerprint: String) -> String {
+    public static func derivePIN(localFingerprint: String, remoteFingerprint: String) -> String {
         let sorted = [localFingerprint, remoteFingerprint].sorted()
         let combined = sorted.joined(separator: ":")
         let hash = SHA256.hash(data: Data(combined.utf8))
@@ -24,8 +24,8 @@ enum RelayAuthenticator {
 
     /// Check if a peer is already known (has a stored certificate fingerprint).
     @MainActor
-    static func isKnownDevice(peerID: String, remoteFingerprint: String, store: DeviceRecordStore) -> Bool {
-        guard let record = store.records.first(where: { $0.id == peerID }),
+    public static func isKnownDevice(peerID: String, remoteFingerprint: String, store: any RelayAuthDeviceStore) -> Bool {
+        guard let record = store.deviceRecord(for: peerID),
               let storedFingerprint = record.certificateFingerprint else {
             return false
         }
@@ -35,11 +35,11 @@ enum RelayAuthenticator {
     /// Store the certificate fingerprint for a peer after successful authentication.
     /// Creates the device record if it doesn't already exist (e.g. relay peers).
     @MainActor
-    static func storeFingerprint(_ fingerprint: String, for peerID: String, store: DeviceRecordStore) {
-        if let index = store.records.firstIndex(where: { $0.id == peerID }) {
-            store.records[index].certificateFingerprint = fingerprint
+    public static func storeFingerprint(_ fingerprint: String, for peerID: String, store: any RelayAuthDeviceStore) {
+        if store.deviceRecord(for: peerID) != nil {
+            store.setFingerprint(fingerprint, for: peerID)
         } else {
-            var record = DeviceRecord(
+            var device = RelayAuthNewDevice(
                 id: peerID,
                 displayName: peerID,
                 sourceType: "relay",
@@ -49,8 +49,8 @@ enum RelayAuthenticator {
                 connectionCount: 1,
                 connectionHistory: [Date()]
             )
-            record.certificateFingerprint = fingerprint
-            store.records.append(record)
+            device.certificateFingerprint = fingerprint
+            store.addNewDevice(device)
         }
         store.save()
         logger.info("Stored certificate fingerprint for peer \(peerID.prefix(8))")

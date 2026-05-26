@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropSecurity
 @testable import PeerDrop
 
 final class TrustedContactKeyHistoryTests: XCTestCase {

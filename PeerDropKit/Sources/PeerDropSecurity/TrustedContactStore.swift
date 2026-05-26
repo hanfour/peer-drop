@@ -2,11 +2,11 @@ import Foundation
 import Combine
 import os.log
 
-final class TrustedContactStore: ObservableObject {
+public final class TrustedContactStore: ObservableObject {
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TrustedContactStore")
 
-    @Published private(set) var contacts: [TrustedContact] = []
+    @Published public private(set) var contacts: [TrustedContact] = []
 
     private let storageKey: String
     private let encryptor = ChatDataEncryptor.shared
@@ -16,54 +16,54 @@ final class TrustedContactStore: ObservableObject {
     /// Older entries are dropped to bound on-disk size.
     private static let maxKeyHistoryEntries = 20
 
-    var all: [TrustedContact] { contacts }
+    public var all: [TrustedContact] { contacts }
 
-    var nonBlocked: [TrustedContact] {
+    public var nonBlocked: [TrustedContact] {
         contacts.filter { !$0.isBlocked }
     }
 
-    init(storageKey: String = "trusted-contacts") {
+    public init(storageKey: String = "trusted-contacts") {
         self.storageKey = storageKey
         self.contacts = load()
     }
 
     // MARK: - CRUD
 
-    func add(_ contact: TrustedContact) {
+    public func add(_ contact: TrustedContact) {
         contacts.append(contact)
         scheduleSave()
     }
 
-    func remove(_ id: UUID) {
+    public func remove(_ id: UUID) {
         contacts.removeAll { $0.id == id }
         scheduleSave()
     }
 
-    func removeAll() {
+    public func removeAll() {
         contacts.removeAll()
         let url = storageURL
         try? FileManager.default.removeItem(at: url)
     }
 
-    func find(byId id: UUID) -> TrustedContact? {
+    public func find(byId id: UUID) -> TrustedContact? {
         contacts.first { $0.id == id }
     }
 
-    func find(byPublicKey publicKey: Data) -> TrustedContact? {
+    public func find(byPublicKey publicKey: Data) -> TrustedContact? {
         contacts.first { $0.matchesKey(publicKey) }
     }
 
-    func find(byDeviceId deviceId: String) -> TrustedContact? {
+    public func find(byDeviceId deviceId: String) -> TrustedContact? {
         contacts.first { $0.deviceId == deviceId }
     }
 
-    func find(byMailboxId mailboxId: String) -> TrustedContact? {
+    public func find(byMailboxId mailboxId: String) -> TrustedContact? {
         contacts.first { $0.mailboxId == mailboxId }
     }
 
     // MARK: - Trust Management
 
-    func updateTrustLevel(for id: UUID, to level: TrustLevel) {
+    public func updateTrustLevel(for id: UUID, to level: TrustLevel) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         contacts[index].trustLevel = level
         if level == .verified {
@@ -72,19 +72,19 @@ final class TrustedContactStore: ObservableObject {
         scheduleSave()
     }
 
-    func setBlocked(_ id: UUID, blocked: Bool) {
+    public func setBlocked(_ id: UUID, blocked: Bool) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         contacts[index].isBlocked = blocked
         scheduleSave()
     }
 
-    func updateMailboxId(for id: UUID, mailboxId: String) {
+    public func updateMailboxId(for id: UUID, mailboxId: String) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         contacts[index].mailboxId = mailboxId
         scheduleSave()
     }
 
-    func updatePeerProtocolVersion(for id: UUID, to version: PeerVersion) {
+    public func updatePeerProtocolVersion(for id: UUID, to version: PeerVersion) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         guard contacts[index].peerProtocolVersion != version else { return }
         contacts[index].peerProtocolVersion = version
@@ -93,7 +93,7 @@ final class TrustedContactStore: ObservableObject {
 
     // MARK: - Key Change Detection
 
-    func detectKeyChange(contactId: UUID, newPublicKey: Data) -> Bool {
+    public func detectKeyChange(contactId: UUID, newPublicKey: Data) -> Bool {
         guard let contact = find(byId: contactId) else { return false }
         return !contact.matchesKey(newPublicKey)
     }
@@ -101,7 +101,7 @@ final class TrustedContactStore: ObservableObject {
     /// Rotate the identity key for a contact and append an audit-trail entry to
     /// `keyHistory`. The history is bounded; oldest entries are dropped.
     /// No history entry is recorded when the new key matches the current key.
-    func updatePublicKey(
+    public func updatePublicKey(
         for id: UUID,
         newKey: Data,
         trustLevel: TrustLevel = .unknown,
@@ -176,7 +176,7 @@ final class TrustedContactStore: ObservableObject {
         }
     }
 
-    func flushPendingSave() {
+    public func flushPendingSave() {
         pendingSave?.cancel()
         save()
     }

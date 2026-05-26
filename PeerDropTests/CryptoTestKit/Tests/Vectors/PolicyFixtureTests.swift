@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// PR2 shape-only tests for the 5 signed-policy JSON fixtures.

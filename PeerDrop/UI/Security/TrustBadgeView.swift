@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 struct TrustBadgeView: View {
     let trustLevel: TrustLevel

@@ -1,12 +1,12 @@
 import Foundation
 import CryptoKit
 
-enum SessionKeyManager {
+public enum SessionKeyManager {
 
     /// Derive a symmetric session key from ECDH shared secret.
     /// Both peers calling this with each other's public keys get the same key.
     /// sharedInfo includes both public keys (sorted) for domain separation.
-    static func deriveSessionKey(
+    public static func deriveSessionKey(
         myPrivateKey: Curve25519.KeyAgreement.PrivateKey,
         peerPublicKey: Curve25519.KeyAgreement.PublicKey
     ) throws -> SymmetricKey {
@@ -26,7 +26,7 @@ enum SessionKeyManager {
         )
     }
 
-    static func encrypt(_ plaintext: Data, with key: SymmetricKey) throws -> Data {
+    public static func encrypt(_ plaintext: Data, with key: SymmetricKey) throws -> Data {
         let sealedBox = try AES.GCM.seal(plaintext, using: key)
         guard let combined = sealedBox.combined else {
             throw CryptoError.encryptionFailed
@@ -34,12 +34,12 @@ enum SessionKeyManager {
         return combined
     }
 
-    static func decrypt(_ ciphertext: Data, with key: SymmetricKey) throws -> Data {
+    public static func decrypt(_ ciphertext: Data, with key: SymmetricKey) throws -> Data {
         let sealedBox = try AES.GCM.SealedBox(combined: ciphertext)
         return try AES.GCM.open(sealedBox, using: key)
     }
 
-    enum CryptoError: Error {
+    public enum CryptoError: Error {
         case encryptionFailed
     }
 }

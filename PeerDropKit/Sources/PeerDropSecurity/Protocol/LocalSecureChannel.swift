@@ -5,7 +5,7 @@ import CryptoKit
 /// `IdentityKeyManager.shared`; tests bind to a freshly-generated keypair
 /// per case so each handshake gets a unique identity without polluting
 /// the real Keychain.
-protocol LocalChannelIdentity {
+public protocol LocalChannelIdentity {
     var publicKey: Curve25519.KeyAgreement.PublicKey { get }
     func deriveSharedSecret(with peerPublicKey: Curve25519.KeyAgreement.PublicKey) throws -> SharedSecret
 }
@@ -45,33 +45,38 @@ extension IdentityKeyManager: LocalChannelIdentity {}
 /// This is Phase 1 — the cryptographic core. PeerConnection integration
 /// (handshake state machine, wire-level negotiation, fallback to plaintext
 /// for v5.0.x peers) lands in Phase 2.
-final class LocalSecureChannel {
+public final class LocalSecureChannel {
 
     /// Wire frame for an encrypted message. Wraps a `RatchetMessage` with
     /// a version byte so we can roll the format forward.
-    struct Frame: Codable {
+    public struct Frame: Codable {
         /// Schema version. `1` = current format (RatchetMessage payload).
-        let version: UInt8
-        let message: RatchetMessage
+        public let version: UInt8
+        public let message: RatchetMessage
 
-        static let currentVersion: UInt8 = 1
+        public static let currentVersion: UInt8 = 1
     }
 
     /// Bundle exchanged during the handshake. Each peer sends its own to
     /// the other; both peers receive the other's. The two together let
     /// each side compute the same root key and bootstrap the ratchet.
-    struct HandshakeBundle: Codable {
+    public struct HandshakeBundle: Codable {
         /// The sender's long-term Curve25519.KeyAgreement public key, raw.
-        let identityPublicKey: Data
+        public let identityPublicKey: Data
 
         /// A fresh Curve25519.KeyAgreement public key the sender will use
         /// as its starting ratchet key. Must be freshly generated per
         /// handshake — reusing it across sessions defeats forward secrecy.
-        let initialRatchetPublicKey: Data
+        public let initialRatchetPublicKey: Data
+
+        public init(identityPublicKey: Data, initialRatchetPublicKey: Data) {
+            self.identityPublicKey = identityPublicKey
+            self.initialRatchetPublicKey = initialRatchetPublicKey
+        }
     }
 
     /// Errors surfaced by establishment / encrypt / decrypt.
-    enum ChannelError: Error, Equatable {
+    public enum ChannelError: Error, Equatable {
         case invalidIdentityKey
         case invalidRatchetKey
         case sameIdentityKey   // two peers with identical pubkeys → MITM or bug
@@ -84,7 +89,7 @@ final class LocalSecureChannel {
     private static let kdfInfo = "PeerDrop-LocalE2E-v1".data(using: .utf8)!
 
     private let ratchet: DoubleRatchetSession
-    let peerIdentityPublicKey: Curve25519.KeyAgreement.PublicKey
+    public let peerIdentityPublicKey: Curve25519.KeyAgreement.PublicKey
 
     /// 6-digit Short Authentication String derived from the canonically-ordered
     /// pair of identity public keys. Both peers compute the same string; the
@@ -98,12 +103,12 @@ final class LocalSecureChannel {
     /// reach for casual attackers, and the 1-in-a-million collision rate is
     /// the standard SAS threat model (Signal's safety numbers use the same
     /// truncate-and-display approach with larger digits).
-    let shortAuthenticationString: String
+    public let shortAuthenticationString: String
 
     /// Fingerprint of the peer's identity key. Same format as
     /// `IdentityKeyManager.fingerprint` for round-trip verification:
     /// `"A1B2 C3D4 E5F6 G7H8 I9J0"`.
-    var peerFingerprint: String {
+    public var peerFingerprint: String {
         let hash = SHA256.hash(data: peerIdentityPublicKey.rawRepresentation)
         let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
         return stride(from: 0, to: 20, by: 4).map { i in
@@ -130,7 +135,7 @@ final class LocalSecureChannel {
     /// The returned `myRatchetPrivateKey` MUST be kept by the caller and
     /// passed to `establish` when the peer's bundle arrives — it's
     /// needed for the responder path.
-    static func prepareHandshake(
+    public static func prepareHandshake(
         identity: LocalChannelIdentity
     ) -> (bundle: HandshakeBundle, myRatchetPrivateKey: Curve25519.KeyAgreement.PrivateKey) {
         let ratchetPriv = Curve25519.KeyAgreement.PrivateKey()
@@ -145,7 +150,7 @@ final class LocalSecureChannel {
     /// Both peers run this with their own private state and the peer's
     /// public bundle; both end up with a session that can encrypt/decrypt
     /// each other's messages.
-    static func establish(
+    public static func establish(
         myIdentity: LocalChannelIdentity,
         myRatchetPrivateKey: Curve25519.KeyAgreement.PrivateKey,
         peerBundle: HandshakeBundle
@@ -255,7 +260,7 @@ final class LocalSecureChannel {
     /// Encrypt a plaintext payload (typically a serialized `PeerMessage`)
     /// into a wire frame. Each call advances the sender chain — repeated
     /// encryption of the same input produces different ciphertext.
-    func encrypt(_ plaintext: Data) throws -> Data {
+    public func encrypt(_ plaintext: Data) throws -> Data {
         let ratchetMessage = try ratchet.encrypt(plaintext)
         let frame = Frame(version: Frame.currentVersion, message: ratchetMessage)
         return try JSONEncoder().encode(frame)
@@ -266,7 +271,7 @@ final class LocalSecureChannel {
     /// - unknown version
     /// - replay (DoubleRatchet's internal counter logic catches this)
     /// - corruption / wrong key (AES-GCM tag verification)
-    func decrypt(_ frameData: Data) throws -> Data {
+    public func decrypt(_ frameData: Data) throws -> Data {
         let frame: Frame
         do {
             frame = try JSONDecoder().decode(Frame.self, from: frameData)

@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropSecurity
 
 enum ArchiveManager {
     struct Manifest: Codable {

@@ -1,6 +1,6 @@
 import Foundation
 
-enum KeyExchangeMessage: Codable {
+public enum KeyExchangeMessage: Codable {
     case hello(
         publicKey: Data,
         signingPublicKey: Data,
@@ -20,7 +20,7 @@ enum KeyExchangeMessage: Codable {
         case hello, verify, confirm, keyChanged
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .hello(let pk, let spk, let fp, let name):
@@ -42,7 +42,7 @@ enum KeyExchangeMessage: Codable {
         }
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(MessageType.self, forKey: .type)
         switch type {

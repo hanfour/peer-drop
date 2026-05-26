@@ -5,42 +5,42 @@ import os.log
 /// Manages encrypted remote sessions with peers via X3DH + Double Ratchet.
 /// Coordinates with MailboxClient for message delivery and PreKeyStore for key material.
 @MainActor
-final class RemoteSessionManager: ObservableObject {
+public final class RemoteSessionManager: ObservableObject {
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "RemoteSessionManager")
 
     private var sessions: [String: DoubleRatchetSession] = [:] // keyed by contact UUID
     private let preKeyStore: PreKeyStore
-    private let mailboxClient: MailboxClient
+    private let mailboxClient: any MailboxServiceProtocol
 
     /// Injected by ConnectionManager (or directly in tests). When non-nil, each
     /// `decrypt` call runs the TTL + LRU eviction passes with these settings.
-    var policyStore: SecurityPolicyStore?
+    public var policyStore: SecurityPolicyStore?
 
     /// Injected alongside `policyStore`. Records C3 eviction + hit events.
-    var cryptoMetrics: CryptoHardeningMetrics?
+    public var cryptoMetrics: CryptoHardeningMetrics?
 
-    init(preKeyStore: PreKeyStore = PreKeyStore(), mailboxClient: MailboxClient = MailboxClient()) {
+    public init(preKeyStore: PreKeyStore = PreKeyStore(), mailboxClient: any MailboxServiceProtocol) {
         self.preKeyStore = preKeyStore
         self.mailboxClient = mailboxClient
         loadAllSessions()
     }
 
     /// Result of initiating an X3DH session, including metadata needed for the initial message envelope.
-    struct InitiateResult {
-        let session: DoubleRatchetSession
-        let ephemeralPublicKey: Data        // Sender's ephemeral key (for receiver to complete X3DH)
-        let usedSignedPreKeyId: UInt32      // Which signed pre-key was used
-        let usedOneTimePreKeyId: UInt32?    // Which OTP key was consumed (if any)
+    public struct InitiateResult {
+        public let session: DoubleRatchetSession
+        public let ephemeralPublicKey: Data        // Sender's ephemeral key (for receiver to complete X3DH)
+        public let usedSignedPreKeyId: UInt32      // Which signed pre-key was used
+        public let usedOneTimePreKeyId: UInt32?    // Which OTP key was consumed (if any)
     }
 
     // MARK: - Initiate Session (Alice side)
 
-    func initiateSession(
+    public func initiateSession(
         contactId: String,
         peerMailboxId: String
     ) async throws -> InitiateResult {
-        let bundle = try await mailboxClient.fetchPreKeyBundle(mailboxId: peerMailboxId)
+        let bundle = try await mailboxClient.fetchSecurityPreKeyBundle(mailboxId: peerMailboxId)
 
         // Validate signed pre-key signature (legacy — pre-C1, over SPK_pubkey alone).
         let signingPub = try Curve25519.Signing.PublicKey(rawRepresentation: bundle.signingKey)
@@ -68,7 +68,7 @@ final class RemoteSessionManager: ObservableObject {
         let theirSignedPreKey = try bundle.signedPreKey.agreementPublicKey()
 
         var theirOneTimePreKey: Curve25519.KeyAgreement.PublicKey?
-        if let otpk = bundle.oneTimePreKey {
+        if let otpk = bundle.oneTimePreKeys.first {
             theirOneTimePreKey = try otpk.agreementPublicKey()
         }
 
@@ -96,7 +96,7 @@ final class RemoteSessionManager: ObservableObject {
             session: session,
             ephemeralPublicKey: ephemeralKey.publicKey.rawRepresentation,
             usedSignedPreKeyId: bundle.signedPreKey.id,
-            usedOneTimePreKeyId: bundle.oneTimePreKey?.id
+            usedOneTimePreKeyId: bundle.oneTimePreKeys.first?.id
         )
     }
 
@@ -107,7 +107,7 @@ final class RemoteSessionManager: ObservableObject {
     /// shared keys and persists a session. The first-contact verification gate
     /// lives in `ConnectionManager.handleRemoteMessage`; any new caller of this
     /// method must implement equivalent gating or the X3DH-MITM property is lost.
-    func respondToSession(
+    public func respondToSession(
         contactId: String,
         theirIdentityKey: Data,
         theirEphemeralKey: Data,
@@ -150,7 +150,7 @@ final class RemoteSessionManager: ObservableObject {
 
     // MARK: - Encrypt / Decrypt
 
-    func encrypt(data: Data, for contactId: String) throws -> RatchetMessage {
+    public func encrypt(data: Data, for contactId: String) throws -> RatchetMessage {
         guard let session = sessions[contactId] else {
             throw RemoteSessionError.noSession
         }
@@ -159,7 +159,7 @@ final class RemoteSessionManager: ObservableObject {
         return result
     }
 
-    func decrypt(message: RatchetMessage, from contactId: String) throws -> Data {
+    public func decrypt(message: RatchetMessage, from contactId: String) throws -> Data {
         guard let session = sessions[contactId] else {
             throw RemoteSessionError.noSession
         }
@@ -168,7 +168,7 @@ final class RemoteSessionManager: ObservableObject {
         return result
     }
 
-    func hasSession(for contactId: String) -> Bool {
+    public func hasSession(for contactId: String) -> Bool {
         sessions[contactId] != nil
     }
 
@@ -183,7 +183,7 @@ final class RemoteSessionManager: ObservableObject {
 
     private let encryptor = ChatDataEncryptor.shared
 
-    func saveSession(for contactId: String) {
+    public func saveSession(for contactId: String) {
         guard let session = sessions[contactId] else { return }
         do {
             let data = try JSONEncoder().encode(session)
@@ -194,7 +194,7 @@ final class RemoteSessionManager: ObservableObject {
         }
     }
 
-    func loadAllSessions() {
+    public func loadAllSessions() {
         let dir = Self.sessionsDirectory
         guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "enc" {
@@ -210,20 +210,20 @@ final class RemoteSessionManager: ObservableObject {
         }
     }
 
-    func deleteSession(for contactId: String) {
+    public func deleteSession(for contactId: String) {
         sessions.removeValue(forKey: contactId)
         let url = Self.sessionsDirectory.appendingPathComponent("\(contactId).enc")
         try? FileManager.default.removeItem(at: url)
     }
 
-    func migrateSessionKey(from oldKey: String, to newKey: String) {
+    public func migrateSessionKey(from oldKey: String, to newKey: String) {
         guard let session = sessions.removeValue(forKey: oldKey) else { return }
         sessions[newKey] = session
         deleteSession(for: oldKey)
         saveSession(for: newKey)
     }
 
-    enum RemoteSessionError: Error {
+    public enum RemoteSessionError: Error {
         case invalidSignedPreKey
         case unknownSignedPreKey
         case noSession

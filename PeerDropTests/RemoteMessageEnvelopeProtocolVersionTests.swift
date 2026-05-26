@@ -1,5 +1,6 @@
 import XCTest
 import PeerDropProtocol
+import PeerDropSecurity
 @testable import PeerDrop
 
 final class RemoteMessageEnvelopeProtocolVersionTests: XCTestCase {

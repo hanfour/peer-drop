@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Pure-function tests for the trust gate (audit-#14 Stage 3) that decides

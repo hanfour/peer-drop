@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropSecurity
 
 struct PeerIdentity: Codable, Identifiable, Hashable {
     let id: String

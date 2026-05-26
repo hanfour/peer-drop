@@ -2,6 +2,7 @@ import XCTest
 import PeerDropProtocol
 import Network
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 private func withTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {

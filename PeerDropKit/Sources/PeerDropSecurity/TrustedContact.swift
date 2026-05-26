@@ -1,21 +1,21 @@
 import Foundation
 import CryptoKit
 
-struct TrustedContact: Codable, Identifiable {
-    let id: UUID
-    var deviceId: String?                    // Stable peer device ID (PeerIdentity.id)
-    var displayName: String
-    var identityPublicKey: Data              // Curve25519 public key (32 bytes)
-    var trustLevel: TrustLevel
-    let firstConnected: Date
-    var lastVerified: Date?
-    var mailboxId: String?                   // Future: remote mailbox ID
-    var userId: String?                      // Future: account user ID
-    var petSnapshot: Data?                   // Future: peer's pet snapshot
-    var isBlocked: Bool
+public struct TrustedContact: Codable, Identifiable {
+    public let id: UUID
+    public var deviceId: String?                    // Stable peer device ID (PeerIdentity.id)
+    public var displayName: String
+    public var identityPublicKey: Data              // Curve25519 public key (32 bytes)
+    public var trustLevel: TrustLevel
+    public let firstConnected: Date
+    public var lastVerified: Date?
+    public var mailboxId: String?                   // Future: remote mailbox ID
+    public var userId: String?                      // Future: account user ID
+    public var petSnapshot: Data?                   // Future: peer's pet snapshot
+    public var isBlocked: Bool
     /// Audit trail of identity-key rotations observed on this contact.
     /// Bounded to a small number of entries by `TrustedContactStore`.
-    var keyHistory: [KeyChangeRecord]
+    public var keyHistory: [KeyChangeRecord]
     /// v5.4 PR7: detected protocol generation of this peer. Set from
     /// `RemoteMessageEnvelope.protocolVersion` on first inbound contact
     /// or any subsequent inbound message (responder-side; see
@@ -26,9 +26,9 @@ struct TrustedContact: Codable, Identifiable {
     /// not strictly required on the initiator side today.
     /// nil for legacy contacts persisted before v5.4 (these decode as nil
     /// and are treated as `.unknown` at use sites).
-    var peerProtocolVersion: PeerVersion?
+    public var peerProtocolVersion: PeerVersion?
 
-    init(
+    public init(
         id: UUID = UUID(),
         deviceId: String? = nil,
         displayName: String,
@@ -60,7 +60,7 @@ struct TrustedContact: Codable, Identifiable {
 
     // Custom decode so legacy on-disk records (no `keyHistory`, no `isBlocked`)
     // continue to load without error after upgrading to v3.4+.
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(UUID.self, forKey: .id)
         self.deviceId = try c.decodeIfPresent(String.self, forKey: .deviceId)
@@ -77,7 +77,7 @@ struct TrustedContact: Codable, Identifiable {
         self.peerProtocolVersion = try c.decodeIfPresent(PeerVersion.self, forKey: .peerProtocolVersion)
     }
 
-    var keyFingerprint: String {
+    public var keyFingerprint: String {
         let hash = SHA256.hash(data: identityPublicKey)
         let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
         return stride(from: 0, to: 20, by: 4).map { i in
@@ -87,11 +87,11 @@ struct TrustedContact: Codable, Identifiable {
         }.joined(separator: " ")
     }
 
-    func matchesKey(_ otherPublicKey: Data) -> Bool {
+    public func matchesKey(_ otherPublicKey: Data) -> Bool {
         identityPublicKey == otherPublicKey
     }
 
-    func cryptoPublicKey() throws -> Curve25519.KeyAgreement.PublicKey {
+    public func cryptoPublicKey() throws -> Curve25519.KeyAgreement.PublicKey {
         try Curve25519.KeyAgreement.PublicKey(rawRepresentation: identityPublicKey)
     }
 }
@@ -100,14 +100,21 @@ struct TrustedContact: Codable, Identifiable {
 
 /// A record of an identity-key rotation observed on a `TrustedContact`.
 /// Used for post-incident forensics — never displayed in regular UI.
-struct KeyChangeRecord: Codable, Hashable {
-    let oldKey: Data
-    let newKey: Data
-    let changedAt: Date
-    let reason: KeyChangeReason
+public struct KeyChangeRecord: Codable, Hashable {
+    public let oldKey: Data
+    public let newKey: Data
+    public let changedAt: Date
+    public let reason: KeyChangeReason
+
+    public init(oldKey: Data, newKey: Data, changedAt: Date, reason: KeyChangeReason) {
+        self.oldKey = oldKey
+        self.newKey = newKey
+        self.changedAt = changedAt
+        self.reason = reason
+    }
 }
 
-enum KeyChangeReason: String, Codable {
+public enum KeyChangeReason: String, Codable {
     /// The peer presented a different identity key during a (re)connection
     /// without the user explicitly being prompted.
     case detectedOnReconnect

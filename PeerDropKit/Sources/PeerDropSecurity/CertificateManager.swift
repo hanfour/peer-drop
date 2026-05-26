@@ -6,18 +6,18 @@ import os
 /// Manages ephemeral self-signed TLS certificates for peer connections.
 /// Uses a P-256 key pair; the "certificate" is derived from the public key
 /// and used solely for fingerprint-based trust-on-first-use verification.
-final class CertificateManager {
+public final class CertificateManager {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CertificateManager")
-    private(set) var identity: SecIdentity?
-    private(set) var certificate: SecCertificate?
-    private(set) var fingerprint: String?
-    private(set) var setupError: String?
+    public private(set) var identity: SecIdentity?
+    public private(set) var certificate: SecCertificate?
+    public private(set) var fingerprint: String?
+    public private(set) var setupError: String?
     private var privateKey: SecKey?
 
     /// Whether the security layer initialized successfully (at minimum a fingerprint).
-    var isReady: Bool { fingerprint != nil }
+    public var isReady: Bool { fingerprint != nil }
 
-    init() {
+    public init() {
         generateEphemeralKeyPair()
     }
 
@@ -104,7 +104,7 @@ final class CertificateManager {
     }
 
     /// Compute SHA-256 fingerprint of a certificate's DER data.
-    func computeFingerprint(of certificate: SecCertificate) -> String {
+    public func computeFingerprint(of certificate: SecCertificate) -> String {
         let data = SecCertificateCopyData(certificate) as Data
         let hash = SHA256.hash(data: data)
         return hash.map { String(format: "%02x", $0) }.joined()

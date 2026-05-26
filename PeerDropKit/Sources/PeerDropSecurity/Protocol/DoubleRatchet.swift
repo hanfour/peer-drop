@@ -2,16 +2,23 @@ import Foundation
 import CryptoKit
 
 /// A message encrypted by the Double Ratchet, ready for wire transmission.
-struct RatchetMessage: Codable {
-    let ratchetKey: Data        // Sender's current DH ratchet public key
-    let counter: UInt32         // Message number in current chain
-    let previousCounter: UInt32 // Length of previous sending chain
-    let ciphertext: Data        // AES-256-GCM encrypted (nonce + ciphertext + tag)
+public struct RatchetMessage: Codable {
+    public let ratchetKey: Data        // Sender's current DH ratchet public key
+    public let counter: UInt32         // Message number in current chain
+    public let previousCounter: UInt32 // Length of previous sending chain
+    public let ciphertext: Data        // AES-256-GCM encrypted (nonce + ciphertext + tag)
+
+    public init(ratchetKey: Data, counter: UInt32, previousCounter: UInt32, ciphertext: Data) {
+        self.ratchetKey = ratchetKey
+        self.counter = counter
+        self.previousCounter = previousCounter
+        self.ciphertext = ciphertext
+    }
 }
 
 /// Double Ratchet session providing per-message forward secrecy.
 /// Reference: https://signal.org/docs/specifications/doubleratchet/
-class DoubleRatchetSession: Codable {
+public class DoubleRatchetSession: Codable {
 
     // DH Ratchet state
     private var myRatchetKey: Curve25519.KeyAgreement.PrivateKey
@@ -74,7 +81,7 @@ class DoubleRatchetSession: Codable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         try container.encode(myRatchetKey.rawRepresentation, forKey: .myRatchetKey)
@@ -97,7 +104,7 @@ class DoubleRatchetSession: Codable {
         try container.encode(entries, forKey: .skippedKeys)
     }
 
-    required convenience init(from decoder: Decoder) throws {
+    public required convenience init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         let rootKeyData = try container.decode(Data.self, forKey: .rootKey)
@@ -139,7 +146,7 @@ class DoubleRatchetSession: Codable {
     // MARK: - Initialization
 
     /// Alice (initiator) initializes after X3DH.
-    static func initializeAsInitiator(
+    public static func initializeAsInitiator(
         rootKey: SymmetricKey,
         theirRatchetKey: Curve25519.KeyAgreement.PublicKey
     ) -> DoubleRatchetSession {
@@ -158,7 +165,7 @@ class DoubleRatchetSession: Codable {
     }
 
     /// Bob (responder) initializes after X3DH.
-    static func initializeAsResponder(
+    public static func initializeAsResponder(
         rootKey: SymmetricKey,
         myRatchetKey: Curve25519.KeyAgreement.PrivateKey
     ) -> DoubleRatchetSession {
@@ -167,7 +174,7 @@ class DoubleRatchetSession: Codable {
 
     // MARK: - Encrypt
 
-    func encrypt(_ plaintext: Data) throws -> RatchetMessage {
+    public func encrypt(_ plaintext: Data) throws -> RatchetMessage {
         guard let chainKey = sendChainKey else {
             throw DoubleRatchetError.noSendChain
         }
@@ -192,7 +199,7 @@ class DoubleRatchetSession: Codable {
 
     // MARK: - Decrypt
 
-    func decrypt(
+    public func decrypt(
         _ message: RatchetMessage,
         policy: SecurityPolicy? = nil,
         metrics: CryptoHardeningMetrics? = nil
@@ -319,12 +326,12 @@ class DoubleRatchetSession: Codable {
 
     /// Exposed for test assertions only — confirms the skipped-keys cache is fully
     /// drained after all out-of-order messages have been consumed.
-    var skippedKeysIsEmpty: Bool { skippedKeys.isEmpty }
+    public var skippedKeysIsEmpty: Bool { skippedKeys.isEmpty }
 
     /// Remove skipped-key cache entries older than `policy.skippedKeyTTLDays`.
     /// Returns the number of entries evicted (for telemetry).
     @discardableResult
-    func evictExpiredSkippedKeys(now: Date, policy: SecurityPolicy) -> Int {
+    public func evictExpiredSkippedKeys(now: Date, policy: SecurityPolicy) -> Int {
         let cutoff = now.addingTimeInterval(-Double(policy.skippedKeyTTLDays) * 86400)
         let before = skippedKeys.count
         skippedKeys = skippedKeys.filter { $0.value.createdAt >= cutoff }
@@ -335,7 +342,7 @@ class DoubleRatchetSession: Codable {
     /// entries by `createdAt` until the count is back within bounds. Returns
     /// the number of entries evicted (for telemetry).
     @discardableResult
-    func evictLRUSkippedKeys(policy: SecurityPolicy) -> Int {
+    public func evictLRUSkippedKeys(policy: SecurityPolicy) -> Int {
         guard skippedKeys.count > policy.skippedKeyMaxCount else { return 0 }
         let sorted = skippedKeys.sorted { $0.value.createdAt > $1.value.createdAt }
         let kept = sorted.prefix(policy.skippedKeyMaxCount)
@@ -349,7 +356,7 @@ class DoubleRatchetSession: Codable {
         return try AES.GCM.open(sealedBox, using: key)
     }
 
-    enum DoubleRatchetError: Error {
+    public enum DoubleRatchetError: Error {
         case noSendChain
         case noReceiveChain
         case encryptionFailed
@@ -361,12 +368,12 @@ class DoubleRatchetSession: Codable {
 extension DoubleRatchetSession {
     /// Test seam: directly insert a skipped key entry. Production code only
     /// reaches `skippedKeys` through `skipMessages` and `decrypt`'s removeValue.
-    func setSkippedKeyForTesting(ratchetKey: Data, counter: UInt32, entry: SkippedKeyEntry) {
+    public func setSkippedKeyForTesting(ratchetKey: Data, counter: UInt32, entry: SkippedKeyEntry) {
         let index = SkippedKeyIndex(ratchetKey: ratchetKey, counter: counter)
         skippedKeys[index] = entry
     }
 
     /// Test seam: count of skipped-key entries.
-    var skippedKeysCountForTesting: Int { skippedKeys.count }
+    public var skippedKeysCountForTesting: Int { skippedKeys.count }
 }
 #endif

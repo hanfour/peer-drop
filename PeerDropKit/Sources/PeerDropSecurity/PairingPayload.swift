@@ -1,15 +1,15 @@
 import Foundation
 import CryptoKit
 
-struct PairingPayload {
-    let publicKey: Data
-    let signingPublicKey: Data
-    let fingerprint: String
-    let deviceName: String
-    let localAddress: String?
-    let relayCode: String?
+public struct PairingPayload {
+    public let publicKey: Data
+    public let signingPublicKey: Data
+    public let fingerprint: String
+    public let deviceName: String
+    public let localAddress: String?
+    public let relayCode: String?
 
-    func toURL() -> URL? {
+    public func toURL() -> URL? {
         var components = URLComponents()
         components.scheme = "peerdrop"
         components.host = "pair"
@@ -28,7 +28,7 @@ struct PairingPayload {
         return components.url
     }
 
-    init(
+    public init(
         publicKey: Data,
         signingPublicKey: Data,
         fingerprint: String,
@@ -44,7 +44,7 @@ struct PairingPayload {
         self.relayCode = relayCode
     }
 
-    init(from url: URL) throws {
+    public init(from url: URL) throws {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.scheme == "peerdrop",
               components.host == "pair",
@@ -73,7 +73,7 @@ struct PairingPayload {
         self.relayCode = dict["relay"]
     }
 
-    static func safetyNumber(myPublicKey: Data, peerPublicKey: Data) -> String {
+    public static func safetyNumber(myPublicKey: Data, peerPublicKey: Data) -> String {
         let sorted = [myPublicKey, peerPublicKey].sorted { $0.lexicographicallyPrecedes($1) }
         var combined = Data()
         combined.append(sorted[0])
@@ -85,7 +85,7 @@ struct PairingPayload {
         return String(format: "%05d %05d", num1, num2)
     }
 
-    enum PairingError: Error {
+    public enum PairingError: Error {
         case invalidURL
         case missingFields
     }
@@ -93,13 +93,13 @@ struct PairingPayload {
 
 // MARK: - Remote Invite Payload
 
-struct InvitePayload: Codable {
-    let mailboxId: String
-    let identityKeyFingerprint: String
-    let displayName: String
-    let expiry: Date
+public struct InvitePayload: Codable {
+    public let mailboxId: String
+    public let identityKeyFingerprint: String
+    public let displayName: String
+    public let expiry: Date
 
-    func toURL() -> URL? {
+    public func toURL() -> URL? {
         var components = URLComponents()
         components.scheme = "peerdrop"
         components.host = "invite"
@@ -112,14 +112,14 @@ struct InvitePayload: Codable {
         return components.url
     }
 
-    init(mailboxId: String, identityKeyFingerprint: String, displayName: String, expiry: Date) {
+    public init(mailboxId: String, identityKeyFingerprint: String, displayName: String, expiry: Date) {
         self.mailboxId = mailboxId
         self.identityKeyFingerprint = identityKeyFingerprint
         self.displayName = displayName
         self.expiry = expiry
     }
 
-    init(from url: URL) throws {
+    public init(from url: URL) throws {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.scheme == "peerdrop",
               components.host == "invite",

@@ -4,11 +4,11 @@ import CryptoKit
 /// X3DH (Extended Triple Diffie-Hellman) key agreement protocol.
 /// Establishes a shared secret between two parties, even when one is offline.
 /// Reference: https://signal.org/docs/specifications/x3dh/
-enum X3DH {
+public enum X3DH {
 
-    struct KeyAgreementResult {
-        let rootKey: SymmetricKey       // For initializing the Double Ratchet root chain
-        let chainKey: SymmetricKey      // For initializing the Double Ratchet sending chain
+    public struct KeyAgreementResult {
+        public let rootKey: SymmetricKey       // For initializing the Double Ratchet root chain
+        public let chainKey: SymmetricKey      // For initializing the Double Ratchet sending chain
     }
 
     /// Alice (initiator) computes the shared secret using Bob's pre-key bundle.
@@ -19,7 +19,7 @@ enum X3DH {
     ///     policy for nil OPK, which is the intended production default.
     ///   - policy: Active `SecurityPolicy`. Defaults to `.bundledDefault`.
     ///   - metrics: Optional telemetry sink. Records C2 events when OPK is absent.
-    static func initiatorKeyAgreement(
+    public static func initiatorKeyAgreement(
         myIdentityKey: Curve25519.KeyAgreement.PrivateKey,      // IK_A
         myEphemeralKey: Curve25519.KeyAgreement.PrivateKey,      // EK_A
         theirIdentityKey: Curve25519.KeyAgreement.PublicKey,     // IK_B
@@ -59,7 +59,7 @@ enum X3DH {
     }
 
     /// Bob (responder) computes the shared secret using Alice's initial message.
-    static func responderKeyAgreement(
+    public static func responderKeyAgreement(
         myIdentityKey: Curve25519.KeyAgreement.PrivateKey,       // IK_B
         mySignedPreKey: Curve25519.KeyAgreement.PrivateKey,      // SPK_B
         myOneTimePreKey: Curve25519.KeyAgreement.PrivateKey?,    // OPK_B (optional)

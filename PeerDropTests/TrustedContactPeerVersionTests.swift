@@ -1,6 +1,7 @@
 import XCTest
 import PeerDropProtocol
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 final class TrustedContactPeerVersionTests: XCTestCase {

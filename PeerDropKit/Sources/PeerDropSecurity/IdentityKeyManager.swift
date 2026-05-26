@@ -8,9 +8,9 @@ import os.log
 /// Note: Uses software Keychain, not Secure Enclave, because SE only supports P-256.
 /// Curve25519 is chosen for Signal Protocol compatibility in Phase 2.
 /// Uses AfterFirstUnlockThisDeviceOnly to support background BLE connections.
-final class IdentityKeyManager {
+public final class IdentityKeyManager {
 
-    static let shared = IdentityKeyManager()
+    public static let shared = IdentityKeyManager()
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "IdentityKeyManager")
     private let keychainService = "com.peerdrop.identity"
@@ -25,12 +25,12 @@ final class IdentityKeyManager {
 
     // MARK: - Key Agreement (Curve25519 for ECDH)
 
-    var publicKey: Curve25519.KeyAgreement.PublicKey {
+    public var publicKey: Curve25519.KeyAgreement.PublicKey {
         agreementPrivateKey.publicKey
     }
 
     /// Human-readable fingerprint: "A1B2 C3D4 E5F6 G7H8 I9J0" (80 bits, truncated SHA-256)
-    var fingerprint: String {
+    public var fingerprint: String {
         let hash = SHA256.hash(data: publicKey.rawRepresentation)
         let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
         return stride(from: 0, to: 20, by: 4).map { i in
@@ -40,7 +40,7 @@ final class IdentityKeyManager {
         }.joined(separator: " ")
     }
 
-    func deriveSharedSecret(
+    public func deriveSharedSecret(
         with peerPublicKey: Curve25519.KeyAgreement.PublicKey
     ) throws -> SharedSecret {
         try agreementPrivateKey.sharedSecretFromKeyAgreement(with: peerPublicKey)
@@ -48,21 +48,21 @@ final class IdentityKeyManager {
 
     // MARK: - Signing (Ed25519)
 
-    var signingPublicKey: Curve25519.Signing.PublicKey {
+    public var signingPublicKey: Curve25519.Signing.PublicKey {
         signingPrivateKey.publicKey
     }
 
-    func sign(_ data: Data) throws -> Data {
+    public func sign(_ data: Data) throws -> Data {
         try signingPrivateKey.signature(for: data)
     }
 
-    func verify(signature: Data, for data: Data, from publicKey: Curve25519.Signing.PublicKey) -> Bool {
+    public func verify(signature: Data, for data: Data, from publicKey: Curve25519.Signing.PublicKey) -> Bool {
         publicKey.isValidSignature(signature, for: data)
     }
 
     // MARK: - Lifecycle
 
-    func deleteIdentity() {
+    public func deleteIdentity() {
         lock.lock()
         defer { lock.unlock() }
         deleteFromKeychain(account: agreementKeyAccount)
@@ -71,7 +71,7 @@ final class IdentityKeyManager {
         cachedSigningKey = nil
     }
 
-    func clearCache() {
+    public func clearCache() {
         lock.lock()
         defer { lock.unlock() }
         cachedAgreementKey = nil
@@ -79,7 +79,7 @@ final class IdentityKeyManager {
     }
 
     /// Expose agreement private key for X3DH key agreement. Only used within Security layer.
-    func agreementPrivateKeyForX3DH() -> Curve25519.KeyAgreement.PrivateKey {
+    public func agreementPrivateKeyForX3DH() -> Curve25519.KeyAgreement.PrivateKey {
         agreementPrivateKey
     }
 
