@@ -1,6 +1,5 @@
 import XCTest
-import PeerDropPlatform
-@testable import PeerDrop
+@testable import PeerDropPlatform
 
 final class CallProviderTests: XCTestCase {
     func test_callEndReasonHasFourCases() {

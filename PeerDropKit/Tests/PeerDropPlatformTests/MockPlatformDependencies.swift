@@ -1,8 +1,6 @@
 import Foundation
-import PeerDropProtocol
 import PeerDropPlatform
 import XCTest
-@testable import PeerDrop
 
 final class MockPasteboard: PlatformPasteboard {
     var changeCount: Int = 0
@@ -124,5 +122,22 @@ extension PlatformDependencies {
             callProvider: { callProvider },
             audioSession: { audioSession }
         )
+    }
+}
+
+final class CallProviderInjectionTests: XCTestCase {
+    func test_mockCallProvider_recordsInvocations() {
+        let mock = MockCallProvider()
+        mock.startOutgoingCall(to: "Alice")
+        mock.reportOutgoingCallConnected()
+        mock.endCall()
+        mock.reportCallEnded(reason: .remoteEnded)
+
+        XCTAssertEqual(mock.invocations, [
+            "startOutgoingCall:Alice",
+            "reportOutgoingCallConnected",
+            "endCall",
+            "reportCallEnded:remoteEnded",
+        ])
     }
 }
