@@ -1,6 +1,7 @@
 import ActivityKit
 import WidgetKit
 import SwiftUI
+import PeerDropPet
 
 @available(iOSApplicationExtension 16.2, *)
 struct PetLiveActivity: Widget {

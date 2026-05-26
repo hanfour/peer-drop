@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Tests for the file-coordinated SharedPetState. Covers the basic

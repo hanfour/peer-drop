@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 /// One-time post-upgrade screen shown the first time a v3.x user opens v4.0.
 /// Frames the visual change positively ("your pet got a glow-up") rather

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct ChatPetOverlay: View {
     @ObservedObject var engine: PetEngine

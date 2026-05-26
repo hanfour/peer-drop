@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPet
 
 /// UserDefaults gate for the v4.0.1 pet-welcome reveal screen.
 ///

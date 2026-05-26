@@ -53,7 +53,18 @@ let package = Package(
         .target(
             name: "PeerDropPet",
             dependencies: [
+                "PeerDropPlatform",
+                "PeerDropProtocol",
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ],
+            resources: [
+                // Task 7 moved 324 species×stage zips into Resources/Pets/.
+                // `.copy("Resources/Pets")` preserves the Pets/ subdirectory
+                // in the module bundle so SpriteAssetResolver can use
+                // `bundle.url(forResource:withExtension:subdirectory: "Pets")`.
+                // `.process` would flatten the tree to the bundle root, making
+                // the subdirectory: lookup return nil for every zip.
+                .copy("Resources/Pets"),
             ]
         ),
         // Test targets — one per product module. Each tests its corresponding
@@ -72,6 +83,16 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PeerDropProtocolTests", dependencies: ["PeerDropProtocol"]),
-        .testTarget(name: "PeerDropPetTests", dependencies: ["PeerDropPet"]),
+        .testTarget(
+            name: "PeerDropPetTests",
+            dependencies: [
+                "PeerDropPet",
+                "PeerDropPlatform",
+                "PeerDropProtocol",
+            ],
+            resources: [
+                .copy("Resources"),
+            ]
+        ),
     ]
 )

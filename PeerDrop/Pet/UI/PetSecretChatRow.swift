@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct PetSecretChatRow: View {
     let entry: SocialEntry

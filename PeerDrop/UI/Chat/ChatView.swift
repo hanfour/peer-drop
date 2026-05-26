@@ -3,6 +3,7 @@ import UIKit
 import PhotosUI
 import UniformTypeIdentifiers
 import os
+import PeerDropPet
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatView")
 

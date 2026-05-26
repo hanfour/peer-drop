@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct PetTabView: View {
     @EnvironmentObject var engine: PetEngine

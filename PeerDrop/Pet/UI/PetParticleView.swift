@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct PetParticleView: View {
     let particle: PetParticle
