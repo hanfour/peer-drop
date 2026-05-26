@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// §8.4 Backward-compatibility 4-cell matrix.

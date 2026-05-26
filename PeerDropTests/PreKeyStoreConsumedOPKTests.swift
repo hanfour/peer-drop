@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Tests for Task 3.7: consumedOneTimePreKeyIds migrated to [UInt32: Date].

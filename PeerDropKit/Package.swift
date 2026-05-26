@@ -55,7 +55,16 @@ let package = Package(
         // here in M1d-2 onwards alongside production source files.
         .testTarget(name: "PeerDropCoreTests", dependencies: ["PeerDropCore"]),
         .testTarget(name: "PeerDropTransportTests", dependencies: ["PeerDropTransport"]),
-        .testTarget(name: "PeerDropSecurityTests", dependencies: ["PeerDropSecurity"]),
+        .testTarget(
+            name: "PeerDropSecurityTests",
+            dependencies: [
+                "PeerDropSecurity",
+                "PeerDropProtocol",
+            ],
+            resources: [
+                .copy("Resources"),
+            ]
+        ),
         .testTarget(name: "PeerDropProtocolTests", dependencies: ["PeerDropProtocol"]),
         .testTarget(name: "PeerDropPetTests", dependencies: ["PeerDropPet"]),
     ]

@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 @testable import PeerDrop
 
 final class MockTransport: TransportProtocol {

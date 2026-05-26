@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 struct SecurityDashboardView: View {
     @ObservedObject var contactStore: TrustedContactStore

@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropSecurity
 import os.log
 
 /// HTTP client for the v2 zero-knowledge relay API.

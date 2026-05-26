@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 import Network
+import PeerDropSecurity
 
 struct NetworkAddress {
     let ip: String

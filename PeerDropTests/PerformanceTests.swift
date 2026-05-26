@@ -1,6 +1,8 @@
 import XCTest
+import PeerDropProtocol
 import Network
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// Performance and stress tests for large file transfers and throughput.

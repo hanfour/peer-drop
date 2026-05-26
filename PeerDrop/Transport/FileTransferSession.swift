@@ -1,4 +1,6 @@
 import Foundation
+import PeerDropProtocol
+import PeerDropSecurity
 import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "FileTransferSession")

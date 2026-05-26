@@ -143,10 +143,12 @@ Build and submit to App Store review (auto-release on approval)
 
 Auto-loads reviewer notes (same as submit_only). Default phased:false.
 
-### ios submit_only
+Pass submit:false to upload only (e.g. to attach IAPs in ASC before submit).
+
+### ios release_now
 
 ```sh
-[bundle exec] fastlane ios submit_only
+[bundle exec] fastlane ios release_now
 ```
 
 Submit an already-uploaded TestFlight build for review (no rebuild)
@@ -154,6 +156,18 @@ Submit an already-uploaded TestFlight build for review (no rebuild)
 Defaults: phased rollout + manual release — safe for major versions.
 
 Auto-loads reviewer notes from docs/release/v<version>-reviewer-notes.md (falls back to v<major.minor>).
+
+Release the current PENDING_DEVELOPER_RELEASE version to App Store.
+
+Use after an approved version was submitted without auto-release
+
+(e.g. `fastlane release submit:false` followed by manual ASC submit).
+
+### ios submit_only
+
+```sh
+[bundle exec] fastlane ios submit_only
+```
 
 Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]
 

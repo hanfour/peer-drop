@@ -1,4 +1,6 @@
 import Foundation
+import PeerDropProtocol
+import PeerDropSecurity
 import Network
 import Combine
 import CryptoKit
@@ -301,7 +303,10 @@ final class ConnectionManager: ObservableObject {
 
     let preKeyStore = PreKeyStore()
     private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
-    private(set) lazy var remoteSessionManager = RemoteSessionManager(preKeyStore: preKeyStore)
+    private(set) lazy var remoteSessionManager = RemoteSessionManager(
+        preKeyStore: preKeyStore,
+        mailboxClient: MailboxClient()
+    )
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 

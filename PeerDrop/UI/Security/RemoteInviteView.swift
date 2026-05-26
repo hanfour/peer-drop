@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 struct RemoteInviteView: View {
     @ObservedObject var mailboxManager: MailboxManager

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import PeerDropSecurity
 import os.log
 
 /// Manages the device's anonymous mailbox on the zero-knowledge relay.

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 @main
 struct PeerDropApp: App {

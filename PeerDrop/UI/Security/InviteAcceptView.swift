@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 struct InviteAcceptView: View {
     let invite: InvitePayload

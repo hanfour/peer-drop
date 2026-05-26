@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropSecurity
 
 /// Persistent retry queue for outbound messages whose X3DH initiation
 /// failed (typically because the responder's OPK list was empty). On

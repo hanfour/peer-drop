@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropProtocol
 @testable import PeerDrop
 
 /// Comprehensive integration tests for all Phase 2 (v1.2.0) features.

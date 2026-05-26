@@ -1,6 +1,8 @@
 import XCTest
+import PeerDropProtocol
 import Network
 import CryptoKit
+import PeerDropSecurity
 @testable import PeerDrop
 
 /// End-to-end integration tests that verify the full file transfer protocol

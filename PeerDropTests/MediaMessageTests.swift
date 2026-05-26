@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropProtocol
 @testable import PeerDrop
 
 /// Tests for the complete media messaging pipeline:
