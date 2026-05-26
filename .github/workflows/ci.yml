@@ -35,7 +35,7 @@ jobs:
                 fi
               done < <(grep -n -E "^import (UIKit|AppKit|WidgetKit)" "$file" | cut -d: -f1)
             fi
-          done < <(find PeerDrop/Core PeerDrop/Pet PeerDrop/Voice -name "*.swift" \
+          done < <(find PeerDrop/Core PeerDrop/Pet PeerDrop/Voice PeerDropKit/Sources -name "*.swift" \
             -not -path "*/Platform/iOS/*" \
             -not -path "*/Pet/UI/*" \
             -not -path "*/Voice/CallKitManager.swift")

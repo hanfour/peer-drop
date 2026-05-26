@@ -13,6 +13,8 @@ packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
     from: 0.9.19
+  PeerDropKit:
+    path: PeerDropKit
 
 settings:
   base:
