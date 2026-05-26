@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 import ZIPFoundation
 @testable import PeerDrop
 

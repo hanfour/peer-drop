@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Phase V.a (2026-05-17) — verifies the `VariantSpec` / `VariantTrait` /

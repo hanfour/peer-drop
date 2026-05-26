@@ -1,0 +1,2 @@
+This directory is the resource bundle anchor for PeerDropPet.
+Task 7 will populate it with the Pets/ species-zip folder reference.

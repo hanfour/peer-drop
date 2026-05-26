@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 /// Wrapper view that observes `PetEngine.renderedImage` and re-passes it
 /// into `V5UpgradeOnboarding` whenever the image arrives.

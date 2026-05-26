@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 final class MetadataV3SchemaTests: XCTestCase {

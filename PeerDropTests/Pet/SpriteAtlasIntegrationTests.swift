@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers

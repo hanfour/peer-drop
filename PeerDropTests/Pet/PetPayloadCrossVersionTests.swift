@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Pins the cross-version contract for PetGreeting (the wire-format struct

@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import PeerDropPet
 
 /// Provides mock data for App Store screenshot capture mode.
 /// Activated via `-SCREENSHOT_MODE 1` launch argument.

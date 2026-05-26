@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Pins the v5.0.1 ghost retirement contract:

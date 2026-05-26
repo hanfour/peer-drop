@@ -174,24 +174,11 @@ targets:
     platform: iOS
     sources:
       - PeerDropWidget
-      - path: PeerDrop/Pet/Shared
-      # PetPalettes is the only Renderer/ file the widget still needs — it
-      # provides ColorPalette typedefs referenced by Pet/Model. After M8's
-      # full deletion of the legacy sprite stack, widget gets pre-rendered
-      # CGImages from the App Group bridge (SharedRenderedPet) and renders
-      # nothing itself — no need for PaletteSwap/Compositor/SpriteData/etc.
-      #
-      # Files are referenced by path so the widget compiles them, but no
-      # explicit `group:` override — Xcode navigator uses the natural
-      # parent-dir group (Model / Renderer) to avoid "file in multiple
-      # groups" warnings (would conflict with PeerDrop target).
-      - path: PeerDrop/Pet/Renderer/PetPalettes.swift
-      - path: PeerDrop/Pet/Model/PetGenome.swift
-      - path: PeerDrop/Pet/Model/PetLevel.swift
-      - path: PeerDrop/Pet/Model/PetAction.swift
-      - path: PeerDrop/Pet/Model/PetMood.swift
-      - path: PeerDrop/Pet/Model/PetSurface.swift
-      - path: PeerDrop/Pet/Model/InteractionType.swift
+    dependencies:
+      - package: PeerDropKit
+        product: PeerDropPet
+      - package: PeerDropKit
+        product: PeerDropPlatform
     info:
       path: PeerDropWidget/Info.plist
       properties:

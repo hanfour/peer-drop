@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 private struct SpeciesIDHolder: Codable, Equatable {

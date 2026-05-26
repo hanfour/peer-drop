@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct PetBubbleView: View {
     let text: String

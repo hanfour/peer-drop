@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 /// First-open reveal screen shown the first time a user opens the Pet tab in
 /// v4.0.1. Replaces the v3.x egg-hatch wait UX: in v4.0.1 pets start at .baby

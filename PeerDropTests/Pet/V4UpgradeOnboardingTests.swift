@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 final class V4UpgradeOnboardingTests: XCTestCase {

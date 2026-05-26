@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct GuestPetView: View {
     let greeting: PetGreeting

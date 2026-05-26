@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Verifies the M7.2 first-launch migration sweep:

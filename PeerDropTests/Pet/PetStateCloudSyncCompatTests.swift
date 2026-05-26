@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Locks the PetState cross-version contract for cloud sync (PetCloudSync /

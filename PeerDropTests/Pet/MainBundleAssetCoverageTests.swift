@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Audits the M5-bundled species assets against the M2.2 SpeciesCatalog.

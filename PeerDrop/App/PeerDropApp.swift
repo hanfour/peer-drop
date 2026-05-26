@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropSecurity
 import PeerDropPlatform
+import PeerDropPet
 
 @main
 struct PeerDropApp: App {

@@ -53,7 +53,18 @@ let package = Package(
         .target(
             name: "PeerDropPet",
             dependencies: [
+                "PeerDropPlatform",
+                "PeerDropProtocol",
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ],
+            resources: [
+                // Task 7 will populate Resources/ with the 324 species×stage
+                // zips. The Resources/ directory is declared now so SPM
+                // generates Bundle.module for this target (needed at compile
+                // time in SpriteAssetResolver, SpriteService, SpriteSheetLoader,
+                // AccessoryOverlay). Only a placeholder.txt lives here
+                // until Task 7 moves the Pets/ folder into this subtree.
+                .process("Resources"),
             ]
         ),
         // Test targets — one per product module. Each tests its corresponding

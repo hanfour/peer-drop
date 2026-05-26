@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import PeerDropPet
 
 private extension View {
     @ViewBuilder

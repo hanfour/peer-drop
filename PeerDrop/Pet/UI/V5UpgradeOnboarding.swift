@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 /// One-time post-upgrade screen shown the first time a v4.x user opens v5.0.
 /// Frames the multi-frame animation rollout positively rather than letting

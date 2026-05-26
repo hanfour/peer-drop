@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 @testable import PeerDrop
 
 /// Tests for the Phase 6 widget bridge invalidation flag.

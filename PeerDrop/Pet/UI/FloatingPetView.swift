@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPet
 
 struct FloatingPetView: View {
     @ObservedObject var engine: PetEngine

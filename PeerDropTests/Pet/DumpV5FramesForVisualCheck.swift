@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPet
 import UIKit
 @testable import PeerDrop
 
