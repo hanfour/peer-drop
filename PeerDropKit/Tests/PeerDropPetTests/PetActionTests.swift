@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 @MainActor
 final class PetActionTests: XCTestCase {

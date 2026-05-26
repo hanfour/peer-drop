@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class SpriteAssetResolverTests: XCTestCase {
 
@@ -47,7 +47,7 @@ final class SpriteAssetResolverTests: XCTestCase {
 
     // MARK: - url: bundle lookup with catalog-aware fallback
 
-    private var testBundle: Bundle { Bundle(for: type(of: self)) }
+    private var testBundle: Bundle { Bundle.module }
 
     func test_url_findsCatTabbyAdult_inTestBundle() throws {
         // The M0 spike fixture cat-tabby-adult.zip is bundled.

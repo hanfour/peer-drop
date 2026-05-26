@@ -1,10 +1,10 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class SpriteServiceAnimationTests: XCTestCase {
 
-    private var testBundle: Bundle { Bundle(for: type(of: self)) }
+    private var testBundle: Bundle { Bundle.module }
 
     private func url(forFixture name: String) -> URL {
         testBundle.url(forResource: name, withExtension: "zip", subdirectory: "Pets")!

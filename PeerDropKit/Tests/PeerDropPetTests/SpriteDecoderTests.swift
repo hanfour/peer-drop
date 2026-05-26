@@ -1,11 +1,11 @@
 import XCTest
 import PeerDropPet
 import ZIPFoundation
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class SpriteDecoderTests: XCTestCase {
 
-    private var testBundle: Bundle { Bundle(for: type(of: self)) }
+    private var testBundle: Bundle { Bundle.module }
     private var catTabbyAdultZip: URL {
         testBundle.url(forResource: "cat-tabby-adult", withExtension: "zip", subdirectory: "Pets")!
     }

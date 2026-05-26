@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class PetExitEnterTests: XCTestCase {
     func testCatExitHasScaleStep() {

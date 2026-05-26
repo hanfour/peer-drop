@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import CoreGraphics
-@testable import PeerDrop
+@testable import PeerDropPet
 
 @MainActor
 final class PetEngineSharedRenderedPetTests: XCTestCase {
@@ -23,7 +23,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
     /// (cat-tabby-adult.zip) in the test bundle, and the test's tempdir
     /// SharedRenderedPet bridge.
     private func makeEngine(pet: PetState) -> PetEngine {
-        let testBundle = Bundle(for: type(of: self))
+        let testBundle = Bundle.module
         let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         let renderer = PetRendererV3(service: service)
         return PetEngine(pet: pet, rendererV3: renderer, sharedRenderedPet: bridge)

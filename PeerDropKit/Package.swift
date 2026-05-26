@@ -58,13 +58,13 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ],
             resources: [
-                // Task 7 will populate Resources/ with the 324 species×stage
-                // zips. The Resources/ directory is declared now so SPM
-                // generates Bundle.module for this target (needed at compile
-                // time in SpriteAssetResolver, SpriteService, SpriteSheetLoader,
-                // AccessoryOverlay). Only a placeholder.txt lives here
-                // until Task 7 moves the Pets/ folder into this subtree.
-                .process("Resources"),
+                // Task 7 moved 324 species×stage zips into Resources/Pets/.
+                // `.copy("Resources/Pets")` preserves the Pets/ subdirectory
+                // in the module bundle so SpriteAssetResolver can use
+                // `bundle.url(forResource:withExtension:subdirectory: "Pets")`.
+                // `.process` would flatten the tree to the bundle root, making
+                // the subdirectory: lookup return nil for every zip.
+                .copy("Resources/Pets"),
             ]
         ),
         // Test targets — one per product module. Each tests its corresponding

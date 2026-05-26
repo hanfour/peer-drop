@@ -36,9 +36,18 @@ public actor SpriteService {
     private var inflightAnimationTasks: [AnimationRequest: Task<AnimationFrames, Error>] = [:]
     public private(set) var decodeCount: Int = 0
 
-    /// Designated initialiser. Pass an explicit `bundle` for tests (fixture zip).
-    /// The production path uses `shared` which pre-fills `.module`.
-    public init(cache: SpriteCache = .shared, bundle: Bundle = .main) {
+    /// No-bundle initialiser for production callers. Internally uses
+    /// `Bundle.module` (the PeerDropPet resource bundle). `Bundle.module` is
+    /// internal so it cannot appear as a default argument in a `public init`;
+    /// this overload is the safe alternative to passing `.main` explicitly.
+    public init(cache: SpriteCache = .shared) {
+        self.cache = cache
+        self.bundle = .module
+    }
+
+    /// Explicit-bundle initialiser. Pass a specific `bundle` for tests (fixture
+    /// zip). Production callers should use `shared` or the no-bundle init above.
+    public init(cache: SpriteCache = .shared, bundle: Bundle) {
         self.cache = cache
         self.bundle = bundle
     }

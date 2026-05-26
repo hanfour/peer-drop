@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Pins the v5.0.1 ghost retirement contract:
 ///   • BodyGene decoder maps `body: "ghost"` (legacy persistence) → .cat

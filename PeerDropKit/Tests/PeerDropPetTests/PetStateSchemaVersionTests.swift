@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Pins the schemaVersion contract added in v5.0:
 ///   • newly-created pets carry schemaVersion = currentSchemaVersion (2)

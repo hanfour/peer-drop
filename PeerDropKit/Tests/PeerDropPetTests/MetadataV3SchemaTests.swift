@@ -1,10 +1,10 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class MetadataV3SchemaTests: XCTestCase {
 
-    private var testBundle: Bundle { Bundle(for: type(of: self)) }
+    private var testBundle: Bundle { Bundle.module }
 
     func test_parseV3Metadata_returnsAnimationDescriptors() throws {
         let url = testBundle.url(

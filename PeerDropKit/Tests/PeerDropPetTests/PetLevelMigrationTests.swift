@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 private struct LevelHolder: Codable, Equatable {
     let level: PetLevel

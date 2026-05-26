@@ -4,7 +4,7 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 import ZIPFoundation
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// End-to-end tests for the atlas read path inside `SpriteService` and
 /// `SpriteDecoder`. Fixtures are built in-process: a synthetic atlas zip

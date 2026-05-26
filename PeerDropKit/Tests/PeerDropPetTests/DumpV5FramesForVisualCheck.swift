@@ -1,7 +1,9 @@
 import XCTest
 import PeerDropPet
+#if canImport(UIKit)
 import UIKit
-@testable import PeerDrop
+#endif
+@testable import PeerDropPet
 
 /// One-shot visual verification: dumps every cat-tabby-adult walk frame from
 /// the SOUTH, EAST, WEST directions (the three that have multi-frame v5 data
@@ -21,10 +23,11 @@ import UIKit
 final class DumpV5FramesForVisualCheck: XCTestCase {
 
     func test_dumpAllCatTabbyAdultFrames() async throws {
+#if canImport(UIKit)
         let outDir = URL(fileURLWithPath: "/tmp/cat-tabby-frames")
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
-        let service = SpriteService(cache: SpriteCache(countLimit: 32), bundle: .main)
+        let service = SpriteService(cache: SpriteCache(countLimit: 32), bundle: .module)
         let species = SpeciesID("cat-tabby")
         let stage: PetLevel = .adult
 
@@ -57,5 +60,8 @@ final class DumpV5FramesForVisualCheck: XCTestCase {
         print("Wrote \(written.count) files to \(outDir.path):")
         for f in written.prefix(20) { print("  \(f)") }
         if written.count > 20 { print("  … and \(written.count - 20) more") }
+#else
+        throw XCTSkip("DumpV5FramesForVisualCheck requires UIKit (run on iOS simulator)")
+#endif
     }
 }

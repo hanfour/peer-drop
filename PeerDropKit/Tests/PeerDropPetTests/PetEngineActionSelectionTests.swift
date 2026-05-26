@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import CoreGraphics
-@testable import PeerDrop
+@testable import PeerDropPet
 
 @MainActor
 final class PetEngineActionSelectionTests: XCTestCase {
@@ -70,7 +70,7 @@ final class PetEngineActionSelectionTests: XCTestCase {
     // MARK: - Engine integration: physicsState transitions drive animator
 
     private func makeEngine() -> PetEngine {
-        let testBundle = Bundle(for: type(of: self))
+        let testBundle = Bundle.module
         let service = SpriteService(cache: SpriteCache(countLimit: 30), bundle: testBundle)
         let renderer = PetRendererV3(service: service)
         var pet = PetState.newEgg()

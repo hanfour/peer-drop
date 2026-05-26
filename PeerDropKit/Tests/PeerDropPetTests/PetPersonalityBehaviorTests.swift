@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class PetPersonalityBehaviorTests: XCTestCase {
     func testHighEnergyIdleShorter() {

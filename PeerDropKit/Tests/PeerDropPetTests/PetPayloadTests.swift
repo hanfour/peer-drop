@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import PeerDropProtocol
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class PetPayloadTests: XCTestCase {
 

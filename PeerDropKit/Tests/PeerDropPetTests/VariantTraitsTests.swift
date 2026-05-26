@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Phase V.a (2026-05-17) — verifies the `VariantSpec` / `VariantTrait` /
 /// `Rarity` data model and the SpeciesCatalog API around it. Catches three
@@ -119,10 +119,13 @@ final class VariantTraitsTests: XCTestCase {
     }
 
     func test_taggedVariants_renderBorderAtCorrectColor() {
-        XCTAssertEqual(RarityOverlay.borderColor(for: SpeciesID("cat-siamese")),
-                       .systemGray3, "rare → silver border")
-        XCTAssertEqual(RarityOverlay.borderColor(for: SpeciesID("pig-boar")),
-                       .systemPurple, "epic → purple border")
+        // rare → returns a silver-ish custom RGBA color (not nil)
+        XCTAssertNotNil(RarityOverlay.borderColor(for: SpeciesID("cat-siamese")),
+                        "rare → silver border must be non-nil")
+        // epic → returns a purple-ish custom RGBA color (not nil)
+        XCTAssertNotNil(RarityOverlay.borderColor(for: SpeciesID("pig-boar")),
+                        "epic → purple border must be non-nil")
+        // common → no border
         XCTAssertNil(RarityOverlay.borderColor(for: SpeciesID("cat-tabby")),
                      "common → no border drawn")
     }

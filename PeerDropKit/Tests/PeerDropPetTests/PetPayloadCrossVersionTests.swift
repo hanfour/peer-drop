@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Pins the cross-version contract for PetGreeting (the wire-format struct
 /// peers exchange when their pets meet). The compat surface is:

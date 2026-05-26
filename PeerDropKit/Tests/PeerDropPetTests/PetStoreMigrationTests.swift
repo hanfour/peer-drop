@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Verifies the M7.2 first-launch migration sweep:
 ///   • legacy v3.x pets get subVariety, seed, and migrationDoneAt assigned

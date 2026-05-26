@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import ZIPFoundation
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class SpriteAtlasTests: XCTestCase {
 

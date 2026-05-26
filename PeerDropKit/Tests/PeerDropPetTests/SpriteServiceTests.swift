@@ -1,11 +1,11 @@
 import XCTest
 import PeerDropPet
 import CoreGraphics
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class SpriteServiceTests: XCTestCase {
 
-    private var testBundle: Bundle { Bundle(for: type(of: self)) }
+    private var testBundle: Bundle { Bundle.module }
     private var catTabbyAdultEast: SpriteRequest {
         SpriteRequest(species: SpeciesID("cat-tabby"), stage: .adult, direction: .east)
     }

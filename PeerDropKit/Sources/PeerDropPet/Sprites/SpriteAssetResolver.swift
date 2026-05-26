@@ -17,6 +17,12 @@ import Foundation
 /// stages — a missing-stage zip returns nil.
 public enum SpriteAssetResolver {
 
+    /// The PeerDropPet module bundle. Exposed publicly so test targets can
+    /// resolve production assets via `Bundle.module` without having to
+    /// hard-code a bundle name. `Bundle.module` is SPM-internal; this accessor
+    /// bridges across the module boundary.
+    public static var moduleBundle: Bundle { .module }
+
     /// Bundle subdirectory holding the species×stage zips. Matches the M5.1
     /// folder-reference layout (`PeerDrop/Resources/Pets/` → `bundle/Pets/`).
     public static let bundleSubdirectory = "Pets"

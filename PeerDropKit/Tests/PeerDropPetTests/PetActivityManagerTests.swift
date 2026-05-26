@@ -1,7 +1,8 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
+#if os(iOS)
 @available(iOS 16.2, *)
 @MainActor
 final class PetActivityManagerTests: XCTestCase {
@@ -33,3 +34,4 @@ final class PetActivityManagerTests: XCTestCase {
         XCTAssertEqual(state.expProgress, 0.0, accuracy: 0.01)
     }
 }
+#endif // os(iOS)

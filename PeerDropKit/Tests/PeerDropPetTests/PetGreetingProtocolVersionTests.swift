@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import PeerDropProtocol
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Locks the M6.2 protocol-version negotiation: v4.0 senders self-tag with
 /// `currentProtocolVersion`; receivers treat missing version as v1 (legacy).

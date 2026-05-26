@@ -1,6 +1,6 @@
 import XCTest
 import PeerDropPet
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Audits the M5-bundled species assets against the M2.2 SpeciesCatalog.
 /// Catches asset-gen regressions early — if a species ID is added to the
@@ -8,7 +8,11 @@ import PeerDropPet
 /// tests fail at the next CI run rather than at first user render.
 final class MainBundleAssetCoverageTests: XCTestCase {
 
-    private var mainBundle: Bundle { Bundle.main }
+    // Use SpriteAssetResolver.moduleBundle (PeerDropPet's Bundle.module) so
+    // coverage tests audit the production bundle, not the test bundle.
+    // Bundle.module in a test file resolves to PeerDropPetTests.bundle;
+    // the production zips live in PeerDropPet.bundle.
+    private var mainBundle: Bundle { SpriteAssetResolver.moduleBundle }
 
     /// Single-variety legacy families ship partial coverage from the
     /// pre-Batch-2 era. Single source of truth for both:

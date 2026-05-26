@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import PeerDropProtocol
-@testable import PeerDrop
+@testable import PeerDropPet
 
 /// Phase 7 — pins the v5-specific cross-version compat surface.
 ///
@@ -23,7 +23,7 @@ import PeerDropProtocol
 @MainActor
 final class V5CrossVersionCompatTests: XCTestCase {
 
-    private var testBundle: Bundle { Bundle(for: type(of: self)) }
+    private var testBundle: Bundle { Bundle.module }
 
     // MARK: - protocolVersion is unchanged
 

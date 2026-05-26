@@ -1,7 +1,7 @@
 import XCTest
 import PeerDropPet
 import CoreGraphics
-@testable import PeerDrop
+@testable import PeerDropPet
 
 final class SpriteCacheTests: XCTestCase {
 
