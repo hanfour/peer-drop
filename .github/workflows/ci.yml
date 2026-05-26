@@ -46,3 +46,16 @@ jobs:
           else
             echo "Clean: PeerDrop/Core/, PeerDrop/Pet/ (non-UI), and PeerDrop/Voice/ (excl. CallKitManager) have no unguarded UI-framework imports."
           fi
+
+  swift-build-macos:
+    name: Swift build (macOS host) — PeerDropKit compile gate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift build from PeerDropKit/
+        working-directory: PeerDropKit
+        run: |
+          swift build 2>&1
+          # Exit code propagates: any compile failure (including
+          # accidental iOS-only API usage in PeerDropKit/Sources/)
+          # fails the job and blocks the PR.
