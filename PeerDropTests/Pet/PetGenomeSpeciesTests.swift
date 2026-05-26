@@ -100,10 +100,15 @@ final class PetGenomeSpeciesTests: XCTestCase {
     }
 
     func test_resolvedSpeciesID_seed_picksDeterministically() {
-        var g = baseGenome(body: .cat)
+        // .dragon has 4 all-common variants (western, eastern, fire, ice),
+        // totalWeight = 400. seed % 400 = 2 → pick lands in [0,100) → variants[0] = "western".
+        // Using an all-common family keeps the test independent of rarity weights;
+        // Phase V.b added rarity to .cat (persian/siamese = rare) which broke the
+        // old seed % variantCount assumption.
+        var g = baseGenome(body: .dragon)
         g.seed = 2
-        // seed % 5 = 2 → variants[2] = "calico"
-        XCTAssertEqual(g.resolvedSpeciesID, SpeciesID("cat-calico"))
+        // seed % 400 = 2 → slice [0, 100) → variants[0] = "western"
+        XCTAssertEqual(g.resolvedSpeciesID, SpeciesID("dragon-western"))
     }
 
     func test_resolvedSpeciesID_seedWrapsAroundVariantCount() {
