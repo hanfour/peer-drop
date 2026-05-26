@@ -13,7 +13,7 @@ final class DoubleRatchetPersistenceTests: XCTestCase {
         let aliceX3DH = try X3DH.initiatorKeyAgreement(
             myIdentityKey: aliceIdentity, myEphemeralKey: aliceEphemeral,
             theirIdentityKey: bobIdentity.publicKey, theirSignedPreKey: bobSignedPreKey.publicKey,
-            theirOneTimePreKey: nil
+            theirOneTimePreKey: nil, peerVersion: .legacy
         )
         let bobX3DH = try X3DH.responderKeyAgreement(
             myIdentityKey: bobIdentity, mySignedPreKey: bobSignedPreKey,

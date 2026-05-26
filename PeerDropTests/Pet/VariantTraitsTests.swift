@@ -146,11 +146,13 @@ final class VariantTraitsTests: XCTestCase {
     }
 
     func test_hatchWeightedSelection_uniformCaseUnchanged_forAllCommonFamily() {
-        // bear has 4 variants all common. Weighted pick should distribute
-        // ~250 each over 1000 seeds (same as old uniform behavior).
+        // dragon has 4 variants all common (western/eastern/fire/ice). Weighted
+        // pick should distribute ~250 each over 1000 seeds (same as old uniform
+        // behavior). Bear was moved away because Phase V.b tagged bear-panda as
+        // .rare and bear-polar as .epic, making its distribution non-uniform.
         var counts: [SpeciesID: Int] = [:]
         for seed: UInt32 in 0..<1000 {
-            let genome = PetGenome(body: .bear, eyes: .dot, pattern: .none, personalityGene: 0.5, seed: seed)
+            let genome = PetGenome(body: .dragon, eyes: .dot, pattern: .none, personalityGene: 0.5, seed: seed)
             counts[genome.resolvedSpeciesID, default: 0] += 1
         }
         for (_, count) in counts {
