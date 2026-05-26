@@ -507,8 +507,8 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
-    func configureVoiceCalling(callKitManager: CallKitManager) {
-        self.voiceCallManager = VoiceCallManager(connectionManager: self, callKitManager: callKitManager)
+    func configureVoiceCalling(callProvider: any CallProvider) {
+        self.voiceCallManager = VoiceCallManager(connectionManager: self, callProvider: callProvider)
     }
 
     // MARK: - Multi-Connection Management

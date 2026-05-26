@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 import WebRTC
 import os
 
@@ -79,7 +78,8 @@ final class VoiceCallManager: ObservableObject {
     // MARK: - Legacy Single-Connection State
 
     private let webRTCClient = WebRTCClient()
-    private let callKitManager: CallKitManager
+    private let callProvider: any CallProvider
+    private let audioSession: AudioSessionConfiguring
     private weak var connectionManager: ConnectionManager?
     private lazy var signaling: SDPSignaling? = {
         guard let manager = connectionManager else {
@@ -89,20 +89,23 @@ final class VoiceCallManager: ObservableObject {
         return SDPSignaling(connectionManager: manager, senderID: "local")
     }()
 
-    init(connectionManager: ConnectionManager, callKitManager: CallKitManager) {
+    init(connectionManager: ConnectionManager,
+         callProvider: any CallProvider,
+         audioSession: AudioSessionConfiguring = PlatformDependencies.shared.audioSession()) {
         self.connectionManager = connectionManager
-        self.callKitManager = callKitManager
+        self.callProvider = callProvider
+        self.audioSession = audioSession
         setupCallbacks()
     }
 
     private func setupCallbacks() {
-        callKitManager.onAnswerCall = { [weak self] in
+        callProvider.onAnswerCall = { [weak self] in
             Task { @MainActor in
                 await self?.answerIncomingCall()
             }
         }
 
-        callKitManager.onEndCall = { [weak self] in
+        callProvider.onEndCall = { [weak self] in
             Task { @MainActor in
                 self?.endCallLocally()
             }
@@ -149,7 +152,7 @@ final class VoiceCallManager: ObservableObject {
             logger.warning("Failed to send call request: \(error.localizedDescription)")
         }
 
-        callKitManager.startOutgoingCall(to: peer.displayName)
+        callProvider.startOutgoingCall(to: peer.displayName)
     }
 
     /// Start a call to a specific peer.
@@ -172,7 +175,7 @@ final class VoiceCallManager: ObservableObject {
             logger.warning("Failed to send call request to peer: \(error.localizedDescription)")
         }
 
-        callKitManager.startOutgoingCall(to: peerConn.peerIdentity.displayName)
+        callProvider.startOutgoingCall(to: peerConn.peerIdentity.displayName)
     }
 
     // MARK: - Incoming Call
@@ -194,7 +197,7 @@ final class VoiceCallManager: ObservableObject {
 
         Task {
             do {
-                try await callKitManager.reportIncomingCall(from: peerName)
+                try await callProvider.reportIncomingCall(from: peerName)
             } catch {
                 logger.error("Failed to report incoming call: \(error.localizedDescription)")
                 let reject = PeerMessage(type: .callReject, senderID: connectionManager?.localIdentity.id ?? "local")
@@ -241,7 +244,7 @@ final class VoiceCallManager: ObservableObject {
     }
 
     func handleCallAccept() {
-        callKitManager.reportOutgoingCallConnected()
+        callProvider.reportOutgoingCallConnected()
 
         // Initiator creates SDP offer
         Task {
@@ -261,12 +264,12 @@ final class VoiceCallManager: ObservableObject {
     }
 
     func handleCallReject(reason: String? = nil) {
-        callKitManager.reportCallEnded(reason: .declinedElsewhere)
+        callProvider.reportCallEnded(reason: .declinedElsewhere)
         endCallLocally()
     }
 
     func handleCallEnd() {
-        callKitManager.reportCallEnded(reason: .remoteEnded)
+        callProvider.reportCallEnded(reason: .remoteEnded)
         endCallLocally()
     }
 
@@ -350,7 +353,7 @@ final class VoiceCallManager: ObservableObject {
                 }
             }
         }
-        callKitManager.endCall()
+        callProvider.endCall()
         endCallLocally()
     }
 
@@ -372,13 +375,8 @@ final class VoiceCallManager: ObservableObject {
     // MARK: - Audio
 
     private func updateAudioOutput() {
-        let session = AVAudioSession.sharedInstance()
         do {
-            if isSpeakerOn {
-                try session.overrideOutputAudioPort(.speaker)
-            } else {
-                try session.overrideOutputAudioPort(.none)
-            }
+            try audioSession.overrideOutputToSpeaker(isSpeakerOn)
         } catch {
             logger.error("Audio output error: \(error.localizedDescription)")
         }

@@ -6,19 +6,25 @@ public struct PlatformDependencies {
     public var deviceName: () -> DeviceNameProvider
     public var systemInfo: () -> SystemInfoProvider
     public var remoteNotifications: () -> RemoteNotificationRegistering
+    public var callProvider: () -> CallProvider
+    public var audioSession: () -> AudioSessionConfiguring
 
     public init(
         pasteboard: (() -> PlatformPasteboard)? = nil,
         haptics: (() -> HapticFeedback)? = nil,
         deviceName: (() -> DeviceNameProvider)? = nil,
         systemInfo: (() -> SystemInfoProvider)? = nil,
-        remoteNotifications: (() -> RemoteNotificationRegistering)? = nil
+        remoteNotifications: (() -> RemoteNotificationRegistering)? = nil,
+        callProvider: (() -> CallProvider)? = nil,
+        audioSession: (() -> AudioSessionConfiguring)? = nil
     ) {
         self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
         self.haptics = haptics ?? { PlatformDependencies.makeHaptics() }
         self.deviceName = deviceName ?? { PlatformDependencies.makeDeviceName() }
         self.systemInfo = systemInfo ?? { PlatformDependencies.makeSystemInfo() }
         self.remoteNotifications = remoteNotifications ?? { PlatformDependencies.makeRemoteNotifications() }
+        self.callProvider = callProvider ?? { PlatformDependencies.makeCallProvider() }
+        self.audioSession = audioSession ?? { PlatformDependencies.makeAudioSession() }
     }
 
     public static var shared = PlatformDependencies()
@@ -72,6 +78,40 @@ public struct PlatformDependencies {
     }()
 
     private static func makeRemoteNotifications() -> RemoteNotificationRegistering { _defaultRemoteNotifications }
+
+    /// IMPORTANT: callProvider default is AlwaysNoOpCallProvider on BOTH platforms.
+    /// On iOS, AppDelegate is the sole creator of the real CallKitManager
+    /// (because CallKit needs a CXProvider delegate wired to the app's UI).
+    /// AppDelegate must pass the instance via ConnectionManager.configureVoiceCalling(callProvider:).
+    /// If callProvider() is read before AppDelegate runs, the NoOp prevents
+    /// silent double-instantiation of CXProvider. macOS (M3) likewise creates
+    /// the real implementation in its NSApplicationDelegate.
+    private static let _defaultCallProvider: CallProvider = AlwaysNoOpCallProvider()
+    private static func makeCallProvider() -> CallProvider { _defaultCallProvider }
+
+    private static let _defaultAudioSession: AudioSessionConfiguring = {
+        #if canImport(UIKit)
+        return UIKitAudioSession()
+        #else
+        return NoOpAudioSession()
+        #endif
+    }()
+    private static func makeAudioSession() -> AudioSessionConfiguring { _defaultAudioSession }
+}
+
+/// Always-no-op CallProvider. Used as the default for PlatformDependencies.callProvider
+/// on BOTH platforms because AppDelegate (iOS) or NSApplicationDelegate (macOS M3)
+/// is the sole creator of the real implementation. See PlatformDependencies
+/// inline comment for the rationale.
+private final class AlwaysNoOpCallProvider: CallProvider {
+    var onAnswerCall: (() -> Void)?
+    var onEndCall: (() -> Void)?
+    func startOutgoingCall(to peerName: String) {}
+    func reportOutgoingCallConnected() {}
+    func reportIncomingCall(from peerName: String) async throws {}
+    func endCall() {}
+    func reportCallEnded(reason: CallEndReason) {}
+    func configureAudioSession() {}
 }
 
 #if !canImport(UIKit)
@@ -119,5 +159,13 @@ private final class NoOpRemoteNotificationRegistering: RemoteNotificationRegiste
     func registerForRemoteNotifications() {
         // M2 replaces with NSApplication.shared.registerForRemoteNotifications()
     }
+}
+
+private final class NoOpAudioSession: AudioSessionConfiguring {
+    func activate(_ category: AudioSessionCategory) throws {}
+    func deactivate() throws {}
+    func overrideOutputToSpeaker(_ speaker: Bool) throws {}
+    var recordPermissionGranted: Bool { false }
+    func requestRecordPermission() async -> Bool { false }
 }
 #endif

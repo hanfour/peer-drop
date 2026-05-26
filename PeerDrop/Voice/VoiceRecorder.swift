@@ -7,20 +7,21 @@ final class VoiceRecorder: NSObject, ObservableObject {
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var audioLevel: Float = 0
 
+    private let audioSession: AudioSessionConfiguring
+
     private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
     private var durationTimer: Timer?
     private var levelTimer: Timer?
 
-    override init() {
+    init(audioSession: AudioSessionConfiguring = PlatformDependencies.shared.audioSession()) {
+        self.audioSession = audioSession
         super.init()
     }
 
     /// Start recording a voice message.
     func startRecording() throws {
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-        try session.setActive(true)
+        try audioSession.activate(.playAndRecordSpeaker)
 
         let tempDir = FileManager.default.temporaryDirectory
         let fileName = "VoiceRecording_\(UUID().uuidString).m4a"
@@ -102,16 +103,12 @@ final class VoiceRecorder: NSObject, ObservableObject {
 
     /// Request microphone permission.
     static func requestPermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                continuation.resume(returning: granted)
-            }
-        }
+        await PlatformDependencies.shared.audioSession().requestRecordPermission()
     }
 
     /// Check if microphone permission is granted.
     static var hasPermission: Bool {
-        AVAudioSession.sharedInstance().recordPermission == .granted
+        PlatformDependencies.shared.audioSession().recordPermissionGranted
     }
 }
 

@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in Core/ and Pet/ (excluding Pet/UI/)
+      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in Core/, Pet/ (non-UI), and Voice/ (excl. CallKitManager)
         run: |
           set -e
           violations=""
@@ -35,11 +35,14 @@ jobs:
                 fi
               done < <(grep -n -E "^import (UIKit|AppKit|WidgetKit)" "$file" | cut -d: -f1)
             fi
-          done < <(find PeerDrop/Core PeerDrop/Pet -name "*.swift" -not -path "*/Platform/iOS/*" -not -path "*/Pet/UI/*")
+          done < <(find PeerDrop/Core PeerDrop/Pet PeerDrop/Voice -name "*.swift" \
+            -not -path "*/Platform/iOS/*" \
+            -not -path "*/Pet/UI/*" \
+            -not -path "*/Voice/CallKitManager.swift")
           if [ -n "$violations" ]; then
-            echo "::error::Unguarded UI-framework imports in Core/ or Pet/ (non-UI):"
+            echo "::error::Unguarded UI-framework imports in Core/, Pet/ (non-UI), or Voice/ (excl. CallKitManager):"
             printf "%b" "$violations"
             exit 1
           else
-            echo "Clean: PeerDrop/Core/ and PeerDrop/Pet/ (non-UI) have no unguarded UI-framework imports."
+            echo "Clean: PeerDrop/Core/, PeerDrop/Pet/ (non-UI), and PeerDrop/Voice/ (excl. CallKitManager) have no unguarded UI-framework imports."
           fi

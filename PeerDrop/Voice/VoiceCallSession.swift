@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 import WebRTC
 import os
 
@@ -19,6 +18,7 @@ final class VoiceCallSession: ObservableObject {
     }
 
     private let webRTCClient = WebRTCClient()
+    private let audioSession: AudioSessionConfiguring
 
     /// Callback to send messages through the connection.
     var sendMessage: ((PeerMessage) async throws -> Void)?
@@ -26,8 +26,10 @@ final class VoiceCallSession: ObservableObject {
     /// Callback when the call ends.
     var onCallEnded: (() -> Void)?
 
-    init(peerID: String) {
+    init(peerID: String,
+         audioSession: AudioSessionConfiguring = PlatformDependencies.shared.audioSession()) {
         self.peerID = peerID
+        self.audioSession = audioSession
         setupCallbacks()
     }
 
@@ -124,13 +126,8 @@ final class VoiceCallSession: ObservableObject {
     // MARK: - Audio
 
     private func updateAudioOutput() {
-        let session = AVAudioSession.sharedInstance()
         do {
-            if isSpeakerOn {
-                try session.overrideOutputAudioPort(.speaker)
-            } else {
-                try session.overrideOutputAudioPort(.none)
-            }
+            try audioSession.overrideOutputToSpeaker(isSpeakerOn)
         } catch {
             logger.error("Audio output error: \(error.localizedDescription)")
         }
