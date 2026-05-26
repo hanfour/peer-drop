@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 
 /// Per-variant decorative accessory overlay (Phase V hook A — see
 /// docs/plans/2026-05-17-variant-traits.md).

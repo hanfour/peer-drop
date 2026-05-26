@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)

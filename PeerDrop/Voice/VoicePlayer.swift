@@ -1,4 +1,5 @@
 import AVFoundation
+import PeerDropPlatform
 import os
 
 /// Plays voice messages using AVAudioPlayer.

@@ -39,6 +39,8 @@ targets:
       - package: WebRTC
       - package: ZIPFoundation
       - package: PeerDropKit
+        product: PeerDropPlatform
+      - package: PeerDropKit
         product: PeerDropCore
       - package: PeerDropKit
         product: PeerDropTransport
@@ -138,6 +140,8 @@ targets:
     dependencies:
       - target: PeerDrop
       - package: ZIPFoundation
+      - package: PeerDropKit
+        product: PeerDropPlatform
       - package: PeerDropKit
         product: PeerDropCore
       - package: PeerDropKit

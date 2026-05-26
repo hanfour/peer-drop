@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPlatform
 
 struct DiscoveryView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
