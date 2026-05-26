@@ -15,7 +15,8 @@ final class DoubleRatchetTests: XCTestCase {
             myEphemeralKey: aliceEphemeral,
             theirIdentityKey: bobIdentity.publicKey,
             theirSignedPreKey: bobSignedPreKey.publicKey,
-            theirOneTimePreKey: nil
+            theirOneTimePreKey: nil,
+            peerVersion: .legacy
         )
         let bobX3DH = try X3DH.responderKeyAgreement(
             myIdentityKey: bobIdentity,
