@@ -45,7 +45,7 @@ final class VoiceCallManager: ObservableObject {
         }
         let session = VoiceCallSession(peerID: peerID)
         session.sendMessage = { [weak self] message in
-            try await self?.connectionManager?.sendMessage(message, to: peerID)
+            try await self?.host?.sendMessage(message, to: peerID)
         }
         session.onCallEnded = { [weak self] in
             self?.handleSessionEnded(peerID: peerID)
@@ -71,8 +71,7 @@ final class VoiceCallManager: ObservableObject {
             isInCall = false
             isMuted = false
             isSpeakerOn = false
-            connectionManager?.showVoiceCall = false
-            connectionManager?.transition(to: .connected)
+            host?.voiceCallDidEnd()
         }
         sessions.removeValue(forKey: peerID)
     }
@@ -82,19 +81,19 @@ final class VoiceCallManager: ObservableObject {
     private let webRTCClient = WebRTCClient()
     private let callProvider: any CallProvider
     private let audioSession: AudioSessionConfiguring
-    private weak var connectionManager: ConnectionManager?
+    private weak var host: TransportHost?
     private lazy var signaling: SDPSignaling? = {
-        guard let manager = connectionManager else {
-            logger.error("connectionManager is nil when creating signaling")
+        guard let host = host else {
+            logger.error("host is nil when creating signaling")
             return nil
         }
-        return SDPSignaling(connectionManager: manager, senderID: "local")
+        return SDPSignaling(host: host, senderID: "local")
     }()
 
-    init(connectionManager: ConnectionManager,
+    init(host: TransportHost,
          callProvider: any CallProvider,
          audioSession: AudioSessionConfiguring = PlatformDependencies.shared.audioSession()) {
-        self.connectionManager = connectionManager
+        self.host = host
         self.callProvider = callProvider
         self.audioSession = audioSession
         setupCallbacks()
@@ -133,9 +132,9 @@ final class VoiceCallManager: ObservableObject {
     // MARK: - Outgoing Call
 
     func startCall() async {
-        guard let manager = connectionManager else { return }
-        guard let peerID = manager.focusedPeerID else { return }
-        guard let peer = manager.connectedPeer else { return }
+        guard let host = host else { return }
+        guard let peerID = host.focusedPeerID else { return }
+        guard let peerName = host.connectedPeerDisplayName else { return }
 
         // Use session-based calling for multi-connection
         let session = session(for: peerID)
@@ -143,41 +142,39 @@ final class VoiceCallManager: ObservableObject {
         activePeerID = peerID
 
         isInCall = true
-        manager.transition(to: .voiceCall)
-        manager.showVoiceCall = true
+        host.voiceCallDidStart()
 
         // Send call request over TCP
-        let request = PeerMessage(type: .callRequest, senderID: manager.localIdentity.id)
+        let request = PeerMessage(type: .callRequest, senderID: host.localPeerID)
         do {
-            try await manager.sendMessage(request, to: peerID)
+            try await host.sendMessage(request, to: peerID)
         } catch {
             logger.warning("Failed to send call request: \(error.localizedDescription)")
         }
 
-        callProvider.startOutgoingCall(to: peer.displayName)
+        callProvider.startOutgoingCall(to: peerName)
     }
 
     /// Start a call to a specific peer.
     func startCall(to peerID: String) async {
-        guard let manager = connectionManager else { return }
-        guard let peerConn = manager.connection(for: peerID) else { return }
+        guard let host = host else { return }
+        guard let peerChannel = host.messageChannel(for: peerID) else { return }
 
         let session = session(for: peerID)
         await session.startCall()
         activePeerID = peerID
 
         isInCall = true
-        manager.transition(to: .voiceCall)
-        manager.showVoiceCall = true
+        host.voiceCallDidStart()
 
-        let request = PeerMessage(type: .callRequest, senderID: manager.localIdentity.id)
+        let request = PeerMessage(type: .callRequest, senderID: host.localPeerID)
         do {
-            try await manager.sendMessage(request, to: peerID)
+            try await host.sendMessage(request, to: peerID)
         } catch {
             logger.warning("Failed to send call request to peer: \(error.localizedDescription)")
         }
 
-        callProvider.startOutgoingCall(to: peerConn.peerIdentity.displayName)
+        callProvider.startOutgoingCall(to: peerChannel.peerDisplayName)
     }
 
     // MARK: - Incoming Call
@@ -185,10 +182,10 @@ final class VoiceCallManager: ObservableObject {
     func handleCallRequest(from senderID: String) {
         // Determine peer name
         let peerName: String
-        if let peerConn = connectionManager?.connection(for: senderID) {
-            peerName = peerConn.peerIdentity.displayName
-        } else if let peer = connectionManager?.connectedPeer {
-            peerName = peer.displayName
+        if let peerChannel = host?.messageChannel(for: senderID) {
+            peerName = peerChannel.peerDisplayName
+        } else if let connectedName = host?.connectedPeerDisplayName {
+            peerName = connectedName
         } else {
             peerName = "Unknown"
         }
@@ -202,9 +199,9 @@ final class VoiceCallManager: ObservableObject {
                 try await callProvider.reportIncomingCall(from: peerName)
             } catch {
                 logger.error("Failed to report incoming call: \(error.localizedDescription)")
-                let reject = PeerMessage(type: .callReject, senderID: connectionManager?.localIdentity.id ?? "local")
+                let reject = PeerMessage(type: .callReject, senderID: host?.localPeerID ?? "local")
                 do {
-                    try await connectionManager?.sendMessage(reject, to: senderID)
+                    try await host?.sendMessage(reject, to: senderID)
                 } catch {
                     logger.warning("Failed to send call reject: \(error.localizedDescription)")
                 }
@@ -218,12 +215,11 @@ final class VoiceCallManager: ObservableObject {
             // Fallback to legacy behavior
             webRTCClient.setup()
             isInCall = true
-            connectionManager?.transition(to: .voiceCall)
-            connectionManager?.showVoiceCall = true
+            host?.voiceCallDidStart()
 
-            let accept = PeerMessage(type: .callAccept, senderID: connectionManager?.localIdentity.id ?? "local")
+            let accept = PeerMessage(type: .callAccept, senderID: host?.localPeerID ?? "local")
             do {
-                try await connectionManager?.sendMessage(accept)
+                try await host?.sendMessage(accept)
             } catch {
                 logger.warning("Failed to send call accept: \(error.localizedDescription)")
             }
@@ -234,12 +230,11 @@ final class VoiceCallManager: ObservableObject {
         await session.answerCall()
 
         isInCall = true
-        connectionManager?.transition(to: .voiceCall)
-        connectionManager?.showVoiceCall = true
+        host?.voiceCallDidStart()
 
-        let accept = PeerMessage(type: .callAccept, senderID: connectionManager?.localIdentity.id ?? "local")
+        let accept = PeerMessage(type: .callAccept, senderID: host?.localPeerID ?? "local")
         do {
-            try await connectionManager?.sendMessage(accept, to: peerID)
+            try await host?.sendMessage(accept, to: peerID)
         } catch {
             logger.warning("Failed to send call accept to peer: \(error.localizedDescription)")
         }
@@ -347,9 +342,9 @@ final class VoiceCallManager: ObservableObject {
         } else {
             // Legacy end
             Task {
-                let end = PeerMessage(type: .callEnd, senderID: connectionManager?.localIdentity.id ?? "local")
+                let end = PeerMessage(type: .callEnd, senderID: host?.localPeerID ?? "local")
                 do {
-                    try await connectionManager?.sendMessage(end)
+                    try await host?.sendMessage(end)
                 } catch {
                     logger.warning("Failed to send call end: \(error.localizedDescription)")
                 }
@@ -370,8 +365,7 @@ final class VoiceCallManager: ObservableObject {
         isInCall = false
         isMuted = false
         isSpeakerOn = false
-        connectionManager?.showVoiceCall = false
-        connectionManager?.transition(to: .connected)
+        host?.voiceCallDidEnd()
     }
 
     // MARK: - Audio

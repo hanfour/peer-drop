@@ -21,7 +21,7 @@ final class FileTransfer: ObservableObject {
     @Published private(set) var overallProgress: Double = 0
     @Published private(set) var isCurrentTransferDirectory: Bool = false
 
-    private weak var connectionManager: ConnectionManager?
+    private weak var host: TransportHost?
     private let chunkSize = Data.defaultChunkSize
     private var isCancelled = false
 
@@ -37,7 +37,7 @@ final class FileTransfer: ObservableObject {
         }
         let session = FileTransferSession(peerID: peerID)
         session.sendMessage = { [weak self] message in
-            try await self?.connectionManager?.sendMessage(message, to: peerID)
+            try await self?.host?.sendMessage(message, to: peerID)
         }
         sessions[peerID] = session
         return session
@@ -64,15 +64,15 @@ final class FileTransfer: ObservableObject {
     private var batchReceivedURLs: [URL] = []
     private var batchFilesCompleted: Int = 0
 
-    init(connectionManager: ConnectionManager) {
-        self.connectionManager = connectionManager
+    init(host: TransportHost) {
+        self.host = host
     }
 
     // MARK: - Sending
 
     /// Send files to the focused peer (legacy API).
     func sendFiles(at urls: [URL], directoryFlags: [URL: Bool] = [:]) async throws {
-        guard let peerID = connectionManager?.focusedPeerID else {
+        guard let peerID = host?.focusedPeerID else {
             throw FileTransferError.notConnected
         }
         try await sendFiles(at: urls, to: peerID, directoryFlags: directoryFlags)
@@ -104,14 +104,14 @@ final class FileTransfer: ObservableObject {
 
     /// Send a single file to a specific peer.
     func sendFile(at url: URL, to peerID: String, isDirectory: Bool = false, session: FileTransferSession? = nil) async throws {
-        guard let manager = connectionManager else {
+        guard let host = host else {
             throw FileTransferError.notConnected
         }
 
         // audit-#14 Stage 3: untrusted peer must not be a transfer target.
         // Surfaces as FileTransferError.peerNotTrusted at the caller — the
         // existing transfer-error UI path renders the localized description.
-        guard await MainActor.run(body: { manager.isPeerTrustedForUserActions(peerID: peerID) }) else {
+        guard host.isPeerTrustedForUserActions(peerID: peerID) else {
             throw FileTransferError.peerNotTrusted
         }
 
@@ -146,8 +146,8 @@ final class FileTransfer: ObservableObject {
         )
 
         // Send file offer
-        let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: manager.localIdentity.id)
-        try await manager.sendMessage(offer, to: peerID)
+        let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: host.localPeerID)
+        try await host.sendMessage(offer, to: peerID)
 
         // Stream chunks from disk via FileHandle (constant memory usage)
         let handle = try FileHandle(forReadingFrom: url)
@@ -158,15 +158,15 @@ final class FileTransfer: ObservableObject {
 
         for chunk in FileChunkIterator(handle: handle, chunkSize: chunkSize, totalSize: fileSize) {
             guard !isCancelled else { throw FileTransferError.cancelled }
-            let chunkMsg = PeerMessage.fileChunk(chunk, senderID: manager.localIdentity.id)
-            try await manager.sendMessage(chunkMsg, to: peerID)
+            let chunkMsg = PeerMessage.fileChunk(chunk, senderID: host.localPeerID)
+            try await host.sendMessage(chunkMsg, to: peerID)
             chunkIndex += 1
             progress = Double(chunkIndex) / Double(totalChunks)
         }
 
         // Send completion
-        let complete = try PeerMessage.fileComplete(hash: hash, senderID: manager.localIdentity.id)
-        try await manager.sendMessage(complete, to: peerID)
+        let complete = try PeerMessage.fileComplete(hash: hash, senderID: host.localPeerID)
+        try await host.sendMessage(complete, to: peerID)
         progress = 1.0
 
         let record = TransferRecord(
@@ -176,18 +176,17 @@ final class FileTransfer: ObservableObject {
             timestamp: Date(),
             success: true
         )
-        manager.transferHistory.insert(record, at: 0)
-        manager.latestToast = record
+        host.recordTransfer(record)
     }
 
     /// Send a single file (legacy API, uses focused peer).
     func sendFile(at url: URL, isDirectory: Bool = false) async throws {
-        guard let manager = connectionManager else {
+        guard let host = host else {
             throw FileTransferError.notConnected
         }
 
         // Try multi-connection mode first
-        if let peerID = manager.focusedPeerID {
+        if let peerID = host.focusedPeerID {
             try await sendFile(at: url, to: peerID, isDirectory: isDirectory)
             return
         }
@@ -223,7 +222,7 @@ final class FileTransfer: ObservableObject {
 
         // Send file offer
         let offer = try PeerMessage.fileOffer(metadata: metadata, senderID: "local")
-        try await manager.sendMessage(offer)
+        try await host.sendMessage(offer)
 
         // Stream chunks from disk via FileHandle (constant memory usage)
         let handle = try FileHandle(forReadingFrom: url)
@@ -235,14 +234,14 @@ final class FileTransfer: ObservableObject {
         for chunk in FileChunkIterator(handle: handle, chunkSize: chunkSize, totalSize: fileSize) {
             guard !isCancelled else { throw FileTransferError.cancelled }
             let chunkMsg = PeerMessage.fileChunk(chunk, senderID: "local")
-            try await manager.sendMessage(chunkMsg)
+            try await host.sendMessage(chunkMsg)
             chunkIndex += 1
             progress = Double(chunkIndex) / Double(totalChunks)
         }
 
         // Send completion
         let complete = try PeerMessage.fileComplete(hash: hash, senderID: "local")
-        try await manager.sendMessage(complete)
+        try await host.sendMessage(complete)
         progress = 1.0
 
         let record = TransferRecord(
@@ -252,8 +251,7 @@ final class FileTransfer: ObservableObject {
             timestamp: Date(),
             success: true
         )
-        manager.transferHistory.insert(record, at: 0)
-        manager.latestToast = record
+        host.recordTransfer(record)
     }
 
     // MARK: - Receiving (called from ConnectionManager message loop)
@@ -285,7 +283,7 @@ final class FileTransfer: ObservableObject {
                 Task {
                     let reject = PeerMessage.fileReject(senderID: "local", reason: "insufficientStorage")
                     do {
-                        try await connectionManager?.sendMessage(reject)
+                        try await host?.sendMessage(reject)
                     } catch {
                         logger.error("Failed to send rejection: \(error.localizedDescription)")
                     }
@@ -320,10 +318,10 @@ final class FileTransfer: ObservableObject {
         Task {
             let accept = PeerMessage.fileAccept(senderID: "local")
             do {
-                try await connectionManager?.sendMessage(accept)
+                try await host?.sendMessage(accept)
                 isTransferring = true
                 progress = 0
-                connectionManager?.showTransferProgress = true
+                host?.transferDidStart()
             } catch {
                 logger.error("Failed to send file accept: \(error.localizedDescription)")
                 lastError = "Failed to accept file transfer"
@@ -335,8 +333,7 @@ final class FileTransfer: ObservableObject {
     /// Cancel an in-progress transfer without disconnecting.
     func cancelTransfer() {
         cleanupReceiveState(error: "Transfer cancelled")
-        connectionManager?.showTransferProgress = false
-        connectionManager?.transition(to: .connected)
+        host?.transferDidEnd()
     }
 
     /// Called by ConnectionManager when the connection drops unexpectedly.
@@ -452,8 +449,7 @@ final class FileTransfer: ObservableObject {
             timestamp: Date(),
             success: success
         )
-        connectionManager?.transferHistory.insert(record, at: 0)
-        connectionManager?.latestToast = record
+        host?.recordTransfer(record)
 
         receiveTempURL = nil
         receiveMetadata = nil
@@ -464,8 +460,7 @@ final class FileTransfer: ObservableObject {
             isCurrentTransferDirectory = false
 
             Task {
-                connectionManager?.showTransferProgress = false
-                connectionManager?.transition(to: .connected)
+                host?.transferDidEnd()
             }
         } else {
             currentFileName = nil

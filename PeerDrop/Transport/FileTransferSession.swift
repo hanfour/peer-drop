@@ -460,7 +460,7 @@ final class FileTransferSession: ObservableObject {
     }
 
     /// Handle an incoming resume request from the sender.
-    func handleResumeRequest(_ payload: FileResumePayload, peerConnection: PeerConnection, senderID: String) {
+    func handleResumeRequest(_ payload: FileResumePayload, peer: MessageSendingPeer, senderID: String) {
         guard let interrupted = lastInterruptedTransfer,
               interrupted.fileName == payload.fileName,
               interrupted.sha256Hash == payload.sha256Hash,
@@ -468,7 +468,7 @@ final class FileTransferSession: ObservableObject {
             // Cannot resume — send rejection
             let ack = FileResumeAckPayload(accepted: false, resumeOffset: 0)
             if let msg = try? PeerMessage.fileResumeAck(ack, senderID: senderID) {
-                Task { try? await peerConnection.sendMessage(msg) }
+                Task { try? await peer.sendMessage(msg) }
             }
             return
         }
@@ -476,7 +476,7 @@ final class FileTransferSession: ObservableObject {
         // Accept resume from the interrupted point
         let ack = FileResumeAckPayload(accepted: true, resumeOffset: interrupted.receivedBytes)
         if let msg = try? PeerMessage.fileResumeAck(ack, senderID: senderID) {
-            Task { try? await peerConnection.sendMessage(msg) }
+            Task { try? await peer.sendMessage(msg) }
         }
 
         // Restore receive state

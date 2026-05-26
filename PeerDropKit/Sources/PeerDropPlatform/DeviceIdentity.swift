@@ -2,12 +2,12 @@ import Foundation
 
 /// Stable per-install device identifier used for routing invites and APNs pushes.
 /// Thread-safe: uses a lock to guarantee exactly one UUID is generated on first access.
-enum DeviceIdentity {
+public enum DeviceIdentity {
     private static let key = "peerDropDeviceId"
     private static let lock = NSLock()
     private static var cached: String?
 
-    static var deviceId: String {
+    public static var deviceId: String {
         lock.lock()
         defer { lock.unlock() }
         if let cached { return cached }

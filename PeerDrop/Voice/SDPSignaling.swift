@@ -54,11 +54,11 @@ struct ICECandidateMessage: Codable {
 /// Sends SDP/ICE messages as PeerMessages over the existing TCP connection.
 @MainActor
 struct SDPSignaling {
-    private let connectionManager: ConnectionManager
+    private let host: TransportHost
     private let senderID: String
 
-    init(connectionManager: ConnectionManager, senderID: String) {
-        self.connectionManager = connectionManager
+    init(host: TransportHost, senderID: String) {
+        self.host = host
         self.senderID = senderID
     }
 
@@ -66,20 +66,20 @@ struct SDPSignaling {
         let sdpMessage = SDPMessage(from: sdp)
         let payload = try JSONEncoder().encode(sdpMessage)
         let message = PeerMessage(type: .sdpOffer, payload: payload, senderID: senderID)
-        try await connectionManager.sendMessage(message)
+        try await host.sendMessage(message)
     }
 
     func sendAnswer(_ sdp: RTCSessionDescription) async throws {
         let sdpMessage = SDPMessage(from: sdp)
         let payload = try JSONEncoder().encode(sdpMessage)
         let message = PeerMessage(type: .sdpAnswer, payload: payload, senderID: senderID)
-        try await connectionManager.sendMessage(message)
+        try await host.sendMessage(message)
     }
 
     func sendICECandidate(_ candidate: RTCIceCandidate) async throws {
         let iceMessage = ICECandidateMessage(from: candidate)
         let payload = try JSONEncoder().encode(iceMessage)
         let message = PeerMessage(type: .iceCandidate, payload: payload, senderID: senderID)
-        try await connectionManager.sendMessage(message)
+        try await host.sendMessage(message)
     }
 }

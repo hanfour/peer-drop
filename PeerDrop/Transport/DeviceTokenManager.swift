@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import DeviceCheck
+import PeerDropPlatform
 import os.log
 
 /// Per-device bearer token cache backed by Apple App Attest.

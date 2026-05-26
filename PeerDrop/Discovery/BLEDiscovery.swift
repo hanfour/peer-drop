@@ -1,6 +1,7 @@
 import Foundation
 import CoreBluetooth
 import Combine
+import PeerDropPlatform
 import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "BLEDiscovery")

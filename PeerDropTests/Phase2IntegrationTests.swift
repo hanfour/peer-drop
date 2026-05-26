@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPlatform
 import PeerDropProtocol
 @testable import PeerDrop
 
