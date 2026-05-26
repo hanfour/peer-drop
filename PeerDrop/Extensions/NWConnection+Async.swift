@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 import Network
 
 extension NWConnection {

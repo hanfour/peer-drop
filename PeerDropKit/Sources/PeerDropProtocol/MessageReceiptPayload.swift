@@ -1,20 +1,20 @@
 import Foundation
 
-struct MessageReceiptPayload: Codable {
-    enum ReceiptType: String, Codable {
+public struct MessageReceiptPayload: Codable {
+    public enum ReceiptType: String, Codable {
         case delivered
         case read
     }
 
-    let messageIDs: [String]
-    let receiptType: ReceiptType
-    let timestamp: Date
+    public let messageIDs: [String]
+    public let receiptType: ReceiptType
+    public let timestamp: Date
 
     // Group messaging support
-    let groupID: String?
-    let senderID: String?  // Who is sending this receipt
+    public let groupID: String?
+    public let senderID: String?  // Who is sending this receipt
 
-    init(messageIDs: [String], receiptType: ReceiptType, timestamp: Date, groupID: String? = nil, senderID: String? = nil) {
+    public init(messageIDs: [String], receiptType: ReceiptType, timestamp: Date, groupID: String? = nil, senderID: String? = nil) {
         self.messageIDs = messageIDs
         self.receiptType = receiptType
         self.timestamp = timestamp
@@ -23,7 +23,7 @@ struct MessageReceiptPayload: Codable {
     }
 
     // Custom decoding for backward compatibility
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         messageIDs = try container.decode([String].self, forKey: .messageIDs)
         receiptType = try container.decode(ReceiptType.self, forKey: .receiptType)

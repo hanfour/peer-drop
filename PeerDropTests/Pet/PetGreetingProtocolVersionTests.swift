@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropProtocol
 @testable import PeerDrop
 
 /// Locks the M6.2 protocol-version negotiation: v4.0 senders self-tag with

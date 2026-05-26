@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 import Network
 import Combine
 import CryptoKit

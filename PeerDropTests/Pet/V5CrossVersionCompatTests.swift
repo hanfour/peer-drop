@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropProtocol
 @testable import PeerDrop
 
 /// Phase 7 — pins the v5-specific cross-version compat surface.

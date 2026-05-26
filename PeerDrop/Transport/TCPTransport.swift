@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 import Network
 
 /// TCP transport wrapping NWConnection with optional TLS and message framing.

@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 
 /// Transport layer state.
 enum TransportState {

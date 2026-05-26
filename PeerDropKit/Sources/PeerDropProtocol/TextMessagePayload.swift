@@ -1,19 +1,19 @@
 import Foundation
 
-struct TextMessagePayload: Codable {
-    let text: String
-    let timestamp: Date
+public struct TextMessagePayload: Codable {
+    public let text: String
+    public let timestamp: Date
 
     // Reply support
-    let replyToMessageID: String?
-    let replyToText: String?
-    let replyToSenderName: String?
+    public let replyToMessageID: String?
+    public let replyToText: String?
+    public let replyToSenderName: String?
 
     // Group messaging support
-    let groupID: String?
-    let senderName: String?
+    public let groupID: String?
+    public let senderName: String?
 
-    init(
+    public init(
         text: String,
         replyToMessageID: String? = nil,
         replyToText: String? = nil,
@@ -31,7 +31,7 @@ struct TextMessagePayload: Codable {
     }
 
     // Custom decoding for backward compatibility
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         text = try container.decode(String.self, forKey: .text)
         timestamp = try container.decode(Date.self, forKey: .timestamp)

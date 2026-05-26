@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropProtocol
 @testable import PeerDrop
 
 /// Tests for the v5.0.3 chunk-size and total-bytes caps in

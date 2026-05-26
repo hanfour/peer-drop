@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 import WebRTC
 
 /// Codable wrappers for SDP and ICE candidate exchange over TCP.

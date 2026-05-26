@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropProtocol
 import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatManager")

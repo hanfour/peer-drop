@@ -1,12 +1,12 @@
 import Foundation
 
-struct PeerMessage: Codable {
-    let version: ProtocolVersion
-    let type: MessageType
-    let payload: Data?
-    let senderID: String
+public struct PeerMessage: Codable {
+    public let version: ProtocolVersion
+    public let type: MessageType
+    public let payload: Data?
+    public let senderID: String
 
-    init(type: MessageType, payload: Data? = nil, senderID: String) {
+    public init(type: MessageType, payload: Data? = nil, senderID: String) {
         self.version = .current
         self.type = type
         self.payload = payload
@@ -15,57 +15,39 @@ struct PeerMessage: Codable {
 
     // MARK: - Convenience encoders for typed payloads
 
-    static func hello(identity: PeerIdentity) throws -> PeerMessage {
-        let data = try JSONEncoder().encode(identity)
-        return PeerMessage(type: .hello, payload: data, senderID: identity.id)
-    }
-
-    static func deviceIdExchange(deviceId: String, senderID: String) throws -> PeerMessage {
+    public static func deviceIdExchange(deviceId: String, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(DeviceIdExchangePayload(deviceId: deviceId))
         return PeerMessage(type: .deviceIdExchange, payload: data, senderID: senderID)
-    }
-
-    /// Plaintext-on-wire handshake bundle. Sender's identity public key +
-    /// fresh ephemeral ratchet public key. Both peers exchange these to
-    /// bootstrap a LocalSecureChannel.
-    static func secureHandshake(bundle: LocalSecureChannel.HandshakeBundle, senderID: String) throws -> PeerMessage {
-        let data = try JSONEncoder().encode(bundle)
-        return PeerMessage(type: .secureHandshake, payload: data, senderID: senderID)
     }
 
     /// Wrap an already-encrypted secure-channel frame for transport. Caller
     /// is responsible for having an active LocalSecureChannel and produced
     /// the `frame` via `channel.encrypt(...)`.
-    static func secureEnvelope(frame: Data, senderID: String) -> PeerMessage {
+    public static func secureEnvelope(frame: Data, senderID: String) -> PeerMessage {
         PeerMessage(type: .secureEnvelope, payload: frame, senderID: senderID)
     }
 
-    static func connectionRequest(senderID: String) -> PeerMessage {
+    public static func connectionRequest(senderID: String) -> PeerMessage {
         PeerMessage(type: .connectionRequest, senderID: senderID)
     }
 
-    static func connectionAccept(senderID: String) -> PeerMessage {
+    public static func connectionAccept(senderID: String) -> PeerMessage {
         PeerMessage(type: .connectionAccept, senderID: senderID)
     }
 
-    static func connectionReject(senderID: String) -> PeerMessage {
+    public static func connectionReject(senderID: String) -> PeerMessage {
         PeerMessage(type: .connectionReject, senderID: senderID)
     }
 
-    static func connectionCancel(senderID: String) -> PeerMessage {
+    public static func connectionCancel(senderID: String) -> PeerMessage {
         PeerMessage(type: .connectionCancel, senderID: senderID)
     }
 
-    static func fileOffer(metadata: TransferMetadata, senderID: String) throws -> PeerMessage {
-        let data = try JSONEncoder().encode(metadata)
-        return PeerMessage(type: .fileOffer, payload: data, senderID: senderID)
-    }
-
-    static func fileAccept(senderID: String) -> PeerMessage {
+    public static func fileAccept(senderID: String) -> PeerMessage {
         PeerMessage(type: .fileAccept, senderID: senderID)
     }
 
-    static func fileReject(senderID: String, reason: String? = nil) -> PeerMessage {
+    public static func fileReject(senderID: String, reason: String? = nil) -> PeerMessage {
         if let reason {
             let data = try? JSONEncoder().encode(RejectionPayload(reason: reason))
             return PeerMessage(type: .fileReject, payload: data, senderID: senderID)
@@ -73,7 +55,7 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .fileReject, senderID: senderID)
     }
 
-    static func callReject(senderID: String, reason: String? = nil) -> PeerMessage {
+    public static func callReject(senderID: String, reason: String? = nil) -> PeerMessage {
         if let reason {
             let data = try? JSONEncoder().encode(RejectionPayload(reason: reason))
             return PeerMessage(type: .callReject, payload: data, senderID: senderID)
@@ -81,7 +63,7 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .callReject, senderID: senderID)
     }
 
-    static func chatReject(senderID: String, reason: String? = nil) -> PeerMessage {
+    public static func chatReject(senderID: String, reason: String? = nil) -> PeerMessage {
         if let reason {
             let data = try? JSONEncoder().encode(RejectionPayload(reason: reason))
             return PeerMessage(type: .chatReject, payload: data, senderID: senderID)
@@ -89,100 +71,95 @@ struct PeerMessage: Codable {
         return PeerMessage(type: .chatReject, senderID: senderID)
     }
 
-    static func fileChunk(_ data: Data, senderID: String) -> PeerMessage {
+    public static func fileChunk(_ data: Data, senderID: String) -> PeerMessage {
         PeerMessage(type: .fileChunk, payload: data, senderID: senderID)
     }
 
-    static func fileComplete(hash: String, senderID: String) throws -> PeerMessage {
+    public static func fileComplete(hash: String, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(["hash": hash])
         return PeerMessage(type: .fileComplete, payload: data, senderID: senderID)
     }
 
-    static func batchStart(metadata: BatchMetadata, senderID: String) throws -> PeerMessage {
-        let data = try JSONEncoder().encode(metadata)
-        return PeerMessage(type: .batchStart, payload: data, senderID: senderID)
-    }
-
-    static func batchComplete(batchID: String, senderID: String) throws -> PeerMessage {
+    public static func batchComplete(batchID: String, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(["batchID": batchID])
         return PeerMessage(type: .batchComplete, payload: data, senderID: senderID)
     }
 
-    static func textMessage(_ payload: TextMessagePayload, senderID: String) throws -> PeerMessage {
+    public static func textMessage(_ payload: TextMessagePayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .textMessage, payload: data, senderID: senderID)
     }
 
-    static func mediaMessage(_ payload: MediaMessagePayload, senderID: String) throws -> PeerMessage {
+    public static func mediaMessage(_ payload: MediaMessagePayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .mediaMessage, payload: data, senderID: senderID)
     }
 
-    static func disconnect(senderID: String) -> PeerMessage {
+    public static func disconnect(senderID: String) -> PeerMessage {
         PeerMessage(type: .disconnect, senderID: senderID)
     }
 
-    static func ping(senderID: String) -> PeerMessage {
+    public static func ping(senderID: String) -> PeerMessage {
         PeerMessage(type: .ping, senderID: senderID)
     }
 
-    static func pong(senderID: String) -> PeerMessage {
+    public static func pong(senderID: String) -> PeerMessage {
         PeerMessage(type: .pong, senderID: senderID)
     }
 
-    static func messageReceipt(_ payload: MessageReceiptPayload, senderID: String) throws -> PeerMessage {
+    public static func messageReceipt(_ payload: MessageReceiptPayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .messageReceipt, payload: data, senderID: senderID)
     }
 
-    static func typingIndicator(_ payload: TypingIndicatorPayload, senderID: String) throws -> PeerMessage {
+    public static func typingIndicator(_ payload: TypingIndicatorPayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .typingIndicator, payload: data, senderID: senderID)
     }
 
-    static func reaction(_ payload: ReactionPayload, senderID: String) throws -> PeerMessage {
+    public static func reaction(_ payload: ReactionPayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .reaction, payload: data, senderID: senderID)
     }
 
-    static func messageEdit(_ payload: MessageEditPayload, senderID: String) throws -> PeerMessage {
+    public static func messageEdit(_ payload: MessageEditPayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .messageEdit, payload: data, senderID: senderID)
     }
 
-    static func messageDelete(_ payload: MessageDeletePayload, senderID: String) throws -> PeerMessage {
+    public static func messageDelete(_ payload: MessageDeletePayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .messageDelete, payload: data, senderID: senderID)
     }
 
-    static func clipboardSync(_ payload: ClipboardSyncPayload, senderID: String) throws -> PeerMessage {
+    public static func clipboardSync(_ payload: ClipboardSyncPayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .clipboardSync, payload: data, senderID: senderID)
     }
 
-    static func fileResume(_ payload: FileResumePayload, senderID: String) throws -> PeerMessage {
+    public static func fileResume(_ payload: FileResumePayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .fileResume, payload: data, senderID: senderID)
     }
 
-    static func fileResumeAck(_ payload: FileResumeAckPayload, senderID: String) throws -> PeerMessage {
+    public static func fileResumeAck(_ payload: FileResumeAckPayload, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(payload)
         return PeerMessage(type: .fileResumeAck, payload: data, senderID: senderID)
     }
 
     // MARK: - Serialization
 
-    func encoded() throws -> Data {
+    public func encoded() throws -> Data {
         try JSONEncoder().encode(self)
     }
 
-    static func decoded(from data: Data) throws -> PeerMessage {
+    public static func decoded(from data: Data) throws -> PeerMessage {
         try JSONDecoder().decode(PeerMessage.self, from: data)
     }
 
     // MARK: - Payload decoding
 
-    func decodePayload<T: Decodable>(_ type: T.Type) throws -> T {
+    public func decodePayload<T: Decodable>(_ type: T.Type) throws -> T {
         guard let payload else {
             throw PeerMessageError.missingPayload
         }
@@ -190,15 +167,23 @@ struct PeerMessage: Codable {
     }
 }
 
-struct RejectionPayload: Codable {
-    let reason: String
+public struct RejectionPayload: Codable {
+    public let reason: String
+
+    public init(reason: String) {
+        self.reason = reason
+    }
 }
 
-struct DeviceIdExchangePayload: Codable {
-    let deviceId: String
+public struct DeviceIdExchangePayload: Codable {
+    public let deviceId: String
+
+    public init(deviceId: String) {
+        self.deviceId = deviceId
+    }
 }
 
-enum PeerMessageError: Error {
+public enum PeerMessageError: Error {
     case missingPayload
     case invalidPayload
 }

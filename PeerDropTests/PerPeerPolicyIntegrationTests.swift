@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropProtocol
 @testable import PeerDrop
 
 final class PerPeerPolicyIntegrationTests: XCTestCase {
