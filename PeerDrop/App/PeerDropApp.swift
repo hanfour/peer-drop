@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 import PeerDropSecurity
 import PeerDropPlatform
 import PeerDropPet

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 
 struct ToastView: View {
     let record: TransferRecord

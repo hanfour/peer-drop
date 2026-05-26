@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 
 struct PeerRowView: View {
     let peer: DiscoveredPeer

@@ -1,4 +1,5 @@
 import XCTest
+@testable import PeerDropTransport
 @testable import PeerDrop
 
 final class DataChannelTransportTests: XCTestCase {

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 import UniformTypeIdentifiers
 
 struct SettingsView: View {

@@ -21,13 +21,4 @@ extension PeerMessage {
         return PeerMessage(type: .secureHandshake, payload: data, senderID: senderID)
     }
 
-    static func fileOffer(metadata: TransferMetadata, senderID: String) throws -> PeerMessage {
-        let data = try JSONEncoder().encode(metadata)
-        return PeerMessage(type: .fileOffer, payload: data, senderID: senderID)
-    }
-
-    static func batchStart(metadata: BatchMetadata, senderID: String) throws -> PeerMessage {
-        let data = try JSONEncoder().encode(metadata)
-        return PeerMessage(type: .batchStart, payload: data, senderID: senderID)
-    }
 }
