@@ -1,4 +1,5 @@
 import AVFoundation
+import PeerDropPlatform
 
 /// Records voice messages using AVAudioRecorder.
 @MainActor

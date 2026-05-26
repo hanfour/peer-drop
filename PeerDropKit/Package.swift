@@ -8,6 +8,7 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
+        .library(name: "PeerDropPlatform", targets: ["PeerDropPlatform"]),
         .library(name: "PeerDropCore", targets: ["PeerDropCore"]),
         .library(name: "PeerDropTransport", targets: ["PeerDropTransport"]),
         .library(name: "PeerDropSecurity", targets: ["PeerDropSecurity"]),
@@ -24,6 +25,11 @@ let package = Package(
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.19"),
     ],
     targets: [
+        .target(
+            name: "PeerDropPlatform",
+            dependencies: []  // pure leaf — Foundation/UIKit/AppKit/AVFoundation/CoreGraphics only
+        ),
+        .testTarget(name: "PeerDropPlatformTests", dependencies: ["PeerDropPlatform"]),
         // PeerDropCore is the keystone — depends on all 4 leaf modules.
         // Per spec §1: "Core consumes Transport/Security/Protocol/Pet";
         // strict single-direction (no cycles).

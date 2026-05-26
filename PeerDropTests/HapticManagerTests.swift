@@ -1,4 +1,5 @@
 import XCTest
+import PeerDropPlatform
 @testable import PeerDrop
 
 final class HapticManagerTests: XCTestCase {

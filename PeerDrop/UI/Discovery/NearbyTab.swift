@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropPlatform
 
 /// All of NearbyTab's modal sheets routed through a single
 /// `.sheet(item:)` binding. Replaces the previous seven parallel

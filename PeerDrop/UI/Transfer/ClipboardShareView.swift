@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PeerDropPlatform
 
 /// Shows a preview of clipboard content (text or image) and allows quick sharing to the connected peer.
 struct ClipboardShareView: View {

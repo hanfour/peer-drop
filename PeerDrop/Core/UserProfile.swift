@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 
 struct UserProfile: Codable {
     var displayName: String

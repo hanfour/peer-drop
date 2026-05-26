@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 import os.log
 
 /// Sends error reports to the Cloudflare Worker for remote debugging.

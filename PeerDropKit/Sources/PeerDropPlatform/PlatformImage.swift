@@ -12,7 +12,7 @@ public typealias PlatformColor = NSColor
 extension PlatformImage {
     /// Cross-platform JPEG encoder. iOS forwards to `jpegData(compressionQuality:)`;
     /// macOS implementation lives in PeerDropApp-macOS (M2).
-    func platformJPEGData(compressionQuality: CGFloat) -> Data? {
+    public func platformJPEGData(compressionQuality: CGFloat) -> Data? {
         #if canImport(UIKit)
         return self.jpegData(compressionQuality: compressionQuality)
         #elseif canImport(AppKit)
@@ -26,7 +26,7 @@ extension PlatformImage {
 extension PlatformImage {
     /// Cross-platform tinted image. iOS forwards to `UIImage.withTintColor(_:renderingMode: .alwaysOriginal)`;
     /// macOS composites the tint via a destinationIn blend pass.
-    func platformWithTintColor(_ color: PlatformColor) -> PlatformImage {
+    public func platformWithTintColor(_ color: PlatformColor) -> PlatformImage {
         #if canImport(UIKit)
         return self.withTintColor(color, renderingMode: .alwaysOriginal)
         #elseif canImport(AppKit)
@@ -47,7 +47,7 @@ extension PlatformImage {
 extension PlatformImage {
     /// Cross-platform CGImage accessor. iOS forwards to `UIImage.cgImage`;
     /// macOS forwards to `NSImage.cgImage(forProposedRect:context:hints:)`.
-    var platformCGImage: CGImage? {
+    public var platformCGImage: CGImage? {
         #if canImport(UIKit)
         return self.cgImage
         #elseif canImport(AppKit)
@@ -62,7 +62,7 @@ extension PlatformImage {
 extension PlatformImage {
     /// Cross-platform CGImage adapter. iOS uses `UIImage(cgImage:)` (size derived
     /// from CGImage); macOS uses `NSImage(cgImage:size:)` (size must be supplied).
-    convenience init?(platformCGImage cgImage: CGImage, size: CGSize) {
+    public convenience init?(platformCGImage cgImage: CGImage, size: CGSize) {
         #if canImport(UIKit)
         self.init(cgImage: cgImage)
         #elseif canImport(AppKit)
@@ -74,7 +74,7 @@ extension PlatformImage {
 
     /// Cross-platform SF Symbol loader. iOS uses `UIImage(systemName:)`;
     /// macOS uses `NSImage(systemSymbolName:accessibilityDescription:)` (macOS 11+).
-    convenience init?(platformSystemName name: String) {
+    public convenience init?(platformSystemName name: String) {
         #if canImport(UIKit)
         self.init(systemName: name)
         #elseif canImport(AppKit)

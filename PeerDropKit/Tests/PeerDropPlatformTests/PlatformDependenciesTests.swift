@@ -1,6 +1,5 @@
-// PeerDropTests/Core/Platform/PlatformDependenciesTests.swift
 import XCTest
-@testable import PeerDrop
+@testable import PeerDropPlatform
 
 final class PlatformDependenciesTests: XCTestCase {
     func test_sharedIsMutable() {

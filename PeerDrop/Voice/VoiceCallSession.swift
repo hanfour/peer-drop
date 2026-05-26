@@ -1,5 +1,6 @@
 import Foundation
 import PeerDropProtocol
+import PeerDropPlatform
 import WebRTC
 import os
 

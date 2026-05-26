@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 import CallKit
 import AVFoundation
 import StoreKit
