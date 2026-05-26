@@ -963,6 +963,7 @@
 		9A9F164C4D40D9F2C2CA4571 /* FileNameSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNameSanitizer.swift; sourceTree = "<group>"; };
 		9B335967E2F46FE4D5037176 /* VerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerificationView.swift; sourceTree = "<group>"; };
 		9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushStatusRow.swift; sourceTree = "<group>"; };
+		9C83BE80AB6146E9AFF27C6D /* PeerDropKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PeerDropKit; path = PeerDropKit; sourceTree = SOURCE_ROOT; };
 		9D5BE7D3839CEC80E6A0BB44 /* PetLevelMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetLevelMigrationTests.swift; sourceTree = "<group>"; };
 		9DC49FC1C8EF2B81B055F6F6 /* PerPeerPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerPeerPolicyTests.swift; sourceTree = "<group>"; };
 		9E58E671AF75C790526DDCDB /* PeerDropWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropWidgetBundle.swift; sourceTree = "<group>"; };
@@ -1194,6 +1195,7 @@
 			children = (
 				F3369C6D619A47A28F3F58EA /* Pets */,
 				3823673D5A46544596C830A9 /* Pets */,
+				A8062E16F091E8B75C5ED172 /* Packages */,
 				9EC0E908E1A38EE0458CEC1B /* peer-drop */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
@@ -1894,6 +1896,14 @@
 			path = iOS;
 			sourceTree = "<group>";
 		};
+		A8062E16F091E8B75C5ED172 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				9C83BE80AB6146E9AFF27C6D /* PeerDropKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
 		B0644EC4965DB3988D2FEDC1 /* Pet */ = {
 			isa = PBXGroup;
 			children = (
@@ -2353,6 +2363,7 @@
 			packageReferences = (
 				6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				0A26A23350D9759D984C445B /* XCLocalSwiftPackageReference "PeerDropKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B852FD7C848E2615AF9BF284 /* Products */;
@@ -3325,6 +3336,13 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0A26A23350D9759D984C445B /* XCLocalSwiftPackageReference "PeerDropKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PeerDropKit;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
 		49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
