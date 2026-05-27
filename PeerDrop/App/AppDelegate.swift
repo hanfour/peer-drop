@@ -1,4 +1,5 @@
 import UIKit
+import PeerDropCore
 import CallKit
 import UserNotifications
 

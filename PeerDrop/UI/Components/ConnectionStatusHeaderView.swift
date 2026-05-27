@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct ConnectionStatusHeaderView: View {
     let state: ConnectionState

@@ -3,12 +3,10 @@ import XCTest
 @testable import PeerDropCore
 
 final class PeerDropCoreTests: XCTestCase {
-    /// Placeholder. Real tests for PeerDropCore consumers (ConnectionManager, ChatManager, etc.) migrate
-    /// here in M1d-4 alongside the source files. This single trivial test
-    /// ensures `swift test` can find + run a test target.
+    /// Smoke-check: confirm a key public type from PeerDropCore links
+    /// when imported via the SPM module boundary. The M1d-1 placeholder
+    /// enum was deleted in M1d-5 once real types migrated into the module.
     func test_moduleIsLinkable() {
-        // PeerDropCore is currently `public enum PeerDropCore {}` — verify
-        // the test target can reference it.
-        XCTAssertNotNil(PeerDropCore.self)
+        XCTAssertEqual(ConnectionRecommendation.useRelayCode, .useRelayCode)
     }
 }

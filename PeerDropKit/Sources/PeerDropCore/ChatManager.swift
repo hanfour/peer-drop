@@ -6,14 +6,14 @@ import os
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatManager")
 
 @MainActor
-final class ChatManager: ObservableObject {
-    @Published private(set) var messages: [ChatMessage] = []
-    @Published private(set) var groupMessages: [ChatMessage] = []
-    @Published private(set) var unreadCounts: [String: Int] = [:]
-    @Published private(set) var groupUnreadCounts: [String: Int] = [:]
-    @Published var activeChatPeerID: String?
-    @Published var activeGroupID: String?
-    @Published var typingPeers: Set<String> = []
+public final class ChatManager: ObservableObject {
+    @Published public private(set) var messages: [ChatMessage] = []
+    @Published public private(set) var groupMessages: [ChatMessage] = []
+    @Published public private(set) var unreadCounts: [String: Int] = [:]
+    @Published public private(set) var groupUnreadCounts: [String: Int] = [:]
+    @Published public var activeChatPeerID: String?
+    @Published public var activeGroupID: String?
+    @Published public var typingPeers: Set<String> = []
 
     private var typingExpirationTasks: [String: Task<Void, Never>] = [:]
     private var persistTasks: [String: Task<Void, Never>] = [:]
@@ -23,11 +23,11 @@ final class ChatManager: ObservableObject {
     private let maxInMemoryMessages = 500
     private var hasOlderMessagesOnDisk = false
     private var currentPeerID: String?
-    var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count || hasOlderMessagesOnDisk }
+    public var hasMoreMessages: Bool { messages.count < allMessagesForCurrentPeer.count || hasOlderMessagesOnDisk }
 
-    var onMessageReceivedForPet: (() -> Void)?
+    public var onMessageReceivedForPet: (() -> Void)?
 
-    var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
+    public var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
     private let fileManager = FileManager.default
     private let unreadKey = "peerDropUnreadCounts"
@@ -60,14 +60,14 @@ final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    func saveOutgoing(text: String, peerID: String, peerName: String, replyTo: ChatMessage? = nil) -> ChatMessage {
+    public func saveOutgoing(text: String, peerID: String, peerName: String, replyTo: ChatMessage? = nil) -> ChatMessage {
         let msg = ChatMessage.text(text: text, isOutgoing: true, peerName: peerName, replyTo: replyTo)
         appendMessage(msg, peerID: peerID)
         return msg
     }
 
     @discardableResult
-    func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
+    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
         let msg = ChatMessage(
             id: UUID().uuidString,
             text: text,
@@ -99,13 +99,13 @@ final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    func saveOutgoingMedia(mediaType: MediaMessagePayload.MediaType, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, peerID: String, peerName: String) -> ChatMessage {
+    public func saveOutgoingMedia(mediaType: MediaMessagePayload.MediaType, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, peerID: String, peerName: String) -> ChatMessage {
         let msg = ChatMessage.media(mediaType: mediaType.rawValue, fileName: fileName, fileSize: fileSize, mimeType: mimeType, duration: duration, localFileURL: localFileURL, thumbnailData: thumbnailData, isOutgoing: true, peerName: peerName)
         appendMessage(msg, peerID: peerID)
         return msg
     }
 
-    func saveIncomingMedia(payload: MediaMessagePayload, fileData: Data, peerID: String, peerName: String) {
+    public func saveIncomingMedia(payload: MediaMessagePayload, fileData: Data, peerID: String, peerName: String) {
         let relativePath = saveMediaFile(data: fileData, fileName: payload.fileName, peerID: peerID)
         let msg = ChatMessage.media(mediaType: payload.mediaType.rawValue, fileName: payload.fileName, fileSize: payload.fileSize, mimeType: payload.mimeType, duration: payload.duration, localFileURL: relativePath, thumbnailData: payload.thumbnailData, isOutgoing: false, peerName: peerName)
         appendMessage(msg, peerID: peerID)
@@ -114,7 +114,7 @@ final class ChatManager: ObservableObject {
         }
     }
 
-    func loadMessages(forPeer peerID: String) {
+    public func loadMessages(forPeer peerID: String) {
         // Flush any pending writes so disk is up to date
         flushPendingPersist(for: peerID)
         currentPeerID = peerID
@@ -156,7 +156,7 @@ final class ChatManager: ObservableObject {
         markAsRead(peerID: peerID)
     }
 
-    func loadMoreMessages() {
+    public func loadMoreMessages() {
         let currentCount = messages.count
         if currentCount < allMessagesForCurrentPeer.count {
             let startIndex = max(0, allMessagesForCurrentPeer.count - currentCount - pageSize)
@@ -199,7 +199,7 @@ final class ChatManager: ObservableObject {
         }
     }
 
-    func deleteMessages(forPeer peerID: String) {
+    public func deleteMessages(forPeer peerID: String) {
         let file = messagesFile(for: peerID)
         do {
             try fileManager.removeItem(at: file)
@@ -218,7 +218,7 @@ final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    func saveMediaFile(data: Data, fileName: String, peerID: String) -> String {
+    public func saveMediaFile(data: Data, fileName: String, peerID: String) -> String {
         let dir = mediaDirectory(for: peerID)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         // peerID is internally generated; fileName is peer-supplied and
@@ -232,17 +232,17 @@ final class ChatManager: ObservableObject {
         return "\(peerID)/\(uniqueName)"
     }
 
-    func loadMediaData(relativePath: String) -> Data? {
+    public func loadMediaData(relativePath: String) -> Data? {
         let url = resolveMediaURL(relativePath)
         return try? encryptor.readAndDecrypt(from: url)
     }
 
-    func resolveMediaURL(_ relativePath: String) -> URL {
+    public func resolveMediaURL(_ relativePath: String) -> URL {
         chatDirectory.appendingPathComponent("media", isDirectory: true).appendingPathComponent(relativePath)
     }
 
     /// Write media to a temporary file for video playback.
-    func writeMediaToTempFile(relativePath: String) -> URL? {
+    public func writeMediaToTempFile(relativePath: String) -> URL? {
         guard let data = loadMediaData(relativePath: relativePath) else { return nil }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -257,7 +257,7 @@ final class ChatManager: ObservableObject {
         }
     }
 
-    func updateStatus(messageID: String, status: MessageStatus) {
+    public func updateStatus(messageID: String, status: MessageStatus) {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx].status = status
         }
@@ -282,7 +282,7 @@ final class ChatManager: ObservableObject {
         }
     }
 
-    func markLastOutgoingAsFailed(peerID: String, errorText: String) {
+    public func markLastOutgoingAsFailed(peerID: String, errorText: String) {
         // Find the last outgoing message in the in-memory list and mark it failed
         if let idx = messages.lastIndex(where: { $0.isOutgoing }) {
             messages[idx].status = .failed
@@ -293,7 +293,7 @@ final class ChatManager: ObservableObject {
     // MARK: - Group Read Status
 
     /// Update group message status for a specific message.
-    func updateGroupMessageStatus(messageID: String, status: MessageStatus) {
+    public func updateGroupMessageStatus(messageID: String, status: MessageStatus) {
         if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
             groupMessages[idx].status = status
         }
@@ -302,7 +302,7 @@ final class ChatManager: ObservableObject {
     }
 
     /// Mark a group message as delivered to a specific peer.
-    func markGroupMessageDelivered(messageID: String, groupID: String, to peerID: String) {
+    public func markGroupMessageDelivered(messageID: String, groupID: String, to peerID: String) {
         // Update in-memory
         if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
             var status = groupMessages[idx].groupReadStatus ?? GroupReadStatus()
@@ -313,7 +313,7 @@ final class ChatManager: ObservableObject {
     }
 
     /// Mark a group message as read by a specific peer.
-    func markGroupMessageRead(messageID: String, groupID: String, by peerID: String) {
+    public func markGroupMessageRead(messageID: String, groupID: String, by peerID: String) {
         // Update in-memory
         if let idx = groupMessages.firstIndex(where: { $0.id == messageID }) {
             var status = groupMessages[idx].groupReadStatus ?? GroupReadStatus()
@@ -347,7 +347,7 @@ final class ChatManager: ObservableObject {
 
     // MARK: - Unread Tracking
 
-    func markAsRead(peerID: String) {
+    public func markAsRead(peerID: String) {
         guard unreadCounts[peerID] != nil, unreadCounts[peerID] != 0 else { return }
         unreadCounts[peerID] = 0
         saveUnreadCounts()
@@ -355,7 +355,7 @@ final class ChatManager: ObservableObject {
 
     // MARK: - Typing Indicator
 
-    func setTyping(_ isTyping: Bool, for peerID: String) {
+    public func setTyping(_ isTyping: Bool, for peerID: String) {
         typingExpirationTasks[peerID]?.cancel()
 
         if isTyping {
@@ -369,24 +369,24 @@ final class ChatManager: ObservableObject {
         }
     }
 
-    func isTyping(peerID: String) -> Bool {
+    public func isTyping(peerID: String) -> Bool {
         typingPeers.contains(peerID)
     }
 
-    func getUnreadMessageIDs(for peerID: String) -> [String] {
+    public func getUnreadMessageIDs(for peerID: String) -> [String] {
         messages
             .filter { !$0.isOutgoing && $0.status != .read }
             .map { $0.id }
     }
 
-    func message(byID messageID: String) -> ChatMessage? {
+    public func message(byID messageID: String) -> ChatMessage? {
         messages.first { $0.id == messageID }
     }
 
     // MARK: - Reactions
 
     /// Add a reaction to a message.
-    func addReaction(emoji: String, to messageID: String, from senderID: String) {
+    public func addReaction(emoji: String, to messageID: String, from senderID: String) {
         guard let idx = messages.firstIndex(where: { $0.id == messageID }) else { return }
 
         var reactions = messages[idx].reactions ?? [:]
@@ -400,7 +400,7 @@ final class ChatManager: ObservableObject {
     }
 
     /// Remove a reaction from a message.
-    func removeReaction(emoji: String, from messageID: String, by senderID: String) {
+    public func removeReaction(emoji: String, from messageID: String, by senderID: String) {
         guard let idx = messages.firstIndex(where: { $0.id == messageID }) else { return }
 
         var reactions = messages[idx].reactions ?? [:]
@@ -437,7 +437,7 @@ final class ChatManager: ObservableObject {
     // MARK: - Search
 
     /// Search messages matching a query for a specific peer.
-    func searchMessages(query: String, peerID: String) -> [ChatMessage] {
+    public func searchMessages(query: String, peerID: String) -> [ChatMessage] {
         let lowercasedQuery = query.lowercased()
 
         // Load all messages for this peer if not already loaded
@@ -459,7 +459,7 @@ final class ChatManager: ObservableObject {
         .sorted { $0.timestamp > $1.timestamp } // Most recent first
     }
 
-    func incrementUnread(peerID: String) {
+    public func incrementUnread(peerID: String) {
         unreadCounts[peerID, default: 0] += 1
         saveUnreadCounts()
     }
@@ -516,7 +516,7 @@ final class ChatManager: ObservableObject {
     }
 
     /// Flush all pending persists across all peers.
-    func flushAllPendingPersists() {
+    public func flushAllPendingPersists() {
         for peerID in persistTasks.keys {
             flushPendingPersist(for: peerID)
         }
@@ -552,7 +552,7 @@ final class ChatManager: ObservableObject {
     // MARK: - Group Messages
 
     @discardableResult
-    func saveGroupOutgoing(text: String, groupID: String, localName: String) -> ChatMessage {
+    public func saveGroupOutgoing(text: String, groupID: String, localName: String) -> ChatMessage {
         let msg = ChatMessage.text(
             text: text,
             isOutgoing: true,
@@ -566,7 +566,7 @@ final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String) -> ChatMessage {
+    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String) -> ChatMessage {
         let msg = ChatMessage.text(
             text: text,
             isOutgoing: false,
@@ -582,7 +582,7 @@ final class ChatManager: ObservableObject {
         return msg
     }
 
-    func loadGroupMessages(forGroup groupID: String) {
+    public func loadGroupMessages(forGroup groupID: String) {
         let file = groupMessagesFile(for: groupID)
         guard fileManager.fileExists(atPath: file.path) else {
             groupMessages = []
@@ -599,7 +599,7 @@ final class ChatManager: ObservableObject {
         markGroupAsRead(groupID: groupID)
     }
 
-    func deleteGroupMessages(forGroup groupID: String) {
+    public func deleteGroupMessages(forGroup groupID: String) {
         let file = groupMessagesFile(for: groupID)
         try? fileManager.removeItem(at: file)
         groupMessages = []
@@ -623,18 +623,18 @@ final class ChatManager: ObservableObject {
 
     // MARK: - Group Unread Tracking
 
-    func markGroupAsRead(groupID: String) {
+    public func markGroupAsRead(groupID: String) {
         guard groupUnreadCounts[groupID] != nil, groupUnreadCounts[groupID] != 0 else { return }
         groupUnreadCounts[groupID] = 0
         saveGroupUnreadCounts()
     }
 
-    func incrementGroupUnread(groupID: String) {
+    public func incrementGroupUnread(groupID: String) {
         groupUnreadCounts[groupID, default: 0] += 1
         saveGroupUnreadCounts()
     }
 
-    func groupUnreadCount(for groupID: String) -> Int {
+    public func groupUnreadCount(for groupID: String) -> Int {
         groupUnreadCounts[groupID] ?? 0
     }
 
@@ -658,7 +658,7 @@ final class ChatManager: ObservableObject {
 
     // MARK: - Edit / Delete
 
-    func applyEdit(messageID: String, newText: String, editedAt: Date, peerID: String) {
+    public func applyEdit(messageID: String, newText: String, editedAt: Date, peerID: String) {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx] = ChatMessage(
                 id: messages[idx].id,
@@ -694,7 +694,7 @@ final class ChatManager: ObservableObject {
         persistEditOrDelete(messageID: messageID, peerID: peerID)
     }
 
-    func applyDelete(messageID: String, peerID: String) {
+    public func applyDelete(messageID: String, peerID: String) {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx].isDeleted = true
         }
@@ -727,7 +727,7 @@ final class ChatManager: ObservableObject {
 
     // MARK: - Migration
 
-    func migrateExistingDataToEncrypted() {
+    public func migrateExistingDataToEncrypted() {
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         if let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) {
             for file in files where file.pathExtension == "json" {

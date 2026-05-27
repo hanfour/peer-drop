@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct GroupEditorView: View {
     @Environment(\.dismiss) private var dismiss

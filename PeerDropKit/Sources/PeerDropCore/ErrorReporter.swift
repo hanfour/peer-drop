@@ -5,12 +5,12 @@ import os.log
 /// Sends error reports to the Cloudflare Worker for remote debugging.
 /// Reports are stored for 7 days and can be fetched with:
 ///   curl -H "X-API-Key: $KEY" https://peerdrop-signal.hanfourhuang.workers.dev/debug/reports
-enum ErrorReporter {
+public enum ErrorReporter {
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ErrorReporter")
 
     /// Send an error report. Fire-and-forget — never blocks UI.
-    static func report(
+    public static func report(
         error: String,
         context: String,
         extras: [String: String] = [:]

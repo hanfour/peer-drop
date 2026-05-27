@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct AssignGroupSheet: View {
     @Environment(\.dismiss) private var dismiss

@@ -5,6 +5,7 @@ import Foundation
 import PeerDropPlatform
 import PeerDropProtocol
 import XCTest
+@testable import PeerDropCore
 @testable import PeerDrop
 
 @MainActor

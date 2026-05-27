@@ -3,6 +3,7 @@ import XCTest
 import PeerDropProtocol
 import CryptoKit
 import PeerDropSecurity
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Integration tests for the relay-path send trust gate. Regression coverage

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct ConnectionOptionsSheet: View {
     @EnvironmentObject var connectionManager: ConnectionManager

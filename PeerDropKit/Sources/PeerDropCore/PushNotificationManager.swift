@@ -6,24 +6,24 @@ import os.log
 
 /// Handles APNs registration and invite push payload parsing.
 @MainActor
-final class PushNotificationManager: NSObject, ObservableObject {
-    static let shared = PushNotificationManager()
+public final class PushNotificationManager: NSObject, ObservableObject {
+    public static let shared = PushNotificationManager()
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PushNotificationManager")
 
     /// Emits when a push-delivered invite arrives (App in background or tap on notification).
-    @Published var receivedInvite: RelayInvite?
+    @Published public var receivedInvite: RelayInvite?
 
     /// User-grant status from `UNUserNotificationCenter`. Refreshed by
     /// `refreshAuthorizationStatus()` on app foreground.
-    @Published private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
 
     /// Where the APNs registration handshake stands. Drives the Settings
     /// "Push notification status" row — without this, the v5.0–v5.2 silent
     /// swallow on `didFailToRegisterForRemoteNotificationsWithError` made
     /// the entire push pipeline broken-by-default invisible to the user.
-    @Published private(set) var registrationState: RegistrationState = .notRequested
+    @Published public private(set) var registrationState: RegistrationState = .notRequested
 
-    enum RegistrationState: Equatable {
+    public enum RegistrationState: Equatable {
         /// Permission never asked, or permission denied — no registration attempted.
         case notRequested
         /// `registerForRemoteNotifications()` called, awaiting iOS callback.
@@ -45,14 +45,14 @@ final class PushNotificationManager: NSObject, ObservableObject {
     /// Re-read permission status from the system. Cheap; safe to call
     /// every time the app foregrounds. Catches the case where the user
     /// toggled the system permission outside the app between sessions.
-    func refreshAuthorizationStatus() async {
+    public func refreshAuthorizationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         await MainActor.run {
             self.authorizationStatus = settings.authorizationStatus
         }
     }
 
-    func requestAuthorizationAndRegister() async {
+    public func requestAuthorizationAndRegister() async {
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
             await refreshAuthorizationStatus()
@@ -76,7 +76,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
     /// Settings row and the logger subsystem. The most common cause is the
     /// `aps-environment` entitlement missing from the build (the bug present
     /// in v5.0–v5.2 that this method was added to catch).
-    func handleRegistrationFailure(_ error: Error) {
+    public func handleRegistrationFailure(_ error: Error) {
         let nsError = error as NSError
         // NSError code 3000 from NSCocoaErrorDomain on this callback is iOS's
         // way of saying "no aps-environment entitlement" — surface it
@@ -91,7 +91,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
         registrationState = .failed(reason: hint)
     }
 
-    func handleDeviceToken(_ deviceToken: Data) async {
+    public func handleDeviceToken(_ deviceToken: Data) async {
         let tokenHex = deviceToken.map { String(format: "%02x", $0) }.joined()
         let tokenPrefix = String(tokenHex.prefix(8))
         logger.info("APNs token: \(tokenPrefix)...")
@@ -132,7 +132,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
     /// Handle a background push notification.
     /// The push only contains roomCode + senderName (no roomToken for security).
     /// Triggers InboxService reconnect to fetch the full invite from the DO queue.
-    func handleRemoteNotification(_ userInfo: [AnyHashable: Any], inboxService: InboxService) {
+    public func handleRemoteNotification(_ userInfo: [AnyHashable: Any], inboxService: InboxService) {
         guard let roomCode = userInfo["roomCode"] as? String else {
             logger.warning("Ignoring push without roomCode")
             return
@@ -160,15 +160,23 @@ final class PushNotificationManager: NSObject, ObservableObject {
 }
 
 /// Shared invite payload model.
-struct RelayInvite: Identifiable, Equatable {
-    enum Source { case websocket, apns }
-    var id: String { roomCode + ":" + (senderId.isEmpty ? senderName : senderId) }
-    let roomCode: String
-    let roomToken: String
-    let senderName: String
-    let senderId: String
-    let source: Source
+public struct RelayInvite: Identifiable, Equatable {
+    public enum Source { case websocket, apns }
+    public var id: String { roomCode + ":" + (senderId.isEmpty ? senderName : senderId) }
+    public let roomCode: String
+    public let roomToken: String
+    public let senderName: String
+    public let senderId: String
+    public let source: Source
+
+    public init(roomCode: String, roomToken: String, senderName: String, senderId: String, source: Source) {
+        self.roomCode = roomCode
+        self.roomToken = roomToken
+        self.senderName = senderName
+        self.senderId = senderId
+        self.source = source
+    }
 
     /// Whether this invite has a valid room token (APNs push invites may not).
-    var hasToken: Bool { !roomToken.isEmpty }
+    public var hasToken: Bool { !roomToken.isEmpty }
 }

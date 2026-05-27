@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct UserProfileView: View {
     @Environment(\.dismiss) private var dismiss

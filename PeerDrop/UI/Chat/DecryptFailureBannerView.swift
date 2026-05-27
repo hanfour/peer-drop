@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 /// Surfaced inside `ChatView` when consecutive decrypt failures from the
 /// focused peer exceed the threshold defined on `ConnectionManager`. Tells

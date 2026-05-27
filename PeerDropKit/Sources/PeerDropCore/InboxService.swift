@@ -4,7 +4,7 @@ import PeerDropPlatform
 import os.log
 
 @MainActor
-final class InboxService: NSObject, ObservableObject {
+public final class InboxService: NSObject, ObservableObject {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "InboxService")
     private let deviceId: String
     private var webSocketTask: URLSessionWebSocketTask?
@@ -15,15 +15,15 @@ final class InboxService: NSObject, ObservableObject {
     private var reconnectAttempt = 0
     private static let maxReconnectDelay: UInt64 = 30_000_000_000 // 30s
 
-    @Published var isConnected: Bool = false
-    @Published var receivedInvite: RelayInvite?
+    @Published public var isConnected: Bool = false
+    @Published public var receivedInvite: RelayInvite?
 
-    init(deviceId: String = DeviceIdentity.deviceId) {
+    public init(deviceId: String = DeviceIdentity.deviceId) {
         self.deviceId = deviceId
         super.init()
     }
 
-    func connect() {
+    public func connect() {
         disconnect()
         reconnectAttempt = 0
         Task { await self.doConnect() }
@@ -59,7 +59,7 @@ final class InboxService: NSObject, ObservableObject {
         startPing()
     }
 
-    func disconnect() {
+    public func disconnect() {
         reconnectTask?.cancel(); reconnectTask = nil
         pingTask?.cancel(); pingTask = nil
         receiveTask?.cancel(); receiveTask = nil

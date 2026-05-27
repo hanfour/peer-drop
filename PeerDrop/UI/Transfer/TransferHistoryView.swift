@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct TransferHistoryView: View {
     @EnvironmentObject var connectionManager: ConnectionManager

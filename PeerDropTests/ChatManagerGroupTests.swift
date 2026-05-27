@@ -1,4 +1,5 @@
 import XCTest
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Tests for ChatManager group messaging functionality

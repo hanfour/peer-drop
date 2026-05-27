@@ -36,6 +36,7 @@ let package = Package(
         .target(
             name: "PeerDropCore",
             dependencies: [
+                "PeerDropPlatform",
                 "PeerDropTransport",
                 "PeerDropSecurity",
                 "PeerDropProtocol",

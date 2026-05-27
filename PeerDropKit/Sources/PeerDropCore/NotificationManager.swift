@@ -2,17 +2,17 @@ import Foundation
 import UserNotifications
 
 @MainActor
-final class NotificationManager {
-    static let shared = NotificationManager()
+public final class NotificationManager {
+    public static let shared = NotificationManager()
     private init() {}
 
-    func requestPermission() async -> Bool {
+    public func requestPermission() async -> Bool {
         do {
             return try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
         } catch { return false }
     }
 
-    func postIncomingConnection(from peerName: String) {
+    public func postIncomingConnection(from peerName: String) {
         guard UserDefaults.standard.bool(forKey: "peerDropNotificationsEnabled") else { return }
         let content = UNMutableNotificationContent()
         content.title = "Incoming Connection"
@@ -22,7 +22,7 @@ final class NotificationManager {
         UNUserNotificationCenter.current().add(request)
     }
 
-    func postChatMessage(from peerName: String, text: String) {
+    public func postChatMessage(from peerName: String, text: String) {
         guard UserDefaults.standard.bool(forKey: "peerDropNotificationsEnabled") else { return }
         let content = UNMutableNotificationContent()
         content.title = peerName
@@ -32,7 +32,7 @@ final class NotificationManager {
         UNUserNotificationCenter.current().add(request)
     }
 
-    func postTransferComplete(fileName: String, success: Bool) {
+    public func postTransferComplete(fileName: String, success: Bool) {
         guard UserDefaults.standard.bool(forKey: "peerDropNotificationsEnabled") else { return }
         let content = UNMutableNotificationContent()
         content.title = success ? "Transfer Complete" : "Transfer Failed"

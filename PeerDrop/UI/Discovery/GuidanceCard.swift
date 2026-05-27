@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct GuidanceCard: View {
     @EnvironmentObject var context: ConnectionContext

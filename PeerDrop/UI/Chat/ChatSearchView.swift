@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 /// Search view for finding messages in chat history.
 struct ChatSearchView: View {

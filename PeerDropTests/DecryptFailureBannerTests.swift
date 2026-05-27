@@ -1,4 +1,5 @@
 import XCTest
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Tests for the decrypt-failure banner (Task A.4).

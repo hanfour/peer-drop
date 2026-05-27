@@ -1,6 +1,7 @@
 import XCTest
 import PeerDropProtocol
 import Network
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Integration tests for chat messaging over loopback connection.

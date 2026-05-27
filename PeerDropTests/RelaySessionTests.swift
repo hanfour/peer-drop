@@ -1,6 +1,7 @@
 import XCTest
 @testable import PeerDropTransport
 import os
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Test seam for `WorkerSignaling`. Records every public side effect that

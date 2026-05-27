@@ -5,9 +5,9 @@ import Combine
 import os.log
 
 @MainActor
-final class ClipboardSyncManager: ObservableObject {
-    @Published private(set) var lastSyncedContent: String?
-    @Published var pendingClipboardContent: ClipboardSyncPayload?
+public final class ClipboardSyncManager: ObservableObject {
+    @Published public private(set) var lastSyncedContent: String?
+    @Published public var pendingClipboardContent: ClipboardSyncPayload?
 
     private let pasteboard: PlatformPasteboard
     private var changeCount: Int
@@ -22,7 +22,7 @@ final class ClipboardSyncManager: ObservableObject {
         self.changeCount = pasteboard.changeCount
     }
 
-    func startMonitoring() {
+    public func startMonitoring() {
         guard FeatureSettings.isClipboardSyncEnabled else { return }
         stopMonitoring()
 
@@ -45,7 +45,7 @@ final class ClipboardSyncManager: ObservableObject {
         logger.info("Clipboard sync monitoring started")
     }
 
-    func stopMonitoring() {
+    public func stopMonitoring() {
         NotificationCenter.default.removeObserver(self, name: pasteboard.changedNotificationName, object: nil)
         pollTimer?.invalidate()
         pollTimer = nil
@@ -95,7 +95,7 @@ final class ClipboardSyncManager: ObservableObject {
         return nil
     }
 
-    func applyReceivedClipboard(_ payload: ClipboardSyncPayload) {
+    public func applyReceivedClipboard(_ payload: ClipboardSyncPayload) {
         switch payload.contentType {
         case .text, .url:
             if let text = payload.textContent {
@@ -113,7 +113,7 @@ final class ClipboardSyncManager: ObservableObject {
         }
     }
 
-    func clearPending() {
+    public func clearPending() {
         pendingClipboardContent = nil
     }
 

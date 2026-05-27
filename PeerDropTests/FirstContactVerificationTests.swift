@@ -2,6 +2,7 @@ import XCTest
 @testable import PeerDropTransport
 import CryptoKit
 import PeerDropSecurity
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Tests for the first-contact consent gate (Task A.2).

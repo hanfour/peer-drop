@@ -1,6 +1,6 @@
 import Foundation
 
-enum ConnectionState: Equatable {
+public enum ConnectionState: Equatable {
     case idle
     case discovering
     case peerFound
@@ -14,7 +14,7 @@ enum ConnectionState: Equatable {
     case rejected
     case failed(reason: String)
 
-    static func == (lhs: ConnectionState, rhs: ConnectionState) -> Bool {
+    public static func == (lhs: ConnectionState, rhs: ConnectionState) -> Bool {
         switch (lhs, rhs) {
         case (.idle, .idle),
              (.discovering, .discovering),
@@ -68,7 +68,7 @@ enum ConnectionState: Equatable {
 }
 
 /// Simplified targets for transition validation (ignores associated values).
-enum TransitionTarget: Hashable {
+public enum TransitionTarget: Hashable {
     case idle, discovering, peerFound, requesting, incomingRequest
     case connecting, connected, transferring, voiceCall
     case disconnected, rejected, failed

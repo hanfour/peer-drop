@@ -3,7 +3,7 @@ import PeerDropTransport
 import PeerDropSecurity
 import PeerDropPlatform
 
-enum ArchiveManager {
+public enum ArchiveManager {
     struct Manifest: Codable {
         let version: Int
         let exportDate: Date
@@ -21,7 +21,7 @@ enum ArchiveManager {
     }
 
     @MainActor
-    static func exportArchive(deviceStore: DeviceRecordStore, transferHistory: [TransferRecord], chatManager: ChatManager) async throws -> URL {
+    public static func exportArchive(deviceStore: DeviceRecordStore, transferHistory: [TransferRecord], chatManager: ChatManager) async throws -> URL {
         let fm = FileManager.default
         let archiveDir = fm.temporaryDirectory.appendingPathComponent("PeerDropArchive", isDirectory: true)
         try? fm.removeItem(at: archiveDir)
@@ -64,7 +64,7 @@ enum ArchiveManager {
     }
 
     @MainActor
-    static func importArchive(from url: URL, merge: Bool, deviceStore: DeviceRecordStore, connectionManager: ConnectionManager) throws {
+    public static func importArchive(from url: URL, merge: Bool, deviceStore: DeviceRecordStore, connectionManager: ConnectionManager) throws {
         let fm = FileManager.default
         guard url.startAccessingSecurityScopedResource() else { throw ArchiveError.invalidArchive }
         defer { url.stopAccessingSecurityScopedResource() }

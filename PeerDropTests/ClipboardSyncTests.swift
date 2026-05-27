@@ -1,6 +1,7 @@
 import XCTest
 import PeerDropPlatform
 import PeerDropProtocol
+@testable import PeerDropCore
 @testable import PeerDrop
 
 @MainActor

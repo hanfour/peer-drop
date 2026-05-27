@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 /// Sheet shown the first time an unknown peer sends a message via the relay.
 /// The user must compare the fingerprint out-of-band (in person, phone, etc.)

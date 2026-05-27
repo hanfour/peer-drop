@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+@testable import PeerDropCore
 @testable import PeerDrop
 
 @MainActor

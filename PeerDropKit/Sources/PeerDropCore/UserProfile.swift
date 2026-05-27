@@ -1,19 +1,24 @@
 import Foundation
 import PeerDropPlatform
 
-struct UserProfile: Codable {
-    var displayName: String
-    var avatarData: Data?
+public struct UserProfile: Codable {
+    public var displayName: String
+    public var avatarData: Data?
+
+    public init(displayName: String, avatarData: Data? = nil) {
+        self.displayName = displayName
+        self.avatarData = avatarData
+    }
 
     @MainActor
-    static var current: UserProfile {
+    public static var current: UserProfile {
         let name = UserDefaults.standard.string(forKey: "peerDropDisplayName")
             ?? PlatformDependencies.shared.deviceName().currentName
         let avatar = UserDefaults.standard.data(forKey: "peerDropAvatarData")
         return UserProfile(displayName: name, avatarData: avatar)
     }
 
-    func save() {
+    public func save() {
         UserDefaults.standard.set(displayName, forKey: "peerDropDisplayName")
         if let avatarData {
             UserDefaults.standard.set(avatarData, forKey: "peerDropAvatarData")

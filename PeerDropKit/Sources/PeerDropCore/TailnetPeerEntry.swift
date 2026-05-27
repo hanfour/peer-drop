@@ -1,16 +1,16 @@
 import Foundation
 
-struct TailnetPeerEntry: Codable, Identifiable, Hashable {
-    let id: UUID
-    var displayName: String
-    var ip: String
-    var port: UInt16
-    var lastReachable: Date?
-    var lastChecked: Date?
-    var consecutiveFailures: Int
-    var addedAt: Date
+public struct TailnetPeerEntry: Codable, Identifiable, Hashable {
+    public let id: UUID
+    public var displayName: String
+    public var ip: String
+    public var port: UInt16
+    public var lastReachable: Date?
+    public var lastChecked: Date?
+    public var consecutiveFailures: Int
+    public var addedAt: Date
 
-    init(id: UUID = UUID(), displayName: String, ip: String, port: UInt16 = 9876,
+    public init(id: UUID = UUID(), displayName: String, ip: String, port: UInt16 = 9876,
          lastReachable: Date? = nil, lastChecked: Date? = nil,
          consecutiveFailures: Int = 0, addedAt: Date = Date()) {
         self.id = id
@@ -23,7 +23,7 @@ struct TailnetPeerEntry: Codable, Identifiable, Hashable {
         self.addedAt = addedAt
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         displayName = try c.decode(String.self, forKey: .displayName)
