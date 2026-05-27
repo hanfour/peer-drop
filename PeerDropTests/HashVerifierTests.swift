@@ -1,5 +1,6 @@
 import XCTest
 import PeerDropSecurity
+@testable import PeerDropTransport
 @testable import PeerDrop
 
 final class HashVerifierTests: XCTestCase {

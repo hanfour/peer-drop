@@ -45,6 +45,9 @@ let package = Package(
         .target(
             name: "PeerDropTransport",
             dependencies: [
+                "PeerDropPlatform",
+                "PeerDropProtocol",
+                "PeerDropSecurity",
                 .product(name: "WebRTC", package: "WebRTC"),
             ]
         ),

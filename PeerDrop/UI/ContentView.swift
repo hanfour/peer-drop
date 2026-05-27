@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 import PeerDropPet
 
 /// Modifier to force tab bar style on iPad (iOS 18+)

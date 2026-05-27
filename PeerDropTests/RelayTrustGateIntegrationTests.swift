@@ -1,4 +1,5 @@
 import XCTest
+@testable import PeerDropTransport
 import PeerDropProtocol
 import CryptoKit
 import PeerDropSecurity

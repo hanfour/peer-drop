@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropTransport
 import PeerDropProtocol
 import PeerDropSecurity
 import PeerDropPlatform
@@ -479,7 +480,7 @@ final class ConnectionManager: ObservableObject {
         self.localIdentity = .local(certificateFingerprint: certManager.fingerprint)
 
         // Deferred init — fileTransfer needs `self`
-        self.fileTransfer = FileTransfer(connectionManager: self)
+        self.fileTransfer = FileTransfer(host: self)
 
         loadTransferHistory()
 
@@ -514,7 +515,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
     func configureVoiceCalling(callProvider: any CallProvider) {
-        self.voiceCallManager = VoiceCallManager(connectionManager: self, callProvider: callProvider)
+        self.voiceCallManager = VoiceCallManager(host: self, callProvider: callProvider)
     }
 
     // MARK: - Multi-Connection Management
@@ -2987,7 +2988,7 @@ final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode FileResumePayload")
                 return
             }
-            peerConnection.fileTransferSession?.handleResumeRequest(payload, peerConnection: peerConnection, senderID: localIdentity.id)
+            peerConnection.fileTransferSession?.handleResumeRequest(payload, peer: peerConnection, senderID: localIdentity.id)
 
         case .fileResumeAck:
             guard let payload = try? message.decodePayload(FileResumeAckPayload.self) else {

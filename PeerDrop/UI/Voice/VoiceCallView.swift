@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 
 struct VoiceCallView: View {
     @EnvironmentObject var connectionManager: ConnectionManager

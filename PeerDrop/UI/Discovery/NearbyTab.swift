@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 import PeerDropPlatform
 
 /// All of NearbyTab's modal sheets routed through a single

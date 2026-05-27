@@ -1,4 +1,5 @@
 import Foundation
+@testable import PeerDropTransport
 import Combine
 @testable import PeerDrop
 

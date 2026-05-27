@@ -3,12 +3,18 @@ import XCTest
 @testable import PeerDropTransport
 
 final class PeerDropTransportTests: XCTestCase {
-    /// Placeholder. Real tests for PeerDropTransport consumers (Bonjour, PeerConnection, RelaySession, WebRTC, voice transport pieces) migrate
-    /// here in M1d-3 alongside the source files. This single trivial test
-    /// ensures `swift test` can find + run a test target.
-    func test_moduleIsLinkable() {
-        // PeerDropTransport is currently `public enum PeerDropTransport {}` — verify
-        // the test target can reference it.
-        XCTAssertNotNil(PeerDropTransport.self)
+    /// Placeholder. Real Transport tests migrate from PeerDropTests into
+    /// this target in Task 8. This trivial test ensures `swift test` can
+    /// find and run a test target after the placeholder enum was deleted.
+    func test_transferRecord_publicConstruction() {
+        let record = TransferRecord(
+            fileName: "test.txt",
+            fileSize: 100,
+            direction: .sent,
+            timestamp: Date(),
+            success: true
+        )
+        XCTAssertEqual(record.fileName, "test.txt")
+        XCTAssertEqual(record.fileSize, 100)
     }
 }

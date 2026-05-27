@@ -1,4 +1,5 @@
 import XCTest
+@testable import PeerDropTransport
 import NearbyInteraction
 @testable import PeerDrop
 

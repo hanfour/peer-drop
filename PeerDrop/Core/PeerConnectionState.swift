@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropTransport
 
 /// Represents the connection state of a single peer connection.
 enum PeerConnectionState: Equatable {

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropTransport
 
 struct TransferProgressView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
