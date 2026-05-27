@@ -7,12 +7,10 @@ options:
   generateEmptyDirectories: true
 
 packages:
-  WebRTC:
-    url: https://github.com/stasel/WebRTC
-    exactVersion: 125.0.0
-  ZIPFoundation:
-    url: https://github.com/weichsel/ZIPFoundation
-    from: 0.9.19
+  # WebRTC + ZIPFoundation are no longer declared at the project level —
+  # both reach the app target transitively via PeerDropKit (WebRTC via
+  # PeerDropTransport, ZIPFoundation via PeerDropPet). Pinned versions
+  # live in PeerDropKit/Package.swift.
   PeerDropKit:
     path: PeerDropKit
 
@@ -29,8 +27,6 @@ targets:
     sources:
       - path: PeerDrop
     dependencies:
-      - package: WebRTC
-      - package: ZIPFoundation
       - package: PeerDropKit
         product: PeerDropPlatform
       - package: PeerDropKit
@@ -128,7 +124,6 @@ targets:
           - "Pet/Fixtures/**"
     dependencies:
       - target: PeerDrop
-      - package: ZIPFoundation
       - package: PeerDropKit
         product: PeerDropPlatform
       - package: PeerDropKit

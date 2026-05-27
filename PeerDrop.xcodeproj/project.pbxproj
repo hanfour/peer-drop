@@ -56,19 +56,18 @@
 		3BD6BDEACD112B57E75D5A84 /* DeviceRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1240CE114D649D9D23131928 /* DeviceRecordTests.swift */; };
 		3BFDDCFE6D28A24ADDE12D20 /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 4804C899E7521ADD9D3235A6 /* PeerDropPlatform */; };
 		3C5928F07C37607D2B5A64C0 /* PixelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE30BAD21DDB022E0E0F577 /* PixelView.swift */; };
-		3CA5FD0AC5927C80A9702704 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 15B2346137F7B0E7DD7695FD /* PeerDropProtocol */; };
+		3CA5FD0AC5927C80A9702704 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 2CC1FAC04667D89A31D6A9B0 /* PeerDropPet */; };
 		3F7C39D4719DCB9C662022DA /* CrossDeviceFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EEFD7B3BD8A478DB9668CA /* CrossDeviceFeatureTests.swift */; };
 		3FC7000ACFFA0923AA0AE460 /* NearbyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505238DF5946BC1E6E39B70B /* NearbyTab.swift */; };
 		402668C766BED0AC8C7E4529 /* E2EIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613B66E2077223EA0560E336 /* E2EIntegrationTests.swift */; };
 		40AE28E8A989BDFC76547990 /* PetWelcomeFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8710FC1E6E5A083ECACA9480 /* PetWelcomeFlag.swift */; };
-		40F720FA53C330BB0E0D9925 /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 2EEFE241B38073C6F8FECED7 /* PeerDropPlatform */; };
+		40F720FA53C330BB0E0D9925 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */; };
 		417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
-		41C366502C800AE0951321B9 /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D956D3F0B546F8A036FC44C /* PeerDropCore */; };
+		41C366502C800AE0951321B9 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */; };
 		46FEAAEBFCF56D312D35998B /* PlatformGraphicsRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB3607DC56240249CB4CF1E /* PlatformGraphicsRendererTests.swift */; };
 		4700A5799483DE1A0208A038 /* TwoDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DC79A8D29D6B05BC7B689B /* TwoDeviceTests.swift */; };
 		4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */; };
 		4B9B72143D9C9EDD4C17A2EA /* PetBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6842DD7730A244B26924472 /* PetBubbleView.swift */; };
-		4F2B1D72E1F3244E4B80B685 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = F551826FCACD53BCDB32C130 /* PeerDropProtocol */; };
 		53697C35A570F2E19AFBC410 /* ConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0348BF900E45022E5C6F3268 /* ConnectionManagerTests.swift */; };
 		5404B9ED2402C165C2331399 /* PreKeyBundleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32671B725E75F8B4558D1CFB /* PreKeyBundleTests.swift */; };
 		5416998769FC38B5920C4452 /* V5UpgradeOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B239DA25974F88FD057AA9 /* V5UpgradeOnboardingTests.swift */; };
@@ -80,14 +79,14 @@
 		5805E2645C1FBD562457CACD /* KeyExchangeMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F15558483B16C63DDF73CC01 /* KeyExchangeMessageTests.swift */; };
 		5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */; };
 		5869553DAA2A2C0975800025 /* DisconnectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D98B7E882918091D8A90224 /* DisconnectSheet.swift */; };
-		588C4858607A127F21B93F02 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */; };
+		588C4858607A127F21B93F02 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = F551826FCACD53BCDB32C130 /* PeerDropProtocol */; };
 		5BD25C6F8D17B4AB4AF8966C /* DataChannelTransportReassemblyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C80BFCC4EAF2CB326660AA /* DataChannelTransportReassemblyTests.swift */; };
 		5D59113DCD6E53DE9974640F /* TransferHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC682C14084D950A4869B2CE /* TransferHistoryView.swift */; };
 		5E80D5077A36825757B36CDA /* ChatIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E26A2A79E586A8C4C682EB /* ChatIntegrationTests.swift */; };
 		5FE1AA932B3F15399C265DD8 /* ConnectionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F3B613733652656BF2FF28 /* ConnectionContextTests.swift */; };
 		61C5755BCACA92C8D909B00B /* GroupEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */; };
-		629ACA86353FAA0329245240 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = 8EB4547F381A228E30EC05C3 /* PeerDropSecurity */; };
-		6338A2FF8A0771415405A458 /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = F5806FE6474E32B719CDE2D8 /* PeerDropCore */; };
+		629ACA86353FAA0329245240 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 15B2346137F7B0E7DD7695FD /* PeerDropProtocol */; };
+		6338A2FF8A0771415405A458 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = C7783ACE48B9EEFD6653EADF /* PeerDropTransport */; };
 		6352E5CBE89C2E1B123E88B5 /* PerformanceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46984ED073D1B5356FEAEF0A /* PerformanceE2ETests.swift */; };
 		63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */; };
 		6691C0DC05645F5A6BB7DEC1 /* MediaPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */; };
@@ -109,7 +108,7 @@
 		7E6F1CBD65F99F5D00FB427D /* InteractionTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BCB78B5EC4B3A84417A174 /* InteractionTrackerTests.swift */; };
 		8089303B801F6FBE5E25C4B5 /* DisabledFeatureUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD1035C987434358B87AFCD /* DisabledFeatureUXTests.swift */; };
 		82AB0A2711658311B6373371 /* MessageFramerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8895CA9BCA992CBB0102A3C7 /* MessageFramerTests.swift */; };
-		82C7A6EA7BFAC3B16FD167EE /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 698E55080DD1EE036F00BF24 /* ZIPFoundation */; };
+		82C7A6EA7BFAC3B16FD167EE /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = A541F05155E79364B2EEE781 /* PeerDropPlatform */; };
 		8493F3E5C9C9CBAEA52CB0B0 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4148097F734513B29899E4A /* ChatView.swift */; };
 		849D53613302571E9E5235B7 /* TipJarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3DEBE03E5EDAD5B8CA5C7DC /* TipJarManager.swift */; };
 		85804F312615EC7ECE8E13E2 /* RelayConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */; };
@@ -117,7 +116,7 @@
 		8760252B1B6ADF4E0FEB4D11 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E3CFE9E060C5CF123F975D8 /* MockURLProtocol.swift */; };
 		899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D66F32C1146402F70397940 /* RetryPolicyTests.swift */; };
 		8AC1D27408D667B99802D3CF /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FEB4731FDC3D68845A758F3 /* SnapshotHelper.swift */; };
-		8B8DA92E60D440AA8C8A3CD3 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */; };
+		8B8DA92E60D440AA8C8A3CD3 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 910E85D475F0267020B97E22 /* PeerDropPet */; };
 		8BBBA409C0EF6B832DA6F848 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */; };
 		8DA618D655A058770E1034F8 /* EdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0694CAF31BEAB2BA98E99ECB /* EdgeCaseTests.swift */; };
 		8E6BA24E3436A54644379273 /* ConnectionQRView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AD6EF89412AB6F6D21874B2 /* ConnectionQRView.swift */; };
@@ -129,7 +128,6 @@
 		9943044243ED5841DD651575 /* RelaySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931B479F1EE7DDCA9BA41340 /* RelaySessionTests.swift */; };
 		9A0AE6490AE9C3A6306B7D62 /* AssignGroupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A372C9EE0F8B252F4EA5C6 /* AssignGroupSheet.swift */; };
 		9A235E33827AC9E33BECB54C /* ConnectionE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52261C190C8AD9BEA9B35F /* ConnectionE2ETests.swift */; };
-		9AE17D46F8D4E3E40C3CF348 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 910E85D475F0267020B97E22 /* PeerDropPet */; };
 		9C46933AE9ED40CF1729A0D9 /* LoopbackIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */; };
 		9F9662F64C669221246F63E8 /* SnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C0D4FA1E9B081F5960A5F5 /* SnapshotTests.swift */; };
 		A01B7F8249D416A5EE360E68 /* SecurityDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */; };
@@ -143,7 +141,6 @@
 		A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */; };
 		A8A1F50CB79026F13570A1E2 /* FoodInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61E4079207CA3828B0ECF602 /* FoodInventoryTests.swift */; };
 		A94523D3B3E9B9DF528E7358 /* DiscoveryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67AD588AE5B03D2A0DE399F /* DiscoveryServiceTests.swift */; };
-		A964AEA79B350C8DC54E6488 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 2CC1FAC04667D89A31D6A9B0 /* PeerDropPet */; };
 		AB64D01D632416F0756CE251 /* PreKeyStoreSPKTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60144E7A15F9633329D0855 /* PreKeyStoreSPKTimestampTests.swift */; };
 		AC394953E0699D3BC62370F5 /* GroupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420320526B18E15D11A63B4C /* GroupDetailView.swift */; };
 		ACAA78D8CD6F941F71265DEB /* ConnectionMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49899A580934A1E3CE7E03D4 /* ConnectionMetricsTests.swift */; };
@@ -152,13 +149,13 @@
 		B3F822E89DC1925AE31F7B87 /* RelayTrustGateIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 686D5DFA5FC5C87756722DFF /* RelayTrustGateIntegrationTests.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
 		B6AA22CF965C693A6EC66A68 /* PetInteractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46C6B8AC8121322C451DEEC7 /* PetInteractionView.swift */; };
-		B780D4E60ABD239D066BBDE5 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = C7783ACE48B9EEFD6653EADF /* PeerDropTransport */; };
+		B780D4E60ABD239D066BBDE5 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = 8EB4547F381A228E30EC05C3 /* PeerDropSecurity */; };
 		B79F1D2D3B47C8B62B8A269F /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712CCBDE5A63978DD474D214 /* GroupChatView.swift */; };
 		B8F9E453A9F2F1CB96266282 /* GuidanceCardSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */; };
 		BB0A876963F26D7D52EECB7A /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */; };
 		BC6156CC6CA44233F862B5A6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */; };
 		BCA7CC236E57C9DA467866E7 /* LocalFirstTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1D13034674D26767D38013 /* LocalFirstTrustTests.swift */; };
-		BDC78AF7F36123EE19BFBE0F /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = D2B442B92A45CC1B46325B9A /* ZIPFoundation */; };
+		BDC78AF7F36123EE19BFBE0F /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D956D3F0B546F8A036FC44C /* PeerDropCore */; };
 		BEAC6B0E1BEB6CCD74DA0C37 /* TailnetPeerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D0867DAE29BDA07261CF4A /* TailnetPeerStoreTests.swift */; };
 		BEF8CCF942780699BB8C551B /* TestSpriteHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B5484E17328BF9C97A68F15 /* TestSpriteHelper.swift */; };
 		BFE46EB28FD7D1F79F8C130B /* ConnectionOptionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF42E03015C3D6F22BB2BA9 /* ConnectionOptionsSheet.swift */; };
@@ -191,7 +188,7 @@
 		D7A85C61F57646A64E170080 /* GroupRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */; };
 		D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */; };
 		DAF0872294A78635ED2BD12A /* TimeoutConsentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */; };
-		DB1E542D2CA6C8AABAF99E3D /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = A541F05155E79364B2EEE781 /* PeerDropPlatform */; };
+		DB1E542D2CA6C8AABAF99E3D /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = F5806FE6474E32B719CDE2D8 /* PeerDropCore */; };
 		DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */; };
 		DD2DE0893C4BE33D0A962E96 /* V5UpgradeOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA5D496230C650E9C138FF7 /* V5UpgradeOnboarding.swift */; };
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
@@ -213,7 +210,7 @@
 		EF397F7C55CD03C40EB060CC /* StatusToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8522C558C3B5DDC867FCE801 /* StatusToastView.swift */; };
 		F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90A9DA5F16B00839A9012834 /* FileTransferTests.swift */; };
 		F197E8CFA4067CF49BC85B16 /* DeviceRecordStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */; };
-		F422276653E0728E859B9BC9 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C17EA9E6BE4797FC20EBBBC /* WebRTC */; };
+		F422276653E0728E859B9BC9 /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 2EEFE241B38073C6F8FECED7 /* PeerDropPlatform */; };
 		F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
 		F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C82AECE1F936949B5184F8 /* OnboardingView.swift */; };
 		F5CCE99629FF1B1F7BE70261 /* SessionKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190A50E1CBA99B173EC8B908 /* SessionKeyManagerTests.swift */; };
@@ -485,13 +482,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				82C7A6EA7BFAC3B16FD167EE /* ZIPFoundation in Frameworks */,
-				DB1E542D2CA6C8AABAF99E3D /* PeerDropPlatform in Frameworks */,
-				6338A2FF8A0771415405A458 /* PeerDropCore in Frameworks */,
-				B780D4E60ABD239D066BBDE5 /* PeerDropTransport in Frameworks */,
-				629ACA86353FAA0329245240 /* PeerDropSecurity in Frameworks */,
-				3CA5FD0AC5927C80A9702704 /* PeerDropProtocol in Frameworks */,
-				A964AEA79B350C8DC54E6488 /* PeerDropPet in Frameworks */,
+				82C7A6EA7BFAC3B16FD167EE /* PeerDropPlatform in Frameworks */,
+				DB1E542D2CA6C8AABAF99E3D /* PeerDropCore in Frameworks */,
+				6338A2FF8A0771415405A458 /* PeerDropTransport in Frameworks */,
+				B780D4E60ABD239D066BBDE5 /* PeerDropSecurity in Frameworks */,
+				629ACA86353FAA0329245240 /* PeerDropProtocol in Frameworks */,
+				3CA5FD0AC5927C80A9702704 /* PeerDropPet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -508,14 +504,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F422276653E0728E859B9BC9 /* WebRTC in Frameworks */,
-				BDC78AF7F36123EE19BFBE0F /* ZIPFoundation in Frameworks */,
-				40F720FA53C330BB0E0D9925 /* PeerDropPlatform in Frameworks */,
-				41C366502C800AE0951321B9 /* PeerDropCore in Frameworks */,
-				588C4858607A127F21B93F02 /* PeerDropTransport in Frameworks */,
-				8B8DA92E60D440AA8C8A3CD3 /* PeerDropSecurity in Frameworks */,
-				4F2B1D72E1F3244E4B80B685 /* PeerDropProtocol in Frameworks */,
-				9AE17D46F8D4E3E40C3CF348 /* PeerDropPet in Frameworks */,
+				F422276653E0728E859B9BC9 /* PeerDropPlatform in Frameworks */,
+				BDC78AF7F36123EE19BFBE0F /* PeerDropCore in Frameworks */,
+				40F720FA53C330BB0E0D9925 /* PeerDropTransport in Frameworks */,
+				41C366502C800AE0951321B9 /* PeerDropSecurity in Frameworks */,
+				588C4858607A127F21B93F02 /* PeerDropProtocol in Frameworks */,
+				8B8DA92E60D440AA8C8A3CD3 /* PeerDropPet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -983,8 +977,6 @@
 			);
 			name = PeerDrop;
 			packageProductDependencies = (
-				4C17EA9E6BE4797FC20EBBBC /* WebRTC */,
-				D2B442B92A45CC1B46325B9A /* ZIPFoundation */,
 				2EEFE241B38073C6F8FECED7 /* PeerDropPlatform */,
 				7D956D3F0B546F8A036FC44C /* PeerDropCore */,
 				79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */,
@@ -1029,7 +1021,6 @@
 			);
 			name = PeerDropTests;
 			packageProductDependencies = (
-				698E55080DD1EE036F00BF24 /* ZIPFoundation */,
 				A541F05155E79364B2EEE781 /* PeerDropPlatform */,
 				F5806FE6474E32B719CDE2D8 /* PeerDropCore */,
 				C7783ACE48B9EEFD6653EADF /* PeerDropTransport */,
@@ -1097,8 +1088,6 @@
 			mainGroup = 013E4227A0A5D1D75404C655;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */,
-				49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				0A26A23350D9759D984C445B /* XCLocalSwiftPackageReference "PeerDropKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -1716,25 +1705,6 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.19;
-			};
-		};
-		6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/stasel/WebRTC";
-			requirement = {
-				kind = exactVersion;
-				version = 125.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		15B2346137F7B0E7DD7695FD /* PeerDropProtocol */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1751,16 +1721,6 @@
 		4804C899E7521ADD9D3235A6 /* PeerDropPlatform */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PeerDropPlatform;
-		};
-		4C17EA9E6BE4797FC20EBBBC /* WebRTC */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6EA1BFE870A0982DBA285C67 /* XCRemoteSwiftPackageReference "WebRTC" */;
-			productName = WebRTC;
-		};
-		698E55080DD1EE036F00BF24 /* ZIPFoundation */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
-			productName = ZIPFoundation;
 		};
 		79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1789,11 +1749,6 @@
 		CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PeerDropSecurity;
-		};
-		D2B442B92A45CC1B46325B9A /* ZIPFoundation */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 49D7235FFBACAA767CEED854 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
-			productName = ZIPFoundation;
 		};
 		F53599A8918AF783801F15D2 /* PeerDropPet */ = {
 			isa = XCSwiftPackageProductDependency;
