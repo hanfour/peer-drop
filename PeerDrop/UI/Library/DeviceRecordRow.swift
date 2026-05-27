@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct DeviceRecordRow: View {
     let record: DeviceRecord

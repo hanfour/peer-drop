@@ -1,20 +1,21 @@
 import Foundation
 import PeerDropTransport
+import PeerDropSecurity
 import Network
 import PeerDropPet
 
 /// Provides mock data for App Store screenshot capture mode.
 /// Activated via `-SCREENSHOT_MODE 1` launch argument.
-final class ScreenshotModeProvider {
+public final class ScreenshotModeProvider {
 
-    static let shared = ScreenshotModeProvider()
+    public static let shared = ScreenshotModeProvider()
 
     private init() {}
 
     // MARK: - Mode Detection
 
     /// Check if screenshot mode is enabled via launch argument.
-    var isActive: Bool {
+    public var isActive: Bool {
         ProcessInfo.processInfo.arguments.contains("-SCREENSHOT_MODE")
     }
 
@@ -48,12 +49,12 @@ final class ScreenshotModeProvider {
 
     // MARK: - Mock Peer IDs (stable for UI tests)
 
-    static let mockPeerID1 = "MOCK-PEER-001-SCREENSHOT"
-    static let mockPeerID2 = "MOCK-PEER-002-SCREENSHOT"
-    static let mockPeerID3 = "MOCK-PEER-003-SCREENSHOT"
-    static let mockPeerID4 = "MOCK-PEER-004-SCREENSHOT"
-    static let mockPeerID5 = "MOCK-PEER-005-SCREENSHOT"
-    static let mockConnectedPeerID = mockPeerID1
+    public static let mockPeerID1 = "MOCK-PEER-001-SCREENSHOT"
+    public static let mockPeerID2 = "MOCK-PEER-002-SCREENSHOT"
+    public static let mockPeerID3 = "MOCK-PEER-003-SCREENSHOT"
+    public static let mockPeerID4 = "MOCK-PEER-004-SCREENSHOT"
+    public static let mockPeerID5 = "MOCK-PEER-005-SCREENSHOT"
+    public static let mockConnectedPeerID = mockPeerID1
 
     // MARK: - Mock Discovered Peers
 
@@ -74,7 +75,7 @@ final class ScreenshotModeProvider {
     }
 
     /// Returns 4 mock discovered peers for the Nearby tab.
-    var mockDiscoveredPeers: [DiscoveredPeer] {
+    public var mockDiscoveredPeers: [DiscoveredPeer] {
         let names: [(en: String, zhHant: String, zhHans: String, ja: String, ko: String)] = [
             ("Sarah's MacBook Pro", "小美的 MacBook Pro", "小美的 MacBook Pro", "さくらの MacBook Pro", "서연의 MacBook Pro"),
             ("James's iPhone", "阿傑的 iPhone", "阿杰的 iPhone", "健太の iPhone", "민준의 iPhone"),
@@ -129,7 +130,7 @@ final class ScreenshotModeProvider {
     // MARK: - Mock Connected Peer
 
     /// Returns a mock connected peer identity.
-    var mockConnectedPeer: PeerIdentity {
+    public var mockConnectedPeer: PeerIdentity {
         let names: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) = (
             "Sarah's MacBook Pro",
             "小美的 MacBook Pro",
@@ -161,7 +162,7 @@ final class ScreenshotModeProvider {
     }
 
     /// Returns mock chat messages for the connected peer.
-    var mockChatMessages: [ChatMessage] {
+    public var mockChatMessages: [ChatMessage] {
         let peerName = localizedPeerShortName
         let now = Date()
 
@@ -243,7 +244,7 @@ final class ScreenshotModeProvider {
     // MARK: - Mock Device Records (Contacts)
 
     /// Returns mock device records for the Library/Contacts tab.
-    var mockDeviceRecords: [DeviceRecord] {
+    public var mockDeviceRecords: [DeviceRecord] {
         let records: [(en: String, zhHant: String, zhHans: String, ja: String, ko: String, daysAgo: Int, count: Int)] = [
             ("Sarah's MacBook Pro", "小美的 MacBook Pro", "小美的 MacBook Pro", "さくらの MacBook Pro", "서연의 MacBook Pro", 0, 15),
             ("James's iPhone", "阿傑的 iPhone", "阿杰的 iPhone", "健太の iPhone", "민준의 iPhone", 1, 8),
@@ -283,7 +284,7 @@ final class ScreenshotModeProvider {
     // MARK: - Mock Transfer Records
 
     /// Returns mock transfer history for the Transfer History view.
-    var mockTransferRecords: [TransferRecord] {
+    public var mockTransferRecords: [TransferRecord] {
         let records: [(fileName: String, size: Int64, hoursAgo: Int, direction: TransferRecord.Direction)] = [
             ("Vacation_Photos.zip", 125_000_000, 1, .received),
             ("Project_Report.pdf", 2_500_000, 3, .sent),
@@ -305,7 +306,7 @@ final class ScreenshotModeProvider {
 
     // MARK: - Mock Pet State
 
-    var mockPetState: PetState {
+    public var mockPetState: PetState {
         let petNames: (en: String, zhHant: String, zhHans: String, ja: String, ko: String) =
             ("Mochi", "麻糬", "麻薯", "もち", "모찌")
 
@@ -375,7 +376,7 @@ final class ScreenshotModeProvider {
 
     // MARK: - Check if a peer ID is mock
 
-    static func isMockPeer(_ peerID: String) -> Bool {
+    public static func isMockPeer(_ peerID: String) -> Bool {
         peerID.hasPrefix("MOCK-PEER-") && peerID.hasSuffix("-SCREENSHOT")
     }
 }

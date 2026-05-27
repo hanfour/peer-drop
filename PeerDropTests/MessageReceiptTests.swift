@@ -1,5 +1,6 @@
 import XCTest
 import PeerDropProtocol
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Tests for message receipt and typing indicator functionality

@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct DevicePickerView: View {
     @EnvironmentObject var connectionManager: ConnectionManager

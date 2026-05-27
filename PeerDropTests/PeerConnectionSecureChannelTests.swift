@@ -3,6 +3,7 @@ import XCTest
 import PeerDropProtocol
 import PeerDropSecurity
 import CryptoKit
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Integration tests for the audit-#13 Phase 2 wiring: handshake state

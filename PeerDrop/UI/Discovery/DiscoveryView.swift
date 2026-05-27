@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 import PeerDropPlatform
 
 struct DiscoveryView: View {

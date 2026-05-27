@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct LibraryTab: View {
     @EnvironmentObject var connectionManager: ConnectionManager

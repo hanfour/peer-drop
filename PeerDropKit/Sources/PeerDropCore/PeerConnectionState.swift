@@ -2,13 +2,13 @@ import Foundation
 import PeerDropTransport
 
 /// Represents the connection state of a single peer connection.
-enum PeerConnectionState: Equatable {
+public enum PeerConnectionState: Equatable {
     case connecting
     case connected
     case disconnected
     case failed(reason: String)
 
-    static func == (lhs: PeerConnectionState, rhs: PeerConnectionState) -> Bool {
+    public static func == (lhs: PeerConnectionState, rhs: PeerConnectionState) -> Bool {
         switch (lhs, rhs) {
         case (.connecting, .connecting),
              (.connected, .connected),
@@ -21,7 +21,7 @@ enum PeerConnectionState: Equatable {
         }
     }
 
-    var isActive: Bool {
+    public var isActive: Bool {
         switch self {
         case .connecting, .connected:
             return true
@@ -30,7 +30,7 @@ enum PeerConnectionState: Equatable {
         }
     }
 
-    var isConnected: Bool {
+    public var isConnected: Bool {
         if case .connected = self {
             return true
         }

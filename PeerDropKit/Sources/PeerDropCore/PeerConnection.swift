@@ -11,11 +11,11 @@ private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PeerCo
 
 /// Encapsulates a single peer connection with its own state, identity, and sessions.
 @MainActor
-final class PeerConnection: ObservableObject, Identifiable {
-    let id: String  // peerID
+public final class PeerConnection: ObservableObject, Identifiable {
+    public let id: String  // peerID
     private(set) var transport: TransportProtocol
-    @Published private(set) var peerIdentity: PeerIdentity
-    @Published private(set) var state: PeerConnectionState
+    @Published public private(set) var peerIdentity: PeerIdentity
+    @Published public private(set) var state: PeerConnectionState
 
     /// Independent file transfer session for this peer.
     var fileTransferSession: FileTransferSession?
@@ -24,16 +24,16 @@ final class PeerConnection: ObservableObject, Identifiable {
     var voiceCallSession: VoiceCallSession?
 
     /// Tracks whether this connection is currently transferring a file.
-    @Published private(set) var isTransferring: Bool = false
+    @Published public private(set) var isTransferring: Bool = false
 
     /// Tracks whether this connection is in a voice call.
-    @Published private(set) var isInVoiceCall: Bool = false
+    @Published public private(set) var isInVoiceCall: Bool = false
 
     /// When this connection entered the connected state.
-    private(set) var connectedSince: Date?
+    public private(set) var connectedSince: Date?
 
     /// Bytes transferred in the last measurement window (for speed calculation).
-    @Published private(set) var transferSpeed: Int64 = 0
+    @Published public private(set) var transferSpeed: Int64 = 0
     private var lastBytesCount: Int64 = 0
     private var speedTimer: Timer?
 
@@ -69,30 +69,30 @@ final class PeerConnection: ObservableObject, Identifiable {
     private var pendingRatchetPrivateKey: Curve25519.KeyAgreement.PrivateKey?
 
     /// Phase of the local-TCP handshake.
-    enum SecureChannelState: Equatable {
+    public enum SecureChannelState: Equatable {
         case disabled              // never initiated; sendMessage plaintext
         case handshakeInProgress   // our bundle sent, awaiting peer's bundle
         case secured               // both bundles exchanged, channel ready
         case fallbackPlaintext     // peer didn't respond in time; staying plaintext
     }
-    @Published private(set) var secureChannelState: SecureChannelState = .disabled
+    @Published public private(set) var secureChannelState: SecureChannelState = .disabled
 
     /// Fingerprint-pinning verdict from the most recent handshake. Exposed
     /// for the UI so the connected-peers list can surface a lock icon for
     /// `.matched`/`.firstTrust` and a warning chip for `.mismatch`.
-    enum PinningVerdict: Equatable {
+    public enum PinningVerdict: Equatable {
         case notChecked         // channel not yet secured
         case firstTrust         // peer was unknown to TrustedContactStore — TOFU stored
         case matched            // peer key matched the existing TrustedContact entry
         case mismatch(stored: String, received: String)  // ALERT — key changed silently
     }
-    @Published private(set) var pinningVerdict: PinningVerdict = .notChecked
+    @Published public private(set) var pinningVerdict: PinningVerdict = .notChecked
 
     /// Update the pinning verdict from outside (called by ConnectionManager
     /// after running the TrustedContactStore lookup in the
     /// `onSecureChannelEstablished` callback). Keeps `pinningVerdict`'s
     /// setter `private(set)` so business code can't randomly flip it.
-    func setPinningVerdict(_ verdict: PinningVerdict) {
+    public func setPinningVerdict(_ verdict: PinningVerdict) {
         pinningVerdict = verdict
     }
 
@@ -108,7 +108,7 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// and falling back to plaintext mode. Both ends of a v5.1+ pair
     /// should respond in well under 1 second; 5 seconds is conservative
     /// enough that a slow-launching peer can still complete.
-    static let handshakeFallbackSeconds: UInt64 = 5
+    public static let handshakeFallbackSeconds: UInt64 = 5
 
     /// MessageTypes that bypass encryption even when a secureChannel exists.
     /// These are either the handshake itself or low-cost keepalive — wrapping
@@ -167,7 +167,7 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     // MARK: - State Management
 
-    func updateState(_ newState: PeerConnectionState) {
+    public func updateState(_ newState: PeerConnectionState) {
         guard state != newState else { return }
         logger.info("PeerConnection[\(self.id.prefix(8))] state: \(String(describing: self.state)) → \(String(describing: newState))")
         state = newState
@@ -186,23 +186,23 @@ final class PeerConnection: ObservableObject, Identifiable {
         }
     }
 
-    func updatePeerIdentity(_ identity: PeerIdentity) {
+    public func updatePeerIdentity(_ identity: PeerIdentity) {
         peerIdentity = identity
     }
 
-    func replaceTransport(_ newTransport: TransportProtocol) {
+    public func replaceTransport(_ newTransport: TransportProtocol) {
         transport = newTransport
         connectionGeneration = UUID()
     }
 
     /// Backward-compatible method for replacing the underlying NWConnection.
-    func replaceConnection(_ newConnection: NWConnection) {
+    public func replaceConnection(_ newConnection: NWConnection) {
         replaceTransport(TCPTransport(connection: newConnection))
     }
 
     // MARK: - Transfer State
 
-    func setTransferring(_ transferring: Bool) {
+    public func setTransferring(_ transferring: Bool) {
         isTransferring = transferring
         if transferring {
             startSpeedTracking()
@@ -211,7 +211,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         }
     }
 
-    func recordBytesTransferred(_ bytes: Int64) {
+    public func recordBytesTransferred(_ bytes: Int64) {
         lastBytesCount += bytes
     }
 
@@ -234,7 +234,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         lastBytesCount = 0
     }
 
-    func setInVoiceCall(_ inCall: Bool) {
+    public func setInVoiceCall(_ inCall: Bool) {
         isInVoiceCall = inCall
     }
 
@@ -265,7 +265,7 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     // MARK: - Message Sending
 
-    func sendMessage(_ message: PeerMessage) async throws {
+    public func sendMessage(_ message: PeerMessage) async throws {
         guard state.isActive else {
             throw ConnectionError.notConnected
         }
@@ -298,7 +298,7 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// completion go through the plaintext path.
     ///
     /// `identity` defaults to the device singleton; tests inject a fake.
-    func initiateSecureHandshake(identity: LocalChannelIdentity = IdentityKeyManager.shared) async throws {
+    public func initiateSecureHandshake(identity: LocalChannelIdentity = IdentityKeyManager.shared) async throws {
         guard secureChannelState == .disabled else { return }
         let (bundle, ratchetPriv) = LocalSecureChannel.prepareHandshake(identity: identity)
         pendingRatchetPrivateKey = ratchetPriv
@@ -312,7 +312,7 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// confirms the peer's capability flag. Initiates the handshake when
     /// both peers support it; otherwise leaves the channel disabled so
     /// every PeerMessage stays on the plaintext path (v5.0.x compat).
-    func startSecureChannelNegotiation(
+    public func startSecureChannelNegotiation(
         peerSupportsSecureChannel: Bool,
         identity: LocalChannelIdentity = IdentityKeyManager.shared
     ) async {
@@ -354,7 +354,7 @@ final class PeerConnection: ObservableObject, Identifiable {
     /// derive the channel from our held ratchet private key + the peer's
     /// bundle. After success, `secureChannel` is non-nil and state is
     /// `.secured`.
-    func handleIncomingSecureHandshake(
+    public func handleIncomingSecureHandshake(
         _ message: PeerMessage,
         identity: LocalChannelIdentity = IdentityKeyManager.shared
     ) async throws {
@@ -410,7 +410,7 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     // MARK: - Receive Loop
 
-    func startReceiving() {
+    public func startReceiving() {
         let generation = connectionGeneration
         logger.info("PeerConnection[\(self.id.prefix(8))] starting receive loop")
 
@@ -459,7 +459,7 @@ final class PeerConnection: ObservableObject, Identifiable {
 
     // MARK: - Disconnect
 
-    func disconnect(sendMessage: Bool = true) async {
+    public func disconnect(sendMessage: Bool = true) async {
         logger.info("PeerConnection[\(self.id.prefix(8))] disconnecting")
         connectionGeneration = UUID()
         heartbeatTask?.cancel()
@@ -474,7 +474,7 @@ final class PeerConnection: ObservableObject, Identifiable {
         updateState(.disconnected)
     }
 
-    func cancel() {
+    public func cancel() {
         connectionGeneration = UUID()
         transport.close()
     }

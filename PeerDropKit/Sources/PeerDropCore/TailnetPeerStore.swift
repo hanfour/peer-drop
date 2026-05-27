@@ -4,24 +4,24 @@ import Network
 import os
 
 @MainActor
-final class TailnetPeerStore: ObservableObject {
-    @Published private(set) var entries: [TailnetPeerEntry] = []
+public final class TailnetPeerStore: ObservableObject {
+    @Published public private(set) var entries: [TailnetPeerEntry] = []
     private let key = "peerDropTailnetPeers"
 
-    init() { load() }
+    public init() { load() }
 
-    func add(displayName: String, ip: String, port: UInt16 = 9876) {
+    public func add(displayName: String, ip: String, port: UInt16 = 9876) {
         let entry = TailnetPeerEntry(displayName: displayName, ip: ip, port: port)
         entries.append(entry)
         persist()
     }
 
-    func remove(id: UUID) {
+    public func remove(id: UUID) {
         entries.removeAll { $0.id == id }
         persist()
     }
 
-    func rename(id: UUID, to newName: String) {
+    public func rename(id: UUID, to newName: String) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[i].displayName = newName
         persist()
@@ -42,7 +42,7 @@ final class TailnetPeerStore: ObservableObject {
 
     private var probeTask: Task<Void, Never>?
 
-    func startPeriodicProbe() {
+    public func startPeriodicProbe() {
         probeTask?.cancel()
         probeTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -52,16 +52,16 @@ final class TailnetPeerStore: ObservableObject {
         }
     }
 
-    func stopPeriodicProbe() { probeTask?.cancel(); probeTask = nil }
+    public func stopPeriodicProbe() { probeTask?.cancel(); probeTask = nil }
 }
 
 extension TailnetPeerStore {
-    func isReachable(_ id: UUID) -> Bool {
+    public func isReachable(_ id: UUID) -> Bool {
         guard let e = entries.first(where: { $0.id == id }) else { return false }
         return e.consecutiveFailures < 2 && e.lastReachable != nil
     }
 
-    func probeAll() async {
+    public func probeAll() async {
         await withTaskGroup(of: (UUID, Bool).self) { group in
             for entry in entries {
                 group.addTask { [entry] in
@@ -83,7 +83,7 @@ extension TailnetPeerStore {
         }
     }
 
-    func addIfMissing(displayName: String, ip: String, port: UInt16 = 9876) {
+    public func addIfMissing(displayName: String, ip: String, port: UInt16 = 9876) {
         if entries.contains(where: { $0.ip == ip }) { return }
         add(displayName: displayName, ip: ip, port: port)
     }

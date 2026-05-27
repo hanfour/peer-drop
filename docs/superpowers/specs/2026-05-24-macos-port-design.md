@@ -18,24 +18,27 @@
 
 ## §1 — SPM Package Boundary
 
-`PeerDropKit/` is a local Swift Package at the repo root, shared by `PeerDropApp-iOS`, `PeerDropApp-macOS`, and `PeerDropWidget`. Five product modules:
+`PeerDropKit/` is a local Swift Package at the repo root, shared by `PeerDropApp-iOS`, `PeerDropApp-macOS`, and `PeerDropWidget`. **Six** product modules (M1d-3a added `PeerDropPlatform` as a foundational leaf below the original 5; M1 train complete after M1d-5):
 
 | Module | Contents | Platform deps |
 |---|---|---|
-| `PeerDropCore` | `ConnectionManager`, `ChatManager`, `DeviceRecordStore`, `UserProfile`, `InboxService`, `FeatureSettings`, `ScreenshotModeProvider`, `ConnectionMetrics` | Foundation only |
-| `PeerDropTransport` | Bonjour discovery, `PeerConnection`, WebRTC wrapper, `RelaySession`, `NetworkFingerprint`, `TailnetPeerStore` | Network, WebRTC SPM |
-| `PeerDropSecurity` | `PeerIdentity`, `DeviceIdentity`, `ChatDataEncryptor`, `TrustedContact`, Double Ratchet, SAS, relay crypto | CryptoKit |
-| `PeerDropProtocol` | Wire format, message envelope, version negotiation (incl. PR7 `peerProtocolVersion`) | Foundation only |
-| `PeerDropPet` | `PetGenome`, `SpeciesCatalog`, `PetRendererV3`, `SpriteService`, `PaletteSwap`, atlas decoding | CoreGraphics, ZIPFoundation |
+| `PeerDropPlatform` | UI-framework abstractions: registry + 7 protocols (`CallProvider`, `AudioSessionConfiguring`, `BackgroundTaskHandling`, `HapticFeedback`, `PlatformPasteboard`, `DeviceNameProvider`, `SystemInfoProvider`, `RemoteNotificationRegistering`, `PlatformGraphicsRenderer`) + 8 iOS adapters under `iOS/`. Also: `DeviceIdentity`, `FeatureSettings`, `PlatformImage` typealias, `HapticManager` facade. | Foundation only (+ UIKit inside `iOS/`) |
+| `PeerDropProtocol` | Wire format (`PeerMessage`, `MessageType`, `ProtocolVersion`, payload structs incl. fileChunk/fileComplete/clipboardSync etc.) | Foundation only |
+| `PeerDropSecurity` | `PeerIdentity`, `IdentityKeyManager`, `ChatDataEncryptor`, `TrustedContact`, `LocalSecureChannel` (Double Ratchet), X3DH, SAS, relay crypto, `PeerMessage+Hello` factories | CryptoKit + `PeerDropPlatform` + `PeerDropProtocol` |
+| `PeerDropPet` | `PetGenome`, `SpeciesCatalog`, `PetRendererV3`, `SpriteService`, palette swap, atlas decoding (324 species×stage zips bundled) | CoreGraphics, ZIPFoundation + `PeerDropPlatform` + `PeerDropProtocol` |
+| `PeerDropTransport` | TCP transport, framing, Bonjour/BLE/Tailscale discovery, `FileTransfer`/`FileTransferSession`, `MailboxClient`/`MailboxManager`, `OutboundRetryQueue`, WebRTC wrapper (`WebRTCClient`, `DataChannelTransport`, `RelaySession` lower-level), voice transport-side (`VoiceCallManager`, `VoiceCallSession`, `SDPSignaling`, `VoicePlayer`, `VoiceRecorder`), `TransportHost`/`MessageSendingPeer` protocols | Network, WebRTC SPM + `PeerDropPlatform` + `PeerDropProtocol` + `PeerDropSecurity` |
+| `PeerDropCore` | `ConnectionManager`, `ChatManager`, `DeviceRecordStore`, `DeviceGroupStore`, `UserProfile`, `InboxService`, `ScreenshotModeProvider`, `ConnectionMetrics`, `ArchiveManager`, `PeerConnection`, `RelaySession` (top-level), `TailnetPeerStore`, `PushNotificationManager`, `NotificationManager`, etc. — the keystone manager layer + `ConnectionManager+TransportHost` conformance bridge | Foundation + all 5 modules above |
 
 Dependency direction (strict, no cycles):
 
 ```
-PeerDropPet ────┐
-PeerDropSecurity ─┐
-PeerDropProtocol ─┼──> PeerDropCore ──> (app targets)
-PeerDropTransport ┘
+PeerDropPlatform ──┐
+PeerDropProtocol ──┼──> PeerDropSecurity ──┐
+                                            ├──> PeerDropTransport ──┐
+                  └──> PeerDropPet ────────────────────────────────────┼──> PeerDropCore ──> (app targets)
 ```
+
+App target deps after M1d-5: `package: PeerDropKit` with all 6 products. WebRTC + ZIPFoundation reach the app target transitively via `PeerDropKit` (WebRTC via Transport, ZIPFoundation via Pet); both direct package declarations were dropped from `project.yml` in M1d-5 Task 10.
 
 **Hard rules (enforced by CI):**
 - No `import UIKit` / `import AppKit` / `import WidgetKit` anywhere in `PeerDropKit/Sources/`
@@ -320,7 +323,7 @@ Investigation during M1 planning surfaced that the original spec underestimated 
 
 Total realistic M1: **~14-18 working days, ~65+ tasks across 9 PRs (M1a/b/c/d-1/d-2/d-3a/d-3b/d-4/d-5)**. Original "5–7 days, 1 PR" estimate was wildly optimistic (~3x off). Two scope-expansion events: (1) M1d → 4 sub-PRs (2026-05-25, when Pet UIKit decoupling underestimation surfaced), (2) M1d-3 → 3a + 3b (2026-05-26, when Pet → Platform cycle forced PeerDropPlatform extraction as a sub-leaf module).
 
-Both app targets build after M1d-5; ~820 tests in SPM bundles + ~90 in app targets.
+**M1 train complete (2026-05-27):** iOS app target shrunk to `App/` + `UI/` + `Pet/` (UI shell only) — every piece of business logic lives in `PeerDropKit/Sources/`. PeerDropCore has 28 source files; PeerDropTransport has 35; PeerDropPet has 61; PeerDropSecurity has 28+; PeerDropProtocol has 11; PeerDropPlatform has 16 (incl. iOS adapters). iOS 635 + SPM 614 tests pass. macOS port (M2) is now unblocked — a parallel app target consuming `PeerDropKit` products needs only the new UI shell, not any source-code duplication.
 
 ### M2 — macOS UI shell (no calling)
 Scope: §4 — create `PeerDropApp-macOS` target, SwiftUI shell, `NavigationSplitView`, `MenuBarExtra`, AppDelegate (Dock drop / reopen), menu commands, NSOpenPanel/NSSavePanel, `NSPasteboard`, Pet sprite in menu bar. 7–10 days. **Alpha milestone** — pairing, cross-platform chat, file transfer (incl. relay), Pet display all work. Voice UI hidden. Internal TestFlight Mac group opens.

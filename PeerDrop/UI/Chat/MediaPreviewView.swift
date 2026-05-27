@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 import AVKit
 
 /// Full-screen media preview for images and videos.

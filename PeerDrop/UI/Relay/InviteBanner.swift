@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct InviteBanner: View {
     let invite: RelayInvite

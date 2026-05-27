@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct StatusBadge: View {
     @Environment(\.colorScheme) private var colorScheme

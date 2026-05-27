@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct TailnetPeersView: View {
     @EnvironmentObject var connectionManager: ConnectionManager

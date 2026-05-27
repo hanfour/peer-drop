@@ -14,7 +14,7 @@ import os
 ///   3. EITHER onConnected fires (success) OR session goes out of scope without
 ///      connecting (deinit closes signaling). There is no "session ended in
 ///      failure but signaling left open" state.
-final class RelaySession {
+public final class RelaySession {
 
     enum Role {
         case creator                          // we send the offer
@@ -101,7 +101,7 @@ final class RelaySession {
     ///   waiting for another callback (which would never come — the WS
     ///   delivers `peer-joined` only once). Has no effect for the joiner role.
     @MainActor
-    func start(peerAlreadyJoined: Bool = false) async {
+    public func start(peerAlreadyJoined: Bool = false) async {
         switch role {
         case .creator: await startCreator(peerAlreadyJoined: peerAlreadyJoined)
         case .joiner:  startJoiner()
@@ -111,7 +111,7 @@ final class RelaySession {
     /// Caller (ConnectionManager) signals it no longer wants this session.
     /// Idempotent; transitions outcome to .cancelled if still .pending.
     @MainActor
-    func cancel(reason: String = "superseded") {
+    public func cancel(reason: String = "superseded") {
         guard case .pending = outcome else { return }
         outcome = .cancelled
         phase1Task?.cancel(); phase1Task = nil
@@ -497,7 +497,7 @@ final class RelaySession {
     /// (regression guard against accidentally removing the `if case .connected`
     /// short-circuit in deinit).
     @MainActor
-    func markConnectedForTesting() async {
+    public func markConnectedForTesting() async {
         guard case .pending = outcome else { return }
         let dummyTransport = DataChannelTransport(client: DataChannelClient())
         outcome = .connected(dummyTransport)

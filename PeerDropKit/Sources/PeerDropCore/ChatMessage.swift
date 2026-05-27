@@ -1,6 +1,6 @@
 import Foundation
 
-enum MessageStatus: String, Codable {
+public enum MessageStatus: String, Codable {
     case sending
     case sent
     case delivered
@@ -9,48 +9,48 @@ enum MessageStatus: String, Codable {
 }
 
 /// Tracks delivery and read status for each group member.
-struct GroupReadStatus: Codable, Equatable {
-    var deliveredTo: Set<String> = []  // Peer IDs that received the message
-    var readBy: Set<String> = []       // Peer IDs that read the message
+public struct GroupReadStatus: Codable, Equatable {
+    public var deliveredTo: Set<String> = []  // Peer IDs that received the message
+    public var readBy: Set<String> = []       // Peer IDs that read the message
 }
 
-struct ChatMessage: Identifiable, Codable {
-    let id: String
-    let text: String?
-    let isMedia: Bool
-    let mediaType: String?
-    let fileName: String?
-    let fileSize: Int64?
-    let mimeType: String?
-    let duration: Double?
-    let thumbnailData: Data?
-    var localFileURL: String?
-    let isOutgoing: Bool
-    let peerName: String
-    var status: MessageStatus
-    let timestamp: Date
+public struct ChatMessage: Identifiable, Codable {
+    public let id: String
+    public let text: String?
+    public let isMedia: Bool
+    public let mediaType: String?
+    public let fileName: String?
+    public let fileSize: Int64?
+    public let mimeType: String?
+    public let duration: Double?
+    public let thumbnailData: Data?
+    public var localFileURL: String?
+    public let isOutgoing: Bool
+    public let peerName: String
+    public var status: MessageStatus
+    public let timestamp: Date
 
     // Group messaging support
-    let groupID: String?       // nil = 1-to-1 message
-    let senderID: String?      // Identifies sender in group context
-    let senderName: String?    // Display name for group messages
+    public let groupID: String?       // nil = 1-to-1 message
+    public let senderID: String?      // Identifies sender in group context
+    public let senderName: String?    // Display name for group messages
 
     // Reply support
-    let replyToMessageID: String?    // ID of the message being replied to
-    let replyToText: String?         // Preview text of replied message
-    let replyToSenderName: String?   // Sender name of replied message
+    public let replyToMessageID: String?    // ID of the message being replied to
+    public let replyToText: String?         // Preview text of replied message
+    public let replyToSenderName: String?   // Sender name of replied message
 
     // Edit / Delete support
-    var editedAt: Date?
-    var isDeleted: Bool
+    public var editedAt: Date?
+    public var isDeleted: Bool
 
     // Reactions (emoji -> set of senderIDs)
-    var reactions: [String: Set<String>]?
+    public var reactions: [String: Set<String>]?
 
     // Group read status (for outgoing group messages)
-    var groupReadStatus: GroupReadStatus?
+    public var groupReadStatus: GroupReadStatus?
 
-    init(
+    public init(
         id: String,
         text: String?,
         isMedia: Bool,
@@ -103,7 +103,7 @@ struct ChatMessage: Identifiable, Codable {
     }
 
     // Custom decoding to handle backward compatibility with old messages
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         text = try container.decodeIfPresent(String.self, forKey: .text)
@@ -136,7 +136,7 @@ struct ChatMessage: Identifiable, Codable {
         groupReadStatus = try container.decodeIfPresent(GroupReadStatus.self, forKey: .groupReadStatus)
     }
 
-    static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
+    public static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
         ChatMessage(
             id: UUID().uuidString,
             text: text,
@@ -161,7 +161,7 @@ struct ChatMessage: Identifiable, Codable {
         )
     }
 
-    static func media(mediaType: String, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
+    public static func media(mediaType: String, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
         ChatMessage(
             id: UUID().uuidString,
             text: nil,
@@ -187,17 +187,17 @@ struct ChatMessage: Identifiable, Codable {
     }
 
     /// Whether this message is a group message.
-    var isGroupMessage: Bool {
+    public var isGroupMessage: Bool {
         groupID != nil
     }
 
     /// Whether this message is a reply to another message.
-    var isReply: Bool {
+    public var isReply: Bool {
         replyToMessageID != nil
     }
 
     /// Whether this message can still be edited or deleted (within 5 minutes).
-    var canEditOrDelete: Bool {
+    public var canEditOrDelete: Bool {
         isOutgoing && !isDeleted && !isMedia && Date().timeIntervalSince(timestamp) < 300
     }
 }

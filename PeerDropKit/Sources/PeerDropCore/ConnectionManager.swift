@@ -7,9 +7,6 @@ import Network
 import Combine
 import CryptoKit
 import SwiftUI
-#if os(iOS)
-import UIKit
-#endif
 import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ConnectionManager")
@@ -33,9 +30,10 @@ private func userFriendlyErrorMessage(_ error: Error) -> String {
             return "Secure connection failed (TLS error \(status))"
         case .dns(let dnsError):
             return "Could not find peer (\(dnsError))"
-        case .wifiAware:
-            return "WiFi Aware connection failed"
         @unknown default:
+            // Catches `.wifiAware` (iOS-only, unavailable on macOS) and any
+            // future NWError cases without forcing per-platform conditional
+            // compilation here.
             return "Network connection failed"
         }
     }
@@ -62,43 +60,43 @@ private func userFriendlyErrorMessage(_ error: Error) -> String {
 
 
 /// Incoming connection request for the consent sheet.
-struct IncomingRequest: Identifiable {
-    let id = UUID()
-    let peerIdentity: PeerIdentity
-    let connection: NWConnection
+public struct IncomingRequest: Identifiable {
+    public let id = UUID()
+    public let peerIdentity: PeerIdentity
+    public let connection: NWConnection
 }
 
 /// Pending PIN verification for a relay connection.
-struct RelayPINRequest: Identifiable {
-    let id = UUID()
-    let pin: String
-    let peerID: String
-    let remoteFingerprint: String
+public struct RelayPINRequest: Identifiable {
+    public let id = UUID()
+    public let pin: String
+    public let peerID: String
+    public let remoteFingerprint: String
 }
 
 /// Info for displaying a key change alert
-struct KeyChangeAlertInfo: Identifiable {
-    let id = UUID()
-    let contactName: String
-    let contactId: UUID
-    let oldFingerprint: String
-    let newFingerprint: String
-    let newPublicKey: Data
+public struct KeyChangeAlertInfo: Identifiable {
+    public let id = UUID()
+    public let contactName: String
+    public let contactId: UUID
+    public let oldFingerprint: String
+    public let newFingerprint: String
+    public let newPublicKey: Data
 }
 
 /// Surfaced to the user after a configurable number of consecutive decrypt
 /// failures from the same peer. Drives a dismissible banner in `ChatView`
 /// suggesting the user verify the peer's fingerprint (e.g., the peer rotated
 /// their identity key without our knowledge, or a session is corrupted).
-struct DecryptFailureBanner: Identifiable, Equatable {
-    let contactId: String
-    let displayName: String
-    var id: String { contactId }
+public struct DecryptFailureBanner: Identifiable, Equatable {
+    public let contactId: String
+    public let displayName: String
+    public var id: String { contactId }
 }
 
 /// Surfaced banner state for C2 OPK events. Drives `CryptoHardeningBanner`
 /// in the chat UI. Cleared on retry success or explicit user dismissal.
-enum C2BannerState: Equatable {
+public enum C2BannerState: Equatable {
     /// A retry is in progress for the given recipient mailbox.
     case retrying(attempts: Int, max: Int, recipientMailboxId: String)
     /// The retry cap was hit — recipient must open the app to replenish OPKs.
@@ -108,18 +106,18 @@ enum C2BannerState: Equatable {
 /// An envelope from an unknown peer awaiting user consent before X3DH session
 /// establishment. The fingerprint is the short human-readable hex string the
 /// user compares out-of-band to defend against MITM at first contact.
-struct PendingFirstContact: Equatable, Identifiable {
-    let fingerprint: String           // stable dedup key (also used as Identifiable id)
-    let senderDisplayName: String     // what to show in the sheet
-    let senderIdentityKey: Data
+public struct PendingFirstContact: Equatable, Identifiable {
+    public let fingerprint: String           // stable dedup key (also used as Identifiable id)
+    public let senderDisplayName: String     // what to show in the sheet
+    public let senderIdentityKey: Data
     /// Short Authentication String (6 digits, "NNN NNN") derived from the
     /// canonically-ordered identity key pair. Present when the prompt is
     /// driven by a `LocalSecureChannel` handshake (local-Wi-Fi audit-#14
     /// Stage 2). Nil for remote-mailbox first-contacts, which surface the
     /// SHA-256 hex fingerprint only.
-    let sas: String?
+    public let sas: String?
 
-    init(
+    public init(
         fingerprint: String,
         senderDisplayName: String,
         senderIdentityKey: Data,
@@ -131,58 +129,58 @@ struct PendingFirstContact: Equatable, Identifiable {
         self.sas = sas
     }
 
-    var id: String { fingerprint }
+    public var id: String { fingerprint }
 }
 
 /// Central state machine that orchestrates discovery, connections, transfers, and calls.
 @MainActor
-final class ConnectionManager: ObservableObject {
+public final class ConnectionManager: ObservableObject {
     // MARK: - Published State
 
-    @Published private(set) var state: ConnectionState = .idle
-    @Published private(set) var discoveredPeers: [DiscoveredPeer] = []
-    @Published var pendingIncomingRequest: IncomingRequest?
-    @Published var showTransferProgress = false
-    @Published var showVoiceCall = false
-    @Published private(set) var transferProgress: Double = 0
-    @Published var transferHistory: [TransferRecord] = [] {
+    @Published public private(set) var state: ConnectionState = .idle
+    @Published public private(set) var discoveredPeers: [DiscoveredPeer] = []
+    @Published public var pendingIncomingRequest: IncomingRequest?
+    @Published public var showTransferProgress = false
+    @Published public var showVoiceCall = false
+    @Published public private(set) var transferProgress: Double = 0
+    @Published public var transferHistory: [TransferRecord] = [] {
         didSet { saveTransferHistory() }
     }
-    @Published var latestToast: TransferRecord?
-    @Published var statusToast: String?
+    @Published public var latestToast: TransferRecord?
+    @Published public var statusToast: String?
     /// When true, the ContentView error alert is suppressed (e.g., user is in ChatView handling the error locally)
-    @Published var suppressErrorAlert: Bool = false
+    @Published public var suppressErrorAlert: Bool = false
     /// Pending PIN verification for relay connections (nil = no verification needed).
-    @Published var pendingRelayPIN: RelayPINRequest?
+    @Published public var pendingRelayPIN: RelayPINRequest?
     /// Relay room code received via deep link, triggers RelayConnectView auto-join.
-    @Published var pendingRelayJoinCode: String?
+    @Published public var pendingRelayJoinCode: String?
     /// Set when a BLE-only peer is tapped; triggers RelayConnectView to open.
-    @Published var shouldShowRelayConnect = false
+    @Published public var shouldShowRelayConnect = false
     /// Device ID currently being invited via `inviteKnownDevice` (for UI loading state).
-    @Published var invitingDeviceId: String?
+    @Published public var invitingDeviceId: String?
     /// Surface invite errors to the UI (transient; auto-cleared on next success or 5s).
-    @Published var inviteError: String?
+    @Published public var inviteError: String?
     /// Pending key change alert for a contact whose key has changed
-    @Published var pendingKeyChangeAlert: KeyChangeAlertInfo?
+    @Published public var pendingKeyChangeAlert: KeyChangeAlertInfo?
     /// Pending first-contact verification: an envelope from an unknown peer
     /// awaiting user consent before we create a TrustedContact and respond
     /// to X3DH. Drives the FirstContactVerificationSheet.
-    @Published var pendingFirstContact: PendingFirstContact?
+    @Published public var pendingFirstContact: PendingFirstContact?
     /// Pending local-Wi-Fi first-trust verification: a peer we just completed
     /// a `LocalSecureChannel` handshake with whose identity key is unknown
     /// to `TrustedContactStore`. Closes the audit-#14 TOFU gap by surfacing
     /// the fingerprint to the user instead of silently auto-trusting.
     /// Drives a second mount of `FirstContactVerificationSheet`.
-    @Published var pendingLocalFirstTrust: PendingFirstContact?
+    @Published public var pendingLocalFirstTrust: PendingFirstContact?
 
     /// Surfaced banner when consecutive decrypt failures from a single peer
     /// cross `decryptFailureBannerThreshold`. Cleared on successful decrypt
     /// from the same peer or explicit user dismissal.
-    @Published var decryptFailureBanner: DecryptFailureBanner?
+    @Published public var decryptFailureBanner: DecryptFailureBanner?
 
     /// Surfaced banner for C2 OPK events: either a retry-in-progress or a
     /// final exhausted state. Cleared on retry success or explicit user action.
-    @Published var pendingC2Banner: C2BannerState?
+    @Published public var pendingC2Banner: C2BannerState?
 
     /// Per-contact running count of consecutive decrypt failures. Reset to 0
     /// on a successful decrypt from the same peer. Keyed by `contact.id.uuidString`.
@@ -206,21 +204,21 @@ final class ConnectionManager: ObservableObject {
     /// envelopes from new peers are dropped.
     private static let maxPendingFirstContacts = 16
 
-    let tailnetStore = TailnetPeerStore()
+    public let tailnetStore = TailnetPeerStore()
 
-    var onPeerConnectedForPet: ((String) -> Void)?
-    var onPeerDisconnectedForPet: ((String) -> Void)?
+    public var onPeerConnectedForPet: ((String) -> Void)?
+    public var onPeerDisconnectedForPet: ((String) -> Void)?
 
     // MARK: - Multi-Connection Support
 
     /// All active peer connections, keyed by peerID.
-    @Published private(set) var connections: [String: PeerConnection] = [:]
+    @Published public private(set) var connections: [String: PeerConnection] = [:]
 
     /// The currently focused peer ID for UI interactions.
-    @Published var focusedPeerID: String?
+    @Published public var focusedPeerID: String?
 
     /// Maximum number of simultaneous connections allowed.
-    let maxConnections = 5
+    public let maxConnections = 5
 
     /// The currently focused connection, if any.
     var focusedConnection: PeerConnection? {
@@ -229,7 +227,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Backward-compatible: returns the focused peer's identity.
-    var connectedPeer: PeerIdentity? {
+    public var connectedPeer: PeerIdentity? {
         focusedConnection?.peerIdentity
     }
 
@@ -253,15 +251,16 @@ final class ConnectionManager: ObservableObject {
     private var discoveryCoordinator: DiscoveryCoordinator?
     private var bonjourDiscovery: BonjourDiscovery?
     private var bleDiscovery: BLEDiscovery?
-    private(set) var nearbyInteractionManager: NearbyInteractionManager?
+    #if os(iOS)
+    public private(set) var nearbyInteractionManager: NearbyInteractionManager?
+    #endif
     private var activeConnection: NWConnection?
     private var cancellables = Set<AnyCancellable>()
-    private(set) var localIdentity: PeerIdentity
-    let certificateManager = CertificateManager()
-    private(set) var lastConnectedPeer: DiscoveredPeer?
-    #if os(iOS)
-    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
-    #endif
+    public private(set) var localIdentity: PeerIdentity
+    public let certificateManager = CertificateManager()
+    public private(set) var lastConnectedPeer: DiscoveredPeer?
+    private var backgroundTaskToken: BackgroundTaskToken = .invalid
+    private lazy var backgroundTaskHandler: BackgroundTaskHandling = PlatformDependencies.shared.backgroundTaskHandler()
     private var requestingTimeoutTask: Task<Void, Never>?
     private var connectingTimeoutTask: Task<Void, Never>?
     private var consentMonitorTask: Task<Void, Never>?
@@ -281,10 +280,8 @@ final class ConnectionManager: ObservableObject {
     private let reconnectController = RetryController()
 
     // MARK: - Background Time Monitoring
-    #if os(iOS)
     private var backgroundTimeMonitorTask: Task<Void, Never>?
     private let backgroundWarningThreshold: TimeInterval = 10.0
-    #endif
 
     // MARK: - Circuit Breaker
     private var failedPeers: [String: (count: Int, lastFailed: Date)] = [:]
@@ -293,19 +290,19 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Submanagers (set after init)
 
-    private(set) var fileTransfer: FileTransfer?
-    private(set) var voiceCallManager: VoiceCallManager?
-    let deviceStore = DeviceRecordStore()
-    let chatManager = ChatManager()
-    let groupStore = DeviceGroupStore()
-    let clipboardSyncManager = ClipboardSyncManager()
-    let trustedContactStore = TrustedContactStore()
+    public private(set) var fileTransfer: FileTransfer?
+    public private(set) var voiceCallManager: VoiceCallManager?
+    public let deviceStore = DeviceRecordStore()
+    public let chatManager = ChatManager()
+    public let groupStore = DeviceGroupStore()
+    public let clipboardSyncManager = ClipboardSyncManager()
+    public let trustedContactStore = TrustedContactStore()
 
     // MARK: - Remote Communication (Phase 2)
 
-    let preKeyStore = PreKeyStore()
-    private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
-    private(set) lazy var remoteSessionManager = RemoteSessionManager(
+    public let preKeyStore = PreKeyStore()
+    public private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
+    public private(set) lazy var remoteSessionManager = RemoteSessionManager(
         preKeyStore: preKeyStore,
         mailboxClient: MailboxClient()
     )
@@ -315,19 +312,19 @@ final class ConnectionManager: ObservableObject {
     /// Policy store injected at App startup (PeerDropApp.onAppear) or via the
     /// `init` argument in unit-test contexts. `nil` until assignment. Future
     /// tasks (PR3, PR5, PR6) read `policyStore?.current` to gate crypto decisions.
-    var policyStore: SecurityPolicyStore?
+    public var policyStore: SecurityPolicyStore?
 
     /// Metrics sink for the 22 crypto-hardening telemetry events (spec §8.1).
     /// Same lifecycle as `policyStore`. Wired by future tasks as each event site
     /// is instrumented.
-    var cryptoMetrics: CryptoHardeningMetrics?
+    public var cryptoMetrics: CryptoHardeningMetrics?
 
     // MARK: - OPK Retry Queue (Task 5.3 / PR5)
 
     /// Persistent queue for messages whose X3DH initiation failed due to OPK
     /// exhaustion. Assigned async-post-init from PeerDropApp.onAppear, mirroring
     /// the policyStore / cryptoMetrics wiring pattern.
-    var outboundRetryQueue: OutboundRetryQueue?
+    public var outboundRetryQueue: OutboundRetryQueue?
 
     /// Background task driving periodic retry ticks.
     private var retryLoopTask: Task<Void, Never>?
@@ -339,7 +336,7 @@ final class ConnectionManager: ObservableObject {
     /// Start the periodic OPK retry loop. Called from `PeerDropApp.onAppear`
     /// after the queue is assigned. Idempotent — calling twice cancels and
     /// re-starts the previous loop.
-    func startRetryLoop() {
+    public func startRetryLoop() {
         retryLoopTask?.cancel()
         retryLoopTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -353,7 +350,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Cancel the periodic retry loop. Called when the app moves to background
     /// (or from tests).
-    func stopRetryLoop() {
+    public func stopRetryLoop() {
         retryLoopTask?.cancel()
         retryLoopTask = nil
     }
@@ -469,7 +466,7 @@ final class ConnectionManager: ObservableObject {
 
     private static let transferHistoryKey = "peerDropTransferHistory"
 
-    init(
+    public init(
         policyStore: SecurityPolicyStore? = nil,
         cryptoMetrics: CryptoHardeningMetrics? = nil
     ) {
@@ -514,24 +511,24 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Call once after init to wire up CallKit (requires AppDelegate reference).
-    func configureVoiceCalling(callProvider: any CallProvider) {
+    public func configureVoiceCalling(callProvider: any CallProvider) {
         self.voiceCallManager = VoiceCallManager(host: self, callProvider: callProvider)
     }
 
     // MARK: - Multi-Connection Management
 
     /// Get a connection by peer ID.
-    func connection(for peerID: String) -> PeerConnection? {
+    public func connection(for peerID: String) -> PeerConnection? {
         connections[peerID]
     }
 
     /// Check if a peer is connected.
-    func isConnected(to peerID: String) -> Bool {
+    public func isConnected(to peerID: String) -> Bool {
         connections[peerID]?.state.isConnected ?? false
     }
 
     /// Focus on a specific peer connection.
-    func focus(on peerID: String) {
+    public func focus(on peerID: String) {
         guard connections[peerID] != nil else { return }
         focusedPeerID = peerID
     }
@@ -665,6 +662,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Nearby Interaction
 
+    #if os(iOS)
     private func startNearbyInteractionSession(for peerID: String, via peerConnection: PeerConnection) {
         guard let niManager = nearbyInteractionManager else { return }
         niManager.startSession(for: peerID) { [weak self] tokenData in
@@ -676,10 +674,11 @@ final class ConnectionManager: ObservableObject {
             }
         }
     }
+    #endif
 
     // MARK: - State Transitions
 
-    func transition(to newState: ConnectionState) {
+    public func transition(to newState: ConnectionState) {
         let target = TransitionTarget(from: newState)
         guard state.canTransition(to: target) else {
             logger.warning("Invalid transition: \(String(describing: self.state)) → \(String(describing: newState))")
@@ -772,7 +771,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Discovery
 
-    func startDiscovery() {
+    public func startDiscovery() {
         // Screenshot mode: inject mock discovered peers without real network discovery
         if ScreenshotModeProvider.shared.isActive {
             startScreenshotModeDiscovery()
@@ -828,10 +827,12 @@ final class ConnectionManager: ObservableObject {
         self.bonjourDiscovery = bonjour
         self.discoveryCoordinator = coordinator
 
-        // Start Nearby Interaction if enabled
+        // Start Nearby Interaction if enabled (iOS-only)
+        #if os(iOS)
         if FeatureSettings.isNearbyInteractionEnabled {
             self.nearbyInteractionManager = NearbyInteractionManager()
         }
+        #endif
         transition(to: .discovering)
 
         // Start network path monitoring
@@ -885,7 +886,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Screenshot mode: create a mock connection to simulate connected state.
-    func setupScreenshotModeConnection() {
+    public func setupScreenshotModeConnection() {
         guard ScreenshotModeProvider.shared.isActive else { return }
         logger.info("Screenshot mode: setting up mock connection")
 
@@ -921,13 +922,15 @@ final class ConnectionManager: ObservableObject {
         logger.info("Screenshot mode: mock connection established, state = \(String(describing: self.state))")
     }
 
-    func stopDiscovery() {
+    public func stopDiscovery() {
         discoveryCoordinator?.stop()
         discoveryCoordinator = nil
         bonjourDiscovery = nil
         bleDiscovery = nil
+        #if os(iOS)
         nearbyInteractionManager?.stopAllSessions()
         nearbyInteractionManager = nil
+        #endif
         stopNetworkPathMonitor()
     }
 
@@ -983,7 +986,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func restartDiscovery() {
+    public func restartDiscovery() {
         logger.info("restartDiscovery() called from state: \(String(describing: self.state))")
         stopDiscovery()
         // Respect the user's online/offline preference before restarting
@@ -1000,7 +1003,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Clear peer info and return to discovery (used by UI "Back to Discovery" button).
-    func returnToDiscovery() {
+    public func returnToDiscovery() {
         focusedPeerID = nil
         if case .discovering = state { return }
         if discoveryCoordinator == nil {
@@ -1011,22 +1014,22 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// The port this device's Bonjour listener is running on (for QR code / deep link).
-    var localListenerPort: UInt16? {
+    public var localListenerPort: UInt16? {
         bonjourDiscovery?.actualPort
     }
 
-    func addManualPeer(host: String, port: UInt16, name: String?) {
+    public func addManualPeer(host: String, port: UInt16, name: String?) {
         discoveryCoordinator?.addManualPeer(host: host, port: port, name: name)
     }
 
-    func removeManualPeer(id: String) {
+    public func removeManualPeer(id: String) {
         discoveryCoordinator?.removeManualPeer(id: id)
     }
 
     // MARK: - Reconnect
 
     /// Attempt to reconnect to the last connected peer with exponential backoff.
-    func reconnect() {
+    public func reconnect() {
         guard let peer = lastConnectedPeer else { return }
 
         Task {
@@ -1057,7 +1060,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Check if a connection attempt should be made to the given peer.
     /// Returns `false` if the circuit breaker is open (too many recent failures).
-    func shouldAttemptConnection(to peerID: String) -> Bool {
+    public func shouldAttemptConnection(to peerID: String) -> Bool {
         guard let failure = failedPeers[peerID] else { return true }
 
         if failure.count >= circuitBreakerThreshold {
@@ -1074,7 +1077,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Record a connection failure for the given peer.
-    func recordConnectionFailure(for peerID: String) {
+    public func recordConnectionFailure(for peerID: String) {
         var failure = failedPeers[peerID] ?? (count: 0, lastFailed: Date())
         failure.count += 1
         failure.lastFailed = Date()
@@ -1092,14 +1095,14 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Record a successful connection, resetting the failure count.
-    func recordConnectionSuccess(for peerID: String) {
+    public func recordConnectionSuccess(for peerID: String) {
         if failedPeers.removeValue(forKey: peerID) != nil {
             logger.info("Circuit breaker reset for peer \(peerID.prefix(8))")
         }
     }
 
     /// Attempt to reconnect to a specific peer.
-    func reconnect(to peerID: String) {
+    public func reconnect(to peerID: String) {
         if let peer = discoveredPeers.first(where: { $0.id == peerID }) {
             requestConnection(to: peer)
         } else if let record = deviceStore.records.first(where: { $0.id == peerID }),
@@ -1114,7 +1117,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Whether a reconnect is possible (we have a last-connected peer).
-    var canReconnect: Bool {
+    public var canReconnect: Bool {
         lastConnectedPeer != nil
     }
 
@@ -1241,7 +1244,7 @@ final class ConnectionManager: ObservableObject {
     /// per-peer failure counter so the banner does not immediately re-appear
     /// on the next failure — it will only return after `threshold` NEW
     /// consecutive failures from the same peer.
-    func dismissDecryptFailureBanner() {
+    public func dismissDecryptFailureBanner() {
         if let banner = decryptFailureBanner {
             consecutiveDecryptFailures[banner.contactId] = 0
         }
@@ -1251,7 +1254,7 @@ final class ConnectionManager: ObservableObject {
     #if DEBUG
     /// Test-only: simulate a decrypt failure from a peer without driving the
     /// full `handleRemoteMessage` flow. Mirrors the production branch.
-    func recordDecryptFailureForTesting(contactId: String, displayName: String) {
+    public func recordDecryptFailureForTesting(contactId: String, displayName: String) {
         let count = (consecutiveDecryptFailures[contactId] ?? 0) + 1
         consecutiveDecryptFailures[contactId] = count
         if count >= Self.decryptFailureBannerThreshold,
@@ -1262,7 +1265,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Test-only: simulate a successful decrypt from a peer.
-    func recordDecryptSuccessForTesting(contactId: String) {
+    public func recordDecryptSuccessForTesting(contactId: String) {
         consecutiveDecryptFailures[contactId] = 0
         if decryptFailureBanner?.contactId == contactId {
             decryptFailureBanner = nil
@@ -1275,7 +1278,7 @@ final class ConnectionManager: ObservableObject {
     /// Compute the human-readable fingerprint shown to the user for a sender's
     /// identity key. Mirrors `TrustedContact.keyFingerprint` so the on-screen
     /// value matches what users see for already-trusted contacts.
-    static func computeFingerprint(of publicKey: Data) -> String {
+    public static func computeFingerprint(of publicKey: Data) -> String {
         let hash = SHA256.hash(data: publicKey)
         let hex = hash.prefix(10).map { String(format: "%02X", $0) }.joined()
         return stride(from: 0, to: 20, by: 4).map { i in
@@ -1288,7 +1291,7 @@ final class ConnectionManager: ObservableObject {
     /// User approved a first-contact. Replay the queued envelope through the
     /// normal flow: create contact at `.linked` trust, then re-enter
     /// `handleRemoteMessage` so the existing X3DH respond + decrypt path runs.
-    func approveFirstContact(fingerprint: String) {
+    public func approveFirstContact(fingerprint: String) {
         guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
         let fpKey = current.senderIdentityKey.base64EncodedString()
         guard let idx = pendingFirstContactEnvelopes.firstIndex(where: { $0.fpKey == fpKey }) else { return }
@@ -1316,7 +1319,7 @@ final class ConnectionManager: ObservableObject {
 
     /// User rejected a first-contact. Discard the queued envelope and do not
     /// create a TrustedContact; the X3DH session is never established.
-    func rejectFirstContact(fingerprint: String) {
+    public func rejectFirstContact(fingerprint: String) {
         guard let current = pendingFirstContact, current.fingerprint == fingerprint else { return }
         let fpKey = current.senderIdentityKey.base64EncodedString()
         pendingFirstContactEnvelopes.removeAll(where: { $0.fpKey == fpKey })
@@ -1343,7 +1346,7 @@ final class ConnectionManager: ObservableObject {
     #if DEBUG
     /// Test-only: invoke the private `handleRemoteMessage` so unit tests can
     /// drive the consent gate without going through MailboxManager.
-    func handleRemoteMessageForTesting(_ message: MailboxMessage) {
+    public func handleRemoteMessageForTesting(_ message: MailboxMessage) {
         handleRemoteMessage(message)
     }
 
@@ -1353,12 +1356,12 @@ final class ConnectionManager: ObservableObject {
     /// `isPeerTrustedForUserActions(peerID:)` end-to-end (peer-identity
     /// extraction → `trustedContactStore` lookup → `evaluateTrustGate`)
     /// in the relay-path scenario that the 2026-05-21 hotfix unblocked.
-    func _setConnectionForTesting(peerID: String, _ peerConnection: PeerConnection) {
+    public func _setConnectionForTesting(peerID: String, _ peerConnection: PeerConnection) {
         connections[peerID] = peerConnection
     }
     #endif
 
-    func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
+    public func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
         guard let peerMailboxId = contact.mailboxId else {
             throw MailboxError.httpError(0) // Contact has no mailbox — cannot send
         }
@@ -1404,7 +1407,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Accept Remote Invite
 
-    func acceptRemoteInvite(_ invite: InvitePayload) async throws {
+    public func acceptRemoteInvite(_ invite: InvitePayload) async throws {
         // 1. Dedup — if already accepted this invite, skip
         if let existing = trustedContactStore.find(byMailboxId: invite.mailboxId) {
             logger.info("Invite already accepted for mailbox \(invite.mailboxId), contact: \(existing.displayName)")
@@ -1506,12 +1509,10 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - App Lifecycle
 
-    func handleScenePhaseChange(_ phase: ScenePhase) {
+    public func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            #if os(iOS)
             endBackgroundTask()
-            #endif
             discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
             mailboxManager.startPolling()
             Task { await mailboxManager.uploadPreKeysIfNeeded() }
@@ -1543,16 +1544,12 @@ final class ConnectionManager: ObservableObject {
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
-                #if os(iOS)
                 beginBackgroundTask()
-                #endif
                 // Keep heartbeat running but stop discovery to save power
                 stopDiscoveryOnly()
             case .requesting, .connecting, .incomingRequest:
                 // Need background time to complete handshake
-                #if os(iOS)
                 beginBackgroundTask()
-                #endif
                 stopDiscoveryOnly()
             default:
                 // Stop Bonjour to save power, but keep BLE advertising
@@ -1561,8 +1558,10 @@ final class ConnectionManager: ObservableObject {
                 bonjourDiscovery = nil
                 discoveryCoordinator?.stop()
                 discoveryCoordinator = nil
+                #if os(iOS)
                 nearbyInteractionManager?.stopAllSessions()
                 nearbyInteractionManager = nil
+                #endif
                 stopNetworkPathMonitor()
                 // BLE kept alive via bluetooth-peripheral background mode
             }
@@ -1582,11 +1581,12 @@ final class ConnectionManager: ObservableObject {
         // Don't clear discoveredPeers - we might need them when returning
     }
 
-    #if os(iOS)
     private func beginBackgroundTask() {
-        guard backgroundTaskID == .invalid else { return }
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask { [weak self] in
-            self?.handleBackgroundExpiration()
+        guard backgroundTaskToken == .invalid else { return }
+        backgroundTaskToken = backgroundTaskHandler.begin { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleBackgroundExpiration()
+            }
         }
 
         // Start monitoring remaining background time
@@ -1594,10 +1594,10 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func endBackgroundTask() {
-        guard backgroundTaskID != .invalid else { return }
+        guard backgroundTaskToken != .invalid else { return }
         stopBackgroundTimeMonitor()
-        UIApplication.shared.endBackgroundTask(backgroundTaskID)
-        backgroundTaskID = .invalid
+        backgroundTaskHandler.end(backgroundTaskToken)
+        backgroundTaskToken = .invalid
     }
 
     private func startBackgroundTimeMonitor() {
@@ -1607,7 +1607,7 @@ final class ConnectionManager: ObservableObject {
                 try? await Task.sleep(nanoseconds: 2_000_000_000) // Check every 2 seconds
 
                 guard let self, !Task.isCancelled else { break }
-                let remaining = UIApplication.shared.backgroundTimeRemaining
+                let remaining = await MainActor.run { self.backgroundTaskHandler.backgroundTimeRemaining }
 
                 if remaining < self.backgroundWarningThreshold && remaining > 0 {
                     await MainActor.run {
@@ -1648,7 +1648,6 @@ final class ConnectionManager: ObservableObject {
         // Legacy active connection: preserve (TCP), iOS maintains socket
         endBackgroundTask()
     }
-    #endif
 
     // MARK: - Timeout Helpers
 
@@ -1744,7 +1743,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Connection Request (Outgoing)
 
-    func requestConnection(to peer: DiscoveredPeer) {
+    public func requestConnection(to peer: DiscoveredPeer) {
         // Check if already connected to this peer
         if let existingConn = connections[peer.id], existingConn.state.isConnected {
             // Just focus on this connection
@@ -2090,7 +2089,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Consent Response
 
-    func acceptConnection() {
+    public func acceptConnection() {
         guard let request = pendingIncomingRequest else { return }
         // Cancel consent monitoring and timeout
         consentMonitorTask?.cancel()
@@ -2157,8 +2156,10 @@ final class ConnectionManager: ObservableObject {
                 resetReconnectAttempts()
                 recordConnectionSuccess(for: peerID)
 
-                // Start Nearby Interaction session if available
+                // Start Nearby Interaction session if available (iOS-only)
+                #if os(iOS)
                 self.startNearbyInteractionSession(for: peerID, via: peerConnection)
+                #endif
 
                 // v5.1: peer's hello arrived inline above; capability flag
                 // is known. Kick off LocalSecureChannel handshake.
@@ -2176,7 +2177,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func rejectConnection() {
+    public func rejectConnection() {
         guard let request = pendingIncomingRequest else { return }
         // Cancel consent monitoring and timeout
         consentMonitorTask?.cancel()
@@ -2231,7 +2232,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Start a relay connection as the room creator (offerer).
-    func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
+    public func startWorkerRelayAsCreator(roomCode: String, roomToken: String? = nil, signaling: WorkerSignaling) {
         logger.info("Starting relay as creator for room: \(roomCode)")
 
         let generation = UUID()
@@ -2298,7 +2299,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Start a relay connection as a joiner (answerer).
-    func startWorkerRelayAsJoiner(roomCode: String, signaling: WorkerSignaling) async throws {
+    public func startWorkerRelayAsJoiner(roomCode: String, signaling: WorkerSignaling) async throws {
         logger.info("Starting relay as joiner for room: \(roomCode)")
 
         let generation = UUID()
@@ -2355,7 +2356,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Joiner flow for invite-driven connections — uses the roomToken from the invite
     /// instead of racing ICE→token fetch. This is the fix for NSURLErrorDomain -1011.
-    func startWorkerRelayAsJoinerWithToken(roomCode: String, roomToken: String, signaling: WorkerSignaling) async throws {
+    public func startWorkerRelayAsJoinerWithToken(roomCode: String, roomToken: String, signaling: WorkerSignaling) async throws {
         logger.info("Accepting invite — joining room \(roomCode) with token")
 
         let generation = UUID()
@@ -2421,7 +2422,7 @@ final class ConnectionManager: ObservableObject {
     /// Initiate a relay invite to a known device. Creates a room, pushes the invite via
     /// the worker (WS inbox or APNs fallback), and starts the relay session as creator.
     /// The peer side receives a `RelayInvite` and can one-tap accept — no manual code.
-    func inviteKnownDevice(_ device: DeviceRecord) async {
+    public func inviteKnownDevice(_ device: DeviceRecord) async {
         guard let peerDeviceId = device.peerDeviceId else {
             await MainActor.run { inviteError = String(localized: "Device ID not yet known") }
             return
@@ -2470,7 +2471,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Accept a relay invite — creates signaling and joins as the answerer.
     /// Dedups concurrent delivery from WebSocket inbox + APNs within a 60s window.
-    func acceptRelayInvite(_ invite: RelayInvite) {
+    public func acceptRelayInvite(_ invite: RelayInvite) {
         guard invite.hasToken else {
             logger.info("Ignoring invite without token (waiting for inbox WS flush)")
             return
@@ -2563,7 +2564,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Confirm PIN verification — store fingerprint and begin handshake.
-    func confirmRelayPIN() {
+    public func confirmRelayPIN() {
         guard let request = pendingRelayPIN else { return }
         RelayAuthenticator.storeFingerprint(request.remoteFingerprint, for: request.peerID, store: deviceStore)
         pendingRelayPIN = nil
@@ -2576,7 +2577,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Reject PIN verification — disconnect the relay peer.
-    func rejectRelayPIN() {
+    public func rejectRelayPIN() {
         guard let request = pendingRelayPIN else { return }
         pendingRelayPIN = nil
         pendingRelayPeerConnection = nil
@@ -2620,7 +2621,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func disconnect() {
+    public func disconnect() {
         logger.info("disconnect() called — state=\(String(describing: self.state)), activeConnection=\(self.activeConnection != nil ? "exists" : "nil")")
         cancelTimeouts()
         connectionGeneration = UUID()
@@ -2654,19 +2655,21 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Disconnect from a specific peer.
-    func disconnect(from peerID: String) async {
+    public func disconnect(from peerID: String) async {
         guard let peerConn = connections[peerID] else { return }
         if peerID == focusedPeerID {
             activeConnection = nil
         }
         await peerConn.disconnect()
+        #if os(iOS)
         nearbyInteractionManager?.stopSession(for: peerID)
+        #endif
         removeConnection(peerID: peerID)
         updateGlobalState()
     }
 
     /// Disconnect from all peers.
-    func disconnectAll() async {
+    public func disconnectAll() async {
         for (peerID, peerConn) in connections {
             await peerConn.disconnect()
             removeConnection(peerID: peerID)
@@ -2690,12 +2693,12 @@ final class ConnectionManager: ObservableObject {
             failedPeers.removeValue(forKey: peerID)
         }
         focusedPeerID = nil
+        #if os(iOS)
         nearbyInteractionManager?.stopAllSessions()
+        #endif
         relaySessionTimer?.cancel()
         relaySessionTimer = nil
-        #if os(iOS)
         endBackgroundTask()
-        #endif
         transition(to: .disconnected)
         // Auto-resume discovery so the user returns to the Nearby tab seamlessly.
         // Avoid full restart when the coordinator already exists — stopping the
@@ -2941,6 +2944,7 @@ final class ConnectionManager: ObservableObject {
             logger.debug("Heartbeat pong received from \(peerID)")
 
         case .niTokenOffer:
+            #if os(iOS)
             guard let payload = message.payload else { return }
             nearbyInteractionManager?.handleTokenOffer(payload, from: peerID) { [weak self] responseData in
                 guard let self else { return }
@@ -2950,10 +2954,13 @@ final class ConnectionManager: ObservableObject {
                     catch { logger.warning("Failed to send NI token response: \(error.localizedDescription)") }
                 }
             }
+            #endif
 
         case .niTokenResponse:
+            #if os(iOS)
             guard let payload = message.payload else { return }
             nearbyInteractionManager?.handleTokenResponse(payload, from: peerID)
+            #endif
 
         case .clipboardSync:
             guard FeatureSettings.isClipboardSyncEnabled else { return }
@@ -3056,10 +3063,12 @@ final class ConnectionManager: ObservableObject {
                 recordConnectionSuccess(for: identity.id)
             }
 
-            // Start Nearby Interaction for legacy path
+            // Start Nearby Interaction for legacy path (iOS-only)
+            #if os(iOS)
             if let peerID = peerIdentity?.id, let peerConn = connections[peerID] {
                 startNearbyInteractionSession(for: peerID, via: peerConn)
             }
+            #endif
 
         case .connectionReject:
             cancelTimeouts()
@@ -3091,9 +3100,7 @@ final class ConnectionManager: ObservableObject {
         case .disconnect:
             activeConnection?.cancel()
             activeConnection = nil
-            #if os(iOS)
             endBackgroundTask()
-            #endif
             fileTransfer?.handleConnectionFailure()
             voiceCallManager?.handleCallEnd()
             // Keep connectedPeer so the UI shows who disconnected.
@@ -3389,7 +3396,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func sendReadReceipts(for peerID: String) {
+    public func sendReadReceipts(for peerID: String) {
         guard let peerConn = connection(for: peerID) else { return }
 
         let unreadIDs = chatManager.getUnreadMessageIDs(for: peerID)
@@ -3415,7 +3422,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Send read receipts for group messages to all group members
-    func sendGroupReadReceipts(for groupID: String, to members: [PeerIdentity]) {
+    public func sendGroupReadReceipts(for groupID: String, to members: [PeerIdentity]) {
         let unreadIDs = chatManager.getUnreadMessageIDs(for: groupID)
         guard !unreadIDs.isEmpty else { return }
 
@@ -3449,7 +3456,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Typing Indicator
 
-    func sendTypingIndicator(to peerID: String, isTyping: Bool) {
+    public func sendTypingIndicator(to peerID: String, isTyping: Bool) {
         guard let peerConn = connection(for: peerID) else { return }
 
         let payload = TypingIndicatorPayload(isTyping: isTyping, timestamp: Date())
@@ -3463,7 +3470,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func handleTypingChange(in peerID: String, hasText: Bool) {
+    public func handleTypingChange(in peerID: String, hasText: Bool) {
         typingDebounceTask?.cancel()
 
         if hasText {
@@ -3484,7 +3491,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Reactions
 
-    func sendReaction(emoji: String, to messageID: String, action: ReactionPayload.Action, peerID: String) {
+    public func sendReaction(emoji: String, to messageID: String, action: ReactionPayload.Action, peerID: String) {
         guard let peerConn = connection(for: peerID) else { return }
 
         let payload = ReactionPayload(
@@ -3514,7 +3521,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Clipboard Sync
 
-    func sendClipboardSync(_ payload: ClipboardSyncPayload, to peerID: String) {
+    public func sendClipboardSync(_ payload: ClipboardSyncPayload, to peerID: String) {
         guard FeatureSettings.isClipboardSyncEnabled else { return }
         guard let peerConn = connection(for: peerID) else { return }
         guard let msg = try? PeerMessage.clipboardSync(payload, senderID: localIdentity.id) else {
@@ -3527,7 +3534,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func sendClipboardSyncToAll(_ payload: ClipboardSyncPayload) {
+    public func sendClipboardSyncToAll(_ payload: ClipboardSyncPayload) {
         for (peerID, peerConn) in connections where peerConn.state.isConnected {
             sendClipboardSync(payload, to: peerID)
         }
@@ -3535,7 +3542,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Message Edit / Delete
 
-    func sendMessageEdit(messageID: String, newText: String, to peerID: String, groupID: String? = nil) {
+    public func sendMessageEdit(messageID: String, newText: String, to peerID: String, groupID: String? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerConn = connection(for: peerID) else { return }
 
@@ -3552,7 +3559,7 @@ final class ConnectionManager: ObservableObject {
         chatManager.applyEdit(messageID: messageID, newText: newText, editedAt: Date(), peerID: peerID)
     }
 
-    func sendMessageDelete(messageID: String, to peerID: String, groupID: String? = nil) {
+    public func sendMessageDelete(messageID: String, to peerID: String, groupID: String? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerConn = connection(for: peerID) else { return }
 
@@ -3571,7 +3578,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Chat
 
-    func sendTextMessage(_ text: String, replyTo: ChatMessage? = nil) {
+    public func sendTextMessage(_ text: String, replyTo: ChatMessage? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
         guard let peerConn = connections[peerID] else { return }
@@ -3599,7 +3606,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Send text message to a specific peer.
-    func sendTextMessage(_ text: String, to peerID: String, replyTo: ChatMessage? = nil) {
+    public func sendTextMessage(_ text: String, to peerID: String, replyTo: ChatMessage? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerConn = connections[peerID] else { return }
         let peer = peerConn.peerIdentity
@@ -3635,7 +3642,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
+    public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
         guard let peerConn = connections[peerID] else { return }
@@ -3688,7 +3695,7 @@ final class ConnectionManager: ObservableObject {
     // MARK: - Group Connection
 
     /// Connect to all online devices in a group.
-    func connectToGroup(_ group: DeviceGroup) {
+    public func connectToGroup(_ group: DeviceGroup) {
         var connectedCount = 0
         var attemptedCount = 0
 
@@ -3727,7 +3734,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Broadcast a text message to all connected members of a group.
-    func broadcastTextMessage(_ text: String, toGroup groupID: String) {
+    public func broadcastTextMessage(_ text: String, toGroup groupID: String) {
         guard let group = groupStore.groups.first(where: { $0.id == groupID }) else { return }
 
         // Save the outgoing group message
@@ -3783,7 +3790,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Get connection status for group members.
-    func groupConnectionStatus(_ group: DeviceGroup) -> (connected: Int, total: Int, online: Int) {
+    public func groupConnectionStatus(_ group: DeviceGroup) -> (connected: Int, total: Int, online: Int) {
         let connectedCount = group.deviceIDs.filter { isConnected(to: $0) }.count
         let onlineCount = group.deviceIDs.filter { deviceID in
             discoveredPeers.contains { $0.id == deviceID }
@@ -3793,7 +3800,7 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Send helpers
 
-    func sendMessage(_ message: PeerMessage) async throws {
+    public func sendMessage(_ message: PeerMessage) async throws {
         // Try focused peer connection first
         if let peerID = focusedPeerID, let peerConn = connections[peerID] {
             try await peerConn.sendMessage(message)
@@ -3808,7 +3815,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Send message to a specific peer.
-    func sendMessage(_ message: PeerMessage, to peerID: String) async throws {
+    public func sendMessage(_ message: PeerMessage, to peerID: String) async throws {
         guard let peerConn = connections[peerID] else {
             throw ConnectionError.notConnected
         }
@@ -3838,7 +3845,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Check a peer's identity against the trusted contact store.
     /// Called after receiving a peer's hello message during connection setup.
-    func checkPeerTrust(peerIdentity: PeerIdentity) {
+    public func checkPeerTrust(peerIdentity: PeerIdentity) {
         guard let peerPublicKey = peerIdentity.identityPublicKey else {
             logger.info("Peer \(peerIdentity.displayName) has no identity public key (legacy client)")
             return
@@ -3982,7 +3989,7 @@ final class ConnectionManager: ObservableObject {
     /// `.matched` so the lock chip turns green, and clears the prompt.
     /// Connection itself is unchanged — the user only authorised continuing
     /// with this peer, not interrupting the live session.
-    func approveLocalFirstTrust(fingerprint: String) {
+    public func approveLocalFirstTrust(fingerprint: String) {
         guard let current = pendingLocalFirstTrust, current.fingerprint == fingerprint else { return }
         pendingLocalFirstTrust = nil
 
@@ -4012,7 +4019,7 @@ final class ConnectionManager: ObservableObject {
     /// `isBlocked` is the user-facing block flag; the underlying contact
     /// record persists for the audit trail so a future reconnect still
     /// surfaces the block (instead of falling back through TOFU again).
-    func blockLocalFirstTrust(fingerprint: String) {
+    public func blockLocalFirstTrust(fingerprint: String) {
         guard let current = pendingLocalFirstTrust, current.fingerprint == fingerprint else { return }
         pendingLocalFirstTrust = nil
 
@@ -4053,7 +4060,7 @@ final class ConnectionManager: ObservableObject {
     /// receiver-side approval (`approveFirstContact` on relay). Both
     /// are quality-of-life improvements rather than send blockers as
     /// of the 2026-05-21 hotfix — see `evaluateTrustGate` for history.
-    func isPeerTrustedForUserActions(peerID: String) -> Bool {
+    public func isPeerTrustedForUserActions(peerID: String) -> Bool {
         guard let peerConn = connections[peerID] else { return false }
         let publicKey = peerConn.peerIdentity.identityPublicKey
         let contact = publicKey.flatMap { trustedContactStore.find(byPublicKey: $0) }
@@ -4117,14 +4124,14 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// User chose to block the contact whose key changed
-    func handleKeyChangeBlock() {
+    public func handleKeyChangeBlock() {
         guard let alert = pendingKeyChangeAlert else { return }
         trustedContactStore.setBlocked(alert.contactId, blocked: true)
         pendingKeyChangeAlert = nil
     }
 
     /// User chose to accept the new key (sets trust to .linked — user actively accepted)
-    func handleKeyChangeAccept() {
+    public func handleKeyChangeAccept() {
         guard let alert = pendingKeyChangeAlert else { return }
         trustedContactStore.updatePublicKey(
             for: alert.contactId,
@@ -4136,7 +4143,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// User chose to verify later (stays at .unknown until face-to-face verification)
-    func handleKeyChangeVerifyLater() {
+    public func handleKeyChangeVerifyLater() {
         guard let alert = pendingKeyChangeAlert else { return }
         trustedContactStore.updatePublicKey(
             for: alert.contactId,
@@ -4169,12 +4176,12 @@ final class ConnectionManager: ObservableObject {
     }
 }
 
-enum ConnectionError: Error, LocalizedError {
+public enum ConnectionError: Error, LocalizedError {
     case notConnected
     case invalidState
     case maxConnectionsReached
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .notConnected: return "Not connected to a peer"
         case .invalidState: return "Invalid connection state"
@@ -4186,13 +4193,13 @@ enum ConnectionError: Error, LocalizedError {
 // MARK: - Retry Policy
 
 /// Exponential backoff configuration for retry logic.
-struct ExponentialBackoff {
+public struct ExponentialBackoff {
     let initialDelay: TimeInterval
     let maxDelay: TimeInterval
     let multiplier: Double
     let maxAttempts: Int
 
-    static let `default` = ExponentialBackoff(
+    public static let `default` = ExponentialBackoff(
         initialDelay: 1.0,
         maxDelay: 30.0,
         multiplier: 2.0,
@@ -4200,7 +4207,7 @@ struct ExponentialBackoff {
     )
 
     /// Calculate the delay for a given attempt number.
-    func delay(for attempt: Int) -> TimeInterval {
+    public func delay(for attempt: Int) -> TimeInterval {
         guard attempt < maxAttempts else { return maxDelay }
         let delay = initialDelay * pow(multiplier, Double(attempt))
         let jitter = Double.random(in: 0.9...1.1)
@@ -4208,13 +4215,13 @@ struct ExponentialBackoff {
     }
 
     /// Check if another retry attempt is allowed.
-    func canRetry(_ attempt: Int) -> Bool {
+    public func canRetry(_ attempt: Int) -> Bool {
         attempt < maxAttempts
     }
 }
 
 /// Actor that controls retry timing with exponential backoff.
-actor RetryController {
+public actor RetryController {
     private let policy: ExponentialBackoff
     private(set) var attemptCount = 0
 
@@ -4223,7 +4230,7 @@ actor RetryController {
     }
 
     /// Get the delay for the next retry attempt.
-    func nextDelay() -> TimeInterval? {
+    public func nextDelay() -> TimeInterval? {
         guard policy.canRetry(attemptCount) else { return nil }
         let delay = policy.delay(for: attemptCount)
         attemptCount += 1
@@ -4231,7 +4238,7 @@ actor RetryController {
     }
 
     /// Reset the attempt counter (call on successful connection).
-    func reset() {
+    public func reset() {
         attemptCount = 0
     }
 

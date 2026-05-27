@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 import PeerDropTransport
 
 // MARK: - iMessage-style bubble shape

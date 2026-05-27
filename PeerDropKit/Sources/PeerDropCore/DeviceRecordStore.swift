@@ -1,9 +1,9 @@
 import Foundation
-import SwiftUI
+import Combine
 
 @MainActor
-final class DeviceRecordStore: ObservableObject {
-    @Published var records: [DeviceRecord] = []
+public final class DeviceRecordStore: ObservableObject {
+    @Published public var records: [DeviceRecord] = []
 
     private let key = "peerDropDeviceRecords"
     private var saveTask: Task<Void, Never>?
@@ -14,7 +14,7 @@ final class DeviceRecordStore: ObservableObject {
         mergeByName()
     }
 
-    func addOrUpdate(id: String, displayName: String, sourceType: String, host: String?, port: UInt16?) {
+    public func addOrUpdate(id: String, displayName: String, sourceType: String, host: String?, port: UInt16?) {
         let now = Date()
         if let index = records.firstIndex(where: { $0.id == id }) {
             records[index].displayName = displayName
@@ -68,12 +68,12 @@ final class DeviceRecordStore: ObservableObject {
         save()
     }
 
-    func remove(id: String) {
+    public func remove(id: String) {
         records.removeAll { $0.id == id }
         save()
     }
 
-    func sorted(by mode: SortMode) -> [DeviceRecord] {
+    public func sorted(by mode: SortMode) -> [DeviceRecord] {
         switch mode {
         case .name:
             return records.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
@@ -84,7 +84,7 @@ final class DeviceRecordStore: ObservableObject {
         }
     }
 
-    func search(query: String) -> [DeviceRecord] {
+    public func search(query: String) -> [DeviceRecord] {
         guard !query.isEmpty else { return records }
         return records.filter { $0.displayName.localizedCaseInsensitiveContains(query) }
     }
@@ -121,12 +121,12 @@ final class DeviceRecordStore: ObservableObject {
         }
     }
 
-    func replaceAll(with newRecords: [DeviceRecord]) {
+    public func replaceAll(with newRecords: [DeviceRecord]) {
         records = newRecords
         save()
     }
 
-    func mergeImported(_ imported: [DeviceRecord]) {
+    public func mergeImported(_ imported: [DeviceRecord]) {
         for record in imported {
             if let index = records.firstIndex(where: { $0.id == record.id }) {
                 records[index].merge(with: record)
@@ -143,7 +143,7 @@ final class DeviceRecordStore: ObservableObject {
         records = decoded
     }
 
-    func save() {
+    public func save() {
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             do {
@@ -157,21 +157,21 @@ final class DeviceRecordStore: ObservableObject {
         }
     }
 
-    func saveImmediately() {
+    public func saveImmediately() {
         saveTask?.cancel()
         guard let data = try? JSONEncoder().encode(records) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
 
     /// Update the peer's stable device identifier after first handshake exchange.
-    func updatePeerDeviceId(for recordId: String, deviceId: String) {
+    public func updatePeerDeviceId(for recordId: String, deviceId: String) {
         guard let index = records.firstIndex(where: { $0.id == recordId }) else { return }
         records[index].peerDeviceId = deviceId
         save()
     }
 
     /// Snapshot of current records (for device picker / UI lists).
-    func allRecords() -> [DeviceRecord] {
+    public func allRecords() -> [DeviceRecord] {
         records
     }
 }

@@ -2,8 +2,8 @@ import Foundation
 import PeerDropTransport
 import os.log
 
-actor ConnectionMetrics {
-    static let shared = ConnectionMetrics()
+public actor ConnectionMetrics {
+    public static let shared = ConnectionMetrics()
 
     private static let configCacheKey = "peerDropMetricsConfig"
 
@@ -33,10 +33,15 @@ actor ConnectionMetrics {
     /// Test-only observation of the current remote config.
     var currentConfig: RemoteConfig { remoteConfig }
 
-    struct RemoteConfig: Codable {
-        let sampleRate: Double
-        let enabled: Bool
-        static let `default` = RemoteConfig(sampleRate: 1.0, enabled: true)
+    public struct RemoteConfig: Codable {
+        public let sampleRate: Double
+        public let enabled: Bool
+        public static let `default` = RemoteConfig(sampleRate: 1.0, enabled: true)
+
+        public init(sampleRate: Double, enabled: Bool) {
+            self.sampleRate = sampleRate
+            self.enabled = enabled
+        }
     }
 
     /// Snapshot of a token's mutable state captured at finalize time.
@@ -59,7 +64,7 @@ actor ConnectionMetrics {
     /// Opaque handle for one in-flight connection attempt. If this is deallocated
     /// without `recordConnected` or `recordFailure` being called, the actor records
     /// the metric as `.abandoned` on the next event-loop tick.
-    final class Token {
+    public final class Token {
         let id = UUID().uuidString
         let startedAt = Date()
         let type: ConnectionMetric.ConnectionType
@@ -108,7 +113,7 @@ actor ConnectionMetrics {
         }
     }
 
-    func begin(type: ConnectionMetric.ConnectionType, role: ConnectionMetric.Role) -> Token {
+    public func begin(type: ConnectionMetric.ConnectionType, role: ConnectionMetric.Role) -> Token {
         let t = Token(type: type, role: role)
         t.onDeinit = { [weak self] snap in
             Task { await self?.recordAbandoned(snap) }
@@ -116,27 +121,27 @@ actor ConnectionMetrics {
         return t
     }
 
-    func recordICEGather(_ token: Token, candidate: ConnectionMetric.CandidateType, order: Int, isIPv6: Bool = false) {
+    public func recordICEGather(_ token: Token, candidate: ConnectionMetric.CandidateType, order: Int, isIPv6: Bool = false) {
         token.gathered.append(candidate)
         if candidate == .srflx, token.srflxOrder == nil { token.srflxOrder = order }
         if candidate == .relay, token.relayOrder == nil { token.relayOrder = order }
         if isIPv6 { token.ipv6Gathered = true }
     }
 
-    func recordConnected(_ token: Token, used: ConnectionMetric.CandidateType, ipv6Connected: Bool = false) async {
+    public func recordConnected(_ token: Token, used: ConnectionMetric.CandidateType, ipv6Connected: Bool = false) async {
         guard !token.finalized else { return }
         token.finalized = true
         token.ipv6Connected = ipv6Connected
         await finalize(snapshot: token.snapshot(), outcome: .success, used: used)
     }
 
-    func recordFailure(_ token: Token, reason: String) async {
+    public func recordFailure(_ token: Token, reason: String) async {
         guard !token.finalized else { return }
         token.finalized = true
         await finalize(snapshot: token.snapshot(), outcome: .failure(reason: reason), used: nil)
     }
 
-    func recordPhaseTime(_ token: Token, phase: Int, elapsedMs: Int) {
+    public func recordPhaseTime(_ token: Token, phase: Int, elapsedMs: Int) {
         guard !token.finalized else { return }
         if phase == 1 {
             token.phase1Ms = elapsedMs
@@ -149,14 +154,14 @@ actor ConnectionMetrics {
         await finalize(snapshot: snapshot, outcome: .abandoned, used: nil)
     }
 
-    func updateRemoteConfig(_ cfg: RemoteConfig) {
+    public func updateRemoteConfig(_ cfg: RemoteConfig) {
         remoteConfig = cfg
     }
 
     /// Fetch the current remote config from the Worker. On success, update the
     /// in-memory value AND persist to UserDefaults so cold starts after network
     /// loss still honor the last good state. On failure, keep whatever is cached.
-    func fetchRemoteConfig() async {
+    public func fetchRemoteConfig() async {
         let baseURL = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
             ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
         guard let url = URL(string: "\(baseURL)/config/metrics") else { return }
@@ -252,7 +257,7 @@ actor ConnectionMetrics {
     /// Post buffered metrics to the Worker, one per request. Drops on any
     /// non-success status — the design doc's "no queue" policy: an unreliable
     /// device's telemetry loss is acceptable; a persistent on-device queue is not.
-    func flush() async {
+    public func flush() async {
         let batch = buffer
         buffer.removeAll(keepingCapacity: true)
         guard !batch.isEmpty else { return }

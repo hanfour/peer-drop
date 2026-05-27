@@ -1,4 +1,5 @@
 import XCTest
+@testable import PeerDropCore
 @testable import PeerDrop
 
 /// Tests for typing indicator state management in ChatManager

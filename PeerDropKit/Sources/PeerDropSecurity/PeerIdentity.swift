@@ -1,15 +1,14 @@
 import Foundation
-import PeerDropSecurity
 import PeerDropPlatform
 
-struct PeerIdentity: Codable, Identifiable, Hashable {
-    let id: String
-    let displayName: String
-    let certificateFingerprint: String?
+public struct PeerIdentity: Codable, Identifiable, Hashable {
+    public let id: String
+    public let displayName: String
+    public let certificateFingerprint: String?
     /// Curve25519 public key for E2E encryption (32 bytes). Stored property so it survives Codable serialization over the wire.
-    let identityPublicKey: Data?
+    public let identityPublicKey: Data?
     /// Human-readable fingerprint of the identity public key
-    let identityFingerprint: String?
+    public let identityFingerprint: String?
     /// v5.1+: peer supports `LocalSecureChannel` (Double Ratchet over local
     /// TCP). Both sides must report `true` before either initiates a
     /// handshake — otherwise we'd send a `.secureHandshake` PeerMessage
@@ -17,9 +16,9 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
     /// their JSON decoder or get silently dropped, leaving the channel
     /// half-up. v5.0.x and earlier wire payloads decode this key as
     /// `false` via the custom decoder below.
-    let supportsSecureChannel: Bool
+    public let supportsSecureChannel: Bool
 
-    init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true) {
+    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true) {
         self.id = UUID().uuidString
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -28,7 +27,7 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
         self.supportsSecureChannel = supportsSecureChannel
     }
 
-    init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true) {
+    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true) {
         self.id = id
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -45,7 +44,7 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
         case supportsSecureChannel
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(String.self, forKey: .id)
         self.displayName = try c.decode(String.self, forKey: .displayName)
@@ -61,10 +60,10 @@ struct PeerIdentity: Codable, Identifiable, Hashable {
 
     /// Alias for `local()` — returns the current device's identity.
     @MainActor
-    static var current: PeerIdentity { local() }
+    public static var current: PeerIdentity { local() }
 
     @MainActor
-    static func local(certificateFingerprint: String? = nil) -> PeerIdentity {
+    public static func local(certificateFingerprint: String? = nil) -> PeerIdentity {
         let name = UserDefaults.standard.string(forKey: "peerDropDisplayName")
             ?? PlatformDependencies.shared.deviceName().currentName
 

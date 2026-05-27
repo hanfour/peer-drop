@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct GroupRow: View {
     let group: DeviceGroup

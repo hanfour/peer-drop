@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 struct BackupRecordListView: View {
     let records: [DeviceRecord]

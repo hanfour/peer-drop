@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 import PeerDropTransport
 import CoreImage.CIFilterBuiltins
 import Network

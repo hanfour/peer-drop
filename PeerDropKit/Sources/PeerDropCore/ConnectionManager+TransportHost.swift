@@ -6,7 +6,7 @@ import PeerDropTransport
 /// Adapts `PeerConnection` (Core) to `MessageSendingPeer` (Transport) so
 /// Transport types can hold a channel reference without importing Core.
 extension PeerConnection: MessageSendingPeer {
-    var peerDisplayName: String { peerIdentity.displayName }
+    public var peerDisplayName: String { peerIdentity.displayName }
     // `sendMessage(_:)` async throws is already declared on PeerConnection.
 }
 
@@ -16,37 +16,37 @@ extension PeerConnection: MessageSendingPeer {
 /// (FileTransfer, VoiceCallManager, SDPSignaling, etc.) can drive UI
 /// transitions and message dispatch without importing Core.
 extension ConnectionManager: TransportHost {
-    var localPeerID: String { localIdentity.id }
+    public var localPeerID: String { localIdentity.id }
 
-    var connectedPeerDisplayName: String? { connectedPeer?.displayName }
+    public var connectedPeerDisplayName: String? { connectedPeer?.displayName }
 
-    func messageChannel(for peerID: String) -> MessageSendingPeer? {
+    public func messageChannel(for peerID: String) -> MessageSendingPeer? {
         connection(for: peerID)
     }
 
     // `sendMessage(_:)` and `sendMessage(_:to:)` async throws already exist.
     // `focusedPeerID` and `isPeerTrustedForUserActions(peerID:)` already exist.
 
-    func transferDidStart() {
+    public func transferDidStart() {
         showTransferProgress = true
     }
 
-    func transferDidEnd() {
+    public func transferDidEnd() {
         showTransferProgress = false
         transition(to: .connected)
     }
 
-    func recordTransfer(_ record: TransferRecord) {
+    public func recordTransfer(_ record: TransferRecord) {
         transferHistory.insert(record, at: 0)
         latestToast = record
     }
 
-    func voiceCallDidStart() {
+    public func voiceCallDidStart() {
         transition(to: .voiceCall)
         showVoiceCall = true
     }
 
-    func voiceCallDidEnd() {
+    public func voiceCallDidEnd() {
         showVoiceCall = false
         transition(to: .connected)
     }
