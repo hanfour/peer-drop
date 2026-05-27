@@ -108,7 +108,7 @@ public struct PlatformDependencies {
     /// the instance via `lazy var` to avoid re-allocating per call.
     @MainActor
     private static func makeBackgroundTaskHandler() -> BackgroundTaskHandling {
-        #if os(iOS)
+        #if canImport(UIKit)
         return UIKitBackgroundTaskHandler()
         #else
         return NoOpBackgroundTaskHandler()
