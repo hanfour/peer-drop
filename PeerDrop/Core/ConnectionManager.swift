@@ -7,9 +7,6 @@ import Network
 import Combine
 import CryptoKit
 import SwiftUI
-#if os(iOS)
-import UIKit
-#endif
 import os
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ConnectionManager")
@@ -259,9 +256,8 @@ final class ConnectionManager: ObservableObject {
     private(set) var localIdentity: PeerIdentity
     let certificateManager = CertificateManager()
     private(set) var lastConnectedPeer: DiscoveredPeer?
-    #if os(iOS)
-    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
-    #endif
+    private var backgroundTaskToken: BackgroundTaskToken = .invalid
+    private lazy var backgroundTaskHandler: BackgroundTaskHandling = PlatformDependencies.shared.backgroundTaskHandler()
     private var requestingTimeoutTask: Task<Void, Never>?
     private var connectingTimeoutTask: Task<Void, Never>?
     private var consentMonitorTask: Task<Void, Never>?
@@ -281,10 +277,8 @@ final class ConnectionManager: ObservableObject {
     private let reconnectController = RetryController()
 
     // MARK: - Background Time Monitoring
-    #if os(iOS)
     private var backgroundTimeMonitorTask: Task<Void, Never>?
     private let backgroundWarningThreshold: TimeInterval = 10.0
-    #endif
 
     // MARK: - Circuit Breaker
     private var failedPeers: [String: (count: Int, lastFailed: Date)] = [:]
@@ -1509,9 +1503,7 @@ final class ConnectionManager: ObservableObject {
     func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            #if os(iOS)
             endBackgroundTask()
-            #endif
             discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
             mailboxManager.startPolling()
             Task { await mailboxManager.uploadPreKeysIfNeeded() }
@@ -1543,16 +1535,12 @@ final class ConnectionManager: ObservableObject {
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
-                #if os(iOS)
                 beginBackgroundTask()
-                #endif
                 // Keep heartbeat running but stop discovery to save power
                 stopDiscoveryOnly()
             case .requesting, .connecting, .incomingRequest:
                 // Need background time to complete handshake
-                #if os(iOS)
                 beginBackgroundTask()
-                #endif
                 stopDiscoveryOnly()
             default:
                 // Stop Bonjour to save power, but keep BLE advertising
@@ -1582,11 +1570,12 @@ final class ConnectionManager: ObservableObject {
         // Don't clear discoveredPeers - we might need them when returning
     }
 
-    #if os(iOS)
     private func beginBackgroundTask() {
-        guard backgroundTaskID == .invalid else { return }
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask { [weak self] in
-            self?.handleBackgroundExpiration()
+        guard backgroundTaskToken == .invalid else { return }
+        backgroundTaskToken = backgroundTaskHandler.begin { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleBackgroundExpiration()
+            }
         }
 
         // Start monitoring remaining background time
@@ -1594,10 +1583,10 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func endBackgroundTask() {
-        guard backgroundTaskID != .invalid else { return }
+        guard backgroundTaskToken != .invalid else { return }
         stopBackgroundTimeMonitor()
-        UIApplication.shared.endBackgroundTask(backgroundTaskID)
-        backgroundTaskID = .invalid
+        backgroundTaskHandler.end(backgroundTaskToken)
+        backgroundTaskToken = .invalid
     }
 
     private func startBackgroundTimeMonitor() {
@@ -1607,7 +1596,7 @@ final class ConnectionManager: ObservableObject {
                 try? await Task.sleep(nanoseconds: 2_000_000_000) // Check every 2 seconds
 
                 guard let self, !Task.isCancelled else { break }
-                let remaining = UIApplication.shared.backgroundTimeRemaining
+                let remaining = await MainActor.run { self.backgroundTaskHandler.backgroundTimeRemaining }
 
                 if remaining < self.backgroundWarningThreshold && remaining > 0 {
                     await MainActor.run {
@@ -1648,7 +1637,6 @@ final class ConnectionManager: ObservableObject {
         // Legacy active connection: preserve (TCP), iOS maintains socket
         endBackgroundTask()
     }
-    #endif
 
     // MARK: - Timeout Helpers
 
@@ -2693,9 +2681,7 @@ final class ConnectionManager: ObservableObject {
         nearbyInteractionManager?.stopAllSessions()
         relaySessionTimer?.cancel()
         relaySessionTimer = nil
-        #if os(iOS)
         endBackgroundTask()
-        #endif
         transition(to: .disconnected)
         // Auto-resume discovery so the user returns to the Nearby tab seamlessly.
         // Avoid full restart when the coordinator already exists — stopping the
@@ -3091,9 +3077,7 @@ final class ConnectionManager: ObservableObject {
         case .disconnect:
             activeConnection?.cancel()
             activeConnection = nil
-            #if os(iOS)
             endBackgroundTask()
-            #endif
             fileTransfer?.handleConnectionFailure()
             voiceCallManager?.handleCallEnd()
             // Keep connectedPeer so the UI shows who disconnected.

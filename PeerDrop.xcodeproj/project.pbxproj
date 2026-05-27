@@ -404,6 +404,7 @@
 		6A9B0AFA399348062ED5EB5D /* V5_4_BackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5_4_BackwardCompatTests.swift; sourceTree = "<group>"; };
 		6B34AD557F41611401810878 /* DeviceIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityTests.swift; sourceTree = "<group>"; };
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
+		6EE7E1554543B3A968CF55AB /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
@@ -504,7 +505,6 @@
 		D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReplyTests.swift; sourceTree = "<group>"; };
 		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutConsentTests.swift; sourceTree = "<group>"; };
-		D303F0C9850C44E69C6C222C /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		D85E471A8F4B9D788A277219 /* CryptoHardeningBannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoHardeningBannerTests.swift; sourceTree = "<group>"; };
 		D89C720568E6E3EF69A02539 /* TipJarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarSection.swift; sourceTree = "<group>"; };
 		D9D4B08876FBC62C951D3E1F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -585,7 +585,7 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				7F710D1200482855BB9C38AF /* feat+m1d-4-transport-migration */,
+				EF31D90B24355D86B8905572 /* feat+m1d-5-core-migration */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
@@ -805,15 +805,6 @@
 				9B335967E2F46FE4D5037176 /* VerificationView.swift */,
 			);
 			path = Security;
-			sourceTree = "<group>";
-		};
-		7F710D1200482855BB9C38AF /* feat+m1d-4-transport-migration */ = {
-			isa = PBXGroup;
-			children = (
-				D303F0C9850C44E69C6C222C /* Secrets.xcconfig */,
-			);
-			name = "feat+m1d-4-transport-migration";
-			path = .;
 			sourceTree = "<group>";
 		};
 		8D255639E6CD70E3B1F87B26 /* PeerDropUITests */ = {
@@ -1047,6 +1038,15 @@
 				12D923E9AEBB7B4CB54DE632 /* Platform */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		EF31D90B24355D86B8905572 /* feat+m1d-5-core-migration */ = {
+			isa = PBXGroup;
+			children = (
+				6EE7E1554543B3A968CF55AB /* Secrets.xcconfig */,
+			);
+			name = "feat+m1d-5-core-migration";
+			path = .;
 			sourceTree = "<group>";
 		};
 		F56F45F22B8B559848A80502 /* Connection */ = {
@@ -1620,7 +1620,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D303F0C9850C44E69C6C222C /* Secrets.xcconfig */;
+			baseConfigurationReference = 6EE7E1554543B3A968CF55AB /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1643,7 +1643,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D303F0C9850C44E69C6C222C /* Secrets.xcconfig */;
+			baseConfigurationReference = 6EE7E1554543B3A968CF55AB /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

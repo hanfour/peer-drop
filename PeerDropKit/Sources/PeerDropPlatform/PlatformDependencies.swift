@@ -8,6 +8,7 @@ public struct PlatformDependencies {
     public var remoteNotifications: () -> RemoteNotificationRegistering
     public var callProvider: () -> CallProvider
     public var audioSession: () -> AudioSessionConfiguring
+    public var backgroundTaskHandler: @MainActor () -> BackgroundTaskHandling
 
     public init(
         pasteboard: (() -> PlatformPasteboard)? = nil,
@@ -16,7 +17,8 @@ public struct PlatformDependencies {
         systemInfo: (() -> SystemInfoProvider)? = nil,
         remoteNotifications: (() -> RemoteNotificationRegistering)? = nil,
         callProvider: (() -> CallProvider)? = nil,
-        audioSession: (() -> AudioSessionConfiguring)? = nil
+        audioSession: (() -> AudioSessionConfiguring)? = nil,
+        backgroundTaskHandler: (@MainActor () -> BackgroundTaskHandling)? = nil
     ) {
         self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
         self.haptics = haptics ?? { PlatformDependencies.makeHaptics() }
@@ -25,6 +27,7 @@ public struct PlatformDependencies {
         self.remoteNotifications = remoteNotifications ?? { PlatformDependencies.makeRemoteNotifications() }
         self.callProvider = callProvider ?? { PlatformDependencies.makeCallProvider() }
         self.audioSession = audioSession ?? { PlatformDependencies.makeAudioSession() }
+        self.backgroundTaskHandler = backgroundTaskHandler ?? { PlatformDependencies.makeBackgroundTaskHandler() }
     }
 
     public static var shared = PlatformDependencies()
@@ -97,6 +100,20 @@ public struct PlatformDependencies {
         #endif
     }()
     private static func makeAudioSession() -> AudioSessionConfiguring { _defaultAudioSession }
+
+    /// BackgroundTaskHandling is `@MainActor`-isolated (UIKit's
+    /// `beginBackgroundTask` must run on main), so the default factory is
+    /// also MainActor-isolated and constructs the adapter lazily per call.
+    /// Consumers that hold a reference (e.g. `ConnectionManager`) cache
+    /// the instance via `lazy var` to avoid re-allocating per call.
+    @MainActor
+    private static func makeBackgroundTaskHandler() -> BackgroundTaskHandling {
+        #if os(iOS)
+        return UIKitBackgroundTaskHandler()
+        #else
+        return NoOpBackgroundTaskHandler()
+        #endif
+    }
 }
 
 /// Always-no-op CallProvider. Used as the default for PlatformDependencies.callProvider
