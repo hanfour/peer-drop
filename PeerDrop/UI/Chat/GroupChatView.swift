@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropSecurity
 
 struct GroupChatView: View {
     let group: DeviceGroup

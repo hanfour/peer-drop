@@ -1,14 +1,13 @@
 import Foundation
 import PeerDropProtocol
-import PeerDropSecurity
 
 extension PeerMessage {
     /// Factory that constructs a hello-type message from a PeerIdentity.
-    /// Lives in PeerDrop/Core/ (not in PeerDropProtocol module) because
-    /// PeerIdentity is currently in PeerDrop/Core/ — M1d-2 keeps the
-    /// inter-module dep at the Core layer rather than forcing
-    /// PeerDropProtocol to depend on PeerDropSecurity/PeerDropCore.
-    static func hello(identity: PeerIdentity) throws -> PeerMessage {
+    /// Lives in PeerDropSecurity because PeerIdentity (and LocalSecureChannel
+    /// for the sibling `secureHandshake(bundle:senderID:)` factory) live
+    /// here. PeerDropProtocol intentionally does not depend on PeerDrop-
+    /// Security, so the extension is declared from the Security side.
+    public static func hello(identity: PeerIdentity) throws -> PeerMessage {
         let data = try JSONEncoder().encode(identity)
         return PeerMessage(type: .hello, payload: data, senderID: identity.id)
     }
@@ -16,7 +15,7 @@ extension PeerMessage {
     /// Plaintext-on-wire handshake bundle. Sender's identity public key +
     /// fresh ephemeral ratchet public key. Both peers exchange these to
     /// bootstrap a LocalSecureChannel.
-    static func secureHandshake(bundle: LocalSecureChannel.HandshakeBundle, senderID: String) throws -> PeerMessage {
+    public static func secureHandshake(bundle: LocalSecureChannel.HandshakeBundle, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(bundle)
         return PeerMessage(type: .secureHandshake, payload: data, senderID: senderID)
     }

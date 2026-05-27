@@ -1,6 +1,7 @@
 import XCTest
 @testable import PeerDropTransport
 import PeerDropProtocol
+import PeerDropSecurity
 @testable import PeerDrop
 
 final class PeerMessageTests: XCTestCase {

@@ -51,7 +51,19 @@ let package = Package(
                 .product(name: "WebRTC", package: "WebRTC"),
             ]
         ),
-        .target(name: "PeerDropSecurity"),
+        // PeerDropSecurity carries PeerIdentity (which builds itself via
+        // `PlatformDependencies.shared.deviceName()`) and the PeerMessage
+        // hello/secureHandshake factories — hence dependencies on
+        // PeerDropPlatform and PeerDropProtocol. PeerDropProtocol stays
+        // dependency-free; the extension is declared from the Security
+        // side so Protocol need not import Security.
+        .target(
+            name: "PeerDropSecurity",
+            dependencies: [
+                "PeerDropPlatform",
+                "PeerDropProtocol",
+            ]
+        ),
         .target(name: "PeerDropProtocol"),
         .target(
             name: "PeerDropPet",
