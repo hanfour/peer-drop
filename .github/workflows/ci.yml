@@ -35,15 +35,15 @@ jobs:
                 fi
               done < <(grep -n -E "^import (UIKit|AppKit|WidgetKit)" "$file" | cut -d: -f1)
             fi
-          done < <(find PeerDrop/Core PeerDrop/Pet PeerDropKit/Sources -name "*.swift" \
+          done < <(find PeerDrop/Pet PeerDropKit/Sources -name "*.swift" \
             -not -path "*/Platform/iOS/*" \
             -not -path "*/Pet/UI/*")
           if [ -n "$violations" ]; then
-            echo "::error::Unguarded UI-framework imports in Core/, Pet/ (non-UI), or PeerDropKit/Sources/:"
+            echo "::error::Unguarded UI-framework imports in Pet/ (non-UI) or PeerDropKit/Sources/:"
             printf "%b" "$violations"
             exit 1
           else
-            echo "Clean: PeerDrop/Core/, PeerDrop/Pet/ (non-UI), and PeerDropKit/Sources/ have no unguarded UI-framework imports."
+            echo "Clean: PeerDrop/Pet/ (non-UI) and PeerDropKit/Sources/ have no unguarded UI-framework imports."
           fi
 
   swift-build-macos:

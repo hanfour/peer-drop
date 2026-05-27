@@ -1,6 +1,6 @@
 #if canImport(UIKit)
-import Foundation
 import UIKit
+import Foundation
 
 @MainActor
 final class UIKitBackgroundTaskHandler: BackgroundTaskHandling {
