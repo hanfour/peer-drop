@@ -30,9 +30,10 @@ private func userFriendlyErrorMessage(_ error: Error) -> String {
             return "Secure connection failed (TLS error \(status))"
         case .dns(let dnsError):
             return "Could not find peer (\(dnsError))"
-        case .wifiAware:
-            return "WiFi Aware connection failed"
         @unknown default:
+            // Catches `.wifiAware` (iOS-only, unavailable on macOS) and any
+            // future NWError cases without forcing per-platform conditional
+            // compilation here.
             return "Network connection failed"
         }
     }
