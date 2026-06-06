@@ -6,10 +6,11 @@ import PeerDropPlatform
 ///
 /// `NSPasteboard.changeCount` is the native equivalent of
 /// `UIPasteboard.changeCount` — monotonically increasing whenever the
-/// pasteboard contents change. `ClipboardSyncManager` polls this every
-/// 2 seconds (per the protocol doc comment) and synthesises a
-/// `changedNotificationName` post itself; AppKit does not emit a system
-/// notification on pasteboard mutations.
+/// pasteboard contents change. AppKit does not emit a system notification
+/// on pasteboard mutations, so `ClipboardSyncManager` runs a 2-second
+/// poll that calls `checkPasteboardChange()` directly — no one posts the
+/// `changedNotificationName` on macOS. The observer registered against it
+/// is effectively dormant; the name exists only to satisfy the protocol.
 final class NSPasteboardAdapter: PlatformPasteboard {
     private let pasteboard = NSPasteboard.general
 
@@ -37,8 +38,9 @@ final class NSPasteboardAdapter: PlatformPasteboard {
         }
     }
 
-    /// macOS has no system notification for pasteboard changes; ClipboardSyncManager
-    /// polls `changeCount` and posts this name itself when a diff is detected.
+    /// Effectively dormant on macOS — see the class-level doc. The protocol
+    /// requires this property; ClipboardSyncManager's 2-second poll path
+    /// drives change detection without going through NotificationCenter.
     var changedNotificationName: Notification.Name {
         Notification.Name("com.hanfour.peerdrop.mac.pasteboardChanged")
     }
