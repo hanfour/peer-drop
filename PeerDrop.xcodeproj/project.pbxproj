@@ -113,6 +113,7 @@
 		6336DE0EABCF94F96B88708F /* GroupEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */; };
 		6338A2FF8A0771415405A458 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = C7783ACE48B9EEFD6653EADF /* PeerDropTransport */; };
 		6352E5CBE89C2E1B123E88B5 /* PerformanceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46984ED073D1B5356FEAEF0A /* PerformanceE2ETests.swift */; };
+		63AE9692338B4930B3ABD4B0 /* Image+PlatformImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */; };
 		63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */; };
 		6691C0DC05645F5A6BB7DEC1 /* MediaPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */; };
 		66C0C687C7029C170387D36C /* VoiceCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50393228F69F31F111E2B37B /* VoiceCallView.swift */; };
@@ -120,6 +121,7 @@
 		68D264EFEA63A2FC01A9B59F /* PerPeerPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC49FC1C8EF2B81B055F6F6 /* PerPeerPolicyTests.swift */; };
 		68D6FB1A56699AA70F6437CE /* TrustGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88C13753314A0B506433A46 /* TrustGateTests.swift */; };
 		68FBDD535D2217927717DFFC /* MacCallProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 942E08C41652EB6AEC201A49 /* MacCallProvider.swift */; };
+		69315F35985C9AAD85C4F0C1 /* Image+PlatformImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */; };
 		6A70994ECAD4424C661A9835 /* VoiceFeatureFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682CA2EF7E45DC8BFFCB8B9F /* VoiceFeatureFlag.swift */; };
 		6A8837F44D5DC1F207C3948F /* TEST_SPEC.md in Resources */ = {isa = PBXBuildFile; fileRef = 5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */; };
 		6B017A3886F724F62ED1EE27 /* MacChatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD58BEE3BF4DC02C141E6810 /* MacChatWindow.swift */; };
@@ -376,6 +378,7 @@
 		1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteAcceptView.swift; sourceTree = "<group>"; };
 		220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerIdentitySecurityTests.swift; sourceTree = "<group>"; };
 		26204406BF0EB84A54256B9E /* PlatformImageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformImageTests.swift; sourceTree = "<group>"; };
+		2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Image+PlatformImage.swift"; sourceTree = "<group>"; };
 		28CD7A07E4B0EE99182B2EA3 /* GuidanceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCard.swift; sourceTree = "<group>"; };
 		292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayConnectView.swift; sourceTree = "<group>"; };
 		2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundRetryQueueTests.swift; sourceTree = "<group>"; };
@@ -477,6 +480,7 @@
 		8DE1DA90E1627A9EC1AC5228 /* MenuBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContent.swift; sourceTree = "<group>"; };
 		8F2323104D4377FDEEF337CB /* TransferMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadataTests.swift; sourceTree = "<group>"; };
 		8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupRow.swift; sourceTree = "<group>"; };
+		8FB730629061933391F5B135 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		9005DB16593AB05BAB95880F /* PeerDrop-Mac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "PeerDrop-Mac.entitlements"; sourceTree = "<group>"; };
 		9024CFE888C9CDAA47353A03 /* TimeoutReconnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutReconnectTests.swift; sourceTree = "<group>"; };
 		90A9DA5F16B00839A9012834 /* FileTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferTests.swift; sourceTree = "<group>"; };
@@ -560,7 +564,6 @@
 		DC117A4A467AED1322168E15 /* FileTransferE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferE2ETests.swift; sourceTree = "<group>"; };
 		DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComprehensiveVerificationTests.swift; sourceTree = "<group>"; };
 		DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupReadReceiptView.swift; sourceTree = "<group>"; };
-		DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCardSnapshotTests.swift; sourceTree = "<group>"; };
 		E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTests.swift; sourceTree = "<group>"; };
 		E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
@@ -645,7 +648,7 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				DAEB9A2865CBF976BBFED661 /* feat-m3-mac-voice-calling */,
+				F6E7388AE7AD05A30C1800C1 /* feat-m4-task-1a-platformimage */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
@@ -854,6 +857,7 @@
 			isa = PBXGroup;
 			children = (
 				3D03168691C8271ED0CCDFB8 /* ConnectionStatusHeaderView.swift */,
+				2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */,
 				12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */,
 				78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */,
 				B6E1809532A651DA46008F31 /* PeerGridItemView.swift */,
@@ -1110,15 +1114,6 @@
 			path = Helpers;
 			sourceTree = "<group>";
 		};
-		DAEB9A2865CBF976BBFED661 /* feat-m3-mac-voice-calling */ = {
-			isa = PBXGroup;
-			children = (
-				DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */,
-			);
-			name = "feat-m3-mac-voice-calling";
-			path = .;
-			sourceTree = "<group>";
-		};
 		DCE44AA1F1BC4658E2745FC1 /* E2E */ = {
 			isa = PBXGroup;
 			children = (
@@ -1171,6 +1166,15 @@
 				FC8A396B6D7C4DEEDE10191A /* ManualConnectView.swift */,
 			);
 			path = Connection;
+			sourceTree = "<group>";
+		};
+		F6E7388AE7AD05A30C1800C1 /* feat-m4-task-1a-platformimage */ = {
+			isa = PBXGroup;
+			children = (
+				8FB730629061933391F5B135 /* Secrets.xcconfig */,
+			);
+			name = "feat-m4-task-1a-platformimage";
+			path = .;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1555,6 +1559,7 @@
 				D7A85C61F57646A64E170080 /* GroupRow.swift in Sources */,
 				A6B1CB07120DD34B949937E7 /* GuestPetView.swift in Sources */,
 				7D93FB0E5753A08AC030A5B2 /* GuidanceCard.swift in Sources */,
+				69315F35985C9AAD85C4F0C1 /* Image+PlatformImage.swift in Sources */,
 				C1B15C98CAFFB74D7883071B /* InviteAcceptView.swift in Sources */,
 				ADC3A11FF7051AFAD8D48337 /* InviteBanner.swift in Sources */,
 				D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */,
@@ -1629,6 +1634,7 @@
 				1171060FCDB7C3B204F92760 /* GroupRow.swift in Sources */,
 				B843394FFA18D4FF1AB02E05 /* GuidanceCard.swift in Sources */,
 				60E71AB364620139063E942A /* HostDeviceNameProvider.swift in Sources */,
+				63AE9692338B4930B3ABD4B0 /* Image+PlatformImage.swift in Sources */,
 				7CE77C2646FB98176AD6D13A /* IncomingCallAutoDismissTimer.swift in Sources */,
 				AEF4DCC588BF84CF40FAA7E1 /* IncomingCallPanelView.swift in Sources */,
 				772F3CEAE9D32802270C6F21 /* InviteAcceptView.swift in Sources */,
@@ -1837,7 +1843,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */;
+			baseConfigurationReference = 8FB730629061933391F5B135 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1860,7 +1866,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */;
+			baseConfigurationReference = 8FB730629061933391F5B135 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
