@@ -16,10 +16,10 @@
     <!-- For inbox + history caches -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
-    <!-- Bonjour services (matches iOS PeerDrop entitlements) -->
+    <!-- BLE peer discovery (matches iOS PeerDrop entitlements) -->
     <key>com.apple.security.bluetooth</key>
     <true/>
-    <!-- Required for relay (TLS over WebSocket) -->
+    <!-- mDNS / Bonjour discovery over local Wi-Fi -->
     <key>com.apple.developer.networking.multicast</key>
     <true/>
 </dict>
