@@ -111,7 +111,14 @@ final class MacCallProvider: NSObject, CallProvider {
 
     /// Called when the real in-band callRequest PeerMessage arrives
     /// after a cold-launch push. Cancels the grace timer.
+    ///
+    /// `peerName` is currently unused — kept in the signature for future
+    /// caller-identity verification (compare against the push payload's
+    /// `callerName` to detect attempts at panel-spoofing via forged in-band
+    /// messages). When that check lands, missing the verification path is
+    /// a much smaller diff than re-introducing the parameter.
     func handleInbandCallRequest(from peerName: String) {
+        _ = peerName
         guard pendingColdLaunchCaller != nil else { return }
         logger.info("In-band SDP arrived during cold-launch grace — proceeding")
         coldLaunchGraceTask?.cancel()
@@ -121,9 +128,9 @@ final class MacCallProvider: NSObject, CallProvider {
 
     // MARK: - Active window
 
-    /// Present the active-call window. Called by the consumer (Task 12
-    /// wiring) after `onAnswerCall` fires, with the live
-    /// VoiceCallManager instance from `ConnectionManager`.
+    /// Present the active-call window. Called by the consumer's
+    /// `onAnswerCall` hook (PeerDropMacApp.onAppear wires it) with the
+    /// live VoiceCallManager instance from `ConnectionManager`.
     func showActiveWindow(peerName: String, voiceCallManager: VoiceCallManager) {
         activeWindow.show(peerName: peerName, voiceCallManager: voiceCallManager)
     }

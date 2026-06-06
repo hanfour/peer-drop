@@ -26,16 +26,17 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("macOS app finished launching")
-        // Register the macOS-specific PlatformDependencies adapters.
-        // (Task 4 fills MacPlatformDependencies.register() with real adapters.)
+        // Register macOS-specific PlatformDependencies adapters
+        // (pasteboard / deviceName / systemInfo / remoteNotifications /
+        // audioSession / platformIdentifier).
         MacPlatformDependencies.register()
     }
 
     /// Finder drop / open-with handler. Files arrive via NSURL array.
-    /// Task 10 routes through MacDropHandler so Dock drops, Finder
+    /// Routed through `MacDropHandler` so Dock drops, Finder
     /// "Open With PeerDrop", and the `open:` lifecycle all share one
     /// logger path. The MacDropHandler TODO comments document the
-    /// post-M2 peer-selection-sheet wiring (App Review compliance:
+    /// future peer-selection-sheet wiring (App Review compliance:
     /// drops NEVER send silently).
     func application(_ application: NSApplication, open urls: [URL]) {
         logger.info("Open URLs: \(urls.map(\.lastPathComponent).joined(separator: ", "))")
@@ -88,12 +89,12 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         PushNotificationManager.shared.handleRegistrationFailure(error)
     }
 
-    /// Inbound APNs alert push. Two payload types matter for M3:
-    ///   - `type: "callRequest"` — voice-call wake (Task 11 routes to MacCallProvider)
-    ///   - chat invite (`roomCode` present) — reuse iOS handleRemoteNotification path
-    ///
-    /// For Task 5 we just log + structurally route. The MacCallProvider hook
-    /// is wired in Task 11.
+    /// Inbound APNs alert push. Two payload types matter:
+    ///   - `type: "callRequest"` — voice-call wake; routed to MacCallProvider
+    ///     for the cold-launch grace flow.
+    ///   - chat invite (`roomCode` present) — reuses the iOS
+    ///     `handleRemoteNotification` path once relay reconnects via
+    ///     `InboxService`. No work needed here.
     func application(
         _ application: NSApplication,
         didReceiveRemoteNotification userInfo: [String: Any]

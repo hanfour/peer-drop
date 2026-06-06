@@ -8,18 +8,20 @@ import os
 /// **Asset source:**
 ///   - Preferred: `PeerDropMac/Resources/Ringtone.caf` bundled into the
 ///     `.app` (loopable, mono, 44.1 kHz, ~5s).
-///   - Fallback: `NSSound(named: "Glass")` re-triggered every ~3s. Used
-///     when `Ringtone.caf` is missing from the bundle (e.g. early M3
-///     dev builds before the audio asset has been commissioned). The
-///     fallback exists so Tasks 8-13 are not gated on a human action.
-///     Sandboxed apps may have `NSSound(named:)` return nil for system
-///     sounds in some configurations; in that case the ringtone is
-///     visually-only until Ringtone.caf is added.
+///   - Fallback: `NSSound(named: "Glass")` re-triggered every ~3s.
+///     Used when `Ringtone.caf` is missing from the bundle (early dev
+///     builds before the audio asset has been commissioned). The
+///     fallback keeps voice-call code paths exercisable while the
+///     production asset is in flight. Sandboxed apps may have
+///     `NSSound(named:)` return nil for system sounds in some
+///     configurations; the ringtone is then visually-only until
+///     Ringtone.caf is added.
 ///
 /// **DND mode:** `start(silent: true)` keeps the timer + panel semantics
 /// uniform (the player still "plays" so cleanup paths are symmetric)
-/// but at zero volume. Combined with `DNDFilter.shouldSilenceRingtone()`
-/// in Task 8 / Task 11.
+/// but at zero volume. The decision to silence comes from
+/// `DNDFilter.shouldSilenceRingtone()`; the wiring lives in
+/// `MacCallProvider.reportIncomingCall`.
 @MainActor
 final class MacRingtonePlayer {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop.mac", category: "Ringtone")
@@ -39,7 +41,7 @@ final class MacRingtonePlayer {
                 logger.error("AVAudioPlayer init failed: \(error.localizedDescription, privacy: .public)")
             }
         } else {
-            logger.warning("Ringtone.caf not bundled — falling back to NSSound.glass loop")
+            logger.warning("Ringtone.caf not bundled — falling back to NSSound(\"Glass\") loop")
         }
     }
 

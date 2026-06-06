@@ -10,7 +10,7 @@ import PeerDropTransport
 ///   - No navigation chrome / sheet semantics: lives in its own
 ///     floating NSWindow.
 ///   - No CallKit-driven dismiss: window closes via `MacCallProvider.cleanup`
-///     in Task 11.
+///     when the call ends.
 struct MacVoiceCallView: View {
     @EnvironmentObject var voiceCallManager: VoiceCallManager
     let peerName: String

@@ -20,6 +20,12 @@ final class MacIncomingCallPanel {
         onAccept: @escaping () -> Void,
         onDecline: @escaping () -> Void
     ) {
+        // Multi-push race: if an APNs callRequest arrives twice in quick
+        // succession (APNs retry is documented), dismiss the previous
+        // panel before assigning a fresh one. Otherwise the prior NSPanel
+        // is orphaned (visible on screen with no controller).
+        dismiss()
+
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 100),
             styleMask: [.nonactivatingPanel, .borderless],
