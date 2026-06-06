@@ -1,0 +1,11 @@
+PeerDrop comes to Mac.
+
+- Bidirectional voice with iPhone: tap the phone icon on either device; the other side shows the incoming call within a second.
+- Drag files from Finder onto the Dock icon, the main window, or a peer's row in the menu bar.
+- Multi-window chat — one window per peer; ⌘1 jumps to the latest.
+- Menu bar item with status, peer list, and Pet sprite.
+- Settings live in the standard System Settings location (⌘,) — General, Profile, Relay.
+
+macOS 14 (Sonoma) or later. Sandboxed; no full disk access, no analytics, no accounts.
+
+Compatibility: the Mac app talks to iPhone/iPad v5.0+ peers unchanged.

@@ -1,0 +1,44 @@
+PeerDrop comes to Mac. Share files, chat, and make voice calls directly with your iPhone, iPad, or another Mac — no internet, no cloud, no accounts required.
+
+MAC-NATIVE EXPERIENCE
+
+- Menu Bar Item: Always-visible status, peer list, and quick file send. Drop files directly onto a peer row.
+- Multi-Window Chat: Open a separate window per peer; arrange them however you like. ⌘1 jumps to the latest chat.
+- Dock + Finder Drop: Drag any file from Finder onto the PeerDrop Dock icon or main window — a confirmation sheet picks the peer.
+- Spaces-Aware Calls: Incoming calls show a floating panel that follows you across Spaces and full-screen apps; the call window stays visible during the conversation.
+
+KEY FEATURES
+
+- Direct File Transfer: Send photos, videos, documents, and any file type directly to nearby devices. Files are chunked and verified with SHA-256 hashes for integrity.
+
+- Encrypted Chat: Send text messages, photos, videos, and voice messages with end-to-end encryption (X3DH + Double Ratchet). All chat history is stored locally and encrypted with AES-256-GCM.
+
+- Voice Calls: Make crystal-clear voice calls using WebRTC. iPhone uses CallKit; Mac uses a custom floating window that doesn't take over your screen.
+
+- Device Discovery: Automatically find nearby devices on your Wi-Fi network using Bonjour. Or connect manually by IP address.
+
+- Multi-Connection: Connect to up to 5 devices simultaneously. Each connection has independent chat, file transfer, and voice call capabilities.
+
+- Device Library: Save frequently connected devices for quick reconnection. Organize them into groups.
+
+- Privacy First: No servers, no accounts, no tracking. Everything stays between your devices. All connections use TLS encryption with trust-on-first-use verification.
+
+HOW IT WORKS
+
+1. Open PeerDrop on a Mac (macOS 14+) and an iPhone or iPad, both connected to the same Wi-Fi network
+2. Devices discover each other automatically
+3. Tap to connect — the receiving device approves with a Short Authentication String (SAS) check
+4. Start sharing files, chatting, or making voice calls
+
+SECURITY
+
+- TLS-encrypted connections with ephemeral P-256 key pairs
+- AES-256-GCM encryption for stored chat data
+- Certificate fingerprint verification (trust-on-first-use)
+- SHA-256 file integrity verification
+- No data ever leaves your local network
+- App Sandbox enabled; only the entitlements PeerDrop actually needs
+
+NEW IN 6.0
+
+This is the first Mac version. iPhone/iPad v6.0 is the same codebase rebuilt as a Swift Package (PeerDropKit) — no user-facing change.
