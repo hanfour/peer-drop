@@ -39,6 +39,9 @@
             </array>
         </dict>
     </array>
+    <!-- M3: microphone access for WebRTC voice capture. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>PeerDrop uses your microphone for peer-to-peer voice calls.</string>
     <!-- Localizations -->
     <key>CFBundleLocalizations</key>
     <array>

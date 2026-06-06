@@ -22,5 +22,14 @@
     <!-- mDNS / Bonjour discovery over local Wi-Fi -->
     <key>com.apple.developer.networking.multicast</key>
     <true/>
+    <!-- M3: APNs alert push for voice-call wake. Release xcconfig flips
+         this to "production" at archive time. -->
+    <key>aps-environment</key>
+    <string>development</string>
+    <!-- M3: microphone access for WebRTC voice capture.
+         NSMicrophoneUsageDescription lives in Info.plist; sandboxed apps
+         additionally need this entitlement. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
 </dict>
 </plist>
