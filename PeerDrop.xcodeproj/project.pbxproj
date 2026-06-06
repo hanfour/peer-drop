@@ -192,6 +192,7 @@
 		AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */; };
 		B3F822E89DC1925AE31F7B87 /* RelayTrustGateIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 686D5DFA5FC5C87756722DFF /* RelayTrustGateIntegrationTests.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
+		B4AFDAADDCDB179AF12BB3D3 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = D747926F57322E171E63FBA5 /* README.md */; };
 		B6AA22CF965C693A6EC66A68 /* PetInteractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46C6B8AC8121322C451DEEC7 /* PetInteractionView.swift */; };
 		B76E95E5DFAD2FA0465F37D6 /* PeerActionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */; };
 		B780D4E60ABD239D066BBDE5 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = 8EB4547F381A228E30EC05C3 /* PeerDropSecurity */; };
@@ -243,6 +244,7 @@
 		D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */; };
 		D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */; };
 		D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */; };
+		D780DA9CA36DE6591EB9014D /* MacRingtonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */; };
 		D7A85C61F57646A64E170080 /* GroupRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */; };
 		D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */; };
 		DAE124B52E30E223F51A6996 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 4D87F8E58A8731C9059C3ABD /* PeerDropProtocol */; };
@@ -534,6 +536,7 @@
 		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutConsentTests.swift; sourceTree = "<group>"; };
 		D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlatformDependencies.swift; sourceTree = "<group>"; };
+		D747926F57322E171E63FBA5 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		D85E471A8F4B9D788A277219 /* CryptoHardeningBannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoHardeningBannerTests.swift; sourceTree = "<group>"; };
 		D89C720568E6E3EF69A02539 /* TipJarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarSection.swift; sourceTree = "<group>"; };
 		D9D4B08876FBC62C951D3E1F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -562,6 +565,7 @@
 		F7169857C02B0AE89B35A93C /* PerPeerPolicyIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerPeerPolicyIntegrationTests.swift; sourceTree = "<group>"; };
 		F802A86F8755983AFE6A3A3C /* MacDropHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDropHandler.swift; sourceTree = "<group>"; };
 		F88C13753314A0B506433A46 /* TrustGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustGateTests.swift; sourceTree = "<group>"; };
+		F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRingtonePlayer.swift; sourceTree = "<group>"; };
 		FB09411CC81953144963CB18 /* PeerRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerRowView.swift; sourceTree = "<group>"; };
 		FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerTransportTests.swift; sourceTree = "<group>"; };
 		FC682C14084D950A4869B2CE /* TransferHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferHistoryView.swift; sourceTree = "<group>"; };
@@ -680,6 +684,14 @@
 				66328B85C1304B063B1EAF38 /* PeerDropMacApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		23FF5FC18FA56B70FA216EE6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				D747926F57322E171E63FBA5 /* README.md */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		348FC413895A2131299A9250 /* PeerDropWidget */ = {
@@ -806,7 +818,9 @@
 				AF73266DB60BE5DCC0E42F4B /* Adapters */,
 				19F5C630122A80C5A0D78496 /* App */,
 				60B904511703E7DCE0CB3EC9 /* DragAndDrop */,
+				23FF5FC18FA56B70FA216EE6 /* Resources */,
 				7480E5F261C36127AAE31E79 /* Views */,
+				8A4682705E899D9A1AAC2947 /* Voice */,
 			);
 			path = PeerDropMac;
 			sourceTree = "<group>";
@@ -893,6 +907,14 @@
 				94EDD0478D782DDD1563BE69 /* PetSectionView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		8A4682705E899D9A1AAC2947 /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */,
+			);
+			path = Voice;
 			sourceTree = "<group>";
 		};
 		8D255639E6CD70E3B1F87B26 /* PeerDropUITests */ = {
@@ -1163,6 +1185,7 @@
 			buildConfigurationList = 1F99A2D104CAB36B6BB8E44A /* Build configuration list for PBXNativeTarget "PeerDropMac" */;
 			buildPhases = (
 				E0323CD822BA40653B3460C7 /* Sources */,
+				A7258691CCDA41E2E6A9759B /* Resources */,
 				F9DA6CBFE9D2D1126D2B18AC /* Frameworks */,
 			);
 			buildRules = (
@@ -1308,6 +1331,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				6A8837F44D5DC1F207C3948F /* TEST_SPEC.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A7258691CCDA41E2E6A9759B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B4AFDAADDCDB179AF12BB3D3 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1586,6 +1617,7 @@
 				CD6A4D35A30B2638EC2268E9 /* MacDropHandler.swift in Sources */,
 				5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */,
 				D5B9A6ABF52756493DB5A9E6 /* MacRemoteNotificationRegistering.swift in Sources */,
+				D780DA9CA36DE6591EB9014D /* MacRingtonePlayer.swift in Sources */,
 				EAD969016D567BCCCE334F30 /* MacSettingsView.swift in Sources */,
 				ECDE858DFACE87974D617ED8 /* MacSidebar.swift in Sources */,
 				D39B1507322D9FDC1507F5D0 /* MacSystemInfoProvider.swift in Sources */,
