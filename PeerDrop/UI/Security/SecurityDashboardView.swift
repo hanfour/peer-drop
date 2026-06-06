@@ -100,7 +100,9 @@ struct SecurityDashboardView: View {
                 }
                 .padding()
                 .navigationTitle(String(localized: "Remote Message"))
+                #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(String(localized: "Cancel")) {

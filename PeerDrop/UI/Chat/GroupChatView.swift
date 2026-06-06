@@ -60,7 +60,9 @@ struct GroupChatView: View {
                 .opacity(hasConnectedMembers ? 1.0 : 0.5)
         }
         .navigationTitle(group.name)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onAppear {
             chatManager.loadGroupMessages(forGroup: group.id)
             chatManager.activeGroupID = group.id
@@ -101,7 +103,7 @@ struct GroupChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(.systemGray6))
+        .background(Color.peerDropFillTertiary)
     }
 
     private var inputBar: some View {
@@ -109,7 +111,7 @@ struct GroupChatView: View {
             TextField("Message", text: $messageText)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(.systemGray6))
+                .background(Color.peerDropFillTertiary)
                 .clipShape(Capsule())
                 .accessibilityLabel("Message")
                 .accessibilityHint(hasConnectedMembers ? "Type a message to the group" : "Connect to members first")
@@ -145,7 +147,7 @@ struct GroupChatBubbleView: View {
     @State private var showReadReceipts = false
 
     private var bubbleColor: Color {
-        message.isOutgoing ? Color.green : Color(.systemGray5)
+        message.isOutgoing ? Color.green : Color.peerDropFillSecondary
     }
 
     private var textColor: Color {

@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.peerdrop
   deploymentTarget:
     iOS: "16.0"
+    macOS: "14.0"
   xcodeVersion: "15.0"
   generateEmptyDirectories: true
 
@@ -112,6 +113,70 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
           - UIInterfaceOrientationPortraitUpsideDown
+
+  PeerDropMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: PeerDropMac
+      # Reuse cross-platform views from the iOS UI tree.
+      # iOS-only files excluded per M2 Task 1 audit.
+      - path: PeerDrop/UI
+        excludes:
+          - "Voice/**"                          # M3 ships voice; M2 hides
+          - "SettingsView.swift"                 # UIDevice (Task 6 REPLACE)
+          - "Settings/DocumentPickerView.swift"  # UIDocumentPickerViewController (Task 6 REPLACE)
+          - "Settings/UserProfileView.swift"     # UIImage avatar (Task 6 REPLACE)
+          - "Settings/PushStatusRow.swift"       # Push notifications (M3 territory)
+          - "Transfer/FilePickerView.swift"      # UIDocumentPickerViewController (Task 6 REPLACE)
+          - "Transfer/ClipboardShareView.swift"  # UIImage + UIPasteboard (Task 6 REPLACE)
+          - "Chat/CameraPickerView.swift"        # UIImagePickerController (iOS-only camera)
+          - "Chat/ChatView.swift"                # PhotosUI picker (iOS-only)
+          - "ContentView.swift"                  # iOS root TabView (replaced by MacContentView in Task 5)
+          - "Settings/TipJarSection.swift"       # TipJarManager (StoreKit IAP, iOS-only)
+          - "Connection/ConnectionQRView.swift"  # UIImage + UIPasteboard QR rendering (Task 6 REPLACE)
+          - "Chat/MediaPreviewView.swift"        # UIImage media decoding (Task 6 REPLACE)
+          - "Relay/RelayConnectView.swift"       # UIImage QR rendering (Task 6 REPLACE)
+          # Task 6a (surface-level macOS port) gated the navigationBarTitleDisplayMode,
+          # UIKit semantic colors (via Color.peerDrop* helpers in Components/PlatformColors.swift),
+          # TabView .page style (OnboardingView wrapped entirely in #if os(iOS)), and
+          # UIApplication.shared.open (GuidanceCard now uses NSWorkspace.shared.open on macOS).
+          # ChatBubbleView remains excluded — beyond surface-level: 3 separate Image(uiImage:)
+          # decode paths plus ImageCache returning PlatformImage need a real refactor (Task 6b).
+          - "Chat/ChatBubbleView.swift"          # Image(uiImage:) thumbnails + ImageCache UIImage paths (Task 6b)
+          # Downstream of excluded views — Task 5 introduces a macOS-specific
+          # container so these iOS-shaped tab containers aren't needed here.
+          - "Connection/ConnectionView.swift"    # references ToastView
+          - "Discovery/DiscoveryView.swift"      # references TailnetPeersView + ManualConnectView
+          - "Discovery/NearbyTab.swift"          # references GuidanceCard, ManualConnectView, ConnectionQRView, etc.
+          - "Library/LibraryTab.swift"           # references GroupEditorView + GroupDetailView
+          - "Connection/ConnectedTab.swift"      # references ConnectionView
+    dependencies:
+      - package: PeerDropKit
+        product: PeerDropPlatform
+      - package: PeerDropKit
+        product: PeerDropCore
+      - package: PeerDropKit
+        product: PeerDropTransport
+      - package: PeerDropKit
+        product: PeerDropSecurity
+      - package: PeerDropKit
+        product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropPet
+    settings:
+      base:
+        INFOPLIST_FILE: PeerDropMac/App/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop.mac
+        DEVELOPMENT_TEAM: UK48R5KWLV
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: PeerDropMac/App/PeerDrop-Mac.entitlements
+        MARKETING_VERSION: "6.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SDKROOT: macosx
+        ENABLE_HARDENED_RUNTIME: "YES"
 
   PeerDropTests:
     type: bundle.unit-test

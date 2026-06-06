@@ -67,7 +67,7 @@ struct ReactionsView: View {
                     .padding(.vertical, 3)
                     .background(
                         Capsule()
-                            .fill(isOutgoing ? Color.white.opacity(0.2) : Color(.systemGray6))
+                            .fill(isOutgoing ? Color.white.opacity(0.2) : Color.peerDropFillTertiary)
                     )
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(ReactionPickerView.emojiNames[item.emoji] ?? item.emoji), \(item.count)")

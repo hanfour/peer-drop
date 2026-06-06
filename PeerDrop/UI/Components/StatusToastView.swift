@@ -23,7 +23,7 @@ struct StatusToastView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: Color(.label).opacity(0.12), radius: 8, y: 4)
+        .shadow(color: Color.peerDropLabel.opacity(0.12), radius: 8, y: 4)
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(message)

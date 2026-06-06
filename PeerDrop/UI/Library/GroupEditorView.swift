@@ -24,7 +24,9 @@ struct GroupEditorView: View {
                 }
             }
             .navigationTitle(group == nil ? "New Group" : "Edit Group")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

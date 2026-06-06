@@ -53,9 +53,11 @@ struct GroupReadReceiptView: View {
                 }
             }
             .navigationTitle("Message Status")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
                     }

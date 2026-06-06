@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var currentPage = 0
@@ -106,3 +107,12 @@ private struct OnboardingPage: View {
         }
     }
 }
+#else
+// Onboarding is iOS-only — the swipeable intro uses `TabView.page` style and
+// touch interactions that don't translate to macOS. macOS users go through
+// `MacContentView` (Task 5) on first launch and never see this view.
+// Stub kept so the file compiles cross-platform; not invoked anywhere on macOS.
+struct OnboardingView: View {
+    var body: some View { EmptyView() }
+}
+#endif

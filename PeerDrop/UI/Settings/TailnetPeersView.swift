@@ -28,7 +28,7 @@ struct TailnetPeersView: View {
             }
         }
         .navigationTitle(String(localized: "Tailnet Devices"))
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showAddSheet = true } label: { Image(systemName: "plus") } } }
+        .toolbar { ToolbarItem(placement: .primaryAction) { Button { showAddSheet = true } label: { Image(systemName: "plus") } } }
         .sheet(isPresented: $showAddSheet) { AddTailnetPeerSheet().environmentObject(connectionManager) }
     }
 }
@@ -44,12 +44,16 @@ struct AddTailnetPeerSheet: View {
             Form {
                 TextField(String(localized: "Display Name"), text: $name)
                 TextField(String(localized: "Tailnet IP (100.x.x.x)"), text: $ip)
+                    #if os(iOS)
                     .keyboardType(.decimalPad)
                     .textInputAutocapitalization(.never)
+                    #endif
                 Section(footer: Text(String(localized: "Port defaults to 9876."))) { EmptyView() }
             }
             .navigationTitle(String(localized: "Add Tailnet Device"))
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(String(localized: "Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

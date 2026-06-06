@@ -27,6 +27,8 @@ struct BackupRecordListView: View {
             }
         }
         .navigationTitle("Backup Records")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }

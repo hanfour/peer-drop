@@ -108,7 +108,9 @@ struct GroupDetailView: View {
             }
         }
         .navigationTitle(group.name)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -304,7 +306,9 @@ struct AddGroupMemberSheet: View {
                 }
             }
             .navigationTitle("Add Member")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
