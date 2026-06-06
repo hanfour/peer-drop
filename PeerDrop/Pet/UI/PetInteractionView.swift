@@ -39,9 +39,11 @@ struct PetInteractionView: View {
                 }
             }
             .navigationTitle("我的寵物")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
             }
         }
     }

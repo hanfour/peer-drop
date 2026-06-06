@@ -121,38 +121,32 @@ targets:
       - path: PeerDropMac
       # Reuse cross-platform views from the iOS UI tree.
       # iOS-only files excluded per M2 Task 1 audit.
+      # Pet/UI reuse — needed by ChatView for the chat-side Pet overlay
+      # (ChatPetOverlay). FloatingPetView is iOS-only (UIScreen +
+      # UIPanGestureRecognizer); PetTabView relies on iOS-only
+      # fullScreenCover sheet semantics for the welcome flow.
+      - path: PeerDrop/Pet/UI
+        excludes:
+          - "FloatingPetView.swift"
+          - "PetTabView.swift"
       - path: PeerDrop/UI
         excludes:
-          # Voice/** un-excluded in M3: VoiceCallView gated via
-          # MacFeatureFlags.isVoiceUIAvailable + PlatformColors helpers.
-          # PushStatusRow un-excluded in M3: UIApplication.openSettingsURLString
-          # gated via #if canImport(UIKit); macOS path uses x-apple.systempreferences.
-          - "SettingsView.swift"                 # UIDevice (Task 6 REPLACE)
-          - "Settings/DocumentPickerView.swift"  # UIDocumentPickerViewController (Task 6 REPLACE)
-          - "Settings/UserProfileView.swift"     # UIImage avatar (Task 6 REPLACE)
-          - "Transfer/FilePickerView.swift"      # UIDocumentPickerViewController (Task 6 REPLACE)
-          - "Transfer/ClipboardShareView.swift"  # UIImage + UIPasteboard (Task 6 REPLACE)
-          - "Chat/CameraPickerView.swift"        # UIImagePickerController (iOS-only camera)
-          - "Chat/ChatView.swift"                # PhotosUI picker (iOS-only)
-          - "ContentView.swift"                  # iOS root TabView (replaced by MacContentView in Task 5)
-          - "Settings/TipJarSection.swift"       # TipJarManager (StoreKit IAP, iOS-only)
-          - "Connection/ConnectionQRView.swift"  # UIImage + UIPasteboard QR rendering (Task 6 REPLACE)
-          - "Chat/MediaPreviewView.swift"        # UIImage media decoding (Task 6 REPLACE)
-          - "Relay/RelayConnectView.swift"       # UIImage QR rendering (Task 6 REPLACE)
-          # Task 6a (surface-level macOS port) gated the navigationBarTitleDisplayMode,
-          # UIKit semantic colors (via Color.peerDrop* helpers in Components/PlatformColors.swift),
-          # TabView .page style (OnboardingView wrapped entirely in #if os(iOS)), and
-          # UIApplication.shared.open (GuidanceCard now uses NSWorkspace.shared.open on macOS).
-          # ChatBubbleView remains excluded — beyond surface-level: 3 separate Image(uiImage:)
-          # decode paths plus ImageCache returning PlatformImage need a real refactor (Task 6b).
-          - "Chat/ChatBubbleView.swift"          # Image(uiImage:) thumbnails + ImageCache UIImage paths (Task 6b)
-          # Downstream of excluded views — Task 5 introduces a macOS-specific
-          # container so these iOS-shaped tab containers aren't needed here.
-          - "Connection/ConnectionView.swift"    # references ToastView
-          - "Discovery/DiscoveryView.swift"      # references TailnetPeersView + ManualConnectView
-          - "Discovery/NearbyTab.swift"          # references GuidanceCard, ManualConnectView, ConnectionQRView, etc.
-          - "Library/LibraryTab.swift"           # references GroupEditorView + GroupDetailView
-          - "Connection/ConnectedTab.swift"      # references ConnectionView
+          # M3 un-excluded: Voice/** (gated via MacFeatureFlags) +
+          # Settings/PushStatusRow (UIApplication → NSWorkspace gated).
+          # M4 Task 1b un-excluded: UserProfileView / FilePickerView /
+          # ConnectionQRView / RelayConnectView / MediaPreviewView /
+          # ChatBubbleView / ChatView (all PlatformImage-refactored) +
+          # NearbyTab + LibraryTab (chain deps now buildable).
+          - "SettingsView.swift"                 # UIDevice — iOS-only; replaced by MacSettingsView
+          - "Settings/DocumentPickerView.swift"  # iOS-only settings document picker; FilePickerView covers macOS needs
+          - "Transfer/ClipboardShareView.swift"  # UIImage + UIPasteboard niche; not surfaced on macOS yet
+          - "Chat/CameraPickerView.swift"        # UIImagePickerController — no macOS camera UI
+          - "ContentView.swift"                  # iOS root TabView — replaced by MacContentView
+          - "Settings/TipJarSection.swift"       # StoreKit IAP — Mac IAP attached separately via Playwright
+          # iOS-shaped tab containers — replaced by MacContentView/MacDetailRouter:
+          - "Connection/ConnectionView.swift"    # iOS tab container; macOS uses MacContentView
+          - "Discovery/DiscoveryView.swift"      # iOS tab container
+          - "Connection/ConnectedTab.swift"      # iOS tab container
     dependencies:
       - package: PeerDropKit
         product: PeerDropPlatform

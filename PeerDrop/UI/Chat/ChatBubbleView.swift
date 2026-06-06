@@ -189,11 +189,19 @@ struct ChatBubbleView: View {
         }
         .padding(.horizontal, 16)
         .padding(message.isOutgoing ? .trailing : .leading, -6)
+        #if os(iOS)
         .fullScreenCover(isPresented: $showMediaPreview) {
             if let chatManager, isPreviewableMedia {
                 MediaPreviewView(message: message, chatManager: chatManager)
             }
         }
+        #else
+        .sheet(isPresented: $showMediaPreview) {
+            if let chatManager, isPreviewableMedia {
+                MediaPreviewView(message: message, chatManager: chatManager)
+            }
+        }
+        #endif
         .sheet(isPresented: $showReactionPicker) {
             ReactionPickerView(
                 onSelect: { emoji in
@@ -261,7 +269,7 @@ struct ChatBubbleView: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
-        .background(message.isOutgoing ? Color.white.opacity(0.15) : Color(.systemGray6))
+        .background(message.isOutgoing ? Color.white.opacity(0.15) : Color.peerDropFillTertiary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.bottom, 4)
     }
@@ -276,7 +284,7 @@ struct ChatBubbleView: View {
     // MARK: - Bubble color
 
     private var bubbleColor: Color {
-        message.isOutgoing ? Color(red: 0.21, green: 0.78, blue: 0.35) : Color(.systemGray5)
+        message.isOutgoing ? Color(red: 0.21, green: 0.78, blue: 0.35) : Color.peerDropFillSecondary
     }
 
     // MARK: - Status view
@@ -380,7 +388,7 @@ struct ChatBubbleView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemGray4))
+                    .fill(Color.peerDropFillPrimary)
                     .frame(width: 200, height: 120)
             }
             Image(systemName: "play.circle.fill")

@@ -288,7 +288,7 @@ struct NearbyTab: View {
         .animation(.easeInOut(duration: 0.2), value: isConnecting)
         .navigationTitle("PeerDrop")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .cancellationAction) {
                 Button {
                     isOnline.toggle()
                     if isOnline {
@@ -309,7 +309,7 @@ struct NearbyTab: View {
                 }
                 .accessibilityLabel(isOnline ? "Go offline" : "Go online")
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .confirmationAction) {
                 Button {
                     activeSheet = .manualConnect
                 } label: {
@@ -413,8 +413,15 @@ struct NearbyTab: View {
                 ConnectionQRView()
                     .environmentObject(connectionManager)
             case .settings:
+                #if os(iOS)
                 SettingsView()
                     .environmentObject(connectionManager)
+                #else
+                // macOS uses MacSettingsView in the Settings scene (⌘,);
+                // the in-sheet settings affordance is iOS-only.
+                Text("Open from menu (⌘,)")
+                    .foregroundStyle(.secondary)
+                #endif
             case .transferHistory:
                 NavigationStack {
                     TransferHistoryView()

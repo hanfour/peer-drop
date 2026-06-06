@@ -242,7 +242,7 @@ struct ChatView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
-                .background(Color(.systemGray6))
+                .background(Color.peerDropFillTertiary)
             }
 
             // Reply preview bar
@@ -260,7 +260,7 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button {
                     showSearch = true
                 } label: {
@@ -367,7 +367,7 @@ struct ChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(.systemGray6))
+        .background(Color.peerDropFillTertiary)
     }
 
     // MARK: - Input Bar
@@ -423,7 +423,7 @@ struct ChatView: View {
                 TextField("Message", text: $messageText)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color(.systemGray6))
+                    .background(Color.peerDropFillTertiary)
                     .clipShape(Capsule())
                     .onChange(of: messageText) { newValue in
                         connectionManager.handleTypingChange(
