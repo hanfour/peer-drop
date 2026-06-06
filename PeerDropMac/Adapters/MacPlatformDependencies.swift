@@ -24,6 +24,10 @@ enum MacPlatformDependencies {
         // M3: APNs registration. PushNotificationManager will call this when
         // the user grants UN permission.
         PlatformDependencies.shared.remoteNotifications = { MacRemoteNotificationRegistering() }
+        // M3: AVCaptureDevice-backed audio session for mic permission.
+        // WebRTC self-manages voice-chat audio routing on macOS, so the
+        // activate/deactivate/overrideOutputToSpeaker methods are no-ops.
+        PlatformDependencies.shared.audioSession = { MacAudioSession() }
         // M3: platformIdentifier defaults to "macos" via #if guards in
         // PlatformDependencies — explicit registration here makes the
         // intent visible at the call site (and provides a single override
