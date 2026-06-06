@@ -62,7 +62,9 @@ struct InviteAcceptView: View {
                 }
             }
             .padding()
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "Cancel")) { onDismiss() }

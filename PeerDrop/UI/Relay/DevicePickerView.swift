@@ -44,7 +44,9 @@ struct DevicePickerView: View {
                 }
             }
             .navigationTitle(String(localized: "Invite"))
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "Cancel")) { dismiss() }

@@ -1,5 +1,10 @@
 import SwiftUI
 import PeerDropCore
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct GuidanceCard: View {
     @EnvironmentObject var context: ConnectionContext
@@ -110,6 +115,10 @@ struct GuidanceCard: View {
 
     private func openTailscaleAppStore() {
         guard let url = URL(string: "https://apps.apple.com/app/tailscale/id1470499037") else { return }
+        #if os(iOS)
         UIApplication.shared.open(url)
+        #elseif os(macOS)
+        NSWorkspace.shared.open(url)
+        #endif
     }
 }

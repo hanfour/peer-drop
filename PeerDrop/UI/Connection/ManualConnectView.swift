@@ -20,14 +20,18 @@ struct ManualConnectView: View {
             Form {
                 Section("Peer Address") {
                     TextField("IP Address or Hostname", text: $host)
+                        #if os(iOS)
                         .keyboardType(.numbersAndPunctuation)
-                        .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
                         .accessibilityLabel("IP Address or Hostname")
                         .accessibilityHint("Enter the peer's IP address or hostname")
 
                     TextField("Port", text: $port)
+                        #if os(iOS)
                         .keyboardType(.numberPad)
+                        #endif
                         .accessibilityLabel("Port")
                         .accessibilityHint("Enter port number, defaults to 9000")
                 }
@@ -39,7 +43,9 @@ struct ManualConnectView: View {
                 }
             }
             .navigationTitle(isEditing ? "Edit Peer" : "Manual Connect")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

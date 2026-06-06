@@ -27,7 +27,7 @@ struct ConsentSheet: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Color.peerDropGroupedBackground, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .padding(.horizontal)
                 .accessibilityElement(children: .combine)

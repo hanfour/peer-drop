@@ -19,7 +19,7 @@ struct ConnectionStatusHeaderView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color.peerDropSecondaryGroupedBackground)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(statusText)
     }

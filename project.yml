@@ -137,34 +137,13 @@ targets:
           - "Connection/ConnectionQRView.swift"  # UIImage + UIPasteboard QR rendering (Task 6 REPLACE)
           - "Chat/MediaPreviewView.swift"        # UIImage media decoding (Task 6 REPLACE)
           - "Relay/RelayConnectView.swift"       # UIImage QR rendering (Task 6 REPLACE)
-          # The following use surface-level iOS-only APIs (navigationBarTitleDisplayMode,
-          # UIApplication.openSettingsURL, UIImage thumbnails). They'll be re-included
-          # in later tasks via #if os(iOS) gates or platform-conditional view modifiers.
-          - "Chat/ChatBubbleView.swift"          # navigationBarTitleDisplayMode + UIImage thumbs
-          - "Chat/ChatSearchView.swift"          # navigationBarTitleDisplayMode
-          - "Chat/GroupChatView.swift"           # navigationBarTitleDisplayMode
-          - "Chat/GroupReadReceiptView.swift"    # navigationBarTitleDisplayMode
-          - "Connection/ManualConnectView.swift" # navigationBarTitleDisplayMode
-          - "Discovery/ConnectionOptionsSheet.swift"  # navigationBarTitleDisplayMode
-          - "Discovery/GuidanceCard.swift"       # UIApplication.shared.open
-          - "Library/AssignGroupSheet.swift"     # navigationBarTitleDisplayMode
-          - "Library/GroupDetailView.swift"      # navigationBarTitleDisplayMode
-          - "Library/GroupEditorView.swift"     # navigationBarTitleDisplayMode
-          - "Relay/DevicePickerView.swift"       # navigationBarTitleDisplayMode
-          - "Relay/PINVerificationView.swift"    # navigationBarTitleDisplayMode
-          - "Security/FirstContactVerificationSheet.swift"  # navigationBarTitleDisplayMode
-          - "Security/InviteAcceptView.swift"    # navigationBarTitleDisplayMode
-          - "Security/SecurityDashboardView.swift"  # navigationBarTitleDisplayMode
-          - "Settings/BackupRecordListView.swift"   # navigationBarTitleDisplayMode
-          - "Settings/TailnetPeersView.swift"    # navigationBarTitleDisplayMode
-          - "Transfer/TransferHistoryView.swift" # navigationBarTitleDisplayMode
-          - "Components/StatusToastView.swift"   # Color(.label) UIKit semantic color
-          - "Chat/TypingIndicatorView.swift"     # Color(.systemGray6) UIKit semantic color
-          - "OnboardingView.swift"               # TabView .page style (iOS-only)
-          - "Components/ToastView.swift"         # Color(.label) UIKit semantic color
-          - "Connection/ConsentSheet.swift"      # Color(.secondarySystemBackground) UIKit semantic color
-          - "Chat/ReactionPickerView.swift"      # Color(.systemGray6) UIKit semantic color
-          - "Components/ConnectionStatusHeaderView.swift"  # UIKit semantic color
+          # Task 6a (surface-level macOS port) gated the navigationBarTitleDisplayMode,
+          # UIKit semantic colors (via Color.peerDrop* helpers in Components/PlatformColors.swift),
+          # TabView .page style (OnboardingView wrapped entirely in #if os(iOS)), and
+          # UIApplication.shared.open (GuidanceCard now uses NSWorkspace.shared.open on macOS).
+          # ChatBubbleView remains excluded — beyond surface-level: 3 separate Image(uiImage:)
+          # decode paths plus ImageCache returning PlatformImage need a real refactor (Task 6b).
+          - "Chat/ChatBubbleView.swift"          # Image(uiImage:) thumbnails + ImageCache UIImage paths (Task 6b)
           # Downstream of excluded views — Task 5 introduces a macOS-specific
           # container so these iOS-shaped tab containers aren't needed here.
           - "Connection/ConnectionView.swift"    # references ToastView

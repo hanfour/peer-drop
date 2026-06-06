@@ -50,7 +50,9 @@ struct PINVerificationView: View {
                 .padding(.horizontal, 40)
                 .padding(.bottom, 32)
             }
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .interactiveDismissDisabled()
         }
     }

@@ -21,7 +21,9 @@ struct ConnectionOptionsSheet: View {
                 }
             }
             .navigationTitle(String(localized: "Connection Options"))
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(String(localized: "Close")) { dismiss() } } }
             .sheet(isPresented: $showManualConnect) {
                 ManualConnectView().environmentObject(connectionManager)

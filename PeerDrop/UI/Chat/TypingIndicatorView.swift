@@ -22,7 +22,7 @@ struct TypingIndicatorView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Color(.systemGray6))
+        .background(Color.peerDropFillTertiary)
         .clipShape(Capsule())
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

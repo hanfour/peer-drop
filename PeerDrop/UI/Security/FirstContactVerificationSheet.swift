@@ -51,7 +51,7 @@ struct FirstContactVerificationSheet: View {
                         .padding(.vertical, 20)
                         .frame(maxWidth: .infinity)
                         .background(
-                            Color(.secondarySystemBackground),
+                            Color.peerDropGroupedBackground,
                             in: RoundedRectangle(cornerRadius: 12)
                         )
                         .accessibilityLabel(Text("Verification code"))
@@ -79,7 +79,7 @@ struct FirstContactVerificationSheet: View {
                         .padding()
                         .frame(maxWidth: .infinity)
                         .background(
-                            Color(.secondarySystemBackground),
+                            Color.peerDropGroupedBackground,
                             in: RoundedRectangle(cornerRadius: 10)
                         )
                         .accessibilityLabel(Text("Fingerprint"))
@@ -110,7 +110,9 @@ struct FirstContactVerificationSheet: View {
             }
             .padding()
             .navigationTitle(Text("Verify first contact"))
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .interactiveDismissDisabled(true)
         }
     }

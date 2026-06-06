@@ -42,7 +42,7 @@ struct ChatSearchView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(Color(.systemGray6))
+                .background(Color.peerDropFillTertiary)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .padding()
 
@@ -89,9 +89,11 @@ struct ChatSearchView: View {
                 }
             }
             .navigationTitle("Search")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
                     }
