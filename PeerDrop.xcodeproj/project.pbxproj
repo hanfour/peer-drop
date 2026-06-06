@@ -135,6 +135,7 @@
 		788CDADD13EB08DA5D36B340 /* PlatformImageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26204406BF0EB84A54256B9E /* PlatformImageTests.swift */; };
 		78EF5354C89CF51473FD7D49 /* FilePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8034F4F86233093A4E36905 /* FilePickerView.swift */; };
 		7C0EAEB1398C988C8C8A0A06 /* PeerDropPet in Frameworks */ = {isa = PBXBuildFile; productRef = 8A112F3E37579D58EAD90BCD /* PeerDropPet */; };
+		7CE77C2646FB98176AD6D13A /* IncomingCallAutoDismissTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48BB1C034C80ABE7AFBBDE8 /* IncomingCallAutoDismissTimer.swift */; };
 		7D93FB0E5753A08AC030A5B2 /* GuidanceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28CD7A07E4B0EE99182B2EA3 /* GuidanceCard.swift */; };
 		7E18D695CB47FF12411FA824 /* MultiSimTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69468BFD13006A4427A306C6 /* MultiSimTestBase.swift */; };
 		7E6F1CBD65F99F5D00FB427D /* InteractionTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BCB78B5EC4B3A84417A174 /* InteractionTrackerTests.swift */; };
@@ -184,11 +185,13 @@
 		A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */; };
 		A8A1F50CB79026F13570A1E2 /* FoodInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61E4079207CA3828B0ECF602 /* FoodInventoryTests.swift */; };
 		A94523D3B3E9B9DF528E7358 /* DiscoveryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67AD588AE5B03D2A0DE399F /* DiscoveryServiceTests.swift */; };
+		AA05665768BABEC12A6B6762 /* MacIncomingCallPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D802376EA45B7A32C1D2211 /* MacIncomingCallPanel.swift */; };
 		AB64D01D632416F0756CE251 /* PreKeyStoreSPKTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60144E7A15F9633329D0855 /* PreKeyStoreSPKTimestampTests.swift */; };
 		AC12BB977A2E6016FDE59D9C /* MacAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6504B54366C11A266CB448F8 /* MacAppDelegate.swift */; };
 		AC394953E0699D3BC62370F5 /* GroupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420320526B18E15D11A63B4C /* GroupDetailView.swift */; };
 		ACAA78D8CD6F941F71265DEB /* ConnectionMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49899A580934A1E3CE7E03D4 /* ConnectionMetricsTests.swift */; };
 		ADC3A11FF7051AFAD8D48337 /* InviteBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */; };
+		AEF4DCC588BF84CF40FAA7E1 /* IncomingCallPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA8DE175B451572ABD2C254 /* IncomingCallPanelView.swift */; };
 		AF9BF7B3AD30D07994CCE901 /* PetWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */; };
 		B3F822E89DC1925AE31F7B87 /* RelayTrustGateIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 686D5DFA5FC5C87756722DFF /* RelayTrustGateIntegrationTests.swift */; };
 		B4252FDB1F7BF7D7A6CFCBBF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E541AC353B141C1ABC8F38B /* StatusBadge.swift */; };
@@ -465,6 +468,7 @@
 		88A5D1E09D940BB3954B8CF4 /* PetWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWidget.swift; sourceTree = "<group>"; };
 		8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionSecureChannelTests.swift; sourceTree = "<group>"; };
 		8CF42E03015C3D6F22BB2BA9 /* ConnectionOptionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionOptionsSheet.swift; sourceTree = "<group>"; };
+		8D802376EA45B7A32C1D2211 /* MacIncomingCallPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacIncomingCallPanel.swift; sourceTree = "<group>"; };
 		8DE1DA90E1627A9EC1AC5228 /* MenuBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContent.swift; sourceTree = "<group>"; };
 		8F2323104D4377FDEEF337CB /* TransferMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferMetadataTests.swift; sourceTree = "<group>"; };
 		8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupRow.swift; sourceTree = "<group>"; };
@@ -537,6 +541,7 @@
 		D1B0EEE5BFA94459573D1E50 /* HostDeviceNameProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostDeviceNameProvider.swift; sourceTree = "<group>"; };
 		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutConsentTests.swift; sourceTree = "<group>"; };
+		D48BB1C034C80ABE7AFBBDE8 /* IncomingCallAutoDismissTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallAutoDismissTimer.swift; sourceTree = "<group>"; };
 		D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlatformDependencies.swift; sourceTree = "<group>"; };
 		D747926F57322E171E63FBA5 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		D85E471A8F4B9D788A277219 /* CryptoHardeningBannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoHardeningBannerTests.swift; sourceTree = "<group>"; };
@@ -558,6 +563,7 @@
 		EBADAF4F21193CFDA049E9A3 /* DropOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropOverlay.swift; sourceTree = "<group>"; };
 		ED3F8AF2B19CC3C425A05946 /* ChatE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatE2ETests.swift; sourceTree = "<group>"; };
 		EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullFeatureVerificationTests.swift; sourceTree = "<group>"; };
+		EFA8DE175B451572ABD2C254 /* IncomingCallPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallPanelView.swift; sourceTree = "<group>"; };
 		EFD90721C90C7D8C7E4EB456 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
 		F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PeerDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1547C59857B7BD88CF8516D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -915,6 +921,9 @@
 			isa = PBXGroup;
 			children = (
 				6A9DAA9520F8849A93151F2B /* DNDFilter.swift */,
+				D48BB1C034C80ABE7AFBBDE8 /* IncomingCallAutoDismissTimer.swift */,
+				EFA8DE175B451572ABD2C254 /* IncomingCallPanelView.swift */,
+				8D802376EA45B7A32C1D2211 /* MacIncomingCallPanel.swift */,
 				F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */,
 			);
 			path = Voice;
@@ -1609,6 +1618,8 @@
 				1171060FCDB7C3B204F92760 /* GroupRow.swift in Sources */,
 				B843394FFA18D4FF1AB02E05 /* GuidanceCard.swift in Sources */,
 				60E71AB364620139063E942A /* HostDeviceNameProvider.swift in Sources */,
+				7CE77C2646FB98176AD6D13A /* IncomingCallAutoDismissTimer.swift in Sources */,
+				AEF4DCC588BF84CF40FAA7E1 /* IncomingCallPanelView.swift in Sources */,
 				772F3CEAE9D32802270C6F21 /* InviteAcceptView.swift in Sources */,
 				EA50DF35753C532271278DDC /* InviteBanner.swift in Sources */,
 				FA9FEBB50E6D19B3B06BD49F /* KeyChangeAlertView.swift in Sources */,
@@ -1619,6 +1630,7 @@
 				4E946682EF58597B4154F849 /* MacContentView.swift in Sources */,
 				119C022502ADD5067A1E0844 /* MacDetailRouter.swift in Sources */,
 				CD6A4D35A30B2638EC2268E9 /* MacDropHandler.swift in Sources */,
+				AA05665768BABEC12A6B6762 /* MacIncomingCallPanel.swift in Sources */,
 				5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */,
 				D5B9A6ABF52756493DB5A9E6 /* MacRemoteNotificationRegistering.swift in Sources */,
 				D780DA9CA36DE6591EB9014D /* MacRingtonePlayer.swift in Sources */,
