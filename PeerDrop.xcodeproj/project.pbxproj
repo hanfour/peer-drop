@@ -278,6 +278,7 @@
 		EF397F7C55CD03C40EB060CC /* StatusToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8522C558C3B5DDC867FCE801 /* StatusToastView.swift */; };
 		F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90A9DA5F16B00839A9012834 /* FileTransferTests.swift */; };
 		F197E8CFA4067CF49BC85B16 /* DeviceRecordStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D663FC8702DFAD7B533905 /* DeviceRecordStoreTests.swift */; };
+		F2764D3945691157DBD83D89 /* DNDFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9DAA9520F8849A93151F2B /* DNDFilter.swift */; };
 		F2F1057F3F359FE56BED8330 /* MacAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D07F428C53DEAA477E05F88 /* MacAudioSession.swift */; };
 		F422276653E0728E859B9BC9 /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 2EEFE241B38073C6F8FECED7 /* PeerDropPlatform */; };
 		F43A12115CCDF096E4CDC3B4 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
@@ -432,6 +433,7 @@
 		6A1D13034674D26767D38013 /* LocalFirstTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFirstTrustTests.swift; sourceTree = "<group>"; };
 		6A69B497E85725EA8A5E9C1D /* LaunchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreen.swift; sourceTree = "<group>"; };
 		6A9B0AFA399348062ED5EB5D /* V5_4_BackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5_4_BackwardCompatTests.swift; sourceTree = "<group>"; };
+		6A9DAA9520F8849A93151F2B /* DNDFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNDFilter.swift; sourceTree = "<group>"; };
 		6B34AD557F41611401810878 /* DeviceIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityTests.swift; sourceTree = "<group>"; };
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
@@ -912,6 +914,7 @@
 		8A4682705E899D9A1AAC2947 /* Voice */ = {
 			isa = PBXGroup;
 			children = (
+				6A9DAA9520F8849A93151F2B /* DNDFilter.swift */,
 				F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */,
 			);
 			path = Voice;
@@ -1592,6 +1595,7 @@
 				46339D62B7FD01C9A1A8698B /* ConnectionStatusHeaderView.swift in Sources */,
 				85BBAF8A148EE4CE2D9BAD1F /* ConsentSheet.swift in Sources */,
 				768AC7D9E047B382F05AF091 /* CryptoHardeningBanner.swift in Sources */,
+				F2764D3945691157DBD83D89 /* DNDFilter.swift in Sources */,
 				3B4D2494C19838E546AEBD42 /* DecryptFailureBannerView.swift in Sources */,
 				8A409F666CBF5120BF135E93 /* DevicePickerView.swift in Sources */,
 				EBEB93A27FFA37C8A48A19D8 /* DeviceRecordRow.swift in Sources */,
