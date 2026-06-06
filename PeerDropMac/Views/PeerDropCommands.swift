@@ -61,10 +61,10 @@ struct PeerDropCommands: Commands {
             .keyboardShortcut("p", modifiers: [.shift, .command])
         }
 
-        // Window menu additions (⌘1 / ⌘2)
-        // Note: ⌘1 is also bound on the chat WindowGroup (Task 7) for
-        // openWindow behavior. SwiftUI resolves to the focused-window context
-        // appropriately — having the menu item gives keyboard discovery.
+        // Window menu additions (⌘1 / ⌘2). The chat WindowGroup deliberately
+        // omits its own ⌘1 binding so this menu item is the canonical owner
+        // of the shortcut (and avoids the SwiftUI undefined-resolution case
+        // when two scenes claim the same key).
         CommandGroup(before: .windowList) {
             Button("Chat") {
                 // Focus the most-recent chat window if one is open.

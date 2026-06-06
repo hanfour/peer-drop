@@ -33,9 +33,27 @@ struct MenuBarStatusIcon: View {
     }
 
     private var accessibilityLabel: String {
-        // `String(describing:)` keeps localisation simple — the menu bar
-        // icon is a one-glyph status indicator, so a short technical
-        // label is preferable to a sentence.
-        NSLocalizedString("PeerDrop status: \(String(describing: state))", comment: "")
+        let template = NSLocalizedString(
+            "PeerDrop status: %@",
+            comment: "VoiceOver label for the menu bar status icon; %@ is the current connection state"
+        )
+        return String(format: template, localizedStateName)
+    }
+
+    private var localizedStateName: String {
+        switch state {
+        case .idle:            return NSLocalizedString("Idle", comment: "ConnectionState: no peer activity")
+        case .discovering:     return NSLocalizedString("Discovering", comment: "ConnectionState: scanning for peers")
+        case .peerFound:       return NSLocalizedString("Peer Found", comment: "ConnectionState: discovered a peer")
+        case .requesting:      return NSLocalizedString("Requesting", comment: "ConnectionState: outbound connection request")
+        case .incomingRequest: return NSLocalizedString("Incoming Request", comment: "ConnectionState: inbound connection request pending")
+        case .connecting:      return NSLocalizedString("Connecting", comment: "ConnectionState: handshake in progress")
+        case .connected:       return NSLocalizedString("Connected", comment: "ConnectionState: peer connected")
+        case .transferring:    return NSLocalizedString("Transferring", comment: "ConnectionState: file transfer active")
+        case .voiceCall:       return NSLocalizedString("In Call", comment: "ConnectionState: voice call active")
+        case .disconnected:    return NSLocalizedString("Disconnected", comment: "ConnectionState: peer disconnected")
+        case .rejected:        return NSLocalizedString("Rejected", comment: "ConnectionState: connection rejected")
+        case .failed:          return NSLocalizedString("Failed", comment: "ConnectionState: connection failed")
+        }
     }
 }
