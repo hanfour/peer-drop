@@ -83,6 +83,19 @@ struct PeerDropCommands: Commands {
             .keyboardShortcut("2")
         }
 
+        // Sidebar section jumps (⌘⌥{1-4}). Posted as a notification so
+        // MacContentView (which owns @State sidebar selection) can update.
+        CommandGroup(after: .windowList) {
+            Button("Nearby")  { postJump(.nearby)  }
+                .keyboardShortcut("1", modifiers: [.command, .option])
+            Button("Trusted") { postJump(.trusted) }
+                .keyboardShortcut("2", modifiers: [.command, .option])
+            Button("Relay")   { postJump(.relay)   }
+                .keyboardShortcut("3", modifiers: [.command, .option])
+            Button("Pet")     { postJump(.pet)     }
+                .keyboardShortcut("4", modifiers: [.command, .option])
+        }
+
         // Help menu — fully functional
         CommandGroup(replacing: .help) {
             Button("PeerDrop Help") {
@@ -97,4 +110,8 @@ struct PeerDropCommands: Commands {
             }
         }
     }
+}
+
+private func postJump(_ section: MacSidebarSection) {
+    NotificationCenter.default.post(name: .macSidebarJump, object: section)
 }
