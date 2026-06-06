@@ -44,7 +44,9 @@ struct RelayConnectView: View {
             }
             }
             .navigationTitle("Relay Connect")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -180,8 +182,8 @@ struct RelayConnectView: View {
                         .font(.system(size: 48, weight: .bold, design: .monospaced))
                         .tracking(8)
 
-                    if let qrImage = generateQRCode(from: "peerdrop://relay/\(generatedCode)") {
-                        Image(uiImage: qrImage)
+                    if let cgImage = generateQRCode(from: "peerdrop://relay/\(generatedCode)") {
+                        Image(decorative: cgImage, scale: 1.0)
                             .interpolation(.none)
                             .resizable()
                             .scaledToFit()
@@ -222,7 +224,9 @@ struct RelayConnectView: View {
             TextField("Room Code", text: $roomCode)
                 .font(.system(size: 32, weight: .bold, design: .monospaced))
                 .multilineTextAlignment(.center)
+                #if os(iOS)
                 .textInputAutocapitalization(.characters)
+                #endif
                 .autocorrectionDisabled()
                 .focused($isCodeFieldFocused)
                 .frame(maxWidth: 240)
@@ -291,7 +295,8 @@ struct RelayConnectView: View {
 
     // MARK: - QR Code
 
-    private func generateQRCode(from string: String) -> UIImage? {
+    /// Generates a QR code CGImage from the given string, cross-platform.
+    private func generateQRCode(from string: String) -> CGImage? {
         let context = CIContext()
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(string.utf8)
@@ -300,7 +305,6 @@ struct RelayConnectView: View {
         guard let outputImage = filter.outputImage else { return nil }
         let scale = 10.0
         let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else { return nil }
-        return UIImage(cgImage: cgImage)
+        return context.createCGImage(scaledImage, from: scaledImage.extent)
     }
 }
