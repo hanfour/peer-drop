@@ -1,5 +1,6 @@
 import SwiftUI
 import PeerDropCore
+import PeerDropPlatform
 import AVKit
 
 /// Full-screen media preview for images and videos.
@@ -36,7 +37,9 @@ struct MediaPreviewView: View {
                 infoBar
             }
         }
+        #if os(iOS)
         .statusBar(hidden: true)
+        #endif
         .onAppear {
             if isVideo {
                 setupVideoPlayer()
@@ -88,7 +91,7 @@ struct MediaPreviewView: View {
     @ViewBuilder
     private func imageView(in geometry: GeometryProxy) -> some View {
         if let image = loadImage() {
-            Image(uiImage: image)
+            Image(platformImage: image)
                 .resizable()
                 .scaledToFit()
                 .scaleEffect(scale)
@@ -181,13 +184,13 @@ struct MediaPreviewView: View {
 
     // MARK: - Helpers
 
-    private func loadImage() -> UIImage? {
+    private func loadImage() -> PlatformImage? {
         // Try thumbnail first for quick display
-        if let thumbData = message.thumbnailData, let image = UIImage(data: thumbData) {
+        if let thumbData = message.thumbnailData, let image = PlatformImage(data: thumbData) {
             // If we have local file, load full resolution
             if let localPath = message.localFileURL,
                let mediaData = chatManager.loadMediaData(relativePath: localPath),
-               let fullImage = UIImage(data: mediaData) {
+               let fullImage = PlatformImage(data: mediaData) {
                 return fullImage
             }
             return image
@@ -196,7 +199,7 @@ struct MediaPreviewView: View {
         // Load from local file
         if let localPath = message.localFileURL,
            let mediaData = chatManager.loadMediaData(relativePath: localPath),
-           let image = UIImage(data: mediaData) {
+           let image = PlatformImage(data: mediaData) {
             return image
         }
 

@@ -90,7 +90,9 @@ struct PetTabView: View {
             }
         }
         .navigationTitle("我的寵物")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .alert("幫寵物取個名字吧！", isPresented: $showNameAlert) {
             TextField("名字", text: $nameText)
             Button("確定") {
@@ -119,6 +121,7 @@ struct PetTabView: View {
                 showWelcome = true
             }
         }
+        #if os(iOS)
         .fullScreenCover(isPresented: $showWelcome) {
             // Pass engine.renderedImage as prerenderedImage: this view is
             // already mounted (we're presenting from it), so engine's sprite
@@ -129,6 +132,14 @@ struct PetTabView: View {
                 showWelcome = false
             }
         }
+        #else
+        .sheet(isPresented: $showWelcome) {
+            PetWelcomeView(pet: engine.pet, prerenderedImage: engine.renderedImage) {
+                welcomeFlag.markSeen()
+                showWelcome = false
+            }
+        }
+        #endif
     }
 
     private var moodIcon: String {

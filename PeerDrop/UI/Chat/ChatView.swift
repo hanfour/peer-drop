@@ -1,11 +1,13 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
-import UIKit
-import PhotosUI
+import PeerDropPlatform
 import UniformTypeIdentifiers
 import os
 import PeerDropPet
+#if canImport(PhotosUI) && os(iOS)
+import PhotosUI
+#endif
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatView")
 
@@ -29,7 +31,9 @@ struct ChatView: View {
     @State private var showCamera = false
     @State private var showPhotoPicker = false
     @State private var showDocumentPicker = false
+    #if canImport(PhotosUI) && os(iOS)
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    #endif
     @State private var replyingToMessage: ChatMessage?
     @State private var showMicPermissionAlert = false
     @State private var showSearch = false
@@ -238,7 +242,7 @@ struct ChatView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
-                .background(Color(.systemGray6))
+                .background(Color.peerDropFillTertiary)
             }
 
             // Reply preview bar
@@ -252,9 +256,11 @@ struct ChatView: View {
                 .opacity(isPeerConnected ? 1.0 : 0.5)
         }
         .navigationTitle(peerName)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button {
                     showSearch = true
                 } label: {
@@ -285,6 +291,7 @@ struct ChatView: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
+        #if os(iOS)
         .fullScreenCover(isPresented: $showCamera) {
             CameraPickerView { image in
                 sendImage(image)
@@ -301,11 +308,18 @@ struct ChatView: View {
                 }
             }
         }
+        #endif
         .alert("Microphone Access Required", isPresented: $showMicPermissionAlert) {
             Button("Open Settings") {
+                #if os(iOS)
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }
+                #elseif os(macOS)
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                    NSWorkspace.shared.open(url)
+                }
+                #endif
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -353,7 +367,7 @@ struct ChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(.systemGray6))
+        .background(Color.peerDropFillTertiary)
     }
 
     // MARK: - Input Bar
@@ -409,7 +423,7 @@ struct ChatView: View {
                 TextField("Message", text: $messageText)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color(.systemGray6))
+                    .background(Color.peerDropFillTertiary)
                     .clipShape(Capsule())
                     .onChange(of: messageText) { newValue in
                         connectionManager.handleTypingChange(
@@ -461,8 +475,8 @@ struct ChatView: View {
 
     // MARK: - Send image
 
-    private func sendImage(_ image: UIImage) {
-        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+    private func sendImage(_ image: PlatformImage) {
+        guard let data = image.platformJPEGData(compressionQuality: 0.8) else { return }
         let fileName = "IMG_\(Date().timeIntervalSince1970).jpg"
         let thumbData = makeThumbnail(image, maxSize: 200)
 
@@ -476,13 +490,14 @@ struct ChatView: View {
         )
     }
 
-    // MARK: - Handle photo picker
+    // MARK: - Handle photo picker (iOS only)
 
+    #if canImport(PhotosUI) && os(iOS)
     private func handleSelectedPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
             if let data = try? await item.loadTransferable(type: Data.self) {
                 let fileName = "Photo_\(Date().timeIntervalSince1970).jpg"
-                let thumbData = UIImage(data: data).flatMap { self.makeThumbnail($0, maxSize: 200) }
+                let thumbData = PlatformImage(data: data).flatMap { self.makeThumbnail($0, maxSize: 200) }
 
                 await MainActor.run {
                     connectionManager.sendMediaMessage(
@@ -498,6 +513,7 @@ struct ChatView: View {
         }
         await MainActor.run { selectedPhotoItems = [] }
     }
+    #endif
 
     // MARK: - Send file
 
@@ -577,17 +593,50 @@ struct ChatView: View {
         return String(format: "%d:%02d", mins, secs)
     }
 
-    private func makeThumbnail(_ image: UIImage, maxSize: CGFloat) -> Data? {
+    // MARK: - Thumbnail
+
+    /// Resizes a PlatformImage to fit within maxSize×maxSize and returns JPEG data.
+    /// iOS: uses UIGraphicsImageRenderer for best quality.
+    /// macOS: uses CGContext-based resize — same output, no AppKit dependency.
+    private func makeThumbnail(_ image: PlatformImage, maxSize: CGFloat) -> Data? {
+        #if canImport(UIKit)
         let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1.0)
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: size)
         let thumb = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
         return thumb.jpegData(compressionQuality: 0.6)
+        #elseif canImport(AppKit)
+        guard let cgImage = image.platformCGImage else { return nil }
+        let srcW = CGFloat(cgImage.width)
+        let srcH = CGFloat(cgImage.height)
+        guard srcW > 0, srcH > 0 else { return nil }
+        let scale = min(maxSize / srcW, maxSize / srcH, 1.0)
+        let dstW = Int(srcW * scale)
+        let dstH = Int(srcH * scale)
+        guard let colorSpace = cgImage.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(
+                data: nil,
+                width: dstW,
+                height: dstH,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else { return nil }
+        ctx.interpolationQuality = .medium
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: dstW, height: dstH))
+        guard let resized = ctx.makeImage() else { return nil }
+        let thumb = PlatformImage(platformCGImage: resized, size: CGSize(width: dstW, height: dstH))
+        return thumb?.platformJPEGData(compressionQuality: 0.6)
+        #else
+        return nil
+        #endif
     }
 }
 
-// MARK: - Document Picker
+// MARK: - Document Picker (iOS only)
 
+#if canImport(UIKit)
 struct DocumentPickerView: UIViewControllerRepresentable {
     var onDocumentsPicked: ([URL]) -> Void
 
@@ -616,6 +665,7 @@ struct DocumentPickerView: UIViewControllerRepresentable {
         }
     }
 }
+#endif
 
 // MARK: - iMessage-style Attachment Menu
 
@@ -655,11 +705,13 @@ struct AttachmentMenuSheet: View {
     }
 
     private var menuItems: [MenuItem] {
-        [
-            MenuItem(icon: "camera.fill", label: "Camera", color: .gray, action: onCamera),
-            MenuItem(icon: "photo.on.rectangle", label: "Photos", color: Color(red: 0.0, green: 0.68, blue: 1.0), action: onPhotos),
-            MenuItem(icon: "doc.fill", label: "Files", color: Color(red: 0.33, green: 0.33, blue: 0.98), action: onFiles),
-        ]
+        var items: [MenuItem] = []
+        #if os(iOS)
+        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: .gray, action: onCamera))
+        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: Color(red: 0.0, green: 0.68, blue: 1.0), action: onPhotos))
+        #endif
+        items.append(MenuItem(icon: "doc.fill", label: "Files", color: Color(red: 0.33, green: 0.33, blue: 0.98), action: onFiles))
+        return items
     }
 
     private struct MenuItem {

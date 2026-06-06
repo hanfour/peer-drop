@@ -1,15 +1,16 @@
 import SwiftUI
 import PeerDropCore
+import PeerDropPlatform
 
 struct UserProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var displayName: String
-    @State private var avatarImage: UIImage?
+    @State private var avatarImage: PlatformImage?
 
     init() {
         let profile = UserProfile.current
         _displayName = State(initialValue: profile.displayName)
-        if let data = profile.avatarData, let img = UIImage(data: data) {
+        if let data = profile.avatarData, let img = PlatformImage(data: data) {
             _avatarImage = State(initialValue: img)
         }
     }
@@ -21,7 +22,7 @@ struct UserProfileView: View {
                     HStack {
                         Spacer()
                         if let avatarImage {
-                            Image(uiImage: avatarImage)
+                            Image(platformImage: avatarImage)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(width: 80, height: 80)
@@ -45,7 +46,9 @@ struct UserProfileView: View {
                 }
             }
             .navigationTitle("Profile")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -63,7 +66,7 @@ struct UserProfileView: View {
     private func save() {
         var profile = UserProfile.current
         profile.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let img = avatarImage, let data = img.jpegData(compressionQuality: 0.8) {
+        if let img = avatarImage, let data = img.platformJPEGData(compressionQuality: 0.8) {
             profile.avatarData = data
         }
         profile.save()

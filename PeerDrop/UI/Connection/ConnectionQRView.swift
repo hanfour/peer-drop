@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
+import PeerDropPlatform
 import CoreImage.CIFilterBuiltins
 import Network
 import PeerDropSecurity
@@ -41,8 +42,8 @@ struct ConnectionQRView: View {
                         .font(.title2.bold())
 
                     if let deepLink = smartDeepLink {
-                        if let qrImage = generateQRCode(from: deepLink) {
-                            Image(uiImage: qrImage)
+                        if let cgImage = generateQRCode(from: deepLink) {
+                            Image(decorative: cgImage, scale: 1.0)
                                 .interpolation(.none)
                                 .resizable()
                                 .scaledToFit()
@@ -87,7 +88,7 @@ struct ConnectionQRView: View {
                             .padding(.horizontal)
 
                         Button {
-                            UIPasteboard.general.string = deepLink
+                            PlatformDependencies.shared.pasteboard().stringContent = deepLink
                             copied = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                 copied = false
@@ -110,7 +111,9 @@ struct ConnectionQRView: View {
                 .padding()
             }
             .navigationTitle("My QR Code")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -192,7 +195,8 @@ struct ConnectionQRView: View {
 
     // MARK: - QR Code Generation
 
-    private func generateQRCode(from string: String) -> UIImage? {
+    /// Generates a QR code CGImage from the given string, cross-platform.
+    private func generateQRCode(from string: String) -> CGImage? {
         let context = CIContext()
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(string.utf8)
@@ -200,8 +204,7 @@ struct ConnectionQRView: View {
         guard let outputImage = filter.outputImage else { return nil }
         let scale = 10.0
         let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else { return nil }
-        return UIImage(cgImage: cgImage)
+        return context.createCGImage(scaledImage, from: scaledImage.extent)
     }
 
     // MARK: - Network Detection
