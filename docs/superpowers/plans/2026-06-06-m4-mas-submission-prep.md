@@ -10,6 +10,11 @@
 
 **Spec reference:** `docs/superpowers/specs/2026-05-24-macos-port-design.md` §M4 (line 334). 4–6 days dev + 1–2 weeks Apple review buffer.
 
+**Memory references (apply during execution):**
+- `[[feedback-asc-iap-quirks]]` — 5 non-obvious IAP automation rules (Tasks 9b / 10)
+- `[[feedback-capability-add-twostep-ship]]` — v5.3's lesson on adding capabilities (1: manually enable in Developer portal → click Save; 2: `fastlane run get_provisioning_profile force:true` to regenerate the profile). Directly applies to Tasks 3 + 5.
+- Project memory `Language` section — 繁體中文台灣用語 / Japanese / Korean conventions (Task 7)
+
 **Predecessors:** M3 (PR #59) merged into main.
 
 ## Investigation findings (verified before plan)
@@ -50,10 +55,75 @@
 - `docs/release/release-runbook.md` — Mac release section.
 - `MEMORY.md` + `project-macos-port.md` — M4 ship status after merge.
 
-## Task 1: Un-stub the Mac sidebar (M2 Task 6b residual)
+## Task 1a: PlatformImage typealias infrastructure
 
 **Files:**
-- Modify: `project.yml` (un-exclude 5 files in PeerDropMac sources)
+- Create: `PeerDropMac/Adapters/PlatformImage+Mac.swift`
+- Create: `PeerDrop/UI/Components/PlatformImage+iOS.swift`
+
+This task ships **independently and merges before Task 1b** so the typealias is in place before any REPLACE-file refactor depends on it. Small, low-risk PR.
+
+- [ ] **Step 1: macOS typealias**
+
+```swift
+// PeerDropMac/Adapters/PlatformImage+Mac.swift
+#if canImport(AppKit)
+import AppKit
+import SwiftUI
+
+typealias PlatformImage = NSImage
+
+extension Image {
+    init(platformImage: PlatformImage) {
+        self.init(nsImage: platformImage)
+    }
+}
+#endif
+```
+
+- [ ] **Step 2: iOS typealias**
+
+```swift
+// PeerDrop/UI/Components/PlatformImage+iOS.swift
+#if canImport(UIKit)
+import UIKit
+import SwiftUI
+
+typealias PlatformImage = UIImage
+
+extension Image {
+    init(platformImage: PlatformImage) {
+        self.init(uiImage: platformImage)
+    }
+}
+#endif
+```
+
+- [ ] **Step 3: Build + commit + open PR**
+
+```bash
+xcodegen generate
+xcodebuild build -scheme PeerDrop -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' 2>&1 | tail -3
+xcodebuild build -scheme PeerDropMac -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO 2>&1 | tail -3
+git add PeerDropMac/Adapters/PlatformImage+Mac.swift PeerDrop/UI/Components/PlatformImage+iOS.swift PeerDrop.xcodeproj/project.pbxproj
+git commit -m "feat(m4): PlatformImage typealias infrastructure (1a/2)
+
+Adds typealias PlatformImage = NSImage on macOS, UIImage on iOS,
+plus Image(platformImage:) initializer. No call sites changed yet
+— Task 1b will swap UIImage/NSImage direct uses across the 8
+REPLACE files.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+Merge 1a, then open 1b as a separate PR. Splitting keeps the typealias change reviewable as a discrete refactor that other tasks (Task 6 UI tests, Task 9 ship) can safely depend on.
+
+---
+
+## Task 1b: Un-stub the Mac sidebar (M2 Task 6b residual)
+
+**Files:**
+- Modify: `project.yml` (un-exclude 9 files in PeerDropMac sources)
 - Modify: `PeerDrop/UI/Discovery/NearbyTab.swift` — add macOS gates
 - Modify: `PeerDrop/UI/Library/LibraryTab.swift` — add macOS gates
 - Modify: `PeerDrop/UI/Relay/RelayConnectView.swift` — add macOS gates
@@ -65,32 +135,20 @@
 - Modify: `PeerDrop/UI/Chat/MediaPreviewView.swift` — `UIImage` decode → `CGImage` via `#if`
 - Modify: `PeerDropMac/Views/MacDetailRouter.swift` — wire NearbyTab/LibraryTab/RelayConnectView in place of stubs
 
+**Execution model:** This task is best executed with `superpowers:subagent-driven-development` (3-4 implementer + reviewer rounds), one round per 2-3 files. Single-shot implementer over 9 files has too high a blast radius — if one fails the others get stuck.
+
 - [ ] **Step 1: Audit each REPLACE file's iOS-only API list**
 
-For each of the 8 files marked "Task 6 REPLACE" in `project.yml` excludes, list:
+For each of the 9 files un-excluded by this task, list:
 - Concrete iOS APIs used (UIKit type / SwiftUI iOS-only modifier / PhotosUI / UIDocumentPicker / UIPasteboard)
 - macOS equivalent (NSOpenPanel / NSImage / NSPasteboard / NSWorkspace / etc.)
 - Whether `#if canImport(UIKit)` gating works OR a full rewrite is needed
 
 Report inline at the top of each file as a `// MARK: - macOS port notes` block before editing — so the rationale survives the diff.
 
-- [ ] **Step 2: Cross-platform image type alias**
+- [ ] **Step 2: Use `Image(platformImage:)` at call sites**
 
-Add to `PeerDropMac/Adapters/PlatformImage+Mac.swift` (new file):
-
-```swift
-#if canImport(AppKit)
-import AppKit
-typealias PlatformImage = NSImage
-extension Image {
-    init(platformImage: PlatformImage) {
-        self.init(nsImage: platformImage)
-    }
-}
-#endif
-```
-
-For iOS side, define matching `typealias PlatformImage = UIImage` + `Image(uiImage:)` in `PeerDrop/UI/Components/PlatformImage+iOS.swift`. Use `Image(platformImage:)` at all call sites in chat / avatar / media preview.
+The typealias and initializer were merged in Task 1a. In each REPLACE file, swap `Image(uiImage: img)` for `Image(platformImage: img)` — both platforms now build.
 
 - [ ] **Step 3: Replace UIDocumentPickerViewController with NSOpenPanel**
 
@@ -683,19 +741,66 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Task 9: Cut v6.0.0 binary + upload (NO submit)
+## Task 9a: Bump iOS MARKETING_VERSION to 6.0.0 + ship iOS
 
-**Files:** (none — runs `fastlane release_mac submit:false`)
+**Files:** Modify `project.yml`
 
-- [ ] **Step 1: Bump version**
+iOS v6.0.0 is the SPM rebuild ship — same-day with the first Mac binary per spec §M4. Handled as a separate task so its history is clean and reviewers can audit the iOS-only side independently.
 
-`project.yml` already has `MARKETING_VERSION: "6.0.0"` for PeerDropMac. Verify iOS PeerDrop too:
+- [ ] **Step 1: Bump iOS MARKETING_VERSION**
 
 ```bash
 grep "MARKETING_VERSION" project.yml
 ```
 
-Iff iOS PeerDrop MARKETING_VERSION is still 5.4.0, bump to 6.0.0 + `xcodegen generate`.
+If PeerDrop target still says `MARKETING_VERSION: "5.4.0"`, edit to `"6.0.0"` and:
+
+```bash
+xcodegen generate
+```
+
+Confirms `CFBundleShortVersionString` will resolve to 6.0.0 in the archive.
+
+- [ ] **Step 2: Run iOS release lane**
+
+```bash
+fastlane release
+```
+
+Full iOS submit-for-review pipeline (build → upload → submit). Reviewer notes auto-load from `docs/release/v6.0.0-reviewer-notes.md` (created in Task 8). Total wall time ~6 min.
+
+- [ ] **Step 3: Verify**
+
+```bash
+fastlane check_status
+```
+
+Expected: PeerDrop v6.0.0 (iOS), build N, `WAITING_FOR_REVIEW`.
+
+- [ ] **Step 4: Commit version bump**
+
+```bash
+git add project.yml PeerDrop.xcodeproj/project.pbxproj
+git commit -m "release: bump iOS to v6.0.0 for SPM-rebuild ship
+
+Coincides with first Mac binary submission per spec §M4. Same-day
+ship for both platforms; iOS user-facing changes are zero (SPM
+modularisation is internal)."
+```
+
+---
+
+## Task 9b: Cut v6.0.0 Mac binary + upload (NO submit)
+
+**Files:** (none — runs `fastlane release_mac submit:false`)
+
+- [ ] **Step 1: Confirm Mac MARKETING_VERSION = 6.0.0**
+
+```bash
+grep -A1 "PeerDropMac:" project.yml | grep MARKETING
+```
+
+Already set at M2; verify it didn't drift.
 
 - [ ] **Step 2: Run `release_mac` with submit:false**
 
@@ -714,7 +819,7 @@ Expected: total wall time ~10 min. ASC web UI should show v6.0.0 (macOS) in `PRE
 - [ ] **Step 3: Verify**
 
 ```bash
-fastlane check_status_mac  # add this lane if not already present
+fastlane check_status_mac
 # or open https://appstoreconnect.apple.com/apps/6759594513/distribution/macos
 ```
 
@@ -795,7 +900,11 @@ Refresh the ASC inflight page; should show 3 IAPs attached to v6.0.0 (macOS).
 
 **Files:** (none — runs `fastlane submit_mac_only`)
 
-- [ ] **Step 1: Run submit_mac_only**
+- [ ] **Step 1: Verify IAPs are attached**
+
+Before submitting, confirm Task 10 actually attached the 3 tip-jar IAPs to the inflight version. Open `https://appstoreconnect.apple.com/apps/6759594513/distribution/macos/version/inflight` and verify the `App 內購買項目和訂閱項目` section lists tip.small / tip.medium / tip.large. If missing, ASC rejects the submission with "no IAP attached" — re-run Task 10 before proceeding.
+
+- [ ] **Step 2: Run submit_mac_only**
 
 ```bash
 fastlane submit_mac_only version:6.0.0 build:1
@@ -803,21 +912,58 @@ fastlane submit_mac_only version:6.0.0 build:1
 
 Or via ASC web UI: open v6.0.0 macOS inflight → "提交以供審查".
 
-- [ ] **Step 2: Verify**
+- [ ] **Step 3: Verify**
 
 ```bash
 fastlane check_status_mac
 ```
 
-Expected: v6.0.0 macOS in `WAITING_FOR_REVIEW`. iOS PeerDrop v6.0.0 (the SPM rebuild) submitted in parallel via `fastlane release submit:true`.
+Expected: v6.0.0 macOS in `WAITING_FOR_REVIEW`. iOS PeerDrop v6.0.0 from Task 9a should already be in `WAITING_FOR_REVIEW` from earlier in the day.
 
-- [ ] **Step 3: Apple review buffer**
+- [ ] **Step 4: Apple review buffer**
 
 1–2 weeks. Monitor via `fastlane check_status_mac`. Common rejection vectors:
 - Sandbox entitlement justification (covered in reviewer notes)
 - Network usage description (covered in Info.plist)
 - IAP screenshot ≠ 1024×1024 (covered in `feedback-asc-iap-quirks`)
 - Self-drawn call panel (low risk per FaceTime/Slack/Discord precedent — flagged in spec §M4 risk register)
+
+### Note on release strategy
+
+Both `release` (iOS) and `release_mac` lanes default to `automatic_release: false` per the v5.4 / v5.3.2 patterns. After Apple approves, the build lands in `PENDING_DEVELOPER_RELEASE` and needs `fastlane release_now` (iOS) or its Mac equivalent to flip to READY_FOR_SALE.
+
+First-Mac-ship caution: do NOT enable phased rollout for v6.0.0. The current iOS `release` lane has `phased_release: false` and the same default for Mac is correct — we want manual control over the initial Mac release given:
+- This is the first Mac binary; sandbox surprises only surface in shipped builds.
+- Spec §M4 risk register flags "Apple rejects self-drawn call panel" — low risk, but if it does land in production with a latent issue we want immediate rollback control rather than a partial-userbase exposure window.
+
+Phased rollout becomes the default starting with v6.1.
+
+---
+
+## Task 11.5: MAS-install smoke check
+
+**Files:** (none — manual)
+
+After v6.0.0 is `READY_FOR_SALE` and you've flipped via `release_now`, install the **App Store version** (not the TestFlight build) on a clean Mac. App-Store-distributed sandboxed binaries can hit entitlement surprises that don't surface in dev / TestFlight builds.
+
+- [ ] **Step 1: Wait for App Store propagation**
+
+After `release_now`, allow ~30 min for the binary to reach the user-facing App Store. Verify by searching "PeerDrop" on App Store on a clean Mac.
+
+- [ ] **Step 2: Install from App Store**
+
+Download from App Store (NOT TestFlight). Launch. The system should prompt for microphone permission on first voice-call attempt.
+
+- [ ] **Step 3: Run the manual smoke matrix from `docs/release/release-runbook.md`**
+
+Specifically the M3 voice-calling matrix (7 rows) plus:
+- [ ] BLE discovery works (potential `NSBluetoothAlwaysUsageDescription` requirement — missing this on a MAS build can fail silently)
+- [ ] Bonjour discovery works (`com.apple.developer.networking.multicast` should cover this but verify)
+- [ ] APNs push wakes the app from terminated state (needs `aps-environment = production`, NOT development — Task 4's reviewer notes already flag this)
+
+- [ ] **Step 4: If failures surface**
+
+File a v6.0.1 hotfix in `docs/release/v6.0.1-reviewer-notes.md`, bump `MARKETING_VERSION`, re-run `release_mac`. The MAS-install smoke check exists precisely to catch these BEFORE end users start downloading.
 
 ---
 
