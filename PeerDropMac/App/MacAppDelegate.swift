@@ -24,11 +24,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     /// Finder drop / open-with handler. Files arrive via NSURL array.
+    /// Task 10 routes through MacDropHandler so Dock drops, Finder
+    /// "Open With PeerDrop", and the `open:` lifecycle all share one
+    /// logger path. The MacDropHandler TODO comments document the
+    /// post-M2 peer-selection-sheet wiring (App Review compliance:
+    /// drops NEVER send silently).
     func application(_ application: NSApplication, open urls: [URL]) {
         logger.info("Open URLs: \(urls.map(\.lastPathComponent).joined(separator: ", "))")
-        // TODO Task 10 — wire to a peer-selection sheet via ConnectionManager.
-        // Task 3 just logs to confirm the AppDelegate hook fires.
-        // The peer-selection sheet ALWAYS appears before send (App Review compliance).
+        MacDropHandler.handle(urls: urls)
     }
 
     /// Dock click when the main window is closed should reopen it.

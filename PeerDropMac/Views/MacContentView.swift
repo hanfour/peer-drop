@@ -4,6 +4,7 @@ import PeerDropCore
 struct MacContentView: View {
     @State private var selection: MacSidebarSection? = .nearby
     @AppStorage("sidebar.width") private var sidebarWidth: Double = 220
+    @State private var isDropTargeted = false
 
     var body: some View {
         NavigationSplitView {
@@ -14,5 +15,13 @@ struct MacContentView: View {
                 .navigationSplitViewColumnWidth(min: 480, ideal: 600)
         }
         .navigationSplitViewStyle(.balanced)
+        .dropDestination(for: URL.self) { urls, _ in
+            MacDropHandler.handle(urls: urls)
+        } isTargeted: { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isDropTargeted = hovering
+            }
+        }
+        .overlay(DropOverlay(isVisible: isDropTargeted), alignment: .center)
     }
 }

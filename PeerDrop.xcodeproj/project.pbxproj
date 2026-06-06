@@ -119,6 +119,7 @@
 		68D6FB1A56699AA70F6437CE /* TrustGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88C13753314A0B506433A46 /* TrustGateTests.swift */; };
 		6A8837F44D5DC1F207C3948F /* TEST_SPEC.md in Resources */ = {isa = PBXBuildFile; fileRef = 5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */; };
 		6B017A3886F724F62ED1EE27 /* MacChatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD58BEE3BF4DC02C141E6810 /* MacChatWindow.swift */; };
+		6BF4CA581482AA49C7DE2A0A /* DropOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBADAF4F21193CFDA049E9A3 /* DropOverlay.swift */; };
 		6D9E553AC7F947B9101E3D1A /* ConnectionStatusHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D03168691C8271ED0CCDFB8 /* ConnectionStatusHeaderView.swift */; };
 		6F2CF0009723FAF2C8DCF7D7 /* PerPeerPolicyIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7169857C02B0AE89B35A93C /* PerPeerPolicyIntegrationTests.swift */; };
 		6F346DC19133E5CC09B63891 /* ConnectionTimeoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E188F98137CC86BA3F87F9E /* ConnectionTimeoutTests.swift */; };
@@ -228,6 +229,7 @@
 		CCB9B46D8FAB607EEF574515 /* ChatE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3F8AF2B19CC3C425A05946 /* ChatE2ETests.swift */; };
 		CCC5D14D0FEA8FA169D20D9B /* PlatformColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = B390D065DDE669E50F90FCAA /* PlatformColors.swift */; };
 		CD53B74D15A17A0A733B97E0 /* E2ETestSuites.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA32370BB5417DCFA96EBEEB /* E2ETestSuites.swift */; };
+		CD6A4D35A30B2638EC2268E9 /* MacDropHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F802A86F8755983AFE6A3A3C /* MacDropHandler.swift */; };
 		CF3EDCDA7F93B7D7FDCD6020 /* BLESignalingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6B1D2992D58BC9668FCED3 /* BLESignalingTests.swift */; };
 		CF69A9E8DA0915525901205B /* TailnetPeersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A7A24E192618BE5D8716A7 /* TailnetPeersView.swift */; };
 		D0C7491ECED0CFEACCADCB25 /* ProofOfWorkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A0AF4FEF462DB76CC4FD9C /* ProofOfWorkTests.swift */; };
@@ -542,6 +544,7 @@
 		E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		EA02F82C01BC5DE57FF9CF2E /* GuestPetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestPetView.swift; sourceTree = "<group>"; };
 		EA32370BB5417DCFA96EBEEB /* E2ETestSuites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ETestSuites.swift; sourceTree = "<group>"; };
+		EBADAF4F21193CFDA049E9A3 /* DropOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropOverlay.swift; sourceTree = "<group>"; };
 		ED3F8AF2B19CC3C425A05946 /* ChatE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatE2ETests.swift; sourceTree = "<group>"; };
 		EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullFeatureVerificationTests.swift; sourceTree = "<group>"; };
 		EFD90721C90C7D8C7E4EB456 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
@@ -551,6 +554,7 @@
 		F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F70A4736E257B8A642683317 /* SnapshotTestsDark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotTestsDark.swift; sourceTree = "<group>"; };
 		F7169857C02B0AE89B35A93C /* PerPeerPolicyIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerPeerPolicyIntegrationTests.swift; sourceTree = "<group>"; };
+		F802A86F8755983AFE6A3A3C /* MacDropHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDropHandler.swift; sourceTree = "<group>"; };
 		F88C13753314A0B506433A46 /* TrustGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustGateTests.swift; sourceTree = "<group>"; };
 		FB09411CC81953144963CB18 /* PeerRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerRowView.swift; sourceTree = "<group>"; };
 		FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerTransportTests.swift; sourceTree = "<group>"; };
@@ -795,6 +799,7 @@
 			children = (
 				AF73266DB60BE5DCC0E42F4B /* Adapters */,
 				19F5C630122A80C5A0D78496 /* App */,
+				60B904511703E7DCE0CB3EC9 /* DragAndDrop */,
 				7480E5F261C36127AAE31E79 /* Views */,
 			);
 			path = PeerDropMac;
@@ -807,6 +812,15 @@
 			);
 			name = "feat+m2-macos-ui-shell";
 			path = .;
+			sourceTree = "<group>";
+		};
+		60B904511703E7DCE0CB3EC9 /* DragAndDrop */ = {
+			isa = PBXGroup;
+			children = (
+				EBADAF4F21193CFDA049E9A3 /* DropOverlay.swift */,
+				F802A86F8755983AFE6A3A3C /* MacDropHandler.swift */,
+			);
+			path = DragAndDrop;
 			sourceTree = "<group>";
 		};
 		62B141FB933FBF791D8759AB /* Components */ = {
@@ -1542,6 +1556,7 @@
 				8A409F666CBF5120BF135E93 /* DevicePickerView.swift in Sources */,
 				EBEB93A27FFA37C8A48A19D8 /* DeviceRecordRow.swift in Sources */,
 				745CD45CE6664ED2C885CB1C /* DisconnectSheet.swift in Sources */,
+				6BF4CA581482AA49C7DE2A0A /* DropOverlay.swift in Sources */,
 				9587AC993E7B3CDE658040AA /* FirstContactVerificationSheet.swift in Sources */,
 				A824F5CC650F1DDDCA1B7557 /* GroupChatView.swift in Sources */,
 				B9CD3AD4FC571877C011ABC3 /* GroupDetailView.swift in Sources */,
@@ -1558,6 +1573,7 @@
 				6B017A3886F724F62ED1EE27 /* MacChatWindow.swift in Sources */,
 				4E946682EF58597B4154F849 /* MacContentView.swift in Sources */,
 				119C022502ADD5067A1E0844 /* MacDetailRouter.swift in Sources */,
+				CD6A4D35A30B2638EC2268E9 /* MacDropHandler.swift in Sources */,
 				5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */,
 				EAD969016D567BCCCE334F30 /* MacSettingsView.swift in Sources */,
 				ECDE858DFACE87974D617ED8 /* MacSidebar.swift in Sources */,

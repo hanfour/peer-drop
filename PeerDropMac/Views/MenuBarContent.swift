@@ -172,6 +172,7 @@ struct MenuBarContent: View {
 
 private struct MenuBarPeerRow: View {
     let peer: DiscoveredPeer
+    @State private var isDropTargeted = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -193,5 +194,16 @@ private struct MenuBarPeerRow: View {
             .help("Send to \(peer.displayName)")
         }
         .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : Color.clear)
+        )
+        .dropDestination(for: URL.self) { urls, _ in
+            MacDropHandler.handle(urls: urls, toPeerID: peer.id)
+        } isTargeted: { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isDropTargeted = hovering
+            }
+        }
     }
 }
