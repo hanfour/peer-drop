@@ -569,4 +569,245 @@ platform :ios do
       }
     )
   end
+
+  # ============================================================================
+  # M4 — Mac App Store lanes (v6.0.0+)
+  # ============================================================================
+  # Mirrors of the iOS release / check_status / submit_only lanes targeted at
+  # the macOS platform (PeerDropMac scheme, com.hanfour.peerdrop.mac bundle).
+  # Spaceship's macOS query path uses Platform::MAC_OS; deliver's takes
+  # `platform: "osx"`. Reviewer notes auto-load from the same
+  # docs/release/v<version>-reviewer-notes.md file shared with iOS — both
+  # platforms ship the same version per spec §M4.
+
+  desc "Print ASC review status for the Mac App: live + in-flight versions"
+  lane :check_status_mac do
+    require "spaceship"
+    require "json"
+
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    data["duration"] || 1200,
+      in_house:    data["in_house"] || false
+    )
+
+    # The Mac bundle shares the App record with iOS (PRODUCT_BUNDLE_IDENTIFIER
+    # com.hanfour.peerdrop on iOS, com.hanfour.peerdrop.mac on macOS) — both
+    # roll up to the same Spaceship::ConnectAPI::App via Apple ID 6759594513.
+    # Pass `platform: MAC_OS` to filter the version queries.
+    bundle_id = "com.hanfour.peerdrop.mac"
+    app = Spaceship::ConnectAPI::App.find(bundle_id)
+    UI.user_error!("Mac app not found: #{bundle_id} — has ASC macOS platform been enabled? See M4 plan Task 4.") unless app
+
+    mac_platform = Spaceship::ConnectAPI::Platform::MAC_OS
+    UI.success("App: #{app.name} (#{bundle_id}) — id #{app.id}")
+    UI.message("")
+
+    live = app.get_live_app_store_version(platform: mac_platform)
+    if live
+      UI.success("=== Live (on Mac App Store) ===")
+      UI.message("  v#{live.version_string} — #{live.app_store_state}")
+      UI.message("  Released: #{live.created_date}")
+      UI.message("")
+    else
+      UI.message("(no live Mac version yet)")
+      UI.message("")
+    end
+
+    edit = app.get_edit_app_store_version(platform: mac_platform)
+    if edit
+      UI.success("=== In Flight (draft / in review / rejected) ===")
+      UI.message("  v#{edit.version_string} — #{edit.app_store_state}")
+      UI.message("  Release type: #{edit.release_type}")
+      UI.message("  Created:      #{edit.created_date}")
+      if (b = edit.build)
+        UI.message("  Build:        #{b.version} (uploaded #{b.uploaded_date})")
+      end
+      UI.message("")
+    else
+      UI.message("(no edit Mac version — nothing in flight)")
+      UI.message("")
+    end
+
+    recent = app.get_app_store_versions(filter: { platform: mac_platform }, limit: 10)
+    if recent.any?
+      UI.success("=== Recent Mac Versions ===")
+      recent.each do |v|
+        UI.message("  v#{v.version_string.ljust(8)} #{v.app_store_state.to_s.ljust(28)} #{v.created_date}")
+      end
+    end
+  end
+
+  desc "Build + upload Mac binary to App Store (and submit unless submit:false)"
+  desc "Auto-loads reviewer notes from docs/release/v<version>-reviewer-notes.md."
+  desc "Default behavior: submit:true automatically (matches iOS release lane);"
+  desc "pass submit:false to leave v6.0.0 in PREPARE_FOR_SUBMISSION so the IAP"
+  desc "tip jar can be attached via Playwright before submission."
+  lane :release_mac do |options|
+    # Same ASC API key auth + reviewer-notes load + temp .p8 dance as the iOS
+    # release lane. Centralising would be cleaner; kept inline for parity.
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    1200,
+      in_house:    false
+    )
+
+    # Auto-load reviewer notes from the SAME file iOS uses — both platforms
+    # ship the same version v6.0.0 per spec §M4.
+    version_match = File.read(File.expand_path("../project.yml", __dir__)).match(/MARKETING_VERSION:\s*"([^"]+)"/)
+    version = version_match ? version_match[1] : nil
+    UI.message("Detected MARKETING_VERSION: #{version || '(unknown)'}")
+
+    review_info = nil
+    if version
+      major_minor = version[/^\d+\.\d+/]
+      versioned_path = File.expand_path("../docs/release/v#{version}-reviewer-notes.md", __dir__)
+      base_path      = File.expand_path("../docs/release/v#{major_minor}-reviewer-notes.md", __dir__)
+      notes_path     = File.exist?(versioned_path) ? versioned_path : base_path
+      if File.exist?(notes_path)
+        raw   = File.read(notes_path)
+        match = raw.match(/<!-- BEGIN_PASTE.*?-->(.*?)<!-- END_PASTE -->/m)
+        if match
+          notes = match[1].gsub(/^#+\s*/, "").strip
+          UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
+          UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
+          review_info = { notes: notes }
+        else
+          UI.important("Reviewer notes file found but BEGIN_PASTE/END_PASTE markers missing: #{notes_path}")
+        end
+      else
+        UI.important("No reviewer notes file at #{versioned_path} or #{base_path} — submitting without")
+      end
+    end
+
+    asc_key_p8 = "/tmp/asc-api-key-mac-#{Process.pid}.p8"
+    File.write(asc_key_p8, data["key"])
+    File.chmod(0o600, asc_key_p8)
+    auth_xcargs = "-allowProvisioningUpdates " \
+                  "-authenticationKeyID #{data['key_id']} " \
+                  "-authenticationKeyIssuerID #{data['issuer_id']} " \
+                  "-authenticationKeyPath #{asc_key_p8}"
+
+    # Mac archive. PeerDropMac has no widget extension (vs iOS), so
+    # provisioningProfiles is a single entry. The profile name is the
+    # ASC-default "<bundle_id> AppStore" — `fastlane run get_provisioning_profile`
+    # in M4 Task 3 creates and downloads it.
+    build_app(
+      scheme: "PeerDropMac",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./fastlane/build",
+      output_name: "PeerDrop-Mac.pkg",
+      clean: true,
+      include_bitcode: false,
+      include_symbols: true,
+      xcargs: auth_xcargs,
+      export_options: {
+        method: "app-store",
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.hanfour.peerdrop.mac" => "com.hanfour.peerdrop.mac AppStore"
+        }
+      }
+    )
+    File.delete(asc_key_p8) if File.exist?(asc_key_p8)
+
+    # `submit: false` leaves v6.0.0 in PREPARE_FOR_SUBMISSION so the Mac
+    # IAP tip jar can be attached via the M4 Task 10 Playwright flow
+    # (ASC has no API for attaching IAPs; web UI only). After attach,
+    # call `submit_mac_only` to ship.
+    #
+    # precheck_include_in_app_purchases: false matches iOS — IAP screenshot
+    # quirks tracked in feedback-asc-iap-quirks make precheck noisy.
+    should_submit = options.fetch(:submit, true)
+    upload_to_app_store(
+      api_key_path: "./fastlane/api_key.json",
+      platform: "osx",
+      skip_screenshots: false,
+      skip_metadata: false,
+      metadata_path: "./fastlane/metadata/macos",
+      screenshots_path: "./fastlane/screenshots_mac",
+      submit_for_review: should_submit,
+      automatic_release: should_submit,
+      phased_release: false,  # first Mac ship — manual release per M4 plan Task 11
+      force: true,
+      precheck_include_in_app_purchases: false,
+      app_review_information: review_info,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: true,
+        export_compliance_is_exempt: true
+      }
+    )
+  end
+
+  desc "Submit an already-uploaded Mac TestFlight build for review (no rebuild)"
+  desc "Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]"
+  desc "Example: fastlane submit_mac_only version:6.0.0 build:1"
+  desc "Use after `release_mac submit:false` + Playwright IAP attach."
+  lane :submit_mac_only do |options|
+    # phased_release defaults to false for the first Mac ship — see M4 plan
+    # Task 11 (sandbox surprises only surface in shipped builds; we want
+    # full rollback control, not a partial-user-base exposure window).
+    # v6.1+ can default to phased.
+    phased_release    = options[:phased] == "true"
+    automatic_release = options[:auto_release] == "true"
+
+    UI.message("Mac submission strategy: phased=#{phased_release}, automatic=#{automatic_release}")
+
+    review_info = nil
+    unless options[:no_review_notes] == "true"
+      version = options[:version]
+      UI.user_error!("version: required when auto-loading reviewer notes (or pass no_review_notes:true)") unless version
+
+      major_minor = version[/^\d+\.\d+/]
+      UI.user_error!("Could not parse major.minor from version '#{version}'") unless major_minor
+
+      versioned_path  = File.expand_path("../docs/release/v#{version}-reviewer-notes.md", __dir__)
+      base_path       = File.expand_path("../docs/release/v#{major_minor}-reviewer-notes.md", __dir__)
+      notes_path      = File.exist?(versioned_path) ? versioned_path : base_path
+      UI.user_error!("Reviewer notes not found: tried #{versioned_path} and #{base_path}") unless File.exist?(notes_path)
+
+      raw = File.read(notes_path)
+      match = raw.match(/<!-- BEGIN_PASTE.*?-->(.*?)<!-- END_PASTE -->/m)
+      UI.user_error!("BEGIN_PASTE / END_PASTE markers not found in #{notes_path}") unless match
+
+      notes = match[1].gsub(/^#+\s*/, "").strip
+      UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
+      UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
+      review_info = { notes: notes }
+    end
+
+    upload_to_app_store(
+      api_key_path: "./fastlane/api_key.json",
+      platform: "osx",
+      app_version: options[:version],
+      build_number: options[:build],
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      metadata_path: "./fastlane/metadata/macos",
+      submit_for_review: true,
+      automatic_release: automatic_release,
+      phased_release: phased_release,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      app_review_information: review_info,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: true,
+        export_compliance_is_exempt: true
+      }
+    )
+  end
 end
