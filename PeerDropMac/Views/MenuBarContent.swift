@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
+import PeerDropPet
 
 /// Contents of the MenuBarExtra popover (~360×500).
 ///
@@ -13,12 +14,14 @@ import PeerDropTransport
 ///   * `connectionManager.activeTransfers` does not exist; only
 ///     `transferProgress: Double`. We render a static "No active
 ///     transfers" placeholder. A real transfers list is a post-M2 pass.
-///   * `connectionManager.petGenome` does not exist; PetEngine is a
-///     separate @StateObject that Task 9 will wire into PeerDropMacApp
-///     and route here. For now we reserve a 60×60 sprite slot so the
-///     popover layout doesn't shift when Pet arrives.
+///   * Task 9 wires the Pet sprite: PetEngine is a separate
+///     @StateObject in PeerDropMacApp (the plan's
+///     `connectionManager.currentPetSprite` doesn't exist). The
+///     mini-sprite consumes `petEngine.renderedImage` via the shared
+///     `PetSpriteView(size:)` component.
 struct MenuBarContent: View {
     @EnvironmentObject var connectionManager: ConnectionManager
+    @EnvironmentObject var petEngine: PetEngine
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,22 +124,24 @@ struct MenuBarContent: View {
         .padding(.vertical, 6)
     }
 
-    // MARK: - Pet sprite slot (Task 9 wires PetEngine renderedImage here)
+    // MARK: - Pet sprite slot (Task 9: live PetEngine sprite at 60pt)
 
     private var petSpriteSlot: some View {
-        HStack {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.secondary.opacity(0.1))
-                .frame(width: 60, height: 60)
-                .overlay(
-                    Image(systemName: "pawprint")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                )
+        HStack(spacing: 12) {
+            PetSpriteView(size: 60)
+            VStack(alignment: .leading, spacing: 2) {
+                if let name = petEngine.pet.name, !name.isEmpty {
+                    Text(name)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+                // PetState exposes `level: PetLevel` (plan called it
+                // `stage`). `displayName` gives the localised stage label.
+                Text(petEngine.pet.level.displayName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
-            Text("Pet (Task 9)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)

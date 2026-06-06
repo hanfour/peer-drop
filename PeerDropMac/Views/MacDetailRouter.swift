@@ -14,7 +14,7 @@ struct MacDetailRouter: View {
         case .relay:
             MacRelaySectionStub()
         case .pet:
-            MacPetSectionStub()
+            PetSectionView()
         case .none:
             ContentUnavailableView(
                 "Choose a section",
@@ -62,13 +62,6 @@ struct MacRelaySectionStub: View {
     }
 }
 
-/// Stub for the Pet section. Task 9 fills with the Pet sprite renderer.
-struct MacPetSectionStub: View {
-    var body: some View {
-        ContentUnavailableView(
-            "Pet",
-            systemImage: "pawprint",
-            description: Text("Pet hub lands in Task 9.")
-        )
-    }
-}
+// Task 9 replaced `MacPetSectionStub` with `PetSectionView` (see
+// `PetSectionView.swift`). The stub struct is intentionally removed —
+// the section now renders the live PetEngine sprite at 256pt.

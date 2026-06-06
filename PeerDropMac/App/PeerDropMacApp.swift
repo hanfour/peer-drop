@@ -1,18 +1,26 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropPlatform
+import PeerDropPet
 
 @main
 struct PeerDropMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) var appDelegate
 
     @StateObject private var connectionManager = ConnectionManager()
+    // Task 9: PetEngine is a separate @StateObject (matches iOS
+    // PeerDropApp.swift:14). The plan referenced
+    // `connectionManager.currentPetSprite` which doesn't exist; the real
+    // source is `petEngine.renderedImage: CGImage?` injected as an
+    // @EnvironmentObject into every scene that may show the sprite.
+    @StateObject private var petEngine = PetEngine()
 
     var body: some Scene {
         // Main window: discovery + sidebar navigation (filled in Task 5).
         WindowGroup("PeerDrop", id: "PeerDropMain") {
             MacContentView()
                 .environmentObject(connectionManager)
+                .environmentObject(petEngine)
                 .environmentObject(appDelegate)
                 .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
@@ -30,6 +38,7 @@ struct PeerDropMacApp: App {
             if let peerID {
                 MacChatWindow(peerID: peerID)
                     .environmentObject(connectionManager)
+                    .environmentObject(petEngine)
             } else {
                 Text("No peer selected")
                     .frame(minWidth: 480, minHeight: 360)
@@ -41,6 +50,7 @@ struct PeerDropMacApp: App {
         Settings {
             MacSettingsView()
                 .environmentObject(connectionManager)
+                .environmentObject(petEngine)
                 .frame(width: 520, height: 360)
         }
 
@@ -55,6 +65,7 @@ struct PeerDropMacApp: App {
         ) {
             MenuBarContent()
                 .environmentObject(connectionManager)
+                .environmentObject(petEngine)
                 .frame(width: 360, height: 500)
         } label: {
             // Use ConnectionManager.state (public, M1d-5). The plan's
