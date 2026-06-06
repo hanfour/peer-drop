@@ -2,6 +2,7 @@ import SwiftUI
 import PeerDropCore
 import PeerDropPlatform
 import PeerDropPet
+import PeerDropTransport
 
 @main
 struct PeerDropMacApp: App {
@@ -27,6 +28,29 @@ struct PeerDropMacApp: App {
                     // Wire AppDelegate's weak ref so lifecycle hooks
                     // (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
+
+                    // M3: wire MacCallProvider into the cross-platform
+                    // CallProvider injection point on ConnectionManager.
+                    // Mirror of iOS PeerDropApp.swift:108.
+                    let provider = appDelegate.macCallProvider
+                    connectionManager.configureVoiceCalling(callProvider: provider)
+
+                    // After user accepts on the panel, fetch the live
+                    // VoiceCallManager from ConnectionManager and present
+                    // the active-call NSWindow. Display name comes from
+                    // discoveredPeers if available, else a fallback.
+                    provider.onAnswerCall = { [weak provider, weak connectionManager] in
+                        guard let provider, let connectionManager,
+                              let voiceCallManager = connectionManager.voiceCallManager
+                        else { return }
+                        let peerName = connectionManager.discoveredPeers.first?.displayName
+                            ?? NSLocalizedString("Peer", comment: "Voice call peer name fallback")
+                        provider.showActiveWindow(
+                            peerName: peerName,
+                            voiceCallManager: voiceCallManager
+                        )
+                    }
+
                     // M3: kick APNs registration. Matches iOS
                     // PeerDropApp.swift pattern. UN permission dialog
                     // shows once; subsequent launches re-register silently.

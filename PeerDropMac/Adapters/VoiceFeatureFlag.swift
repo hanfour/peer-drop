@@ -3,21 +3,14 @@ import Foundation
 /// Whether the macOS app should surface Voice UI affordances (call buttons,
 /// in-call panels, etc.).
 ///
-/// **M2: false** — Voice UI is hidden on macOS. iOS continues to expose
-/// Voice via its own AppDelegate-mounted CallKitManager + VoiceCallView.
-/// macOS users won't see call triggers in any reused chat / peer surface.
+/// **M3: true** — macOS voice calling shipped. MacCallProvider is wired
+/// into ConnectionManager.configureVoiceCalling(_:) at scene appearance
+/// time; incoming-call NSPanel + active-call NSWindow + bundled
+/// ringtone + DND-filter + APNs alert-push wake all live.
 ///
-/// **M3 will flip this to true** once the custom NSWindow-based incoming-
-/// call panel + APNs alert push + DND integration ship. Until then, any
-/// future code that wants to add a "Call peer" button in a cross-platform
-/// view should gate on `MacFeatureFlags.isVoiceUIAvailable` instead of
-/// `#if os(iOS)` so M3 can unhide with a single boolean flip.
-///
-/// Today's M2 doesn't actually have any cross-platform-included view that
-/// triggers voice — Voice/**, ContentView, ConnectionView (and the chat
-/// header that exposes the phone button) are all in the project.yml
-/// PeerDropMac excludes list from Task 2. The flag exists so M3 has a
-/// clean toggle point.
+/// Cross-platform UI surfaces that surface a "Call peer" affordance
+/// gate on this flag rather than `#if os(iOS)` so future macOS-only
+/// disablement (e.g. for a regression hotfix) is a one-line edit.
 enum MacFeatureFlags {
-    static var isVoiceUIAvailable: Bool { false }
+    static var isVoiceUIAvailable: Bool { true }
 }

@@ -93,13 +93,12 @@ struct CallButton: View {
 
     private var backgroundColor: Color {
         if isDestructive { return .red }
-        if isActive { return Color(.systemFill) }
-        return Color(.systemGray5)
+        if isActive { return Color.peerDropFillPrimary }
+        return Color.peerDropFillSecondary
     }
 
     private var foregroundColor: Color {
         if isDestructive { return .white }
-        if isActive { return Color(.label) }
         return .primary
     }
 }

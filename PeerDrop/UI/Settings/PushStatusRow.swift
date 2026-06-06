@@ -1,6 +1,10 @@
 import SwiftUI
 import PeerDropCore
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 import UserNotifications
 
 /// Shows the current APNs registration pipeline status in the Settings
@@ -110,9 +114,7 @@ struct PushStatusRow: View {
     private func handleTap() {
         switch pushManager.authorizationStatus {
         case .denied:
-            if let url = URL(string: UIApplication.openSettingsURLString) {
-                UIApplication.shared.open(url)
-            }
+            openSystemSettings()
         case .notDetermined:
             Task { await pushManager.requestAuthorizationAndRegister() }
         case .authorized, .provisional, .ephemeral:
@@ -125,5 +127,20 @@ struct PushStatusRow: View {
         @unknown default:
             break
         }
+    }
+
+    /// Open the OS notification-settings pane. iOS uses
+    /// `UIApplication.openSettingsURLString`; macOS deep-links via the
+    /// system preferences URL scheme.
+    private func openSystemSettings() {
+        #if canImport(UIKit)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #elseif canImport(AppKit)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(url)
+        }
+        #endif
     }
 }
