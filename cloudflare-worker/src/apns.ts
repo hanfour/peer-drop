@@ -61,7 +61,7 @@ export interface APNsOptions {
   topicOverride?: string;
   priority?: number;
   expiration?: number;
-  interruptionLevel?: "active" | "time-sensitive" | "critical";
+  interruptionLevel?: "passive" | "active" | "time-sensitive" | "critical";
 }
 
 export async function sendAPNs(

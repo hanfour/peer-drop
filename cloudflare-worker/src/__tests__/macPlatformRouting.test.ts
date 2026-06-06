@@ -21,6 +21,7 @@
 
 import { SELF } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
+import { selectApnsTopic } from "../index";
 
 const API_KEY = "test-api-key-12345";
 
@@ -205,5 +206,43 @@ describe("missing platform field in KV", () => {
     expect(inviteResp.status).toBe(200);
     const inviteBody = await inviteResp.json() as Record<string, unknown>;
     expect(inviteBody.ok).toBe(true);
+  });
+});
+
+// --------------------------------------------------------------------------
+// Pure helper: selectApnsTopic (no Worker / KV / APNs dependencies)
+// --------------------------------------------------------------------------
+
+describe("selectApnsTopic — per-platform bundle ID selection", () => {
+  const env = {
+    APNS_BUNDLE_ID: "com.hanfour.peerdrop",
+    APNS_BUNDLE_ID_MAC: "com.hanfour.peerdrop.mac",
+  };
+
+  it("returns the Mac bundle ID for platform = macos", () => {
+    expect(selectApnsTopic("macos", env)).toBe("com.hanfour.peerdrop.mac");
+  });
+
+  it("returns the iOS bundle ID for platform = ios", () => {
+    expect(selectApnsTopic("ios", env)).toBe("com.hanfour.peerdrop");
+  });
+
+  it("defaults to iOS bundle ID when platform is undefined", () => {
+    expect(selectApnsTopic(undefined, env)).toBe("com.hanfour.peerdrop");
+  });
+
+  it("defaults to iOS bundle ID for unrecognized platform values", () => {
+    expect(selectApnsTopic("visionos", env)).toBe("com.hanfour.peerdrop");
+    expect(selectApnsTopic("", env)).toBe("com.hanfour.peerdrop");
+  });
+
+  it("falls back to hardcoded Mac bundle ID when APNS_BUNDLE_ID_MAC is empty", () => {
+    expect(selectApnsTopic("macos", { APNS_BUNDLE_ID: "x", APNS_BUNDLE_ID_MAC: "" }))
+      .toBe("com.hanfour.peerdrop.mac");
+  });
+
+  it("falls back to hardcoded iOS bundle ID when APNS_BUNDLE_ID is empty", () => {
+    expect(selectApnsTopic("ios", { APNS_BUNDLE_ID: "", APNS_BUNDLE_ID_MAC: "y" }))
+      .toBe("com.hanfour.peerdrop");
   });
 });

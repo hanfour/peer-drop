@@ -1026,10 +1026,7 @@ export default {
         if (!env.APNS_KEY_P8) {
           return jsonResponse({ ok: true, delivered: "queued", apns: "not_configured" });
         }
-        const invitePlatform = info.platform ?? "ios";
-        const inviteTopic = invitePlatform === "macos"
-          ? (env.APNS_BUNDLE_ID_MAC || "com.hanfour.peerdrop.mac")
-          : (env.APNS_BUNDLE_ID || "com.hanfour.peerdrop");
+        const inviteTopic = selectApnsTopic(info.platform, env);
         try {
           const result = await sendAPNs(info.pushToken, {
             alert: { title: "PeerDrop", body: `${safeSenderName} wants to connect` },
@@ -1068,6 +1065,7 @@ export default {
         return jsonResponse({ error: "Missing callerId or callerName" }, 400);
       }
       const safeCallerName = (body.callerName || "").slice(0, 100);
+      const safeCallerId = body.callerId.slice(0, 100);
       const deviceInfo = await env.V2_STORE.get(`device:${deviceId}`);
       if (!deviceInfo) {
         return jsonResponse({ ok: false, error: "not_registered" }, 404);
@@ -1076,17 +1074,14 @@ export default {
       if (!env.APNS_KEY_P8) {
         return jsonResponse({ ok: false, apns: "not_configured" });
       }
-      const callPlatform = info.platform ?? "ios";
-      const callTopic = callPlatform === "macos"
-        ? (env.APNS_BUNDLE_ID_MAC || "com.hanfour.peerdrop.mac")
-        : (env.APNS_BUNDLE_ID || "com.hanfour.peerdrop");
+      const callTopic = selectApnsTopic(info.platform, env);
       try {
         const result = await sendAPNs(info.pushToken, {
           alert: { title: "Incoming call", body: safeCallerName },
           sound: "default",
           customData: {
             type: "callRequest",
-            callerId: body.callerId,
+            callerId: safeCallerId,
             callerName: safeCallerName,
           },
         }, {
@@ -1149,6 +1144,22 @@ async function isRequestAuthorized(request: Request, url: URL, env: Env): Promis
   }
   const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
   return providedKey === env.API_KEY;
+}
+
+/**
+ * Resolve the correct `apns-topic` bundle ID for a device's registered
+ * platform. Missing/unknown `platform` values default to iOS (legacy
+ * compatibility — pre-v6 clients never sent the field). Exported so it
+ * can be unit-tested in isolation without involving APNs HTTP/2.
+ */
+export function selectApnsTopic(
+  platform: string | undefined,
+  env: Pick<Env, "APNS_BUNDLE_ID" | "APNS_BUNDLE_ID_MAC">
+): string {
+  if (platform === "macos") {
+    return env.APNS_BUNDLE_ID_MAC || "com.hanfour.peerdrop.mac";
+  }
+  return env.APNS_BUNDLE_ID || "com.hanfour.peerdrop";
 }
 
 // Helper: JSON response with CORS
