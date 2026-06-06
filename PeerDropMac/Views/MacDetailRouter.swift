@@ -28,7 +28,8 @@ struct MacDetailRouter: View {
 // MARK: - Section stubs (Task 6 replaces with real iOS view reuse)
 
 /// Stub for the Nearby section. Task 6 replaces with `NearbyTab` reuse
-/// after fixing that view's iOS-only dependencies.
+/// after fixing that view's iOS-only dependencies. Task 6b will wire the
+/// peer-row tap to `openWindow(id: "chat", value: peerID)` (Task 7 scene).
 struct MacNearbySectionStub: View {
     var body: some View {
         ContentUnavailableView(

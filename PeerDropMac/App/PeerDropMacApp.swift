@@ -23,6 +23,20 @@ struct PeerDropMacApp: App {
         }
         .commands { PeerDropCommands() }
 
+        // Per-peer chat windows (Task 7). Opens via openWindow(id:value:) from
+        // any View; multiple chats can live side-by-side per spec §4
+        // multi-window strategy. ⌘1 focuses the most-recently-opened chat.
+        WindowGroup(id: "chat", for: String.self) { $peerID in
+            if let peerID {
+                MacChatWindow(peerID: peerID)
+                    .environmentObject(connectionManager)
+            } else {
+                Text("No peer selected")
+                    .frame(minWidth: 480, minHeight: 360)
+            }
+        }
+        .keyboardShortcut("1", modifiers: .command)
+
         // Settings scene (⌘,)
         Settings {
             MacSettingsView()
