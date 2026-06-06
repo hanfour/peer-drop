@@ -35,6 +35,7 @@ export interface Env {
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
+  APNS_BUNDLE_ID_MAC?: string;
   ANALYTICS_KEY: string;
   // Phase B device-token auth. HMAC secret for issuing per-device bearer
   // tokens after App Attest verification. Set via
@@ -157,6 +158,7 @@ export default {
                           (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST") ||
                           (path === "/v2/device/register" && request.method === "POST") ||
                           (path.match(/^\/v2\/invite\/[a-zA-Z0-9-]{8,64}$/) && request.method === "POST") ||
+                          (path.match(/^\/v2\/call\/[a-zA-Z0-9-]{8,64}$/) && request.method === "POST") ||
                           (path.match(/^\/v2\/inbox\/[a-zA-Z0-9-]{8,64}$/) && request.headers.get("Upgrade") === "websocket");
     if (requiresAuth) {
       if (!env.API_KEY) {
@@ -1021,9 +1023,10 @@ export default {
           return jsonResponse({ ok: true, delivered: "queued", apns: "no_token" });
         }
         const info = JSON.parse(deviceInfo) as { pushToken: string; platform: string };
-        if (info.platform !== "ios" || !env.APNS_KEY_P8) {
+        if (!env.APNS_KEY_P8) {
           return jsonResponse({ ok: true, delivered: "queued", apns: "not_configured" });
         }
+        const inviteTopic = selectApnsTopic(info.platform, env);
         try {
           const result = await sendAPNs(info.pushToken, {
             alert: { title: "PeerDrop", body: `${safeSenderName} wants to connect` },
@@ -1041,6 +1044,8 @@ export default {
             teamId: env.APNS_TEAM_ID,
             p8Key: env.APNS_KEY_P8,
             bundleId: env.APNS_BUNDLE_ID || "com.hanfour.peerdrop",
+          }, {
+            topicOverride: inviteTopic,
           });
           return jsonResponse({ ok: true, delivered: "apns", apnsStatus: result.status });
         } catch (e) {
@@ -1049,6 +1054,51 @@ export default {
       }
 
       return jsonResponse({ ok: true, delivered: doResult.delivered });
+    }
+
+    // POST /v2/call/:deviceId — deliver voice-call wake push (M3 Mac voice)
+    const callMatch = path.match(/^\/v2\/call\/([a-zA-Z0-9-]{8,64})$/);
+    if (callMatch && request.method === "POST") {
+      const deviceId = callMatch[1];
+      const body = await request.json() as { callerId?: string; callerName?: string };
+      if (!body.callerId || !body.callerName) {
+        return jsonResponse({ error: "Missing callerId or callerName" }, 400);
+      }
+      const safeCallerName = (body.callerName || "").slice(0, 100);
+      const safeCallerId = body.callerId.slice(0, 100);
+      const deviceInfo = await env.V2_STORE.get(`device:${deviceId}`);
+      if (!deviceInfo) {
+        return jsonResponse({ ok: false, error: "not_registered" }, 404);
+      }
+      const info = JSON.parse(deviceInfo) as { pushToken: string; platform: string };
+      if (!env.APNS_KEY_P8) {
+        return jsonResponse({ ok: false, apns: "not_configured" });
+      }
+      const callTopic = selectApnsTopic(info.platform, env);
+      try {
+        const result = await sendAPNs(info.pushToken, {
+          alert: { title: "Incoming call", body: safeCallerName },
+          sound: "default",
+          customData: {
+            type: "callRequest",
+            callerId: safeCallerId,
+            callerName: safeCallerName,
+          },
+        }, {
+          keyId: env.APNS_KEY_ID,
+          teamId: env.APNS_TEAM_ID,
+          p8Key: env.APNS_KEY_P8,
+          bundleId: env.APNS_BUNDLE_ID || "com.hanfour.peerdrop",
+        }, {
+          topicOverride: callTopic,
+          priority: 10,
+          expiration: Math.floor(Date.now() / 1000) + 30,
+          interruptionLevel: "time-sensitive",
+        });
+        return jsonResponse({ ok: true, apnsStatus: result.status });
+      } catch (e) {
+        return jsonResponse({ ok: false, apns: "send_failed", error: String(e) }, 500);
+      }
     }
 
     // GET /v2/config/crypto-policy — serve the signed crypto-policy blob.
@@ -1094,6 +1144,22 @@ async function isRequestAuthorized(request: Request, url: URL, env: Env): Promis
   }
   const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
   return providedKey === env.API_KEY;
+}
+
+/**
+ * Resolve the correct `apns-topic` bundle ID for a device's registered
+ * platform. Missing/unknown `platform` values default to iOS (legacy
+ * compatibility — pre-v6 clients never sent the field). Exported so it
+ * can be unit-tested in isolation without involving APNs HTTP/2.
+ */
+export function selectApnsTopic(
+  platform: string | undefined,
+  env: Pick<Env, "APNS_BUNDLE_ID" | "APNS_BUNDLE_ID_MAC">
+): string {
+  if (platform === "macos") {
+    return env.APNS_BUNDLE_ID_MAC || "com.hanfour.peerdrop.mac";
+  }
+  return env.APNS_BUNDLE_ID || "com.hanfour.peerdrop";
 }
 
 // Helper: JSON response with CORS

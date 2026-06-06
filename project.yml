@@ -123,11 +123,13 @@ targets:
       # iOS-only files excluded per M2 Task 1 audit.
       - path: PeerDrop/UI
         excludes:
-          - "Voice/**"                          # M3 ships voice; M2 hides
+          # Voice/** un-excluded in M3: VoiceCallView gated via
+          # MacFeatureFlags.isVoiceUIAvailable + PlatformColors helpers.
+          # PushStatusRow un-excluded in M3: UIApplication.openSettingsURLString
+          # gated via #if canImport(UIKit); macOS path uses x-apple.systempreferences.
           - "SettingsView.swift"                 # UIDevice (Task 6 REPLACE)
           - "Settings/DocumentPickerView.swift"  # UIDocumentPickerViewController (Task 6 REPLACE)
           - "Settings/UserProfileView.swift"     # UIImage avatar (Task 6 REPLACE)
-          - "Settings/PushStatusRow.swift"       # Push notifications (M3 territory)
           - "Transfer/FilePickerView.swift"      # UIDocumentPickerViewController (Task 6 REPLACE)
           - "Transfer/ClipboardShareView.swift"  # UIImage + UIPasteboard (Task 6 REPLACE)
           - "Chat/CameraPickerView.swift"        # UIImagePickerController (iOS-only camera)

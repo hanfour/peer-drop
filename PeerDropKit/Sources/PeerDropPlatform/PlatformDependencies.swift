@@ -9,6 +9,7 @@ public struct PlatformDependencies {
     public var callProvider: () -> CallProvider
     public var audioSession: () -> AudioSessionConfiguring
     public var backgroundTaskHandler: @MainActor () -> BackgroundTaskHandling
+    public var platformIdentifier: () -> String
 
     public init(
         pasteboard: (() -> PlatformPasteboard)? = nil,
@@ -18,7 +19,8 @@ public struct PlatformDependencies {
         remoteNotifications: (() -> RemoteNotificationRegistering)? = nil,
         callProvider: (() -> CallProvider)? = nil,
         audioSession: (() -> AudioSessionConfiguring)? = nil,
-        backgroundTaskHandler: (@MainActor () -> BackgroundTaskHandling)? = nil
+        backgroundTaskHandler: (@MainActor () -> BackgroundTaskHandling)? = nil,
+        platformIdentifier: (() -> String)? = nil
     ) {
         self.pasteboard = pasteboard ?? { PlatformDependencies.makePasteboard() }
         self.haptics = haptics ?? { PlatformDependencies.makeHaptics() }
@@ -28,6 +30,7 @@ public struct PlatformDependencies {
         self.callProvider = callProvider ?? { PlatformDependencies.makeCallProvider() }
         self.audioSession = audioSession ?? { PlatformDependencies.makeAudioSession() }
         self.backgroundTaskHandler = backgroundTaskHandler ?? { PlatformDependencies.makeBackgroundTaskHandler() }
+        self.platformIdentifier = platformIdentifier ?? { PlatformDependencies.makePlatformIdentifier() }
     }
 
     public static var shared = PlatformDependencies()
@@ -112,6 +115,23 @@ public struct PlatformDependencies {
         return UIKitBackgroundTaskHandler()
         #else
         return NoOpBackgroundTaskHandler()
+        #endif
+    }
+
+    /// Returns a stable string identifying the current platform for use in
+    /// the worker's `/v2/device/register` payload.
+    ///
+    /// NOTE: `canImport(UIKit)` is checked first because Mac Catalyst builds
+    /// import UIKit while also running on macOS — for M3 we don't ship
+    /// Catalyst, so the ordering is moot, but it's correct practice and
+    /// keeps the guard future-safe if a Catalyst target is ever added.
+    private static func makePlatformIdentifier() -> String {
+        #if canImport(UIKit)
+        return "ios"
+        #elseif os(macOS)
+        return "macos"
+        #else
+        return "unknown"
         #endif
     }
 }

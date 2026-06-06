@@ -111,7 +111,7 @@ public final class PushNotificationManager: NSObject, ObservableObject {
         let body: [String: String] = [
             "deviceId": DeviceIdentity.deviceId,
             "pushToken": tokenHex,
-            "platform": "ios",
+            "platform": PlatformDependencies.shared.platformIdentifier(),
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

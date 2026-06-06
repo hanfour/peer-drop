@@ -57,10 +57,18 @@ async function signJWT(config: APNsConfig): Promise<string> {
   return token;
 }
 
+export interface APNsOptions {
+  topicOverride?: string;
+  priority?: number;
+  expiration?: number;
+  interruptionLevel?: "passive" | "active" | "time-sensitive" | "critical";
+}
+
 export async function sendAPNs(
   deviceToken: string,
   payload: APNsPayload,
-  config: APNsConfig
+  config: APNsConfig,
+  options?: APNsOptions
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   const jwt = await signJWT(config);
 
@@ -69,16 +77,27 @@ export async function sendAPNs(
   if (payload.alert) aps.alert = payload.alert;
   if (payload.sound) aps.sound = payload.sound;
   if (payload.contentAvailable) aps["content-available"] = 1;
+  if (options?.interruptionLevel) aps["interruption-level"] = options.interruptionLevel;
   if (payload.customData) Object.assign(apsBody, payload.customData);
+
+  const topic = options?.topicOverride ?? config.bundleId;
+
+  const requestHeaders: Record<string, string> = {
+    "authorization": `bearer ${jwt}`,
+    "apns-topic": topic,
+    "apns-push-type": "alert",
+    "content-type": "application/json",
+  };
+  if (options?.priority !== undefined) {
+    requestHeaders["apns-priority"] = String(options.priority);
+  }
+  if (options?.expiration !== undefined) {
+    requestHeaders["apns-expiration"] = String(options.expiration);
+  }
 
   const resp = await fetch(`https://api.push.apple.com/3/device/${deviceToken}`, {
     method: "POST",
-    headers: {
-      "authorization": `bearer ${jwt}`,
-      "apns-topic": config.bundleId,
-      "apns-push-type": "alert",
-      "content-type": "application/json",
-    },
+    headers: requestHeaders,
     body: JSON.stringify(apsBody),
   });
 

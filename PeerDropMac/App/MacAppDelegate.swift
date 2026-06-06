@@ -16,18 +16,27 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// ConnectionManager. Weak to avoid retaining beyond scene scope.
     weak var connectionManager: ConnectionManager?
 
+    /// M3: owns the macOS CallProvider implementation. Strong reference
+    /// because PeerDropMacApp registers it via
+    /// `ConnectionManager.configureVoiceCalling(callProvider:)` which
+    /// stores the provider weakly via the VoiceCallManager chain. The
+    /// AppDelegate is the canonical owner per the iOS pattern (where
+    /// CallKitManager is held by the iOS PeerDropAppDelegate).
+    let macCallProvider = MacCallProvider()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("macOS app finished launching")
-        // Register the macOS-specific PlatformDependencies adapters.
-        // (Task 4 fills MacPlatformDependencies.register() with real adapters.)
+        // Register macOS-specific PlatformDependencies adapters
+        // (pasteboard / deviceName / systemInfo / remoteNotifications /
+        // audioSession / platformIdentifier).
         MacPlatformDependencies.register()
     }
 
     /// Finder drop / open-with handler. Files arrive via NSURL array.
-    /// Task 10 routes through MacDropHandler so Dock drops, Finder
+    /// Routed through `MacDropHandler` so Dock drops, Finder
     /// "Open With PeerDrop", and the `open:` lifecycle all share one
     /// logger path. The MacDropHandler TODO comments document the
-    /// post-M2 peer-selection-sheet wiring (App Review compliance:
+    /// future peer-selection-sheet wiring (App Review compliance:
     /// drops NEVER send silently).
     func application(_ application: NSApplication, open urls: [URL]) {
         logger.info("Open URLs: \(urls.map(\.lastPathComponent).joined(separator: ", "))")
@@ -51,5 +60,53 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // `flushAllPendingPersists` lives on `ChatManager` (M1d-5 audit).
         // ConnectionManager exposes ChatManager via `public let chatManager`.
         connectionManager?.chatManager.flushAllPendingPersists()
+    }
+
+    // MARK: - M3: APNs registration
+
+    /// Called by macOS after `NSApplication.shared.registerForRemoteNotifications()`
+    /// succeeds. Forwards the binary token to PushNotificationManager which
+    /// hex-encodes it and POSTs `/v2/device/register` on the Worker.
+    func application(
+        _ application: NSApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        let tokenPrefix = deviceToken.prefix(4).map { String(format: "%02x", $0) }.joined()
+        logger.info("APNs token received (prefix=\(tokenPrefix, privacy: .public))")
+        Task { @MainActor in
+            await PushNotificationManager.shared.handleDeviceToken(deviceToken)
+        }
+    }
+
+    /// Called when registerForRemoteNotifications fails (missing entitlement,
+    /// dev sandbox unreachable, etc.). PushNotificationManager surfaces the
+    /// failure into `registrationState`; the Mac PushStatusRow will read this.
+    func application(
+        _ application: NSApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        logger.error("APNs registration failed: \(error.localizedDescription, privacy: .public)")
+        PushNotificationManager.shared.handleRegistrationFailure(error)
+    }
+
+    /// Inbound APNs alert push. Two payload types matter:
+    ///   - `type: "callRequest"` — voice-call wake; routed to MacCallProvider
+    ///     for the cold-launch grace flow.
+    ///   - chat invite (`roomCode` present) — reuses the iOS
+    ///     `handleRemoteNotification` path once relay reconnects via
+    ///     `InboxService`. No work needed here.
+    func application(
+        _ application: NSApplication,
+        didReceiveRemoteNotification userInfo: [String: Any]
+    ) {
+        let type = userInfo["type"] as? String ?? (userInfo["roomCode"] != nil ? "chatInvite" : "unknown")
+        logger.info("APNs push received: type=\(type, privacy: .public)")
+
+        if type == "callRequest" {
+            let callerName = userInfo["callerName"] as? String ?? NSLocalizedString("Unknown", comment: "Caller name fallback")
+            macCallProvider.handleColdLaunchPush(callerName: callerName)
+        }
+        // Chat invites route through the same path as iOS once relay
+        // reconnects — InboxService picks up the queued PeerMessage.
     }
 }

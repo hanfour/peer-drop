@@ -269,3 +269,48 @@ If the production private key is lost or compromised:
 ## Reverting a bad ship
 
 If you discover a regression after submission but before approval: see "Need to abort" above. If after approval but before users have updated en masse: ASC supports phased rollout pause, but the lane currently sets `phased_release: false` so the entire userbase gets the update at once. For a true revert you must ship a new version (X.Y.(Z+1)) with the regression fixed.
+
+---
+
+## M3 Voice Calling Verification (Mac, v6.0)
+
+Bidirectional iPhone ↔ Mac voice calling shipped via PR #(M3). The following matrix MUST be executed manually on real hardware (1 iPhone + 1 Mac, paired first via SAS) before promoting any Mac voice change to production.
+
+### Worker prerequisites
+
+```bash
+cd cloudflare-worker
+npx wrangler deploy            # ships /v2/call route + per-platform routing
+```
+
+The `APNS_BUNDLE_ID_MAC` env binding is optional — the Worker falls back to `com.hanfour.peerdrop.mac` in code if unset. Operators who prefer config-driven topic IDs should:
+
+```bash
+# Optional: explicit binding
+npx wrangler secret put APNS_BUNDLE_ID_MAC   # paste com.hanfour.peerdrop.mac
+```
+
+### Manual test matrix
+
+Per spec §6 lines 290-301. Each row must be ticked before M3 sign-off:
+
+- [ ] iPhone → Mac (Mac foreground): panel appears top-right, Accept → both sides hear audio, mic + end buttons work.
+- [ ] iPhone → Mac (Mac sleeping): APNs wakes app → panel appears → Accept → 10s grace window catches SDP → audio established. Log line `Cold-launch push: …` and `In-band SDP arrived…` should both appear in Console.app under subsystem `com.hanfour.peerdrop.mac`.
+- [ ] iPhone → Mac (Mac in DND): panel still appears (visual confirm), ringtone silent (audio confirm), Accept → audio works.
+- [ ] iPhone → Mac (no answer 30s): panel auto-dismisses, iPhone gets standard "no answer" via CallKit.
+- [ ] Mac → iPhone call: iPhone shows CallKit incoming UI → Accept → audio established.
+- [ ] Mac active-call window crosses Spaces: switch via Mission Control → call window stays visible (not bound to its origin Space).
+- [ ] Mac quits app mid-call: clean teardown on both sides (no half-open SDP, no orphaned NSWindow).
+
+### Known limitations (document in v6.0 reviewer notes)
+
+- **Focus mode opacity**: macOS 14 does not expose Focus mode state to third-party apps. `DNDFilter` reads `UNUserNotificationCenter.notificationSettings()` only; per-Focus configurations (Sleep, custom Focus) are not directly readable.
+- **Ringtone dev fallback**: if `Ringtone.caf` is missing from the bundle, `MacRingtonePlayer` falls back to looped `NSSound(named: "Glass")`. The fallback is dev-only — sandboxed shipped builds cannot reliably reference `/System/Library/Sounds/` and the Glass loop may not play. **Ringtone.caf MUST be commissioned + bundled before MAS submission.**
+- **PushKit divergence**: iOS retains PushKit (CallKit requirement). macOS uses alert push only. Worker route `/v2/call/:deviceId` reads `device:{id}.platform` to choose APNs topic.
+
+### iOS regression check
+
+iOS unchanged in M3. Smoke test:
+- [ ] iPhone ↔ iPhone voice call still works.
+- [ ] iOS chat invite push still wakes the app via `/v2/invite/` (Worker route now per-platform; iOS default preserved).
+

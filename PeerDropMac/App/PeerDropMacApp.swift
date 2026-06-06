@@ -2,21 +2,21 @@ import SwiftUI
 import PeerDropCore
 import PeerDropPlatform
 import PeerDropPet
+import PeerDropTransport
 
 @main
 struct PeerDropMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) var appDelegate
 
     @StateObject private var connectionManager = ConnectionManager()
-    // Task 9: PetEngine is a separate @StateObject (matches iOS
-    // PeerDropApp.swift:14). The plan referenced
-    // `connectionManager.currentPetSprite` which doesn't exist; the real
-    // source is `petEngine.renderedImage: CGImage?` injected as an
-    // @EnvironmentObject into every scene that may show the sprite.
+    /// PetEngine is a separate @StateObject (mirrors iOS
+    /// PeerDropApp.swift). The sprite source is
+    /// `petEngine.renderedImage: CGImage?` injected as an
+    /// `@EnvironmentObject` into every scene that may show the pet.
     @StateObject private var petEngine = PetEngine()
 
     var body: some Scene {
-        // Main window: discovery + sidebar navigation (filled in Task 5).
+        // Main window: discovery + sidebar navigation.
         WindowGroup("PeerDrop", id: "PeerDropMain") {
             MacContentView()
                 .environmentObject(connectionManager)
@@ -27,6 +27,45 @@ struct PeerDropMacApp: App {
                     // Wire AppDelegate's weak ref so lifecycle hooks
                     // (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
+
+                    // M3: wire MacCallProvider into the cross-platform
+                    // CallProvider injection point on ConnectionManager.
+                    // Mirror of iOS PeerDropApp.swift:108.
+                    let provider = appDelegate.macCallProvider
+                    connectionManager.configureVoiceCalling(callProvider: provider)
+
+                    // After user accepts on the panel, fetch the live
+                    // VoiceCallManager from ConnectionManager and present
+                    // the active-call NSWindow. Display name comes from
+                    // discoveredPeers if available, else a fallback.
+                    provider.onAnswerCall = { [weak provider, weak connectionManager] in
+                        guard let provider, let connectionManager,
+                              let voiceCallManager = connectionManager.voiceCallManager
+                        else { return }
+                        let peerName = connectionManager.discoveredPeers.first?.displayName
+                            ?? NSLocalizedString("Peer", comment: "Voice call peer name fallback")
+                        provider.showActiveWindow(
+                            peerName: peerName,
+                            voiceCallManager: voiceCallManager
+                        )
+                    }
+
+                    // Decline / timeout / cold-launch-expire all fire
+                    // onEndCall(). Without this hook, VoiceCallManager
+                    // wouldn't tear down its WebRTC session if one was
+                    // already mid-setup (e.g. an outgoing call that the
+                    // remote end never picked up). Calling endCall() is
+                    // idempotent — no-op if no session is live.
+                    provider.onEndCall = { [weak connectionManager] in
+                        connectionManager?.voiceCallManager?.endCall()
+                    }
+
+                    // M3: kick APNs registration. Matches iOS
+                    // PeerDropApp.swift pattern. UN permission dialog
+                    // shows once; subsequent launches re-register silently.
+                    Task {
+                        await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                    }
                 }
         }
         .commands { PeerDropCommands() }
