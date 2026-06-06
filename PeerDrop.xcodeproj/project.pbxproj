@@ -239,6 +239,7 @@
 		D36260C8EE273FB4B656CFC1 /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74BB6BFC733AA77B47140BE /* DevicePickerView.swift */; };
 		D38F63BFF71188024A18FB04 /* ConnectionOptionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF42E03015C3D6F22BB2BA9 /* ConnectionOptionsSheet.swift */; };
 		D39B1507322D9FDC1507F5D0 /* MacSystemInfoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D021552703725631F7F19973 /* MacSystemInfoProvider.swift */; };
+		D5B9A6ABF52756493DB5A9E6 /* MacRemoteNotificationRegistering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1DA20B516AD2B99CD2E205 /* MacRemoteNotificationRegistering.swift */; };
 		D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */; };
 		D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */; };
 		D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */; };
@@ -474,6 +475,7 @@
 		94BD192C79B059E535261B80 /* MessageReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReceiptTests.swift; sourceTree = "<group>"; };
 		94EDD0478D782DDD1563BE69 /* PetSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSectionView.swift; sourceTree = "<group>"; };
 		99B71A06E3C254432BBCF700 /* TipJarManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarManagerTests.swift; sourceTree = "<group>"; };
+		9B1DA20B516AD2B99CD2E205 /* MacRemoteNotificationRegistering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRemoteNotificationRegistering.swift; sourceTree = "<group>"; };
 		9B335967E2F46FE4D5037176 /* VerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerificationView.swift; sourceTree = "<group>"; };
 		9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushStatusRow.swift; sourceTree = "<group>"; };
 		9C83BE80AB6146E9AFF27C6D /* PeerDropKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PeerDropKit; path = PeerDropKit; sourceTree = SOURCE_ROOT; };
@@ -510,7 +512,6 @@
 		BB96FBFC92CCA1BB2F13DB3B /* PetWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeView.swift; sourceTree = "<group>"; };
 		C11D26CE93EC66ABC301E36D /* MacContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacContentView.swift; sourceTree = "<group>"; };
 		C4148097F734513B29899E4A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		C42AF7DF11A7C856C240DD02 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		C45A1BF776BAD2272FD68D83 /* SpriteSheetLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpriteSheetLoaderTests.swift; sourceTree = "<group>"; };
 		C62C5B66CDE30F7CF7039BD2 /* PreKeyBundleTimestampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyBundleTimestampTests.swift; sourceTree = "<group>"; };
 		C6842DD7730A244B26924472 /* PetBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetBubbleView.swift; sourceTree = "<group>"; };
@@ -539,6 +540,7 @@
 		DC117A4A467AED1322168E15 /* FileTransferE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferE2ETests.swift; sourceTree = "<group>"; };
 		DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComprehensiveVerificationTests.swift; sourceTree = "<group>"; };
 		DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupReadReceiptView.swift; sourceTree = "<group>"; };
+		DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCardSnapshotTests.swift; sourceTree = "<group>"; };
 		E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTests.swift; sourceTree = "<group>"; };
 		E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
@@ -621,7 +623,7 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				5A7D8E467412F962300462E0 /* feat+m2-macos-ui-shell */,
+				DAEB9A2865CBF976BBFED661 /* feat-m3-mac-voice-calling */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
@@ -805,15 +807,6 @@
 				7480E5F261C36127AAE31E79 /* Views */,
 			);
 			path = PeerDropMac;
-			sourceTree = "<group>";
-		};
-		5A7D8E467412F962300462E0 /* feat+m2-macos-ui-shell */ = {
-			isa = PBXGroup;
-			children = (
-				C42AF7DF11A7C856C240DD02 /* Secrets.xcconfig */,
-			);
-			name = "feat+m2-macos-ui-shell";
-			path = .;
 			sourceTree = "<group>";
 		};
 		60B904511703E7DCE0CB3EC9 /* DragAndDrop */ = {
@@ -1020,6 +1013,7 @@
 			children = (
 				D1B0EEE5BFA94459573D1E50 /* HostDeviceNameProvider.swift */,
 				D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */,
+				9B1DA20B516AD2B99CD2E205 /* MacRemoteNotificationRegistering.swift */,
 				D021552703725631F7F19973 /* MacSystemInfoProvider.swift */,
 				610B6BB592E702BE1B2A0EEB /* NSPasteboardAdapter.swift */,
 				682CA2EF7E45DC8BFFCB8B9F /* VoiceFeatureFlag.swift */,
@@ -1066,6 +1060,15 @@
 				5E3CFE9E060C5CF123F975D8 /* MockURLProtocol.swift */,
 			);
 			path = Helpers;
+			sourceTree = "<group>";
+		};
+		DAEB9A2865CBF976BBFED661 /* feat-m3-mac-voice-calling */ = {
+			isa = PBXGroup;
+			children = (
+				DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */,
+			);
+			name = "feat-m3-mac-voice-calling";
+			path = .;
 			sourceTree = "<group>";
 		};
 		DCE44AA1F1BC4658E2745FC1 /* E2E */ = {
@@ -1578,6 +1581,7 @@
 				119C022502ADD5067A1E0844 /* MacDetailRouter.swift in Sources */,
 				CD6A4D35A30B2638EC2268E9 /* MacDropHandler.swift in Sources */,
 				5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */,
+				D5B9A6ABF52756493DB5A9E6 /* MacRemoteNotificationRegistering.swift in Sources */,
 				EAD969016D567BCCCE334F30 /* MacSettingsView.swift in Sources */,
 				ECDE858DFACE87974D617ED8 /* MacSidebar.swift in Sources */,
 				D39B1507322D9FDC1507F5D0 /* MacSystemInfoProvider.swift in Sources */,
@@ -1765,7 +1769,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C42AF7DF11A7C856C240DD02 /* Secrets.xcconfig */;
+			baseConfigurationReference = DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1788,7 +1792,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C42AF7DF11A7C856C240DD02 /* Secrets.xcconfig */;
+			baseConfigurationReference = DFF65A26044DE7E1DAC75119 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

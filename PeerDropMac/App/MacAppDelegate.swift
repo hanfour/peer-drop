@@ -52,4 +52,47 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // ConnectionManager exposes ChatManager via `public let chatManager`.
         connectionManager?.chatManager.flushAllPendingPersists()
     }
+
+    // MARK: - M3: APNs registration
+
+    /// Called by macOS after `NSApplication.shared.registerForRemoteNotifications()`
+    /// succeeds. Forwards the binary token to PushNotificationManager which
+    /// hex-encodes it and POSTs `/v2/device/register` on the Worker.
+    func application(
+        _ application: NSApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        let tokenPrefix = deviceToken.prefix(4).map { String(format: "%02x", $0) }.joined()
+        logger.info("APNs token received (prefix=\(tokenPrefix, privacy: .public))")
+        Task { @MainActor in
+            await PushNotificationManager.shared.handleDeviceToken(deviceToken)
+        }
+    }
+
+    /// Called when registerForRemoteNotifications fails (missing entitlement,
+    /// dev sandbox unreachable, etc.). PushNotificationManager surfaces the
+    /// failure into `registrationState`; the Mac PushStatusRow will read this.
+    func application(
+        _ application: NSApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        logger.error("APNs registration failed: \(error.localizedDescription, privacy: .public)")
+        PushNotificationManager.shared.handleRegistrationFailure(error)
+    }
+
+    /// Inbound APNs alert push. Two payload types matter for M3:
+    ///   - `type: "callRequest"` — voice-call wake (Task 11 routes to MacCallProvider)
+    ///   - chat invite (`roomCode` present) — reuse iOS handleRemoteNotification path
+    ///
+    /// For Task 5 we just log + structurally route. The MacCallProvider hook
+    /// is wired in Task 11.
+    func application(
+        _ application: NSApplication,
+        didReceiveRemoteNotification userInfo: [String: Any]
+    ) {
+        let type = userInfo["type"] as? String ?? (userInfo["roomCode"] != nil ? "chatInvite" : "unknown")
+        logger.info("APNs push received: type=\(type, privacy: .public)")
+        // Task 11 will route callRequest payloads to MacCallProvider here.
+        // Chat invites route through the same path as iOS once relay reconnects.
+    }
 }

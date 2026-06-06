@@ -27,6 +27,12 @@ struct PeerDropMacApp: App {
                     // Wire AppDelegate's weak ref so lifecycle hooks
                     // (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
+                    // M3: kick APNs registration. Matches iOS
+                    // PeerDropApp.swift pattern. UN permission dialog
+                    // shows once; subsequent launches re-register silently.
+                    Task {
+                        await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                    }
                 }
         }
         .commands { PeerDropCommands() }
