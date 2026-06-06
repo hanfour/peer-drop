@@ -11,6 +11,7 @@
 		015C7CB8BE2D6B445BF98CE3 /* TipJarManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B71A06E3C254432BBCF700 /* TipJarManagerTests.swift */; };
 		0452C14B3597C8D5108977EA /* MockPlatformDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1645655AF1530B5121896FEA /* MockPlatformDependencies.swift */; };
 		06528AA9160E9CF2F6DC7F90 /* PeerIdentitySecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */; };
+		072D3D1FDB380DC436F75700 /* NSPasteboardAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 610B6BB592E702BE1B2A0EEB /* NSPasteboardAdapter.swift */; };
 		0860AFDB158802DF211AEC3F /* DecryptFailureBannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D067A433D853F7D010BEA796 /* DecryptFailureBannerTests.swift */; };
 		086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09411CC81953144963CB18 /* PeerRowView.swift */; };
 		0B77F471E5A114C808B503AA /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5328488B4605628BD3820F15 /* PeerDropCore */; };
@@ -96,6 +97,7 @@
 		5D59113DCD6E53DE9974640F /* TransferHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC682C14084D950A4869B2CE /* TransferHistoryView.swift */; };
 		5E80D5077A36825757B36CDA /* ChatIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E26A2A79E586A8C4C682EB /* ChatIntegrationTests.swift */; };
 		5FE1AA932B3F15399C265DD8 /* ConnectionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F3B613733652656BF2FF28 /* ConnectionContextTests.swift */; };
+		60E71AB364620139063E942A /* HostDeviceNameProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B0EEE5BFA94459573D1E50 /* HostDeviceNameProvider.swift */; };
 		61C5755BCACA92C8D909B00B /* GroupEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */; };
 		629ACA86353FAA0329245240 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 15B2346137F7B0E7DD7695FD /* PeerDropProtocol */; };
 		6338A2FF8A0771415405A458 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = C7783ACE48B9EEFD6653EADF /* PeerDropTransport */; };
@@ -207,6 +209,7 @@
 		D26EB737C7A21B17E8752582 /* CanonicalJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A1BFDD59F2AD40F96D12B1 /* CanonicalJSONTests.swift */; };
 		D2D66422C311F0DAEECE29CF /* ComprehensiveVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */; };
 		D36260C8EE273FB4B656CFC1 /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74BB6BFC733AA77B47140BE /* DevicePickerView.swift */; };
+		D39B1507322D9FDC1507F5D0 /* MacSystemInfoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D021552703725631F7F19973 /* MacSystemInfoProvider.swift */; };
 		D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */; };
 		D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */; };
 		D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */; };
@@ -375,6 +378,7 @@
 		5E5883B9C4565535B9BECDC1 /* V5UpgradeOnboardingHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5UpgradeOnboardingHost.swift; sourceTree = "<group>"; };
 		5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TEST_SPEC.md; sourceTree = "<group>"; };
 		5F4FC5F3178F8C9D62BF46CC /* PeerDropMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PeerDropMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		610B6BB592E702BE1B2A0EEB /* NSPasteboardAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSPasteboardAdapter.swift; sourceTree = "<group>"; };
 		613B66E2077223EA0560E336 /* E2EIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EIntegrationTests.swift; sourceTree = "<group>"; };
 		61E4079207CA3828B0ECF602 /* FoodInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodInventoryTests.swift; sourceTree = "<group>"; };
 		62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateMachineTests.swift; sourceTree = "<group>"; };
@@ -482,8 +486,10 @@
 		CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordRow.swift; sourceTree = "<group>"; };
 		CD3861D6EB13D47D188BBB05 /* DataChannelTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportTests.swift; sourceTree = "<group>"; };
 		CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorTests.swift; sourceTree = "<group>"; };
+		D021552703725631F7F19973 /* MacSystemInfoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSystemInfoProvider.swift; sourceTree = "<group>"; };
 		D067A433D853F7D010BEA796 /* DecryptFailureBannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecryptFailureBannerTests.swift; sourceTree = "<group>"; };
 		D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReplyTests.swift; sourceTree = "<group>"; };
+		D1B0EEE5BFA94459573D1E50 /* HostDeviceNameProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostDeviceNameProvider.swift; sourceTree = "<group>"; };
 		D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferIntegrationTests.swift; sourceTree = "<group>"; };
 		D2E36DB065AE031DED58C276 /* TimeoutConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutConsentTests.swift; sourceTree = "<group>"; };
 		D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlatformDependencies.swift; sourceTree = "<group>"; };
@@ -956,7 +962,10 @@
 		AF73266DB60BE5DCC0E42F4B /* Adapters */ = {
 			isa = PBXGroup;
 			children = (
+				D1B0EEE5BFA94459573D1E50 /* HostDeviceNameProvider.swift */,
 				D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */,
+				D021552703725631F7F19973 /* MacSystemInfoProvider.swift */,
+				610B6BB592E702BE1B2A0EEB /* NSPasteboardAdapter.swift */,
 			);
 			path = Adapters;
 			sourceTree = "<group>";
@@ -1486,6 +1495,7 @@
 				EBEB93A27FFA37C8A48A19D8 /* DeviceRecordRow.swift in Sources */,
 				745CD45CE6664ED2C885CB1C /* DisconnectSheet.swift in Sources */,
 				1171060FCDB7C3B204F92760 /* GroupRow.swift in Sources */,
+				60E71AB364620139063E942A /* HostDeviceNameProvider.swift in Sources */,
 				EA50DF35753C532271278DDC /* InviteBanner.swift in Sources */,
 				FA9FEBB50E6D19B3B06BD49F /* KeyChangeAlertView.swift in Sources */,
 				8EE00746DBC2D2BDC2BC71B2 /* LaunchScreen.swift in Sources */,
@@ -1493,8 +1503,10 @@
 				4E946682EF58597B4154F849 /* MacContentView.swift in Sources */,
 				5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */,
 				EAD969016D567BCCCE334F30 /* MacSettingsView.swift in Sources */,
+				D39B1507322D9FDC1507F5D0 /* MacSystemInfoProvider.swift in Sources */,
 				FF685FF14B1F8BFE84D921C1 /* MenuBarContent.swift in Sources */,
 				A1AEBDDB05403449E578811E /* MenuBarStatusIcon.swift in Sources */,
+				072D3D1FDB380DC436F75700 /* NSPasteboardAdapter.swift in Sources */,
 				B76E95E5DFAD2FA0465F37D6 /* PeerActionSheet.swift in Sources */,
 				28F561B3CF13C1C09D82587F /* PeerAvatar.swift in Sources */,
 				20ACA25FD060857F71B1B3F0 /* PeerDropCommands.swift in Sources */,
