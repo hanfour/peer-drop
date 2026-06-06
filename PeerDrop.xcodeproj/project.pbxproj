@@ -117,6 +117,7 @@
 		6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */; };
 		68D264EFEA63A2FC01A9B59F /* PerPeerPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC49FC1C8EF2B81B055F6F6 /* PerPeerPolicyTests.swift */; };
 		68D6FB1A56699AA70F6437CE /* TrustGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88C13753314A0B506433A46 /* TrustGateTests.swift */; };
+		68FBDD535D2217927717DFFC /* MacCallProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 942E08C41652EB6AEC201A49 /* MacCallProvider.swift */; };
 		6A70994ECAD4424C661A9835 /* VoiceFeatureFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682CA2EF7E45DC8BFFCB8B9F /* VoiceFeatureFlag.swift */; };
 		6A8837F44D5DC1F207C3948F /* TEST_SPEC.md in Resources */ = {isa = PBXBuildFile; fileRef = 5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */; };
 		6B017A3886F724F62ED1EE27 /* MacChatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD58BEE3BF4DC02C141E6810 /* MacChatWindow.swift */; };
@@ -483,6 +484,7 @@
 		931B479F1EE7DDCA9BA41340 /* RelaySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelaySessionTests.swift; sourceTree = "<group>"; };
 		93571ACBFB10FF050F0D9D1B /* MacSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsView.swift; sourceTree = "<group>"; };
 		939CAE1E09A6EDC2B9F8A47A /* MacActiveCallWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacActiveCallWindow.swift; sourceTree = "<group>"; };
+		942E08C41652EB6AEC201A49 /* MacCallProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCallProvider.swift; sourceTree = "<group>"; };
 		946255B9AFD4BF54EA5B71F2 /* PetSnapshotTestsDark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetSnapshotTestsDark.swift; sourceTree = "<group>"; };
 		94A0AF4FEF462DB76CC4FD9C /* ProofOfWorkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofOfWorkTests.swift; sourceTree = "<group>"; };
 		94BD192C79B059E535261B80 /* MessageReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReceiptTests.swift; sourceTree = "<group>"; };
@@ -928,6 +930,7 @@
 				D48BB1C034C80ABE7AFBBDE8 /* IncomingCallAutoDismissTimer.swift */,
 				EFA8DE175B451572ABD2C254 /* IncomingCallPanelView.swift */,
 				939CAE1E09A6EDC2B9F8A47A /* MacActiveCallWindow.swift */,
+				942E08C41652EB6AEC201A49 /* MacCallProvider.swift */,
 				8D802376EA45B7A32C1D2211 /* MacIncomingCallPanel.swift */,
 				F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */,
 				D52A23FB8DD632663B09E62E /* MacVoiceCallView.swift */,
@@ -1633,6 +1636,7 @@
 				C459894EB2D1A9F4237D3137 /* MacActiveCallWindow.swift in Sources */,
 				AC12BB977A2E6016FDE59D9C /* MacAppDelegate.swift in Sources */,
 				F2F1057F3F359FE56BED8330 /* MacAudioSession.swift in Sources */,
+				68FBDD535D2217927717DFFC /* MacCallProvider.swift in Sources */,
 				6B017A3886F724F62ED1EE27 /* MacChatWindow.swift in Sources */,
 				4E946682EF58597B4154F849 /* MacContentView.swift in Sources */,
 				119C022502ADD5067A1E0844 /* MacDetailRouter.swift in Sources */,

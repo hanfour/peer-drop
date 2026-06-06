@@ -16,6 +16,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// ConnectionManager. Weak to avoid retaining beyond scene scope.
     weak var connectionManager: ConnectionManager?
 
+    /// M3: owns the macOS CallProvider implementation. Strong reference
+    /// because PeerDropMacApp registers it via
+    /// `ConnectionManager.configureVoiceCalling(callProvider:)` which
+    /// stores the provider weakly via the VoiceCallManager chain. The
+    /// AppDelegate is the canonical owner per the iOS pattern (where
+    /// CallKitManager is held by the iOS PeerDropAppDelegate).
+    let macCallProvider = MacCallProvider()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("macOS app finished launching")
         // Register the macOS-specific PlatformDependencies adapters.
@@ -92,7 +100,12 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     ) {
         let type = userInfo["type"] as? String ?? (userInfo["roomCode"] != nil ? "chatInvite" : "unknown")
         logger.info("APNs push received: type=\(type, privacy: .public)")
-        // Task 11 will route callRequest payloads to MacCallProvider here.
-        // Chat invites route through the same path as iOS once relay reconnects.
+
+        if type == "callRequest" {
+            let callerName = userInfo["callerName"] as? String ?? NSLocalizedString("Unknown", comment: "Caller name fallback")
+            macCallProvider.handleColdLaunchPush(callerName: callerName)
+        }
+        // Chat invites route through the same path as iOS once relay
+        // reconnects — InboxService picks up the queued PeerMessage.
     }
 }
