@@ -214,6 +214,21 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.uitests
         GENERATE_INFOPLIST_FILE: "YES"
 
+  PeerDropMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - PeerDropMacUITests
+    dependencies:
+      - target: PeerDropMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.mac.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
+        DEVELOPMENT_TEAM: UK48R5KWLV
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SDKROOT: macosx
+
   PeerDropWidget:
     type: app-extension
     platform: iOS
@@ -273,3 +288,26 @@ schemes:
       config: Debug
       targets:
         - PeerDropUITests
+
+  PeerDropMac:
+    build:
+      targets:
+        PeerDropMac: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release
+
+  PeerDropMacUITests:
+    build:
+      targets:
+        PeerDropMac: all
+        PeerDropMacUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PeerDropMacUITests

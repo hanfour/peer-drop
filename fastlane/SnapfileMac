@@ -1,0 +1,38 @@
+# SnapfileMac — Fastlane snapshot configuration for the PeerDropMac app.
+#
+# fastlane's `capture_mac_screenshots` action uses the host Mac's screen
+# resolution — there is no "Mac simulator" to swap between sizes. To
+# capture multiple Mac App Store resolutions (1280×800 / 1440×900 /
+# 2560×1600 / 2880×1800), either:
+#   1. Run on a host whose resolution matches each target, or
+#   2. Capture once at high-DPI and downsample post-hoc.
+# We default to option 2: capture on the host's native resolution and
+# leave any downsample work to a frame_screenshots-like script.
+
+scheme("PeerDropMacUITests")
+output_directory("./fastlane/screenshots_mac")
+
+# Mac App Store screenshot localisations — same five as iOS.
+languages([
+  "en-US",
+  "zh-Hant",
+  "zh-Hans",
+  "ja",
+  "ko"
+])
+
+# Same SCREENSHOT_MODE arg the iOS UI tests use. PeerDropMacApp.onAppear
+# wires it to populate mock peers + Pet state via ScreenshotModeProvider.
+launch_arguments(["-SCREENSHOT_MODE 1"])
+
+clear_previous_screenshots(true)
+reinstall_app(false)
+erase_simulator(false)
+concurrent_simulators(false)  # macOS isn't simulated
+
+# Only run the snapshot test bundles (skip any future non-snapshot
+# UI tests added to PeerDropMacUITests).
+only_testing([
+  "PeerDropMacUITests/MacSnapshotTests",
+  "PeerDropMacUITests/MacSnapshotTestsDark"
+])

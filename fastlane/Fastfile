@@ -580,6 +580,25 @@ platform :ios do
   # docs/release/v<version>-reviewer-notes.md file shared with iOS — both
   # platforms ship the same version per spec §M4.
 
+  desc "Capture Mac App Store screenshots via PeerDropMacUITests"
+  desc "Output: ./fastlane/screenshots_mac/<lang>/*.png"
+  desc "macOS uses the host's screen resolution (no simulator); capture at"
+  desc "highest available DPI and downsample post-hoc for the smaller ASC"
+  desc "size brackets if needed."
+  lane :screenshots_mac do
+    capture_mac_screenshots(
+      scheme: "PeerDropMacUITests",
+      output_directory: "./fastlane/screenshots_mac",
+      languages: ["en-US", "zh-Hant", "zh-Hans", "ja", "ko"],
+      launch_arguments: ["-SCREENSHOT_MODE 1"],
+      clear_previous_screenshots: true,
+      only_testing: [
+        "PeerDropMacUITests/MacSnapshotTests",
+        "PeerDropMacUITests/MacSnapshotTestsDark"
+      ]
+    )
+  end
+
   desc "Print ASC review status for the Mac App: live + in-flight versions"
   lane :check_status_mac do
     require "spaceship"
