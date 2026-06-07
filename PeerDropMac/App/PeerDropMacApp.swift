@@ -60,11 +60,21 @@ struct PeerDropMacApp: App {
                         connectionManager?.voiceCallManager?.endCall()
                     }
 
-                    // M3: kick APNs registration. Matches iOS
-                    // PeerDropApp.swift pattern. UN permission dialog
-                    // shows once; subsequent launches re-register silently.
-                    Task {
-                        await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                    // M4 screenshot mode (Task 6): when the
+                    // -SCREENSHOT_MODE launch arg is set (fastlane
+                    // snapshot), populate the Pet + auto-start
+                    // discovery with mock peers so MAS screenshots
+                    // capture a populated UI without real network.
+                    if ScreenshotModeProvider.shared.isActive {
+                        petEngine.pet = ScreenshotModeProvider.shared.mockPetState
+                        connectionManager.startDiscovery()
+                    } else {
+                        // M3: kick APNs registration. Matches iOS
+                        // PeerDropApp.swift pattern. UN permission dialog
+                        // shows once; subsequent launches re-register silently.
+                        Task {
+                            await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                        }
                     }
                 }
         }

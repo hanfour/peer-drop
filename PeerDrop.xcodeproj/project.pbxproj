@@ -52,6 +52,7 @@
 		23049AA320595802D640748B /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A979FF3DD437916760AAC312 /* DiscoveryView.swift */; };
 		239DB398541A3E45203962AF /* TypingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09172CEE390C95A62A857CDD /* TypingIndicatorView.swift */; };
 		25C4BA2BA66BF68D6A3CF6F8 /* PushStatusRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */; };
+		2645D10B81CF9B065C2F45E9 /* MacSnapshotTestsDark.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCF4CCFAA125C2739B40BF9E /* MacSnapshotTestsDark.swift */; };
 		27538539E3C9506E49455EF5 /* PeerConnectionSecureChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */; };
 		27A6618B320BC359BCC8078F /* DeviceRecordRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */; };
 		27E277572AD10A5381AE7884 /* OutboundRetryQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */; };
@@ -111,6 +112,7 @@
 		588C4858607A127F21B93F02 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = F551826FCACD53BCDB32C130 /* PeerDropProtocol */; };
 		5A65DB904DE1FB857B47375D /* ChatSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */; };
 		5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */; };
+		5B720E41674A74F8187D9D13 /* MacSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07D6C5BF9EB43DCB151AB72 /* MacSnapshotTests.swift */; };
 		5BD25C6F8D17B4AB4AF8966C /* DataChannelTransportReassemblyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C80BFCC4EAF2CB326660AA /* DataChannelTransportReassemblyTests.swift */; };
 		5D59113DCD6E53DE9974640F /* TransferHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC682C14084D950A4869B2CE /* TransferHistoryView.swift */; };
 		5E80D5077A36825757B36CDA /* ChatIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E26A2A79E586A8C4C682EB /* ChatIntegrationTests.swift */; };
@@ -281,6 +283,7 @@
 		DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */; };
 		DD2DE0893C4BE33D0A962E96 /* V5UpgradeOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA5D496230C650E9C138FF7 /* V5UpgradeOnboarding.swift */; };
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
+		E0126E894DE57B15A1324AF6 /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA2A4797AC8095B6EE63842 /* SnapshotHelper.swift */; };
 		E158D469EC4DC2A47D885373 /* MessageEditDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9B97DBDAB6199D70D28408 /* MessageEditDeleteTests.swift */; };
 		E227AD3EDDE718018E892BEF /* LocalSecureChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A112125C84CFC3B0BEFB3A5 /* LocalSecureChannelTests.swift */; };
 		E28B49798D489839F029FB49 /* ChatBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAED5F8373D498D847E54328 /* ChatBubbleView.swift */; };
@@ -335,6 +338,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 0A0CD5FF6A828E9185B2315B;
 			remoteInfo = PeerDrop;
+		};
+		45779D00D0F8D919FE8C3C00 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 68DA42402509F8E5D3003CEA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 17AD73F25AC48B3BEF740AE3;
+			remoteInfo = PeerDropMac;
 		};
 		6D96F107E9874BCB904A1FAA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -394,10 +404,10 @@
 		18F1E75EEFA27967224E035C /* PetParticleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetParticleView.swift; sourceTree = "<group>"; };
 		190A50E1CBA99B173EC8B908 /* SessionKeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManagerTests.swift; sourceTree = "<group>"; };
 		1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityDashboardView.swift; sourceTree = "<group>"; };
+		1AA2A4797AC8095B6EE63842 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
 		1D0644790BDA63B2309997A1 /* DiscoveryE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryE2ETests.swift; sourceTree = "<group>"; };
 		1DD1035C987434358B87AFCD /* DisabledFeatureUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledFeatureUXTests.swift; sourceTree = "<group>"; };
 		1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteAcceptView.swift; sourceTree = "<group>"; };
-		1E0C1916D156F28591EC143E /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerIdentitySecurityTests.swift; sourceTree = "<group>"; };
 		26204406BF0EB84A54256B9E /* PlatformImageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformImageTests.swift; sourceTree = "<group>"; };
 		2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Image+PlatformImage.swift"; sourceTree = "<group>"; };
@@ -537,6 +547,7 @@
 		A979FF3DD437916760AAC312 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
 		AFC7F344C93ACB56C79EE3AE /* DocumentPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerView.swift; sourceTree = "<group>"; };
 		B07C0E24C95366B78FAFC44E /* CertificateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CertificateManagerTests.swift; sourceTree = "<group>"; };
+		B07D6C5BF9EB43DCB151AB72 /* MacSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSnapshotTests.swift; sourceTree = "<group>"; };
 		B0A1BFDD59F2AD40F96D12B1 /* CanonicalJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonicalJSONTests.swift; sourceTree = "<group>"; };
 		B198ADBAA38DB5D0B76D37A4 /* FeatureVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureVerificationTests.swift; sourceTree = "<group>"; };
 		B1A4197BB82EBE81782949D3 /* PeerDropCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropCommands.swift; sourceTree = "<group>"; };
@@ -565,6 +576,7 @@
 		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
 		CAED5F8373D498D847E54328 /* ChatBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
 		CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordRow.swift; sourceTree = "<group>"; };
+		CBBD92FD60F0061245462D38 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		CD3861D6EB13D47D188BBB05 /* DataChannelTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportTests.swift; sourceTree = "<group>"; };
 		CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorTests.swift; sourceTree = "<group>"; };
 		D021552703725631F7F19973 /* MacSystemInfoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSystemInfoProvider.swift; sourceTree = "<group>"; };
@@ -584,11 +596,13 @@
 		DAB5476BBC66A9EA04119567 /* ChatManagerGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatManagerGroupTests.swift; sourceTree = "<group>"; };
 		DC117A4A467AED1322168E15 /* FileTransferE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferE2ETests.swift; sourceTree = "<group>"; };
 		DC809F7D677B913F3AF50137 /* ComprehensiveVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComprehensiveVerificationTests.swift; sourceTree = "<group>"; };
+		DCF4CCFAA125C2739B40BF9E /* MacSnapshotTestsDark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSnapshotTestsDark.swift; sourceTree = "<group>"; };
 		DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupReadReceiptView.swift; sourceTree = "<group>"; };
 		E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCardSnapshotTests.swift; sourceTree = "<group>"; };
 		E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTests.swift; sourceTree = "<group>"; };
 		E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSearchView.swift; sourceTree = "<group>"; };
+		E88CAA4865C10111ECB32DD6 /* PeerDropMacUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PeerDropMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		EA02F82C01BC5DE57FF9CF2E /* GuestPetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestPetView.swift; sourceTree = "<group>"; };
 		EA32370BB5417DCFA96EBEEB /* E2ETestSuites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ETestSuites.swift; sourceTree = "<group>"; };
@@ -666,13 +680,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		00EF69C5665D833866C753A8 /* feat-m4-task-6-mac-snapshots */ = {
+			isa = PBXGroup;
+			children = (
+				CBBD92FD60F0061245462D38 /* Secrets.xcconfig */,
+			);
+			name = "feat-m4-task-6-mac-snapshots";
+			path = .;
+			sourceTree = "<group>";
+		};
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				64D8452574677D3961D8C7C6 /* feat-m4-task-1b-unstub-sidebar */,
+				00EF69C5665D833866C753A8 /* feat-m4-task-6-mac-snapshots */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
+				27C871958EB5E8E427248037 /* PeerDropMacUITests */,
 				38FF6B6A4F1A48F8529B0F2F /* PeerDropTests */,
 				8D255639E6CD70E3B1F87B26 /* PeerDropUITests */,
 				348FC413895A2131299A9250 /* PeerDropWidget */,
@@ -732,6 +756,16 @@
 				D747926F57322E171E63FBA5 /* README.md */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		27C871958EB5E8E427248037 /* PeerDropMacUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B07D6C5BF9EB43DCB151AB72 /* MacSnapshotTests.swift */,
+				DCF4CCFAA125C2739B40BF9E /* MacSnapshotTestsDark.swift */,
+				1AA2A4797AC8095B6EE63842 /* SnapshotHelper.swift */,
+			);
+			path = PeerDropMacUITests;
 			sourceTree = "<group>";
 		};
 		348FC413895A2131299A9250 /* PeerDropWidget */ = {
@@ -896,15 +930,6 @@
 				50393228F69F31F111E2B37B /* VoiceCallView.swift */,
 			);
 			path = Voice;
-			sourceTree = "<group>";
-		};
-		64D8452574677D3961D8C7C6 /* feat-m4-task-1b-unstub-sidebar */ = {
-			isa = PBXGroup;
-			children = (
-				1E0C1916D156F28591EC143E /* Secrets.xcconfig */,
-			);
-			name = "feat-m4-task-1b-unstub-sidebar";
-			path = .;
 			sourceTree = "<group>";
 		};
 		6BEDEDA3BDAB0A9589800AD6 /* UI */ = {
@@ -1108,6 +1133,7 @@
 			children = (
 				F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */,
 				5F4FC5F3178F8C9D62BF46CC /* PeerDropMac.app */,
+				E88CAA4865C10111ECB32DD6 /* PeerDropMacUITests.xctest */,
 				107432E165DB757DDBC416BC /* PeerDropTests.xctest */,
 				A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */,
 				832F36BF0DBBD408CEA57692 /* PeerDropWidget.appex */,
@@ -1297,6 +1323,24 @@
 			productReference = 107432E165DB757DDBC416BC /* PeerDropTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		AF3AB905037676515C42811E /* PeerDropMacUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C955589E7425D0DB824CB83B /* Build configuration list for PBXNativeTarget "PeerDropMacUITests" */;
+			buildPhases = (
+				4004993E5707ADC1E2EBE041 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1A1FE51633DD46542C2DA79E /* PBXTargetDependency */,
+			);
+			name = PeerDropMacUITests;
+			packageProductDependencies = (
+			);
+			productName = PeerDropMacUITests;
+			productReference = E88CAA4865C10111ECB32DD6 /* PeerDropMacUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		BB562606179B1C91784991E6 /* PeerDropWidget */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C95782F5702CA7208AE3E971 /* Build configuration list for PBXNativeTarget "PeerDropWidget" */;
@@ -1337,6 +1381,10 @@
 					17F1F675B19F95104979A7B9 = {
 						TestTargetID = 0A0CD5FF6A828E9185B2315B;
 					};
+					AF3AB905037676515C42811E = {
+						DevelopmentTeam = UK48R5KWLV;
+						TestTargetID = 17AD73F25AC48B3BEF740AE3;
+					};
 					BB562606179B1C91784991E6 = {
 						DevelopmentTeam = UK48R5KWLV;
 						ProvisioningStyle = Automatic;
@@ -1366,6 +1414,7 @@
 			targets = (
 				0A0CD5FF6A828E9185B2315B /* PeerDrop */,
 				17AD73F25AC48B3BEF740AE3 /* PeerDropMac */,
+				AF3AB905037676515C42811E /* PeerDropMacUITests */,
 				7BAE530F5224EBE36DDA1247 /* PeerDropTests */,
 				17F1F675B19F95104979A7B9 /* PeerDropUITests */,
 				BB562606179B1C91784991E6 /* PeerDropWidget */,
@@ -1403,6 +1452,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4004993E5707ADC1E2EBE041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5B720E41674A74F8187D9D13 /* MacSnapshotTests.swift in Sources */,
+				2645D10B81CF9B065C2F45E9 /* MacSnapshotTestsDark.swift in Sources */,
+				E0126E894DE57B15A1324AF6 /* SnapshotHelper.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		65F30F597E3FDBC4923F1545 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1734,6 +1793,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		1A1FE51633DD46542C2DA79E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 17AD73F25AC48B3BEF740AE3 /* PeerDropMac */;
+			targetProxy = 45779D00D0F8D919FE8C3C00 /* PBXContainerItemProxy */;
+		};
 		3A3E2E23549391CAB4F492BC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 0A0CD5FF6A828E9185B2315B /* PeerDrop */;
@@ -1783,6 +1847,25 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PeerDrop.app/PeerDrop";
+			};
+			name = Debug;
+		};
+		1F8903DB38D01BE13E6D2D82 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = UK48R5KWLV;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.mac.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = PeerDropMac;
 			};
 			name = Debug;
 		};
@@ -1885,7 +1968,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1E0C1916D156F28591EC143E /* Secrets.xcconfig */;
+			baseConfigurationReference = CBBD92FD60F0061245462D38 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1908,7 +1991,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1E0C1916D156F28591EC143E /* Secrets.xcconfig */;
+			baseConfigurationReference = CBBD92FD60F0061245462D38 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1928,6 +2011,25 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		8CF92F95FCA0D7F6846F0356 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = UK48R5KWLV;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.peerdrop.mac.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = PeerDropMac;
+			};
+			name = Release;
 		};
 		AF54BF708F3B499BE65CF7DF /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -2110,6 +2212,15 @@
 			buildConfigurations = (
 				80EB7FBA76991A74CA5A81F7 /* Debug */,
 				7E74B2CC3908D83E08101866 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C955589E7425D0DB824CB83B /* Build configuration list for PBXNativeTarget "PeerDropMacUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1F8903DB38D01BE13E6D2D82 /* Debug */,
+				8CF92F95FCA0D7F6846F0356 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
