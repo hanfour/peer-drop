@@ -30,6 +30,24 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // (pasteboard / deviceName / systemInfo / remoteNotifications /
         // audioSession / platformIdentifier).
         MacPlatformDependencies.register()
+
+        // M4 Task 6 follow-up: respect the -AppleInterfaceStyle launch
+        // argument so MacSnapshotTestsDark captures actually render in
+        // dark mode. macOS doesn't auto-flip NSApp.appearance based on
+        // this arg — it only steers the system appearance for processes
+        // that opt in. We force the override here.
+        let args = ProcessInfo.processInfo.arguments
+        if let idx = args.firstIndex(of: "-AppleInterfaceStyle"),
+           idx + 1 < args.count {
+            let style = args[idx + 1]
+            if style.caseInsensitiveCompare("Dark") == .orderedSame {
+                logger.info("Launch arg requested Dark appearance")
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+            } else if style.caseInsensitiveCompare("Light") == .orderedSame {
+                logger.info("Launch arg requested Light (Aqua) appearance")
+                NSApp.appearance = NSAppearance(named: .aqua)
+            }
+        }
     }
 
     /// Finder drop / open-with handler. Files arrive via NSURL array.

@@ -401,6 +401,7 @@
 		140545A8AE9D38F8EE7EA56D /* PetWelcomeFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWelcomeFlagTests.swift; sourceTree = "<group>"; };
 		15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecryptFailureBannerView.swift; sourceTree = "<group>"; };
 		1645655AF1530B5121896FEA /* MockPlatformDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockPlatformDependencies.swift; sourceTree = "<group>"; };
+		1748AF0830B33E2796BC42B1 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		18F1E75EEFA27967224E035C /* PetParticleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetParticleView.swift; sourceTree = "<group>"; };
 		190A50E1CBA99B173EC8B908 /* SessionKeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManagerTests.swift; sourceTree = "<group>"; };
 		1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityDashboardView.swift; sourceTree = "<group>"; };
@@ -576,7 +577,6 @@
 		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
 		CAED5F8373D498D847E54328 /* ChatBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
 		CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordRow.swift; sourceTree = "<group>"; };
-		CBBD92FD60F0061245462D38 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		CD3861D6EB13D47D188BBB05 /* DataChannelTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportTests.swift; sourceTree = "<group>"; };
 		CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorTests.swift; sourceTree = "<group>"; };
 		D021552703725631F7F19973 /* MacSystemInfoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSystemInfoProvider.swift; sourceTree = "<group>"; };
@@ -680,19 +680,10 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		00EF69C5665D833866C753A8 /* feat-m4-task-6-mac-snapshots */ = {
-			isa = PBXGroup;
-			children = (
-				CBBD92FD60F0061245462D38 /* Secrets.xcconfig */,
-			);
-			name = "feat-m4-task-6-mac-snapshots";
-			path = .;
-			sourceTree = "<group>";
-		};
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				00EF69C5665D833866C753A8 /* feat-m4-task-6-mac-snapshots */,
+				71D2896A1C3B15EA5D0354CB /* fix-m4-mac-chat-window-and-darkmode */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
@@ -966,6 +957,15 @@
 				9B335967E2F46FE4D5037176 /* VerificationView.swift */,
 			);
 			path = Security;
+			sourceTree = "<group>";
+		};
+		71D2896A1C3B15EA5D0354CB /* fix-m4-mac-chat-window-and-darkmode */ = {
+			isa = PBXGroup;
+			children = (
+				1748AF0830B33E2796BC42B1 /* Secrets.xcconfig */,
+			);
+			name = "fix-m4-mac-chat-window-and-darkmode";
+			path = .;
 			sourceTree = "<group>";
 		};
 		7480E5F261C36127AAE31E79 /* Views */ = {
@@ -1968,7 +1968,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CBBD92FD60F0061245462D38 /* Secrets.xcconfig */;
+			baseConfigurationReference = 1748AF0830B33E2796BC42B1 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1991,7 +1991,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CBBD92FD60F0061245462D38 /* Secrets.xcconfig */;
+			baseConfigurationReference = 1748AF0830B33E2796BC42B1 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
