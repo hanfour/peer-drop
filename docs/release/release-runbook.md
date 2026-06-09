@@ -314,3 +314,198 @@ iOS unchanged in M3. Smoke test:
 - [ ] iPhone ↔ iPhone voice call still works.
 - [ ] iOS chat invite push still wakes the app via `/v2/invite/` (Worker route now per-platform; iOS default preserved).
 
+---
+
+## Mac App Store release (v6.0+)
+
+This section covers the **Mac-specific** release flow. The shared parts of the runbook above (reviewer-notes loading, ASC API key setup, abort handling) apply to both platforms — only the lane names and one-time setup differ.
+
+### One-time setup (first Mac ship only)
+
+Before `fastlane release_mac` can succeed end-to-end, three external pieces must be in place. Each takes a few minutes; once done they're idempotent for future Mac releases.
+
+#### 1. Apple Developer portal — Mac App ID capabilities
+
+The Mac bundle `com.hanfour.peerdrop.mac` needs the same App ID capability set as iOS (where applicable) plus Mac-specific entries:
+
+1. https://developer.apple.com/account → Identifiers → click `com.hanfour.peerdrop.mac` (create if absent: macOS App ID, description "PeerDrop for Mac")
+2. Enable: App Sandbox, Push Notifications, Bluetooth, Microphone, Networking (multicast)
+3. Save
+
+Then regenerate the provisioning profile via fastlane:
+
+```bash
+fastlane run get_provisioning_profile \
+  app_identifier:com.hanfour.peerdrop.mac \
+  platform:macos \
+  app_store:true \
+  force:true
+```
+
+This creates **`com.hanfour.peerdrop.mac AppStore`** in your Apple Developer account and downloads it to `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`. The name string is what `release_mac` references in its `export_options.provisioningProfiles` dict.
+
+#### 2. App Store Connect — enable macOS platform
+
+ASC needs to know the existing PeerDrop app record (App ID `6759594513`, iOS bundle `com.hanfour.peerdrop`) also serves Mac:
+
+1. https://appstoreconnect.apple.com/apps/6759594513 → general info → **+ Add macOS** → pick bundle `com.hanfour.peerdrop.mac`
+2. Fill in Mac-specific app info (category defaults to iOS values; subtitle / promo per `fastlane/metadata/macos/<lang>/`); ASC will auto-populate from the metadata upload on first `release_mac` run
+3. Min macOS version: 14.0 (matches `project.yml: MACOSX_DEPLOYMENT_TARGET`)
+
+After this, `fastlane check_status_mac` returns the Mac app metadata instead of `app not found`.
+
+#### 3. Commission `Ringtone.caf`
+
+`MacRingtonePlayer` falls back to looped `NSSound("Glass")` if `Ringtone.caf` is missing from the bundle. The fallback is **dev-only** — sandboxed shipped builds can't reliably reference `/System/Library/Sounds/`. Before MAS ship:
+
+```bash
+# Source: CC0 from Freesound, branded recording, or licensed asset
+afconvert -d aac -f caff Source.aiff PeerDropMac/Resources/Ringtone.caf
+afinfo PeerDropMac/Resources/Ringtone.caf  # verify: AAC, mono 44.1 kHz, ≤6s
+```
+
+Commit + push. The next `release_mac` picks it up.
+
+### Per-release flow
+
+Both platforms ship the same version per spec §M4 (M0–M3 was iOS-only at 5.x; v6.0+ is bi-platform). The order matters:
+
+#### Step 1 — Verify both versions bumped
+
+```bash
+grep "MARKETING_VERSION" project.yml
+# Expect: 6.0.0 for both PeerDrop target and PeerDropMac target
+```
+
+If iOS PeerDrop is still on 5.4.x, bump to 6.0.0:
+
+```yaml
+# project.yml
+PeerDrop:
+  settings:
+    base:
+      MARKETING_VERSION: "6.0.0"   # was "5.4.0"
+```
+
+then `xcodegen generate` and commit.
+
+#### Step 2 — Sign + write the v6.0.0 reviewer notes
+
+```bash
+# Already at docs/release/v6.0.0-reviewer-notes.md (M4 Task 8).
+# Verify the BEGIN_PASTE block is ≤ 4000 chars:
+python3 -c "import re; t=open('docs/release/v6.0.0-reviewer-notes.md').read(); m=re.search(r'<!-- BEGIN_PASTE.*?-->(.*?)<!-- END_PASTE -->', t, re.DOTALL); print(len(m.group(1).strip()))"
+```
+
+Both `release` and `release_mac` lanes auto-load from this same file.
+
+#### Step 3 — Capture Mac screenshots
+
+```bash
+fastlane screenshots_mac
+```
+
+Output lands in `fastlane/screenshots_mac/<lang>/`. The `MacSnapshotTests` + `MacSnapshotTestsDark` suites produce 5 captures × 2 appearances × 5 languages = 50 PNGs total.
+
+**Smoke check on a real Mac before submit**: macOS UI tests need the dev provisioning profile installed; if `fastlane screenshots_mac` errors with `No profiles for 'com.hanfour.peerdrop.mac'`, you skipped one-time setup #1.
+
+#### Step 4 — Ship iOS first (`release`)
+
+```bash
+fastlane release
+```
+
+Standard iOS flow. ~6 min wall-time. Lands in `WAITING_FOR_REVIEW`.
+
+#### Step 5 — Cut Mac binary (no submit yet)
+
+```bash
+fastlane release_mac submit:false
+```
+
+`submit:false` is required because the Mac IAP tip jar must be re-attached via Playwright (ASC has no API for IAP attachment; this is the v5.3.2 lesson applied to the first Mac ship). After upload, v6.0.0 macOS sits in `PREPARE_FOR_SUBMISSION`.
+
+Verify via `fastlane check_status_mac`.
+
+#### Step 6 — Attach Mac IAPs (Playwright)
+
+```bash
+# Requires Playwright installed via M4 plan Task 10
+npx playwright test scripts/iap-attach-mac.ts
+```
+
+(Plan Task 10 references the script; if not yet present, attach manually via the ASC web UI: app inflight → `App 內購買項目和訂閱項目` → 選取項目 → check tip.small / tip.medium / tip.large → 完成.)
+
+#### Step 7 — Submit Mac
+
+```bash
+fastlane submit_mac_only version:6.0.0 build:1
+```
+
+Verifies IAP attach didn't get rolled back, builds the review-submission, and flips macOS v6.0.0 from `PREPARE_FOR_SUBMISSION` to `WAITING_FOR_REVIEW`.
+
+Both iOS + Mac now in Apple's review queue.
+
+#### Step 8 — Apple review window
+
+1–2 weeks. Monitor:
+
+```bash
+fastlane check_status        # iOS
+fastlane check_status_mac    # Mac
+```
+
+Status transitions: `WAITING_FOR_REVIEW` → `IN_REVIEW` → either `APPROVED` / `PENDING_DEVELOPER_RELEASE` (automatic_release:false) or `REJECTED`.
+
+#### Step 9 — Release to App Store (manual)
+
+Once Apple approves both:
+
+```bash
+fastlane release_now            # iOS — flips PENDING_DEVELOPER_RELEASE → READY_FOR_SALE
+# Mac equivalent: open the inflight version in ASC web UI → 「發佈此版本」
+# (no current `release_now_mac` fastlane lane; the Spaceship API call is the same shape if needed)
+```
+
+**First Mac ship strategy**: NO phased rollout for v6.0.0. The lane is configured with `phased_release: false` per the spec §M4 risk register — sandbox surprises only surface in shipped builds; we want immediate rollback control rather than a partial-userbase exposure window. v6.1+ can default to phased.
+
+#### Step 10 — MAS-install smoke check
+
+After both platforms are `READY_FOR_SALE`, wait ~30 min for App Store propagation, then install **from the App Store** (not TestFlight) on a clean Mac:
+
+- [ ] iPhone ↔ Mac voice call works (full 7-row matrix from "M3 Voice Calling Verification" above)
+- [ ] BLE peer discovery works (sandboxed shipped binaries can hit `NSBluetoothAlwaysUsageDescription` requirements that dev/TF builds miss)
+- [ ] Bonjour discovery works on local Wi-Fi
+- [ ] APNs push wakes the app from terminated state (needs `aps-environment = production`, not `development` — verify in shipped binary's entitlements via `codesign -d --entitlements - /Applications/PeerDrop.app`)
+- [ ] Microphone permission prompt appears on first call attempt
+
+If failures surface: file a v6.0.1 hotfix at `docs/release/v6.0.1-reviewer-notes.md`, bump `MARKETING_VERSION`, re-run `release_mac` + `submit_mac_only`. The MAS-install smoke exists specifically to catch sandbox surprises BEFORE end users.
+
+### Diagnosing Mac-specific failures
+
+#### `fastlane release_mac` fails with `app not found`
+
+The macOS platform was never enabled on the ASC app record. Do one-time setup #2 above.
+
+#### `fastlane release_mac` fails with `No profiles for 'com.hanfour.peerdrop.mac'`
+
+Mac App Store provisioning profile missing. Re-run one-time setup #1.
+
+#### `fastlane release_mac` fails with `Could not find category 'MZGenre.SocialNetworking'`
+
+(Should not happen — fastlane deliver's `map_category_from_itc` strips the `MZGenre.` prefix and looks up the bare name in a flat map that covers iOS + macOS. If it does happen, the fastlane version may have changed the API; verify against `spaceship/lib/spaceship/connect_api/models/app_category.rb`.)
+
+#### `release_mac` upload succeeds but ASC shows no IAPs attached
+
+The macOS app's IAP attachment must be done via Playwright or the ASC web UI **after** `release_mac submit:false` completes. Spaceship has no IAP-attach API. If you ran `release_mac` with the default `submit:true`, the version is locked at `WAITING_FOR_REVIEW` without IAPs and Apple may reject as Guideline 2.1. Re-run with `submit:false`, attach IAPs, then `submit_mac_only`.
+
+#### Snapshot capture fails with `XCUIKeyboardKeySecondaryFn` error
+
+You're on an older fastlane SnapshotHelper. The current PeerDropMacUITests/SnapshotHelper.swift uses `XCUIKeyboardKey.secondaryFn.rawValue`. If you regenerated the helper from the fastlane template, re-apply the M4 Task 6 fix.
+
+### Mac-only files reference
+
+- Project: `PeerDropMac/`, `PeerDropMacUITests/`, `PeerDropMac/App/PeerDrop-Mac.entitlements`, `PeerDropMac/Resources/Ringtone.caf`
+- Fastlane: `fastlane/SnapfileMac`, `fastlane/metadata/macos/`, `fastlane/screenshots_mac/`
+- Lanes: `release_mac`, `check_status_mac`, `submit_mac_only`, `screenshots_mac`
+- Reviewer notes: `docs/release/v6.0.0-reviewer-notes.md` (shared with iOS — both platforms ship same version)
