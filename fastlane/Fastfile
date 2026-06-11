@@ -829,4 +829,34 @@ platform :ios do
       }
     )
   end
+
+  desc "Release the current PENDING_DEVELOPER_RELEASE Mac version to App Store."
+  desc "Use after an approved Mac version was submitted without auto-release"
+  desc "(e.g. `fastlane release_mac submit:false` + IAP attach + submit_mac_only)."
+  lane :release_now_mac do
+    api_key_path = File.expand_path("api_key.json", __dir__)
+    UI.user_error!("API key not found at #{api_key_path}") unless File.exist?(api_key_path)
+    data = JSON.parse(File.read(api_key_path))
+    app_store_connect_api_key(
+      key_id:      data["key_id"],
+      issuer_id:   data["issuer_id"],
+      key_content: data["key"],
+      duration:    1200,
+      in_house:    false
+    )
+
+    bundle_id = "com.hanfour.peerdrop.mac"
+    app = Spaceship::ConnectAPI::App.find(bundle_id)
+    UI.user_error!("Mac app not found: #{bundle_id} — has ASC macOS platform been enabled?") unless app
+
+    mac_platform = Spaceship::ConnectAPI::Platform::MAC_OS
+    pending = app.get_app_store_versions(
+      filter: { appStoreState: "PENDING_DEVELOPER_RELEASE", platform: mac_platform }
+    ).first
+    UI.user_error!("No PENDING_DEVELOPER_RELEASE Mac version found.") unless pending
+
+    UI.message("Releasing Mac v#{pending.version_string} (id #{pending.id})...")
+    pending.create_app_store_version_release_request
+    UI.success("✓ Mac release request created for v#{pending.version_string}. App Store will roll it out within minutes.")
+  end
 end

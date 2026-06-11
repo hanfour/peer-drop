@@ -457,14 +457,15 @@ fastlane check_status_mac    # Mac
 
 Status transitions: `WAITING_FOR_REVIEW` → `IN_REVIEW` → either `APPROVED` / `PENDING_DEVELOPER_RELEASE` (automatic_release:false) or `REJECTED`.
 
-#### Step 9 — Release to App Store (manual)
+#### Step 9 — Release to App Store
 
-Once Apple approves both:
+**iOS:** the `release` lane defaults to `submit:true`, which sets both `submit_for_review: true` AND `automatic_release: true`. Apple ships iOS automatically on approval — **no `release_now` needed** unless you explicitly ran `fastlane release submit:false` (which you would only do to attach IAPs the v5.3.2 way; v6.0.0 didn't need that on iOS).
+
+**Mac:** `submit_mac_only` intentionally defaults `automatic_release: false` (first Mac ship caution per spec §M4 risk register). v6.0.0 macOS lands in `PENDING_DEVELOPER_RELEASE` and you flip it manually:
 
 ```bash
-fastlane release_now            # iOS — flips PENDING_DEVELOPER_RELEASE → READY_FOR_SALE
-# Mac equivalent: open the inflight version in ASC web UI → 「發佈此版本」
-# (no current `release_now_mac` fastlane lane; the Spaceship API call is the same shape if needed)
+fastlane release_now_mac        # wraps Spaceship's create_app_store_version_release_request with platform: MAC_OS
+# Or via web UI: ASC → app inflight → 「發佈此版本」
 ```
 
 **First Mac ship strategy**: NO phased rollout for v6.0.0. The lane is configured with `phased_release: false` per the spec §M4 risk register — sandbox surprises only surface in shipped builds; we want immediate rollback control rather than a partial-userbase exposure window. v6.1+ can default to phased.
@@ -476,7 +477,7 @@ After both platforms are `READY_FOR_SALE`, wait ~30 min for App Store propagatio
 - [ ] iPhone ↔ Mac voice call works (full 7-row matrix from "M3 Voice Calling Verification" above)
 - [ ] BLE peer discovery works (sandboxed shipped binaries can hit `NSBluetoothAlwaysUsageDescription` requirements that dev/TF builds miss)
 - [ ] Bonjour discovery works on local Wi-Fi
-- [ ] APNs push wakes the app from terminated state (needs `aps-environment = production`, not `development` — verify in shipped binary's entitlements via `codesign -d --entitlements - /Applications/PeerDrop.app`)
+- [ ] APNs push wakes the app from terminated state. **Do not modify the entitlement file** — it ships as `aps-environment = development`. Apple's App Store distribution signing normalises this: the production APNs route is selected by receipt/build provenance, not by the string in the embedded entitlement. Verifying the smoke is "does push wake the app from terminated state, after install from App Store", NOT inspecting the entitlement string. (If a future setup requires the literal `production` string, it'd come from a Release-config xcconfig override — but that override doesn't exist today and isn't needed for MAS distribution.)
 - [ ] Microphone permission prompt appears on first call attempt
 
 If failures surface: file a v6.0.1 hotfix at `docs/release/v6.0.1-reviewer-notes.md`, bump `MARKETING_VERSION`, re-run `release_mac` + `submit_mac_only`. The MAS-install smoke exists specifically to catch sandbox surprises BEFORE end users.
@@ -502,6 +503,31 @@ The macOS app's IAP attachment must be done via Playwright or the ASC web UI **a
 #### Snapshot capture fails with `XCUIKeyboardKeySecondaryFn` error
 
 You're on an older fastlane SnapshotHelper. The current PeerDropMacUITests/SnapshotHelper.swift uses `XCUIKeyboardKey.secondaryFn.rawValue`. If you regenerated the helper from the fastlane template, re-apply the M4 Task 6 fix.
+
+#### `release_mac` succeeds but ASC reports `Notarization rejected`
+
+Mac App Store distribution requires the uploaded `.pkg` to pass Apple's notarization service before it can be added to a version. Notarization typically rejects for:
+
+- **Missing Privacy Manifest entries** — `PrivacyInfo.xcprivacy` doesn't declare a required reason for a privacy-relevant API. Mac-side common offender: `NSPrivacyAccessedAPICategoryFileTimestamp` if you read file mtimes anywhere.
+- **Deprecated APIs that Apple no longer accepts** — even if Xcode compiles, the notary may reject (rare).
+- **Hardened-runtime + sandbox conflict** — entitlement asks for something the sandbox denies, or vice versa.
+- **Broken or expired signing chain** — distribution cert revoked, or a nested binary not signed.
+
+Diagnosis:
+
+```bash
+# Find your submission ID
+xcrun notarytool history --key fastlane/AuthKey_<keyid>.p8 --key-id <keyid> --issuer <issuer>
+
+# Pull the full log for a specific submission
+xcrun notarytool log <submission-uuid> --key fastlane/AuthKey_<keyid>.p8 --key-id <keyid> --issuer <issuer>
+
+# Or check the ASC web UI: app inflight → 「處理中問題」(processing issues)
+```
+
+Common fixes:
+- Add the missing Privacy Manifest entry; bump build number; re-run `fastlane release_mac submit:false`.
+- For hardened-runtime conflicts, audit `PeerDropMac/App/PeerDrop-Mac.entitlements` against the actually-requested capabilities.
 
 ### Mac-only files reference
 
