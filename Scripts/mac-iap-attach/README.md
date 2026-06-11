@@ -16,7 +16,7 @@ App Store Connect has no public API for attaching In-App Purchases to a specific
 ## Usage
 
 ```bash
-cd scripts/mac-iap-attach
+cd Scripts/mac-iap-attach
 npm install
 npx playwright install chromium    # one-time
 npx tsx iap-attach-mac.ts

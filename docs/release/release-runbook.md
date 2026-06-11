@@ -430,13 +430,13 @@ Verify via `fastlane check_status_mac`.
 #### Step 6 — Attach Mac IAPs (Playwright)
 
 ```bash
-cd scripts/mac-iap-attach
+cd Scripts/mac-iap-attach
 npm install
 npx playwright install chromium    # one-time per host
 npx tsx iap-attach-mac.ts
 ```
 
-The script opens ASC in a visible browser, waits for you to complete 2FA interactively, then navigates to the v6.0.0 macOS inflight version and ticks the three tip-jar IAPs (`tip.small` / `tip.medium` / `tip.large`). See `scripts/mac-iap-attach/README.md` for failure modes and selector-drift fixes.
+The script opens ASC in a visible browser, waits for you to complete 2FA interactively, then navigates to the v6.0.0 macOS inflight version and ticks the three tip-jar IAPs (`tip.small` / `tip.medium` / `tip.large`). See `Scripts/mac-iap-attach/README.md` for failure modes and selector-drift fixes.
 
 ASC web UI fallback if the script breaks: app inflight → `App 內購買項目和訂閱項目` → 選取項目 → check tip.small / tip.medium / tip.large → 完成.
 
