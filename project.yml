@@ -190,6 +190,12 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
         ENABLE_HARDENED_RUNTIME: "YES"
+    configFiles:
+      # Same Secrets.xcconfig as iOS so $(PEERDROP_WORKER_API_KEY)
+      # substitution works in Info.plist. Gitignored; copy from
+      # Secrets.xcconfig.example for new dev setup.
+      Debug: Secrets.xcconfig
+      Release: Secrets.xcconfig
 
   PeerDropTests:
     type: bundle.unit-test

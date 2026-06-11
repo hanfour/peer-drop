@@ -110,9 +110,11 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Inbound APNs alert push. Two payload types matter:
     ///   - `type: "callRequest"` — voice-call wake; routed to MacCallProvider
     ///     for the cold-launch grace flow.
-    ///   - chat invite (`roomCode` present) — reuses the iOS
-    ///     `handleRemoteNotification` path once relay reconnects via
-    ///     `InboxService`. No work needed here.
+    ///   - chat invite (`roomCode` present) — forwarded via NotificationCenter
+    ///     so PeerDropMacApp's `.onReceive(.didReceiveRelayPush)` can call
+    ///     `PushNotificationManager.handleRemoteNotification` with the
+    ///     live InboxService instance (which lives in PeerDropMacApp,
+    ///     not in AppDelegate). Mirror of iOS AppDelegate.swift:42-47.
     func application(
         _ application: NSApplication,
         didReceiveRemoteNotification userInfo: [String: Any]
@@ -123,8 +125,23 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if type == "callRequest" {
             let callerName = userInfo["callerName"] as? String ?? NSLocalizedString("Unknown", comment: "Caller name fallback")
             macCallProvider.handleColdLaunchPush(callerName: callerName)
+            return
         }
-        // Chat invites route through the same path as iOS once relay
-        // reconnects — InboxService picks up the queued PeerMessage.
+
+        // Chat invites + any other relay-pushed payload that's not handled
+        // internally: forward to the app shell.
+        NotificationCenter.default.post(
+            name: .didReceiveRelayPush,
+            object: nil,
+            userInfo: userInfo
+        )
     }
+}
+
+extension Notification.Name {
+    /// Cross-platform marker for relay-pushed payloads that the AppDelegate
+    /// hands off to the app shell. Same string as iOS at
+    /// PeerDrop/App/AppDelegate.swift:7 — listeners on either platform see
+    /// the same notification.
+    static let didReceiveRelayPush = Notification.Name("didReceiveRelayPush")
 }

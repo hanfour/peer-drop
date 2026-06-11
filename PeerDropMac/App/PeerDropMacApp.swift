@@ -3,6 +3,7 @@ import PeerDropCore
 import PeerDropPlatform
 import PeerDropPet
 import PeerDropTransport
+import PeerDropSecurity
 
 @main
 struct PeerDropMacApp: App {
@@ -14,6 +15,34 @@ struct PeerDropMacApp: App {
     /// `petEngine.renderedImage: CGImage?` injected as an
     /// `@EnvironmentObject` into every scene that may show the pet.
     @StateObject private var petEngine = PetEngine()
+    /// Relay invite queue. Routes APNs chat-invite pushes to the
+    /// peer-message pipeline once the relay WebSocket reconnects.
+    /// Without this, push wake-ups for chat invites are dropped.
+    /// Mirrors iOS PeerDropApp.swift:15.
+    @StateObject private var inboxService = InboxService()
+    /// Soak-window metrics for the v5.4 relay crypto hardening
+    /// (PR series #37–#44). Mirrors iOS PeerDropApp.swift:16.
+    @StateObject private var cryptoMetrics = CryptoHardeningMetrics()
+    /// Validates worker-served crypto policy upgrades against the
+    /// public-key set in Info.plist's `CryptoPolicyPublicKeys`. Without
+    /// this, the app stays on the bundled default policy (legacy/warn)
+    /// — shipping-safe but stuck. Mirrors iOS PeerDropApp.swift:17.
+    @StateObject private var policyStore: SecurityPolicyStore = {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Security")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let bundledKeys: [Data] = (Bundle.main.object(forInfoDictionaryKey: "CryptoPolicyPublicKeys") as? [String])?
+            .compactMap { Data(base64Encoded: $0) } ?? []
+        let workerURLString = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
+            ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
+        let workerURL = URL(string: workerURLString)
+        return SecurityPolicyStore(
+            storageDirectory: dir,
+            publicKeys: bundledKeys,
+            metrics: nil,
+            baseURL: workerURL
+        )
+    }()
 
     var body: some Scene {
         // Main window: discovery + sidebar navigation.
@@ -60,6 +89,17 @@ struct PeerDropMacApp: App {
                         connectionManager?.voiceCallManager?.endCall()
                     }
 
+                    // M4 audit fix: wire crypto-policy + metrics into
+                    // ConnectionManager. Matches iOS PeerDropApp.swift:111-119.
+                    // The lazy @StateObject init can't reference these so we
+                    // assign at .onAppear. PreKeyStore reads `activePolicy`
+                    // off the background-thread saveSync path; the
+                    // .onReceive(policyStore.$current) below keeps it fresh.
+                    connectionManager.policyStore = policyStore
+                    connectionManager.cryptoMetrics = cryptoMetrics
+                    connectionManager.remoteSessionManager.policyStore = policyStore
+                    connectionManager.remoteSessionManager.cryptoMetrics = cryptoMetrics
+
                     // M4 screenshot mode (Task 6): when the
                     // -SCREENSHOT_MODE launch arg is set (fastlane
                     // snapshot), populate the Pet + auto-start
@@ -76,6 +116,20 @@ struct PeerDropMacApp: App {
                             await PushNotificationManager.shared.requestAuthorizationAndRegister()
                         }
                     }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .didReceiveRelayPush)) { notification in
+                    // M4 audit fix: route relay-pushed chat invites to the
+                    // live InboxService (queued PeerMessage pickup once the
+                    // relay WebSocket reconnects). Without this, Mac users
+                    // get APNs alerts they can't actually act on.
+                    guard let userInfo = notification.userInfo else { return }
+                    PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
+                }
+                .onReceive(policyStore.$current) { newPolicy in
+                    // Re-snapshot activePolicy on every policy update so the
+                    // background-thread C4 prune path picks up changes without
+                    // an app restart. Mirrors iOS PeerDropApp.swift:79-85.
+                    connectionManager.preKeyStore.activePolicy = newPolicy
                 }
         }
         .commands { PeerDropCommands() }
