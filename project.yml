@@ -136,6 +136,10 @@ targets:
       # cross-platform via this catalog. Without this the Mac bundle
       # has no .lproj directories and ships English-only.
       - path: PeerDrop/App/Localizable.xcstrings
+      # Purchase/ — StoreKit Tip Jar manager. Cross-platform (no UIKit).
+      # Required so MacSettingsView's Support tab can surface the IAPs
+      # that M4 Task 10 attaches via Playwright.
+      - path: PeerDrop/Purchase
       # Reuse cross-platform views from the iOS UI tree.
       # iOS-only files excluded per M2 Task 1 audit.
       # Pet/UI reuse — needed by ChatView for the chat-side Pet overlay
@@ -159,7 +163,9 @@ targets:
           - "Transfer/ClipboardShareView.swift"  # UIImage + UIPasteboard niche; not surfaced on macOS yet
           - "Chat/CameraPickerView.swift"        # UIImagePickerController — no macOS camera UI
           - "ContentView.swift"                  # iOS root TabView — replaced by MacContentView
-          - "Settings/TipJarSection.swift"       # StoreKit IAP — Mac IAP attached separately via Playwright
+          # Settings/TipJarSection.swift un-excluded for M4 — MacSettingsView
+          # now has a Support tab so the Mac IAPs attached via Playwright
+          # are reachable (Apple Guideline 2.1 risk otherwise).
           # iOS-shaped tab containers — replaced by MacContentView/MacDetailRouter:
           - "Connection/ConnectionView.swift"    # iOS tab container; macOS uses MacContentView
           - "Discovery/DiscoveryView.swift"      # iOS tab container

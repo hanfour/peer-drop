@@ -13,8 +13,27 @@ struct MacSettingsView: View {
 
             RelaySettingsTab()
                 .tabItem { Label("Relay", systemImage: "network") }
+
+            SupportSettingsTab()
+                .tabItem { Label("Support", systemImage: "heart.fill") }
         }
-        .frame(width: 520, height: 360)
+        .frame(width: 520, height: 420)
+    }
+}
+
+// MARK: - Support (Tip Jar)
+
+/// Hosts the cross-platform `TipJarSection` so Mac users can find the
+/// IAPs attached to the Mac binary via M4 Task 10 (Playwright). Without
+/// this surface, the IAPs would be listed in ASC but unreachable from
+/// the app — Apple Guideline 2.1 reject risk.
+private struct SupportSettingsTab: View {
+    var body: some View {
+        Form {
+            TipJarSection()
+        }
+        .formStyle(.grouped)
+        .padding()
     }
 }
 
