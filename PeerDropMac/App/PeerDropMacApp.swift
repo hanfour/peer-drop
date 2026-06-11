@@ -57,6 +57,15 @@ struct PeerDropMacApp: App {
                     // (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
 
+                    // Round 6 audit fix: wire MacDropHandler so Finder
+                    // / Dock / menu-bar drops can actually call
+                    // connectionManager.fileTransfer?.sendFiles(…).
+                    // Without this, drops are logged but no data ever
+                    // leaves — the Mac value prop "drag-and-drop file
+                    // sharing" was a false claim in v6.0 metadata
+                    // (Apple Guideline 2.3 reject risk).
+                    MacDropHandler.connectionManager = connectionManager
+
                     // M3: wire MacCallProvider into the cross-platform
                     // CallProvider injection point on ConnectionManager.
                     // Mirror of iOS PeerDropApp.swift:108.
