@@ -1,11 +1,12 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import os
 import PeerDropCore
 import PeerDropPlatform
 
 @MainActor
-final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNotificationCenterDelegate {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop.mac", category: "AppDelegate")
 
     /// Visibility of the menu bar item — toggled by the View menu command.
@@ -24,12 +25,29 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// CallKitManager is held by the iOS PeerDropAppDelegate).
     let macCallProvider = MacCallProvider()
 
+    /// Round 5 audit fix: buffer for APNs payloads that arrive before
+    /// PeerDropMacApp's `.onReceive(.didReceiveRelayPush)` subscriber has
+    /// attached. NotificationCenter posts are dropped if no subscriber
+    /// exists — on cold launch the SwiftUI scene mounts AFTER
+    /// `application(_:didReceiveRemoteNotification:)` fires. PeerDropMacApp
+    /// drains this on its .onAppear.
+    var pendingRelayPushPayloads: [[AnyHashable: Any]] = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("macOS app finished launching")
         // Register macOS-specific PlatformDependencies adapters
         // (pasteboard / deviceName / systemInfo / remoteNotifications /
         // audioSession / platformIdentifier).
         MacPlatformDependencies.register()
+
+        // Round 5 audit fix: become the UNUserNotificationCenter delegate
+        // so APNs banners actually show while the app is foregrounded
+        // (default macOS behavior is to suppress them). Mirrors iOS
+        // PeerDrop/App/AppDelegate.swift:18. Without this, an iPhone
+        // calling/messaging a foregrounded Mac shows nothing in the
+        // system notification banner — only the in-band PeerMessage
+        // eventually surfaces.
+        UNUserNotificationCenter.current().delegate = self
 
         // M4 Task 6 follow-up: respect the -AppleInterfaceStyle launch
         // argument so MacSnapshotTestsDark captures actually render in
@@ -139,11 +157,31 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         // Chat invites + any other relay-pushed payload that's not handled
         // internally: forward to the app shell.
+        //
+        // Cold-launch race: if this fires before PeerDropMacApp's body
+        // has built and the .onReceive subscriber has attached, the
+        // post is dropped. Buffer the payload so PeerDropMacApp can
+        // drain it on .onAppear. Subsequent foreground pushes still
+        // route via NotificationCenter as normal.
+        pendingRelayPushPayloads.append(userInfo)
         NotificationCenter.default.post(
             name: .didReceiveRelayPush,
             object: nil,
             userInfo: userInfo
         )
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    /// Show APNs banners while the app is foregrounded. Without this
+    /// delegate, macOS suppresses banners for the active app and the
+    /// user sees nothing. Mirrors iOS at PeerDrop/App/AppDelegate.swift:24.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }
 

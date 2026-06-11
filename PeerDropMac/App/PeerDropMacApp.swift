@@ -133,6 +133,20 @@ struct PeerDropMacApp: App {
                     guard let userInfo = notification.userInfo else { return }
                     PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
                 }
+                .task {
+                    // Round 5 audit fix: drain any APNs payloads buffered by
+                    // MacAppDelegate before this scene mounted. Cold-launch
+                    // path: app was launched by an APNs tap, so
+                    // didReceiveRemoteNotification fires BEFORE the scene
+                    // exists. The NotificationCenter post in that window
+                    // has no subscriber — without draining, the chat invite
+                    // is silently lost.
+                    let pending = appDelegate.pendingRelayPushPayloads
+                    appDelegate.pendingRelayPushPayloads.removeAll()
+                    for userInfo in pending {
+                        PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
+                    }
+                }
                 .onReceive(policyStore.$current) { newPolicy in
                     // Re-snapshot activePolicy on every policy update so the
                     // background-thread C4 prune path picks up changes without
