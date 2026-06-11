@@ -71,6 +71,7 @@
 		342D25E7C0F456718E67300B /* GroupReadReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */; };
 		35C316B9FD879D24D2C8D903 /* ConnectionMetricTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73383ABF5706CAEE306977CA /* ConnectionMetricTests.swift */; };
 		380BAF60EE61B6A08CC086F2 /* CryptoHardeningBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC6F021A1186DAB8EE559D9 /* CryptoHardeningBanner.swift */; };
+		3872DECCB46A06420408B4A3 /* TipJarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3DEBE03E5EDAD5B8CA5C7DC /* TipJarManager.swift */; };
 		3B4D2494C19838E546AEBD42 /* DecryptFailureBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */; };
 		3B6359D8C4AAD94403CC319F /* PetSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85FF54E4B04D525691B3B6B /* PetSnapshotTests.swift */; };
 		3B8C23FCE45A7BAA19CA5CD6 /* BackupRecordListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */; };
@@ -94,6 +95,7 @@
 		4AA3B3C282F59BE062C67844 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C82AECE1F936949B5184F8 /* OnboardingView.swift */; };
 		4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */; };
 		4B9B72143D9C9EDD4C17A2EA /* PetBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6842DD7730A244B26924472 /* PetBubbleView.swift */; };
+		4D8AA9FCE4F4A21C7177BB8C /* TipJarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89C720568E6E3EF69A02539 /* TipJarSection.swift */; };
 		4E946682EF58597B4154F849 /* MacContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11D26CE93EC66ABC301E36D /* MacContentView.swift */; };
 		4F26413A4BB07D8144F50CE0 /* BackupRecordListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */; };
 		5345BAC4593546B2C35AD9BD /* AssignGroupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A372C9EE0F8B252F4EA5C6 /* AssignGroupSheet.swift */; };
@@ -548,6 +550,7 @@
 		A8034F4F86233093A4E36905 /* FilePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerView.swift; sourceTree = "<group>"; };
 		A979FF3DD437916760AAC312 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
 		AFC7F344C93ACB56C79EE3AE /* DocumentPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerView.swift; sourceTree = "<group>"; };
+		B07201E475CD59F06421A81D /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		B07C0E24C95366B78FAFC44E /* CertificateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CertificateManagerTests.swift; sourceTree = "<group>"; };
 		B07D6C5BF9EB43DCB151AB72 /* MacSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSnapshotTests.swift; sourceTree = "<group>"; };
 		B0A1BFDD59F2AD40F96D12B1 /* CanonicalJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonicalJSONTests.swift; sourceTree = "<group>"; };
@@ -578,7 +581,6 @@
 		CAB4749E439D0C347B4008E3 /* PeerDropApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDropApp.swift; sourceTree = "<group>"; };
 		CAED5F8373D498D847E54328 /* ChatBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
 		CB53741EB7C892846AE2EB56 /* DeviceRecordRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRecordRow.swift; sourceTree = "<group>"; };
-		CCE54B771800D425279E8C6F /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		CD3861D6EB13D47D188BBB05 /* DataChannelTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportTests.swift; sourceTree = "<group>"; };
 		CFB523BDF87B8FE3276D9B4F /* TypingIndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorTests.swift; sourceTree = "<group>"; };
 		D021552703725631F7F19973 /* MacSystemInfoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSystemInfoProvider.swift; sourceTree = "<group>"; };
@@ -684,7 +686,7 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				F22FAD21EEE157088E013C98 /* fix-m4-mac-infoplist-and-state-objects */,
+				87750999BDB6C9A1F10A254D /* fix-m4-mac-tipjar-and-deeplinks */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
@@ -967,6 +969,15 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		87750999BDB6C9A1F10A254D /* fix-m4-mac-tipjar-and-deeplinks */ = {
+			isa = PBXGroup;
+			children = (
+				B07201E475CD59F06421A81D /* Secrets.xcconfig */,
+			);
+			name = "fix-m4-mac-tipjar-and-deeplinks";
+			path = .;
+			sourceTree = "<group>";
+		};
 		8A4682705E899D9A1AAC2947 /* Voice */ = {
 			isa = PBXGroup;
 			children = (
@@ -1192,15 +1203,6 @@
 				12D923E9AEBB7B4CB54DE632 /* Platform */,
 			);
 			path = Core;
-			sourceTree = "<group>";
-		};
-		F22FAD21EEE157088E013C98 /* fix-m4-mac-infoplist-and-state-objects */ = {
-			isa = PBXGroup;
-			children = (
-				CCE54B771800D425279E8C6F /* Secrets.xcconfig */,
-			);
-			name = "fix-m4-mac-infoplist-and-state-objects";
-			path = .;
 			sourceTree = "<group>";
 		};
 		F56F45F22B8B559848A80502 /* Connection */ = {
@@ -1769,6 +1771,8 @@
 				BE95EEEAA60880475354E9B5 /* StatusBadge.swift in Sources */,
 				C43974E41805F7607994ECC3 /* StatusToastView.swift in Sources */,
 				CF69A9E8DA0915525901205B /* TailnetPeersView.swift in Sources */,
+				3872DECCB46A06420408B4A3 /* TipJarManager.swift in Sources */,
+				4D8AA9FCE4F4A21C7177BB8C /* TipJarSection.swift in Sources */,
 				BCACD17C59E487EF6F7A581F /* ToastView.swift in Sources */,
 				DC894F35138683614F800E51 /* TransferHistoryView.swift in Sources */,
 				0D7CB122177AFADF9F2A6743 /* TransferProgressView.swift in Sources */,
@@ -1919,7 +1923,7 @@
 		};
 		67C046C3A3E9A839F9155B26 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CCE54B771800D425279E8C6F /* Secrets.xcconfig */;
+			baseConfigurationReference = B07201E475CD59F06421A81D /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "PeerDropMac/App/PeerDrop-Mac.entitlements";
@@ -1963,7 +1967,7 @@
 		};
 		7E74B2CC3908D83E08101866 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CCE54B771800D425279E8C6F /* Secrets.xcconfig */;
+			baseConfigurationReference = B07201E475CD59F06421A81D /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1986,7 +1990,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CCE54B771800D425279E8C6F /* Secrets.xcconfig */;
+			baseConfigurationReference = B07201E475CD59F06421A81D /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2151,7 +2155,7 @@
 		};
 		F2D6CAD8F28615F8F8BA5477 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CCE54B771800D425279E8C6F /* Secrets.xcconfig */;
+			baseConfigurationReference = B07201E475CD59F06421A81D /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "PeerDropMac/App/PeerDrop-Mac.entitlements";

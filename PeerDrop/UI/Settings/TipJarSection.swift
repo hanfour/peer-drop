@@ -115,7 +115,7 @@ struct TipJarSection: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+            .background(Color.peerDropSecondaryGroupedBackground, in: RoundedRectangle(cornerRadius: 10))
             .overlay {
                 if tipJar.purchasingProductID == product.id {
                     ProgressView()

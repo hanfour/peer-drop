@@ -61,6 +61,15 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         MacDropHandler.handle(urls: urls)
     }
 
+    /// Stay running when the last window closes — the menu bar item is
+    /// the primary affordance for receiving file drops and incoming
+    /// calls, so quitting after the main window closes would defeat
+    /// that. Matches the Slack / Discord / Telegram desktop pattern.
+    /// Users quit explicitly via ⌘Q or the menu bar Quit entry.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     /// Dock click when the main window is closed should reopen it.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {

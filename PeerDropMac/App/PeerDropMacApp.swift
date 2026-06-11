@@ -115,6 +115,14 @@ struct PeerDropMacApp: App {
                         Task {
                             await PushNotificationManager.shared.requestAuthorizationAndRegister()
                         }
+                        // M4 audit fix: observe StoreKit transactions so
+                        // refunded / replayed / family-shared Mac tip-jar
+                        // IAPs are completed correctly. Without this, the
+                        // Mac App Store can charge the user but the app
+                        // never marks the transaction finished — receipt
+                        // queue grows, future buys re-fire old transactions.
+                        // Mirrors iOS PeerDropApp.swift:92.
+                        TipJarManager.shared.startObservingTransactions()
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .didReceiveRelayPush)) { notification in
