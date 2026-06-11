@@ -119,10 +119,23 @@ targets:
     platform: macOS
     sources:
       - path: PeerDropMac
+        excludes:
+          # Bundled README is documentation for developers / asset
+          # commissioning, not for end users. Don't ship it.
+          - "Resources/README.md"
       # Privacy Manifest — shared single source-of-truth with iOS so
       # both bundles declare the same NSPrivacyAccessedAPI reasons.
       # Notarization will reject Mac builds without this file.
       - path: PeerDrop/PrivacyInfo.xcprivacy
+      # App icon catalog — universal idiom with 1024×1024 source.
+      # Xcode derives Mac variants at build time. Without this the Mac
+      # .app ships without Assets.car / AppIcon.icns and MAS submission
+      # rejects "Missing required icon file".
+      - path: PeerDrop/App/Assets.xcassets
+      # Localizable.xcstrings — SwiftUI Text("…") resolves
+      # cross-platform via this catalog. Without this the Mac bundle
+      # has no .lproj directories and ships English-only.
+      - path: PeerDrop/App/Localizable.xcstrings
       # Reuse cross-platform views from the iOS UI tree.
       # iOS-only files excluded per M2 Task 1 audit.
       # Pet/UI reuse — needed by ChatView for the chat-side Pet overlay
