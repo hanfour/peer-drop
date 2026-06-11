@@ -119,6 +119,10 @@ targets:
     platform: macOS
     sources:
       - path: PeerDropMac
+      # Privacy Manifest — shared single source-of-truth with iOS so
+      # both bundles declare the same NSPrivacyAccessedAPI reasons.
+      # Notarization will reject Mac builds without this file.
+      - path: PeerDrop/PrivacyInfo.xcprivacy
       # Reuse cross-platform views from the iOS UI tree.
       # iOS-only files excluded per M2 Task 1 audit.
       # Pet/UI reuse — needed by ChatView for the chat-side Pet overlay
