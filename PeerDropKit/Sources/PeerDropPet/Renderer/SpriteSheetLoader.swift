@@ -54,7 +54,10 @@ public enum SpriteSheetLoader {
     }
 
     /// Load sprite strip for a body type + stage + action from bundle.
-    public static func loadAction(body: BodyGene, stage: PetLevel, action: PetAction, bundle: Bundle = .main) throws -> [[[UInt8]]] {
+    /// Default is `.module`: sprite resources moved into PeerDropPet's
+    /// resource bundle in the m1d-3b SPM migration — `.main` (the
+    /// pre-migration default) fails every lookup from the app targets.
+    public static func loadAction(body: BodyGene, stage: PetLevel, action: PetAction, bundle: Bundle = SpriteAssetResolver.moduleBundle) throws -> [[[UInt8]]] {
         let name = "\(body.rawValue)_\(stage.rawValue)_\(action.rawValue)"
         guard let url = bundle.url(forResource: name, withExtension: "png"),
               let data = try? Data(contentsOf: url),

@@ -21,7 +21,10 @@ public enum AccessoryOverlay {
 
     /// Returns the accessory image for the given species ID, or nil if no
     /// accessory trait is declared (or the asset is missing).
-    public static func image(for speciesID: SpeciesID, in bundle: Bundle = .main) -> PlatformImage? {
+    /// Default is `.module`: accessory PNGs ship inside PeerDropPet's
+    /// resource bundle (`Resources/Pets/accessories/`), not the app
+    /// bundle — `.main` was a leftover from the pre-SPM layout.
+    public static func image(for speciesID: SpeciesID, in bundle: Bundle = SpriteAssetResolver.moduleBundle) -> PlatformImage? {
         guard let assetName = assetName(for: speciesID) else { return nil }
         // Phase V.c: load from bundle path Pets/accessories/<assetName>.png
         // For now stub returns nil since no accessories ship yet.
