@@ -131,8 +131,21 @@ final class MacCallProvider: NSObject, CallProvider {
     /// Present the active-call window. Called by the consumer's
     /// `onAnswerCall` hook (PeerDropMacApp.onAppear wires it) with the
     /// live VoiceCallManager instance from `ConnectionManager`.
+    ///
+    /// Round 12 audit fix: route the title-bar ✕ to
+    /// `voiceCallManager.endCall()` so the in-band PeerMessage callEnd
+    /// is sent, WebRTC torn down, and the mic released. Without this
+    /// the close button was a privacy hole (mic stayed hot after the
+    /// window vanished).
     func showActiveWindow(peerName: String, voiceCallManager: VoiceCallManager) {
-        activeWindow.show(peerName: peerName, voiceCallManager: voiceCallManager)
+        activeWindow.show(
+            peerName: peerName,
+            voiceCallManager: voiceCallManager,
+            onUserClose: { [weak voiceCallManager, weak self] in
+                self?.logger.info("Active-call window closed by user — ending call")
+                voiceCallManager?.endCall()
+            }
+        )
     }
 
     // MARK: - Private
