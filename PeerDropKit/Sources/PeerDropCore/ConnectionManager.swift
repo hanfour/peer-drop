@@ -789,7 +789,14 @@ public final class ConnectionManager: ObservableObject {
             tlsOpts = nil
         }
 
-        let bonjour = BonjourDiscovery(localPeerName: localIdentity.displayName, tlsOptions: tlsOpts)
+        let bonjour = BonjourDiscovery(
+            localPeerName: localIdentity.displayName,
+            // Publish the identity UUID in the TXT record so browsing
+            // peers key DiscoveredPeer.id to the same namespace as
+            // `connections` (audit round 15).
+            localPeerID: localIdentity.id,
+            tlsOptions: tlsOpts
+        )
         bonjour.onIncomingConnection = { [weak self] connection in
             Task { @MainActor in
                 self?.handleIncomingConnection(connection)
@@ -1664,6 +1671,10 @@ public final class ConnectionManager: ObservableObject {
         heartbeatTask?.cancel()
         let generation = connectionGeneration
         heartbeatTask = Task { [weak self] in
+            // Audit round 15: 3 consecutive failed pings (~30s of silence)
+            // tear the dead connection down instead of logging forever and
+            // leaving a zombie "connected" peer in the UI.
+            var failurePolicy = HeartbeatFailurePolicy()
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
@@ -1674,8 +1685,16 @@ public final class ConnectionManager: ObservableObject {
                         let ping = PeerMessage.ping(senderID: self.localIdentity.id)
                         do {
                             try await self.sendMessage(ping)
+                            failurePolicy.recordSuccess()
                         } catch {
-                            logger.warning("Heartbeat ping failed: \(error.localizedDescription)")
+                            let shouldTearDown = failurePolicy.recordFailure()
+                            logger.warning("Heartbeat ping failed (\(failurePolicy.consecutiveFailures)/\(failurePolicy.maxConsecutiveFailures)): \(error.localizedDescription)")
+                            if shouldTearDown {
+                                logger.error("Heartbeat: consecutive failure threshold reached — tearing down dead connection")
+                                self.statusToast = "Connection lost"
+                                self.disconnect()
+                                return
+                            }
                         }
                     default:
                         continue
