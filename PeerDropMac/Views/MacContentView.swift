@@ -23,6 +23,10 @@ struct MacContentView: View {
             }
         }
         .overlay(DropOverlay(isVisible: isDropTargeted), alignment: .center)
+        // Security consent + first-contact verification sheets. Without
+        // this, inbound connection requests have no accept UI on macOS and
+        // the initiating peer always times out (see MacSecuritySheets.swift).
+        .modifier(MacSecuritySheetsModifier())
         .onReceive(NotificationCenter.default.publisher(for: .macSidebarJump)) { note in
             if let section = note.object as? MacSidebarSection {
                 selection = section
