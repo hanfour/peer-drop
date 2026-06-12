@@ -66,6 +66,14 @@ struct PeerDropMacApp: App {
                     // (Apple Guideline 2.3 reject risk).
                     MacDropHandler.connectionManager = connectionManager
 
+                    // Round 8 audit fix: wire the URL-scheme deep-link
+                    // handler. Same lifecycle as MacDropHandler — the
+                    // SwiftUI-owned ConnectionManager is the canonical
+                    // source. Without this, peerdrop:// URLs were
+                    // misrouted through MacDropHandler as if they were
+                    // file drops.
+                    MacDeepLinkHandler.connectionManager = connectionManager
+
                     // M3: wire MacCallProvider into the cross-platform
                     // CallProvider injection point on ConnectionManager.
                     // Mirror of iOS PeerDropApp.swift:108.
