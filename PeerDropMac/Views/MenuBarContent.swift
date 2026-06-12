@@ -173,6 +173,7 @@ struct MenuBarContent: View {
 private struct MenuBarPeerRow: View {
     let peer: DiscoveredPeer
     @State private var isDropTargeted = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 8) {
@@ -183,15 +184,18 @@ private struct MenuBarPeerRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer()
-            // Send button stub — Task 10 (drag-and-drop) will wire this to
-            // a peer-targeted file picker / drop-accept sheet.
+            // Round 10 audit fix: previously a stub paperplane button
+            // that did nothing. Now opens the per-peer chat window.
+            // File-send is reachable via drag-drop onto this row's
+            // dropDestination (round 6) + File > Import Files… (⌘O,
+            // round 9).
             Button {
-                // TODO Task 10: openWindow / sheet to file picker for this peer
+                openWindow(id: "chat", value: peer.id)
             } label: {
-                Image(systemName: "paperplane")
+                Image(systemName: "bubble.left.and.bubble.right")
             }
             .buttonStyle(.borderless)
-            .help("Send to \(peer.displayName)")
+            .help("Chat with \(peer.displayName)")
         }
         .contentShape(Rectangle())
         .background(

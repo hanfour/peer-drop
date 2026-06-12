@@ -35,6 +35,13 @@ private enum NearbyTabSheet: Identifiable {
 struct NearbyTab: View {
     @Binding var selectedTab: Int
     @EnvironmentObject var connectionManager: ConnectionManager
+    #if os(macOS)
+    // Round 10 audit fix: on Mac, tapping a connected peer needs to
+    // open the per-peer chat WindowGroup defined in PeerDropMacApp,
+    // not flip an iOS-only TabView index. Environment-injected SwiftUI
+    // window dispatcher.
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @AppStorage("peerDropViewMode") private var isGridMode = false
     @AppStorage("peerDropSortMode") private var sortModeRaw = "name"
     @AppStorage("peerDropIsOnline") private var isOnline = true
@@ -140,7 +147,7 @@ struct NearbyTab: View {
                             ForEach(filteredPeers) { peer in
                                 PeerGridItemView(peer: peer) {
                                     if isConnectedPeer(peer) {
-                                        selectedTab = 1
+                                        openChatWindow(for: peer.id)
                                     } else {
                                         connectionManager.requestConnection(to: peer)
                                     }
@@ -161,7 +168,7 @@ struct NearbyTab: View {
                             ForEach(networkPeers) { peer in
                                 PeerRowView(peer: peer) {
                                     if isConnectedPeer(peer) {
-                                        selectedTab = 1
+                                        openChatWindow(for: peer.id)
                                     } else {
                                         connectionManager.requestConnection(to: peer)
                                     }
@@ -495,6 +502,18 @@ struct NearbyTab: View {
         // Fallback to legacy single-connection check
         guard case .connected = connectionManager.state else { return false }
         return connectionManager.lastConnectedPeer?.id == peer.id
+    }
+
+    /// Cross-platform "open chat" dispatcher. iOS flips the TabView's
+    /// selected index so the existing chat tab focuses the right peer
+    /// (via the iOS ContentView routing). Mac opens a fresh per-peer
+    /// chat WindowGroup defined in PeerDropMacApp.
+    private func openChatWindow(for peerID: String) {
+        #if os(macOS)
+        openWindow(id: "chat", value: peerID)
+        #else
+        selectedTab = 1
+        #endif
     }
 
     // MARK: - Search Bar Footer
