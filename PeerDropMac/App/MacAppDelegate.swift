@@ -68,15 +68,27 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
         }
     }
 
-    /// Finder drop / open-with handler. Files arrive via NSURL array.
-    /// Routed through `MacDropHandler` so Dock drops, Finder
-    /// "Open With PeerDrop", and the `open:` lifecycle all share one
-    /// logger path. The MacDropHandler TODO comments document the
-    /// future peer-selection-sheet wiring (App Review compliance:
-    /// drops NEVER send silently).
+    /// Finder drop / open-with / URL-scheme handler. Two URL classes
+    /// arrive here:
+    ///   - `file://` URLs from Finder drops, Dock drops, "Open With…".
+    ///     Route to MacDropHandler.
+    ///   - `peerdrop://` URLs from QR-code links, iMessage shares,
+    ///     QR-code scanners. Route to MacDeepLinkHandler so the
+    ///     relay-join / manual-connect / smart / invite flows actually
+    ///     run instead of being treated as a file drop (round 8 audit
+    ///     fix; previously every URL went to MacDropHandler and clicking
+    ///     `peerdrop://invite/?…` triggered a confused "Send 1 file?"
+    ///     confirmation).
     func application(_ application: NSApplication, open urls: [URL]) {
-        logger.info("Open URLs: \(urls.map(\.lastPathComponent).joined(separator: ", "))")
-        MacDropHandler.handle(urls: urls)
+        logger.info("Open URLs: \(urls.map(\.absoluteString).joined(separator: ", "), privacy: .public)")
+        let fileURLs = urls.filter { $0.isFileURL }
+        let deepLinks = urls.filter { $0.scheme == "peerdrop" }
+        if !fileURLs.isEmpty {
+            MacDropHandler.handle(urls: fileURLs)
+        }
+        for url in deepLinks {
+            MacDeepLinkHandler.handle(url)
+        }
     }
 
     /// Stay running when the last window closes — the menu bar item is
