@@ -25,11 +25,20 @@ public final class SharedRenderedPet {
     private static let filename = "pet-rendered.png"
 
     private let containerURL: URL
+    /// Write-failure log dedup flag (see write(_:)). Reset on success.
+    private var didLogWriteFailure = false
 
     public init(suiteName: String? = appGroupID) {
         if let suite = suiteName,
            let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
             self.containerURL = url
+            // On macOS the group container directory is NOT created
+            // automatically (unlike iOS) — every write then fails with
+            // "folder doesn't exist", which the render loop repeated at
+            // ~6 Hz (audit round 15). Creating it here makes the bridge
+            // work on the Mac and is a no-op where it already exists.
+            try? FileManager.default.createDirectory(
+                at: url, withIntermediateDirectories: true)
         } else {
             // Fallback for tests / non-app-group context: per-process temp dir
             // so concurrent test cases don't clobber each other.
@@ -65,8 +74,15 @@ public final class SharedRenderedPet {
             // one, never a partial write.
             do {
                 try data.write(to: url, options: .atomic)
+                self.didLogWriteFailure = false
             } catch {
-                bridgeLogger.error("PNG write failed: \(error.localizedDescription, privacy: .public)")
+                // Dedup: the render loop calls write() at animation rate, so
+                // a persistent failure (e.g. missing entitlement in dev
+                // builds) would otherwise flood the log at ~6 Hz.
+                if !self.didLogWriteFailure {
+                    self.didLogWriteFailure = true
+                    bridgeLogger.error("PNG write failed: \(error.localizedDescription, privacy: .public) (further occurrences suppressed)")
+                }
             }
         }
         if let coordinatorError {

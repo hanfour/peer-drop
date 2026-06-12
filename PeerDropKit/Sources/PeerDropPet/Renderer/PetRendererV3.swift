@@ -17,6 +17,22 @@ public final class PetRendererV3 {
 
     private let service: SpriteService
 
+    /// Fallback warnings deduped per (species, stage) — the render loop
+    /// runs at animation rate (~6–12 fps), so an unconditional warning for
+    /// a partial-coverage species floods the log with hundreds of identical
+    /// lines per minute (audit round 15). First occurrence still logs.
+    private var loggedMissingAssets = Set<String>()
+    private let loggedMissingAssetsLock = NSLock()
+
+    private func logMissingAssetOnce(species: SpeciesID, stage: PetLevel) {
+        let key = "\(species.rawValue)#\(stage.rawValue)"
+        loggedMissingAssetsLock.lock()
+        let firstTime = loggedMissingAssets.insert(key).inserted
+        loggedMissingAssetsLock.unlock()
+        guard firstTime else { return }
+        rendererLogger.warning("Asset missing for species=\(species.rawValue, privacy: .public) stage=\(stage.rawValue); falling back to \(Self.ultimateFallback.rawValue, privacy: .public) (further occurrences suppressed)")
+    }
+
     /// Ultimate fallback species when a pet's resolved SpeciesID has no
     /// shipping assets (e.g. partial-coverage species like `octopus-adult`
     /// or `bird-baby`). The fallback target MUST have all 3 stages bundled —
@@ -125,7 +141,7 @@ public final class PetRendererV3 {
             if species == Self.ultimateFallback {
                 throw SpriteServiceError.assetNotFound(request.spriteRequest)
             }
-            rendererLogger.warning("Asset missing for species=\(species.rawValue, privacy: .public) stage=\(stage.rawValue); falling back to \(Self.ultimateFallback.rawValue, privacy: .public)")
+            logMissingAssetOnce(species: species, stage: stage)
             let fallback = AnimationRequest(
                 species: Self.ultimateFallback,
                 stage: stage,
@@ -160,7 +176,7 @@ public final class PetRendererV3 {
             if species == Self.ultimateFallback {
                 throw SpriteServiceError.assetNotFound(request)
             }
-            rendererLogger.warning("Asset missing for species=\(species.rawValue, privacy: .public) stage=\(stage.rawValue); falling back to \(Self.ultimateFallback.rawValue, privacy: .public)")
+            logMissingAssetOnce(species: species, stage: stage)
             let fallbackRequest = SpriteRequest(
                 species: Self.ultimateFallback,
                 stage: stage,
