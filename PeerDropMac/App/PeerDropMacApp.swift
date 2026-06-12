@@ -74,6 +74,14 @@ struct PeerDropMacApp: App {
                     // file drops.
                     MacDeepLinkHandler.connectionManager = connectionManager
 
+                    // Round 9 audit fix: wire menu commands. Peer >
+                    // Refresh Discovery (⌘R) calls
+                    // connectionManager.restartDiscovery() via this
+                    // static ref. Other stub menu items were removed
+                    // entirely so the menubar doesn't expose inert
+                    // affordances to App Store reviewers.
+                    MacCommandHandler.connectionManager = connectionManager
+
                     // M3: wire MacCallProvider into the cross-platform
                     // CallProvider injection point on ConnectionManager.
                     // Mirror of iOS PeerDropApp.swift:108.
