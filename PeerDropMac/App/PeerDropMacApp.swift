@@ -9,6 +9,13 @@ import PeerDropSecurity
 struct PeerDropMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) var appDelegate
 
+    /// Round 14 audit fix: mirrors iOS PeerDropApp.swift:38. Drives the
+    /// `.onChange(of: scenePhase)` handler that routes through
+    /// `connectionManager.handleScenePhaseChange(_:)` — without this the
+    /// Mac never restarted discovery or reconnected the inbox after
+    /// the app was hidden / unhidden.
+    @Environment(\.scenePhase) private var scenePhase
+
     @StateObject private var connectionManager = ConnectionManager()
     /// PetEngine is a separate @StateObject (mirrors iOS
     /// PeerDropApp.swift). The sprite source is
@@ -146,14 +153,29 @@ struct PeerDropMacApp: App {
                     connectionManager.remoteSessionManager.policyStore = policyStore
                     connectionManager.remoteSessionManager.cryptoMetrics = cryptoMetrics
 
+                    // Round 14 audit fix: kick discovery on first
+                    // appear for ALL users, not just ScreenshotMode.
+                    // Previously this call lived only inside the
+                    // ScreenshotMode branch, so real users launched
+                    // the Mac app, opened the Nearby tab, and saw an
+                    // empty list — Bonjour browse had never started.
+                    // Apple Guideline 2.1 reject risk + first-run UX
+                    // catastrophe (the headline "find nearby devices"
+                    // feature did nothing). iOS triggers this via
+                    // `restartDiscovery()` inside
+                    // `handleScenePhaseChange(.active)` — see
+                    // PeerDropApp.swift:253 — but on Mac the very first
+                    // scenePhase tick is delivered as .active without
+                    // an .onChange callback, so we need an explicit
+                    // initial start.
+                    connectionManager.startDiscovery()
+
                     // M4 screenshot mode (Task 6): when the
                     // -SCREENSHOT_MODE launch arg is set (fastlane
-                    // snapshot), populate the Pet + auto-start
-                    // discovery with mock peers so MAS screenshots
-                    // capture a populated UI without real network.
+                    // snapshot), populate the Pet with mock state so
+                    // MAS screenshots capture a populated UI.
                     if ScreenshotModeProvider.shared.isActive {
                         petEngine.pet = ScreenshotModeProvider.shared.mockPetState
-                        connectionManager.startDiscovery()
                     } else {
                         // M3: kick APNs registration. Matches iOS
                         // PeerDropApp.swift pattern. UN permission dialog
@@ -169,6 +191,25 @@ struct PeerDropMacApp: App {
                         // queue grows, future buys re-fire old transactions.
                         // Mirrors iOS PeerDropApp.swift:92.
                         TipJarManager.shared.startObservingTransactions()
+                    }
+                }
+                .onChange(of: scenePhase) { newPhase in
+                    // Round 14 audit fix: mirrors iOS PeerDropApp.swift:253-276.
+                    // On Mac, scenePhase flips when the user Cmd+H hides
+                    // the app or closes the last window (with menu-bar
+                    // staying alive). Without this handler, returning to
+                    // the app after a long hide left discovery stopped
+                    // (background-mode behaviour persisted) and the
+                    // inbox WebSocket disconnected — no relay-pushed
+                    // messages until manual restart.
+                    connectionManager.handleScenePhaseChange(newPhase)
+                    switch newPhase {
+                    case .background:
+                        inboxService.disconnect()
+                    case .active:
+                        inboxService.connect()
+                    default:
+                        break
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .didReceiveRelayPush)) { notification in
