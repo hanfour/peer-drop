@@ -38,12 +38,24 @@ enum MacDropHandler {
             return false
         }
 
-        guard let target = connectionManager.discoveredPeers.first else {
+        // Round 7 audit fix: pick a CONNECTED peer, not just any discovered
+        // peer. `discoveredPeers` includes Bonjour-visible devices that may
+        // not be paired or connected — sending to them would either fail
+        // silently (no active session) or, worse, leak file metadata to an
+        // unverified peer. Prefer the focused connection; fall back to any
+        // discovered peer with an active session.
+        guard let targetID = pickConnectedTarget(connectionManager),
+              let displayName = displayName(for: targetID, in: connectionManager) else {
             presentNoPeerAlert()
             return false
         }
 
-        confirmAndSend(urls: urls, target: target, connectionManager: connectionManager)
+        confirmAndSend(
+            urls: urls,
+            targetID: targetID,
+            displayName: displayName,
+            connectionManager: connectionManager
+        )
         return true
     }
 
@@ -57,13 +69,50 @@ enum MacDropHandler {
             return false
         }
 
-        guard let target = connectionManager.discoveredPeers.first(where: { $0.id == peerID }) else {
-            logger.error("Target peer \(peerID.prefix(8), privacy: .public) not in discoveredPeers")
+        // Round 7 audit fix: verify the hinted peer is actually connected
+        // before opening the confirmation dialog. The peer-row drop site
+        // can fire on a discovered-but-not-connected peer (the row is
+        // visible just from Bonjour discovery).
+        guard connectionManager.isConnected(to: peerID),
+              let displayName = displayName(for: peerID, in: connectionManager) else {
+            logger.error("Target peer \(peerID.prefix(8), privacy: .public) is not connected")
+            presentNotConnectedAlert()
             return false
         }
 
-        confirmAndSend(urls: urls, target: target, connectionManager: connectionManager)
+        confirmAndSend(
+            urls: urls,
+            targetID: peerID,
+            displayName: displayName,
+            connectionManager: connectionManager
+        )
         return true
+    }
+
+    // MARK: - Target selection
+
+    /// Pick a peer that's both connected and ready to receive files. The
+    /// focused connection is the primary candidate; otherwise pick any
+    /// connected peer that's also in `discoveredPeers` (the AND filter
+    /// excludes stale entries left over from a recent disconnect).
+    private static func pickConnectedTarget(_ connectionManager: ConnectionManager) -> String? {
+        if let focused = connectionManager.focusedPeerID,
+           connectionManager.isConnected(to: focused) {
+            return focused
+        }
+        return connectionManager.discoveredPeers.first {
+            connectionManager.isConnected(to: $0.id)
+        }?.id
+    }
+
+    private static func displayName(for peerID: String, in connectionManager: ConnectionManager) -> String? {
+        if let identity = connectionManager.connection(for: peerID)?.peerIdentity {
+            return identity.displayName
+        }
+        if let discovered = connectionManager.discoveredPeers.first(where: { $0.id == peerID }) {
+            return discovered.displayName
+        }
+        return nil
     }
 
     // MARK: - Private
@@ -82,9 +131,24 @@ enum MacDropHandler {
         alert.runModal()
     }
 
+    private static func presentNotConnectedAlert() {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString(
+            "This device isn't connected",
+            comment: "Drop-target alert when the hinted peer is discovered but not connected"
+        )
+        alert.informativeText = NSLocalizedString(
+            "Open the chat with this device first to send files.",
+            comment: "Drop-target instructional text when peer is not connected"
+        )
+        alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
+        alert.runModal()
+    }
+
     private static func confirmAndSend(
         urls: [URL],
-        target: DiscoveredPeer,
+        targetID: String,
+        displayName: String,
         connectionManager: ConnectionManager
     ) {
         let alert = NSAlert()
@@ -94,7 +158,7 @@ enum MacDropHandler {
                 "Send %d file(s) to %@?",
                 comment: "Drop confirmation; %d is file count, %@ is peer display name"
             ),
-            urls.count, target.displayName
+            urls.count, displayName
         )
         alert.informativeText = names
         alert.addButton(withTitle: NSLocalizedString("Send", comment: ""))
@@ -107,13 +171,17 @@ enum MacDropHandler {
         }
 
         Task { @MainActor in
-            await processAndSend(urls: urls, target: target, connectionManager: connectionManager)
+            await processAndSend(
+                urls: urls,
+                targetID: targetID,
+                connectionManager: connectionManager
+            )
         }
     }
 
     private static func processAndSend(
         urls: [URL],
-        target: DiscoveredPeer,
+        targetID: String,
         connectionManager: ConnectionManager
     ) async {
         connectionManager.showTransferProgress = true
@@ -139,10 +207,10 @@ enum MacDropHandler {
 
             try await connectionManager.fileTransfer?.sendFiles(
                 at: processedURLs,
-                to: target.id,
+                to: targetID,
                 directoryFlags: directoryFlags
             )
-            logger.info("Drop send completed: \(processedURLs.count, privacy: .public) files to \(target.id.prefix(8), privacy: .public)…")
+            logger.info("Drop send completed: \(processedURLs.count, privacy: .public) files to \(targetID.prefix(8), privacy: .public)…")
         } catch {
             logger.error("Drop send failed: \(error.localizedDescription, privacy: .public)")
             let alert = NSAlert()
