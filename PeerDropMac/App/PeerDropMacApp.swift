@@ -15,6 +15,17 @@ struct PeerDropMacApp: App {
     /// `petEngine.renderedImage: CGImage?` injected as an
     /// `@EnvironmentObject` into every scene that may show the pet.
     @StateObject private var petEngine = PetEngine()
+    /// Round 11 audit fix: NearbyTab + GuidanceCard read this object
+    /// via `@EnvironmentObject` to drive the discovery-help heuristics.
+    /// Without it, the SwiftUI environment lookup fatals at first
+    /// render of the Mac sidebar's Nearby section. Mirrors iOS
+    /// PeerDropApp.swift:12.
+    @StateObject private var connectionContext = ConnectionContext()
+    /// Round 11 audit fix: ChatBubbleView reads this object via
+    /// `@EnvironmentObject` to play voice-message attachments. Without
+    /// it, opening any Mac chat window crashes on the first bubble
+    /// render. Mirrors iOS PeerDropApp.swift:13.
+    @StateObject private var voicePlayer = VoicePlayer()
     /// Relay invite queue. Routes APNs chat-invite pushes to the
     /// peer-message pipeline once the relay WebSocket reconnects.
     /// Without this, push wake-ups for chat invites are dropped.
@@ -50,12 +61,22 @@ struct PeerDropMacApp: App {
             MacContentView()
                 .environmentObject(connectionManager)
                 .environmentObject(petEngine)
+                .environmentObject(connectionContext)
+                .environmentObject(voicePlayer)
                 .environmentObject(appDelegate)
                 .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
                     // Wire AppDelegate's weak ref so lifecycle hooks
                     // (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
+
+                    // Round 11 audit fix: wire ConnectionContext to the
+                    // live data sources NearbyTab + GuidanceCard read.
+                    // Mirrors iOS PeerDropApp.swift:101-104.
+                    connectionContext.observe(
+                        deviceStore: connectionManager.deviceStore,
+                        tailnetStore: connectionManager.tailnetStore
+                    )
 
                     // Round 6 audit fix: wire MacDropHandler so Finder
                     // / Dock / menu-bar drops can actually call
@@ -192,6 +213,8 @@ struct PeerDropMacApp: App {
                 MacChatWindow(peerID: peerID)
                     .environmentObject(connectionManager)
                     .environmentObject(petEngine)
+                    .environmentObject(connectionContext)
+                    .environmentObject(voicePlayer)
             } else {
                 Text("No peer selected")
                     .frame(minWidth: 480, minHeight: 360)
@@ -203,7 +226,9 @@ struct PeerDropMacApp: App {
             MacSettingsView()
                 .environmentObject(connectionManager)
                 .environmentObject(petEngine)
-                .frame(width: 520, height: 360)
+                .environmentObject(connectionContext)
+                .environmentObject(voicePlayer)
+                .frame(width: 520, height: 420)
         }
 
         // Menu bar item — visibility bound to AppDelegate's @Published flag.
@@ -218,6 +243,8 @@ struct PeerDropMacApp: App {
             MenuBarContent()
                 .environmentObject(connectionManager)
                 .environmentObject(petEngine)
+                .environmentObject(connectionContext)
+                .environmentObject(voicePlayer)
                 .frame(width: 360, height: 500)
         } label: {
             // Use ConnectionManager.state (public, M1d-5). The plan's
