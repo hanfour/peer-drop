@@ -59,4 +59,27 @@ final class PetEvolutionTests: XCTestCase {
         // Also verify it CAN happen (at least 1 in 200 trials)
         XCTAssertGreaterThan(mutations, 0, "At least one mutation should occur in 200 trials")
     }
+
+    func testInitPromotesOverdueBabyWithoutInteraction() {
+        // Audit round 16 (live finding): checkEvolution() only ran inside
+        // interaction handlers, so a pet whose owner never taps it stayed
+        // .baby forever — observed live at age 17/8 days. Passive aging
+        // must be applied at engine startup too.
+        var pet = PetState.newEgg()
+        pet.level = .baby
+        pet.genome.body = .cat
+        pet.birthDate = Date().addingTimeInterval(-(17 * 86400))
+        let engine = PetEngine(pet: pet)
+        XCTAssertEqual(engine.pet.level, .adult,
+                       "overdue baby must evolve at launch, not only on interaction")
+    }
+
+    func testInitKeepsYoungBabyUntouched() {
+        var pet = PetState.newEgg()
+        pet.level = .baby
+        pet.genome.body = .cat
+        pet.birthDate = Date().addingTimeInterval(-(2 * 86400))
+        let engine = PetEngine(pet: pet)
+        XCTAssertEqual(engine.pet.level, .baby)
+    }
 }

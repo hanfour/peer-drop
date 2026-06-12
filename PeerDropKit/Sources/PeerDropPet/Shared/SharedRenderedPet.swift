@@ -28,7 +28,10 @@ public final class SharedRenderedPet {
     /// Write-failure log dedup flag (see write(_:)). Reset on success.
     private var didLogWriteFailure = false
 
-    public init(suiteName: String? = appGroupID) {
+    /// - Parameter minWriteInterval: throttle window for `write(_:)`.
+    ///   Tests pass 0 so consecutive writes aren't dropped.
+    public init(suiteName: String? = appGroupID, minWriteInterval: TimeInterval = 1.0) {
+        self.minWriteInterval = minWriteInterval
         if let suite = suiteName,
            let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
             self.containerURL = url
@@ -52,42 +55,69 @@ public final class SharedRenderedPet {
 
     public var fileURL: URL { containerURL.appendingPathComponent(Self.filename) }
 
+    /// Serial queue for encode + coordinated I/O. write(_:) is called from
+    /// the render loop on the main actor at animation rate (~6–12 Hz);
+    /// doing the PNG encode and NSFileCoordinator write synchronously there
+    /// saturated the main thread and starved ConnectionManager — incoming
+    /// connections were never serviced (audit round 16 live finding, after
+    /// the container-directory fix made the writes actually happen).
+    private let writeQueue = DispatchQueue(label: "com.peerdrop.sharedrenderedpet", qos: .utility)
+
+    /// Last accepted write (checked on the caller's thread — write(_:) is
+    /// only invoked from the main actor). The widget consumes this file on
+    /// a 15-minute timeline, so once per second is already generous.
+    private var lastWriteAt = Date.distantPast
+    private let minWriteInterval: TimeInterval
+
     /// Writes the CGImage as PNG bytes to the App Group container.
     /// Coordinated so the widget never reads a half-written file.
+    /// Throttled and asynchronous — see `writeQueue`.
     public func write(_ image: CGImage) {
-        guard let data = Self.pngData(from: image) else {
-            // Release-safe diagnostic — assertionFailure alone is debug-only,
-            // so a prod encode failure would silently freeze the widget at
-            // its previous frame with no signal in Console.
-            bridgeLogger.error("PNG encode failed for \(image.width)×\(image.height) CGImage; bridge write skipped")
-            assertionFailure("Failed to encode CGImage as PNG")
-            return
-        }
-        let coordinator = NSFileCoordinator(filePresenter: nil)
-        var coordinatorError: NSError?
-        coordinator.coordinate(
-            writingItemAt: fileURL, options: .forReplacing,
-            error: &coordinatorError
-        ) { url in
-            // .atomic writes to a temp location and renames into place — a
-            // concurrent reader either sees the previous file or the new
-            // one, never a partial write.
-            do {
-                try data.write(to: url, options: .atomic)
-                self.didLogWriteFailure = false
-            } catch {
-                // Dedup: the render loop calls write() at animation rate, so
-                // a persistent failure (e.g. missing entitlement in dev
-                // builds) would otherwise flood the log at ~6 Hz.
-                if !self.didLogWriteFailure {
-                    self.didLogWriteFailure = true
-                    bridgeLogger.error("PNG write failed: \(error.localizedDescription, privacy: .public) (further occurrences suppressed)")
+        let now = Date()
+        guard now.timeIntervalSince(lastWriteAt) >= minWriteInterval else { return }
+        lastWriteAt = now
+
+        writeQueue.async { [self] in
+            guard let data = Self.pngData(from: image) else {
+                // Release-safe diagnostic — assertionFailure alone is debug-only,
+                // so a prod encode failure would silently freeze the widget at
+                // its previous frame with no signal in Console.
+                bridgeLogger.error("PNG encode failed for \(image.width)×\(image.height) CGImage; bridge write skipped")
+                assertionFailure("Failed to encode CGImage as PNG")
+                return
+            }
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            var coordinatorError: NSError?
+            coordinator.coordinate(
+                writingItemAt: fileURL, options: .forReplacing,
+                error: &coordinatorError
+            ) { url in
+                // .atomic writes to a temp location and renames into place — a
+                // concurrent reader either sees the previous file or the new
+                // one, never a partial write.
+                do {
+                    try data.write(to: url, options: .atomic)
+                    didLogWriteFailure = false
+                } catch {
+                    // Dedup: a persistent failure (e.g. missing entitlement in
+                    // dev builds) would otherwise flood the log once per second.
+                    if !didLogWriteFailure {
+                        didLogWriteFailure = true
+                        bridgeLogger.error("PNG write failed: \(error.localizedDescription, privacy: .public) (further occurrences suppressed)")
+                    }
                 }
             }
+            if let coordinatorError {
+                bridgeLogger.error("NSFileCoordinator write coordination failed: \(coordinatorError.localizedDescription, privacy: .public)")
+            }
         }
-        if let coordinatorError {
-            bridgeLogger.error("NSFileCoordinator write coordination failed: \(coordinatorError.localizedDescription, privacy: .public)")
-        }
+    }
+
+    /// Blocks until all writes enqueued so far have completed. Test seam —
+    /// write(_:) is asynchronous, so a write-then-read sequence needs this
+    /// barrier to be deterministic.
+    public func flushPendingWrites() {
+        writeQueue.sync {}
     }
 
     /// Reads the most recently written CGImage. Returns nil when the file
