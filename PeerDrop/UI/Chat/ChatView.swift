@@ -425,6 +425,12 @@ struct ChatView: View {
                     .padding(.vertical, 8)
                     .background(Color.peerDropFillTertiary)
                     .clipShape(Capsule())
+                    // Return/Enter sends. Without this the only affordance
+                    // was the arrow button — on the Mac, Enter in a chat
+                    // input silently doing nothing reads as broken
+                    // (audit round 15 live-verification finding).
+                    .submitLabel(.send)
+                    .onSubmit { sendMessage() }
                     .onChange(of: messageText) { newValue in
                         connectionManager.handleTypingChange(
                             in: peerID,
@@ -554,6 +560,12 @@ struct ChatView: View {
                 try voiceRecorder.startRecording()
             } catch {
                 logger.error("Failed to start recording: \(error.localizedDescription)")
+                // Surface it — without this the mic button appeared to do
+                // nothing (or worse, the UI showed a fake "Recording 0:00")
+                // when capture couldn't start (audit round 16).
+                await MainActor.run {
+                    connectionManager.statusToast = error.localizedDescription
+                }
             }
         }
     }
@@ -562,14 +574,19 @@ struct ChatView: View {
         let duration = voiceRecorder.duration
         guard let url = voiceRecorder.stopRecording() else { return }
         guard duration >= 0.5 else {
-            // Ignore very short recordings
+            // Too short OR the recorder never actually captured (duration
+            // stuck at 0 — e.g. mic unavailable). Silently dropping here
+            // made the user think the message was sent (audit round 16
+            // live finding) — always surface why nothing appeared.
             try? FileManager.default.removeItem(at: url)
+            connectionManager.statusToast = String(localized: "Recording too short")
             return
         }
 
         // Read the recorded audio data
         guard let data = try? Data(contentsOf: url) else {
             try? FileManager.default.removeItem(at: url)
+            connectionManager.statusToast = String(localized: "Voice message failed")
             return
         }
 
