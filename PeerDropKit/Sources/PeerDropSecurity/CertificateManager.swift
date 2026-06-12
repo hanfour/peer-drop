@@ -74,11 +74,22 @@ public final class CertificateManager {
     private func storeIdentity(privateKey: SecKey, keyTag: String) {
         guard let keyTagData = keyTag.data(using: .utf8) else { return }
 
+        // All three queries are pinned to the data-protection keychain. On
+        // iOS that's already the default; on macOS the legacy file-based
+        // login keychain ignores kSecAttrApplicationTag for
+        // kSecClassIdentity lookups and returns ANY identity the user has
+        // (e.g. their "Apple Development: …" codesigning cert). That leaked
+        // identity flipped the Mac side to TLS while iOS (identity == nil)
+        // listened on plain TCP, so every Mac ↔ iPhone local connection
+        // died in framing (MessageFramer rejecting 0x16030302 — a TLS
+        // ClientHello header). See CertificateManagerIdentityTests.
+
         // Store the key in keychain so we can retrieve a SecIdentity
         let addKeyQuery: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecValueRef as String: privateKey,
             kSecAttrApplicationTag as String: keyTagData,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         SecItemAdd(addKeyQuery as CFDictionary, nil)
 
@@ -87,7 +98,8 @@ public final class CertificateManager {
         let identityQuery: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
             kSecAttrApplicationTag as String: keyTagData,
-            kSecReturnRef as String: true
+            kSecReturnRef as String: true,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         if SecItemCopyMatching(identityQuery as CFDictionary, &identityRef) == errSecSuccess,
            let ref = identityRef {
@@ -99,6 +111,7 @@ public final class CertificateManager {
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationTag as String: keyTagData,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         SecItemDelete(deleteQuery as CFDictionary)
     }

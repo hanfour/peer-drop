@@ -72,22 +72,88 @@ extension NWConnection {
     }
 
     /// Wait for the connection to become ready (internal implementation).
+    ///
+    /// Lost-wakeup guard: `stateUpdateHandler` only fires on state CHANGES —
+    /// NWConnection does not replay the current state to a freshly installed
+    /// handler. A connection that turned `.ready` before this call (common on
+    /// loopback, where start→ready completes in microseconds) would otherwise
+    /// hang until the caller's timeout. After installing the handler we check
+    /// the current state once; `ResumeOnce` makes handler-vs-check resumption
+    /// race-safe.
     private func waitReadyInternal() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    self.stateUpdateHandler = nil
-                    continuation.resume()
-                case .failed(let error):
-                    self.stateUpdateHandler = nil
-                    continuation.resume(throwing: error)
-                case .cancelled:
-                    self.stateUpdateHandler = nil
-                    continuation.resume(throwing: NWConnectionError.cancelled)
-                default:
-                    break
+        let resumeOnce = ResumeOnce()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                resumeOnce.bind(continuation)
+                let settle: (NWConnection.State) -> Bool = { state in
+                    switch state {
+                    case .ready:
+                        self.stateUpdateHandler = nil
+                        resumeOnce.resume(nil)
+                        return true
+                    case .failed(let error):
+                        self.stateUpdateHandler = nil
+                        resumeOnce.resume(error)
+                        return true
+                    case .cancelled:
+                        self.stateUpdateHandler = nil
+                        resumeOnce.resume(NWConnectionError.cancelled)
+                        return true
+                    default:
+                        return false
+                    }
                 }
+                stateUpdateHandler = { state in _ = settle(state) }
+                // Cover the already-transitioned case the handler will never see.
+                _ = settle(state)
+            }
+        } onCancel: {
+            // waitReady's timeout arm cancels this task; without resuming
+            // here the continuation leaks and withThrowingTaskGroup waits
+            // for this child forever — the timeout path itself deadlocked.
+            resumeOnce.resume(CancellationError())
+        }
+    }
+
+    /// Resumes a continuation at most once, from whichever of three racers
+    /// gets there first: the state handler, the current-state check, or the
+    /// cancellation handler (which can fire before bind). Double-resume
+    /// traps at runtime, so all paths funnel through this gate.
+    private final class ResumeOnce {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+        private var settled: Error??  // .some(nil) success / .some(err) / nil pending
+
+        func bind(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            if let result = settled {
+                lock.unlock()
+                if let error = result {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        func resume(_ error: Error?) {
+            lock.lock()
+            guard settled == nil else {
+                lock.unlock()
+                return
+            }
+            settled = .some(error)
+            let cont = continuation
+            continuation = nil
+            lock.unlock()
+            guard let cont else { return }
+            if let error {
+                cont.resume(throwing: error)
+            } else {
+                cont.resume()
             }
         }
     }

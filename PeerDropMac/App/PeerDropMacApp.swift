@@ -22,6 +22,13 @@ struct PeerDropMacApp: App {
     /// `petEngine.renderedImage: CGImage?` injected as an
     /// `@EnvironmentObject` into every scene that may show the pet.
     @StateObject private var petEngine = PetEngine()
+    /// Animation clock for the pet sprite. On iOS, FloatingPetView's
+    /// CADisplayLink feeds PetAnimationController.advance(dt:); the Mac
+    /// app has no floating pet, so without this driver the animator never
+    /// ticks and the sidebar/menu-bar sprite freezes on frame 0. Created
+    /// in onAppear (needs petEngine.animator) and kept alive app-wide so
+    /// the MenuBarExtra sprite stays animated with the main window closed.
+    @State private var petTickDriver: PetTickDriver?
     /// Round 11 audit fix: NearbyTab + GuidanceCard read this object
     /// via `@EnvironmentObject` to drive the discovery-help heuristics.
     /// Without it, the SwiftUI environment lookup fatals at first
@@ -76,6 +83,16 @@ struct PeerDropMacApp: App {
                     // Wire AppDelegate's weak ref so lifecycle hooks
                     // (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
+
+                    // Start the pet animation clock (see petTickDriver doc).
+                    // onAppear can re-fire when the main window reopens;
+                    // PetTickDriver.start() is idempotent but the nil check
+                    // also keeps us from allocating a second driver.
+                    if petTickDriver == nil {
+                        let driver = PetTickDriver(animator: petEngine.animator)
+                        driver.start()
+                        petTickDriver = driver
+                    }
 
                     // Round 11 audit fix: wire ConnectionContext to the
                     // live data sources NearbyTab + GuidanceCard read.
