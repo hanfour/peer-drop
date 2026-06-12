@@ -11,7 +11,7 @@ final class SharedRenderedPetTests: XCTestCase {
         super.setUp()
         // Init with nil suite forces the per-process tempdir fallback so each
         // test gets its own container.
-        bridge = SharedRenderedPet(suiteName: nil)
+        bridge = SharedRenderedPet(suiteName: nil, minWriteInterval: 0)
     }
 
     override func tearDown() {
@@ -25,6 +25,7 @@ final class SharedRenderedPetTests: XCTestCase {
     func test_writeThenRead_returnsCGImageWithMatchingDimensions() {
         let original = makeStubImage(width: 68, height: 68, red: true)
         bridge.write(original)
+        bridge.flushPendingWrites()
 
         let loaded = bridge.read()
         XCTAssertNotNil(loaded)
@@ -39,6 +40,7 @@ final class SharedRenderedPetTests: XCTestCase {
 
     func test_clear_removesFile_subsequentReadReturnsNil() {
         bridge.write(makeStubImage(width: 16, height: 16))
+        bridge.flushPendingWrites()
         XCTAssertNotNil(bridge.read())
 
         bridge.clear()
@@ -50,6 +52,7 @@ final class SharedRenderedPetTests: XCTestCase {
     func test_secondWrite_replacesFirst_observedDimensionsMatchSecond() {
         bridge.write(makeStubImage(width: 16, height: 16))
         bridge.write(makeStubImage(width: 64, height: 32))
+        bridge.flushPendingWrites()
 
         let loaded = bridge.read()
         XCTAssertEqual(loaded?.width, 64)
@@ -63,6 +66,7 @@ final class SharedRenderedPetTests: XCTestCase {
         // PNG round-trip should preserve the colour exactly (lossless).
         let original = makeStubImage(width: 4, height: 4, red: true)
         bridge.write(original)
+        bridge.flushPendingWrites()
         let loaded = try! XCTUnwrap(bridge.read())
 
         let originalSample = samplePixel(in: original, x: 1, y: 1)

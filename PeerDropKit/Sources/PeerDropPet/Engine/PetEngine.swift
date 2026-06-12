@@ -109,6 +109,11 @@ public class PetEngine: ObservableObject {
         // exercise the metadata-fetch path; production uses .shared.
         self.spriteService = spriteService
         setupAnimationObserver()
+        // Passive aging: evolution previously only ran inside interaction
+        // handlers, so a pet whose owner never taps it stayed .baby forever
+        // (observed live at age 17/8 days — audit round 16). Apply the age
+        // gate once at startup so time alone is enough for baby→adult.
+        checkEvolution()
     }
 
     // MARK: - Daily Login & Rewards

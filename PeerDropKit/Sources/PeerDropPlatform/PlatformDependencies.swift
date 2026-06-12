@@ -98,6 +98,12 @@ public struct PlatformDependencies {
     private static let _defaultAudioSession: AudioSessionConfiguring = {
         #if canImport(UIKit)
         return UIKitAudioSession()
+        #elseif os(macOS)
+        // Real adapter, not NoOp: chat voice messages route mic permission
+        // through audioSession(), and the NoOp's `requestRecordPermission
+        // → false` made recording permanently impossible on the Mac
+        // (audit round 16 live-verification finding).
+        return MacAudioSession()
         #else
         return NoOpAudioSession()
         #endif

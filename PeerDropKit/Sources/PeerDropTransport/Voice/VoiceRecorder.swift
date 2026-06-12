@@ -1,6 +1,19 @@
 import AVFoundation
 import PeerDropPlatform
 
+public enum VoiceRecorderError: Error, LocalizedError {
+    /// AVAudioRecorder.record() returned false — capture never started
+    /// (typically no input device, e.g. a Mac mini without a microphone).
+    case captureFailedToStart
+
+    public var errorDescription: String? {
+        switch self {
+        case .captureFailedToStart:
+            return String(localized: "Could not start recording — no microphone available")
+        }
+    }
+}
+
 /// Records voice messages using AVAudioRecorder.
 @MainActor
 public final class VoiceRecorder: NSObject, ObservableObject {
@@ -39,7 +52,17 @@ public final class VoiceRecorder: NSObject, ObservableObject {
         audioRecorder = try AVAudioRecorder(url: url, settings: settings)
         audioRecorder?.isMeteringEnabled = true
         audioRecorder?.delegate = self
-        audioRecorder?.record()
+        // record() returning false means capture never started (no input
+        // device — e.g. a Mac mini without a microphone — or the audio
+        // engine refused). Ignoring it left the UI stuck on
+        // "Recording 0:00" and the eventual stop silently discarded a
+        // zero-length take (audit round 16 live finding, both platforms).
+        guard audioRecorder?.record() == true else {
+            audioRecorder = nil
+            recordingURL = nil
+            try? FileManager.default.removeItem(at: url)
+            throw VoiceRecorderError.captureFailedToStart
+        }
 
         isRecording = true
         duration = 0

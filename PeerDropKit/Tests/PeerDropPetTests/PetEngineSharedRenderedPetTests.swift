@@ -10,7 +10,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        bridge = SharedRenderedPet(suiteName: nil)  // tempdir fallback per process
+        bridge = SharedRenderedPet(suiteName: nil, minWriteInterval: 0)  // tempdir fallback per process; no throttle so consecutive writes land
     }
 
     override func tearDown() {
@@ -43,6 +43,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
 
         XCTAssertNotNil(engine.renderedImage, "renderedImage should be populated")
 
+        bridge.flushPendingWrites()
         let shared = bridge.read()
         XCTAssertNotNil(shared, "SharedRenderedPet should contain the rendered CGImage")
         XCTAssertEqual(shared?.width, engine.renderedImage?.width)
@@ -67,6 +68,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
 
         engine.updateRenderedImage()
         try await waitForRenderedImage(engine: engine, timeout: 2.0)
+        bridge.flushPendingWrites()
 
         XCTAssertNotNil(engine.renderedImage, "missing-asset render should fall back to placeholder")
         XCTAssertNotNil(bridge.read(), "Bridge should get the placeholder image")
@@ -82,6 +84,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
 
         engine.updateRenderedImage()
         try await waitForRenderedImage(engine: engine, timeout: 2.0)
+        bridge.flushPendingWrites()
         let firstBytes = pngBytes(bridge.read()!)
 
         // Same input → same composited output (UIGraphicsImageRenderer is
@@ -89,6 +92,7 @@ final class PetEngineSharedRenderedPetTests: XCTestCase {
         // short-circuit).
         engine.updateRenderedImage()
         try await Task.sleep(nanoseconds: 200_000_000)
+        bridge.flushPendingWrites()
         let secondBytes = pngBytes(bridge.read()!)
 
         XCTAssertEqual(firstBytes, secondBytes,

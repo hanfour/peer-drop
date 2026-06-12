@@ -20,15 +20,44 @@ public final class BonjourDiscovery: DiscoveryBackend {
     private var listener: NWListener?
     private let listenerPort: NWEndpoint.Port
     private let localPeerName: String
+    /// Identity UUID published in the service TXT record ("pid") so the
+    /// browsing side can key `DiscoveredPeer.id` to the SAME namespace as
+    /// `ConnectionManager.connections` (audit round 15 — without this the
+    /// two ID spaces never matched and every `connection(for:)` lookup
+    /// from a DiscoveredPeer missed). nil → no TXT, legacy behavior.
+    private let localPeerID: String?
     private let tlsOptions: NWProtocolTLS.Options?
     private let queue = DispatchQueue(label: "com.peerdrop.bonjour")
     private var isRestartingListener = false
     private var isRestartingBrowser = false
 
-    public init(port: UInt16 = 0, localPeerName: String, tlsOptions: NWProtocolTLS.Options? = nil) {
+    public init(
+        port: UInt16 = 0,
+        localPeerName: String,
+        localPeerID: String? = nil,
+        tlsOptions: NWProtocolTLS.Options? = nil
+    ) {
         self.listenerPort = port == 0 ? .any : NWEndpoint.Port(rawValue: port)!
         self.localPeerName = localPeerName
+        self.localPeerID = localPeerID
         self.tlsOptions = tlsOptions
+    }
+
+    /// Resolve a browse result to a stable peer ID: prefer the identity
+    /// UUID from the TXT record ("pid"); fall back to the legacy
+    /// "name.type.domain" service string for pre-v6 peers without TXT.
+    /// Pure function — unit-tested in BonjourPeerIDTests.
+    static func resolvedPeerID(
+        name: String,
+        type: String,
+        domain: String,
+        metadata: NWBrowser.Result.Metadata?
+    ) -> String {
+        if case .bonjour(let txt) = metadata,
+           let pid = txt["pid"], !pid.isEmpty {
+            return pid
+        }
+        return "\(name).\(type).\(domain)"
     }
 
     public var actualPort: UInt16? {
@@ -56,11 +85,22 @@ public final class BonjourDiscovery: DiscoveryBackend {
             params.includePeerToPeer = true
 
             let listener = try NWListener(using: params, on: listenerPort)
-            listener.service = NWListener.Service(
-                name: localPeerName,
-                type: Self.serviceType,
-                domain: Self.serviceDomain
-            )
+            if let localPeerID {
+                var txt = NWTXTRecord()
+                txt["pid"] = localPeerID
+                listener.service = NWListener.Service(
+                    name: localPeerName,
+                    type: Self.serviceType,
+                    domain: Self.serviceDomain,
+                    txtRecord: txt.data
+                )
+            } else {
+                listener.service = NWListener.Service(
+                    name: localPeerName,
+                    type: Self.serviceType,
+                    domain: Self.serviceDomain
+                )
+            }
 
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
@@ -105,7 +145,9 @@ public final class BonjourDiscovery: DiscoveryBackend {
     // MARK: - Browsing
 
     private func startBrowsing() {
-        let descriptor = NWBrowser.Descriptor.bonjour(
+        // bonjourWithTXTRecord delivers each result's TXT metadata so
+        // resolvedPeerID can prefer the advertised identity UUID ("pid").
+        let descriptor = NWBrowser.Descriptor.bonjourWithTXTRecord(
             type: Self.serviceType,
             domain: Self.serviceDomain
         )
@@ -166,6 +208,13 @@ public final class BonjourDiscovery: DiscoveryBackend {
             return false
         }
 
+        // 0. TXT pid match — exact and rename-proof (audit round 15).
+        if let localPeerID,
+           case .bonjour(let txt) = result.metadata,
+           let pid = txt["pid"], pid == localPeerID {
+            return true
+        }
+
         // 1. Name-based detection (including Bonjour-renamed variants)
         if isSelfByName(name) { return true }
 
@@ -187,7 +236,7 @@ public final class BonjourDiscovery: DiscoveryBackend {
             guard !isSelf(result) else { return nil }
 
             return DiscoveredPeer(
-                id: "\(name).\(type).\(domain)",
+                id: Self.resolvedPeerID(name: name, type: type, domain: domain, metadata: result.metadata),
                 displayName: name,
                 endpoint: .bonjour(name: name, type: type, domain: domain),
                 source: .bonjour
