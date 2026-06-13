@@ -82,4 +82,37 @@ final class PetEvolutionTests: XCTestCase {
         let engine = PetEngine(pet: pet)
         XCTAssertEqual(engine.pet.level, .baby)
     }
+
+    func testAssigningOverdueBabyPromotesToAdult() {
+        // Audit round 18 (live finding 2026-06-13): the round-16 init-time
+        // checkEvolution only sees the `.newEgg()` PetEngine() is built
+        // with — the REAL persisted pet is assigned afterwards via
+        // `petEngine.pet = saved` (PeerDropApp.onAppear). That load path
+        // never re-ran evolution, so a 17-day-old pet displayed "Age 17/8
+        // days" while still labelled 幼年. Assignment of a replacement pet
+        // must apply passive aging too.
+        let engine = PetEngine(pet: .newEgg())  // fresh egg, age 0
+        var saved = PetState.newEgg()
+        saved.level = .baby
+        saved.genome.body = .cat
+        saved.birthDate = Date().addingTimeInterval(-(17 * 86400))
+        engine.pet = saved
+        XCTAssertEqual(engine.pet.level, .adult,
+                       "loading an overdue baby must promote it, not just at init")
+    }
+
+    func testInPlayMutationDoesNotReEvaluateOrRecurse() {
+        // The didSet evolution hook must fire only on pet REPLACEMENT
+        // (id change), not on in-play field mutations — otherwise evolve()
+        // mutating pet.level would re-enter checkEvolution. A young baby
+        // whose mood/experience changes must stay .baby and not loop.
+        var pet = PetState.newEgg()
+        pet.level = .baby
+        pet.genome.body = .cat
+        pet.birthDate = Date().addingTimeInterval(-(2 * 86400))
+        let engine = PetEngine(pet: pet)
+        engine.pet.mood = .happy
+        engine.pet.experience += 10
+        XCTAssertEqual(engine.pet.level, .baby)
+    }
 }

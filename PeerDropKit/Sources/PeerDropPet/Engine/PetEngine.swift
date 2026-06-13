@@ -20,6 +20,17 @@ public class PetEngine: ObservableObject {
             if oldValue.genome.body != pet.genome.body {
                 behaviorProvider = PetBehaviorProviderFactory.create(for: pet.genome.body)
             }
+            // Passive aging on REPLACEMENT (audit round 18). init's
+            // checkEvolution only sees the `.newEgg()` PetEngine() is built
+            // with; the real persisted pet is assigned afterwards via
+            // `petEngine.pet = saved`, and that load path never re-ran
+            // evolution — a 17-day-old baby stayed 幼年 forever. Gate on a
+            // pet-IDENTITY change (a genuine load/replace) so in-play field
+            // mutations don't re-evaluate, and crucially so evolve()'s own
+            // `pet.level =` mutation (same id) can't re-enter checkEvolution.
+            if oldValue.id != pet.id {
+                checkEvolution()
+            }
         }
     }
     @Published public var currentAction: PetAction = .idle
