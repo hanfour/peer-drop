@@ -17,6 +17,12 @@ struct PetTabView: View {
                     SpriteImageView(image: engine.renderedImage, displaySize: 128)
                         .background(Color.gray.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        // The pet sprite is the screen's focal point but was an
+                        // unlabeled image to VoiceOver. Name (language-neutral)
+                        // or a localized fallback.
+                        .accessibilityElement()
+                        .accessibilityLabel(engine.pet.name ?? String(localized: "Your pet"))
+                        .accessibilityAddTraits(.isImage)
 
                     VStack(alignment: .leading, spacing: 6) {
                         PetNameButton(name: engine.pet.name, showAlert: $showNameAlert, nameText: $nameText)
@@ -89,6 +95,7 @@ struct PetTabView: View {
                         .fill(paletteColor(engine.pet.genome.paletteIndex))
                         .frame(width: 18, height: 18)
                         .overlay(Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: 0.5))
+                        .accessibilityLabel("配色")
                 }
 
                 PersonalityBarsView(traits: engine.pet.genome.personalityTraits)
@@ -273,6 +280,8 @@ struct PersonalityBarsView: View {
             ProgressView(value: value)
                 .tint(traitColor(value))
         }
+        // Read "<trait>, NN%" as one element instead of label and bar separately.
+        .accessibilityElement(children: .combine)
     }
 
     private func traitColor(_ value: Double) -> Color {
@@ -311,6 +320,9 @@ struct FoodInventoryRow: View {
                     .buttonStyle(.plain)
                     .disabled(count == 0)
                     .draggable(food.rawValue)
+                    // VoiceOver auto-describes the emoji + count; add the
+                    // action so it's clear the button feeds the pet.
+                    .accessibilityHint(Text("Tap a treat to feed your pet"))
                 }
                 Spacer()
             }

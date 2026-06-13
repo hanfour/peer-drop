@@ -1,6 +1,14 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Your pet" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "あなたのペット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "내 펫" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的宠物" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的寵物" } }
+      }
+    },
     "%lld 天" : {
       "extractionState" : "manual",
       "localizations" : {
