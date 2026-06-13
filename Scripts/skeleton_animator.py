@@ -43,10 +43,18 @@ class Keypoint:
 # Frame counts + fps (must match normalize_pixellab.py + AssetSpec.swift)
 # =====================================================================
 
-WALK_FRAMES = 3
+# Full-fidelity cycle lengths matching the PixelLab UI presets + AssetSpec.swift
+# (walk = "Walk (8 frames)", idle = 5). The /animate-with-skeleton endpoint
+# only renders EXACTLY 3 pose images per call, so render_direction chains
+# ceil(N/3) batches (padding the final short batch and trimming the extras).
+WALK_FRAMES = 8
 WALK_FPS = 6
-IDLE_FRAMES = 3
+IDLE_FRAMES = 5
 IDLE_FPS = 2
+
+# Hard per-call pose count enforced by PixelLab's /animate-with-skeleton
+# ("Expected 3 pose images"). render_direction batches around this.
+ANIMATE_BATCH = 3
 
 
 # =====================================================================

@@ -45,6 +45,7 @@ from typing import Iterable, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from skeleton_animator import (
+    ANIMATE_BATCH,
     Keypoint as AnimatorKeypoint,
     frames_for_action,
     fps_for_action,
@@ -192,27 +193,42 @@ def render_direction(
     from pixellab_client import Keypoint as ClientKeypoint
     for action in ACTIONS:
         n_frames = frames_for_action(action)
-        # Build all frames for this action as a batch (PixelLab requires
-        # min 3 frames per /animate-with-skeleton call).
-        skeleton_frames = []
-        for frame_idx in range(n_frames):
-            perturbed_kps = perturb(base, action, frame_idx)
-            client_kps = [
-                ClientKeypoint(x=kp.x, y=kp.y, label=kp.label, z_index=kp.z_index)
-                for kp in perturbed_kps
-            ]
-            skeleton_frames.append(client_kps)
-        pngs = client.animate_with_skeleton(
-            reference_image_bytes=rotation_png,
-            image_size=image_size,
-            skeleton_frames=skeleton_frames,
-            direction=direction,
-        )
-        report.api_calls += 1
-        for frame_idx, png in enumerate(pngs):
-            out[action].append((frame_idx, png))
-            report.frames_written += 1
+        # Perturb every frame of the cycle up front …
+        all_poses = [
+            [ClientKeypoint(x=kp.x, y=kp.y, label=kp.label, z_index=kp.z_index)
+             for kp in perturb(base, action, i)]
+            for i in range(n_frames)
+        ]
+        # … then render in fixed batches: /animate-with-skeleton renders
+        # EXACTLY ANIMATE_BATCH (3) poses per call ("Expected 3 pose images"),
+        # so chunk the cycle, pad the final short batch by repeating its last
+        # pose, and drop the padded extras. A stable per-(direction, action)
+        # seed keeps successive batches stylistically consistent.
+        seed = _direction_seed(direction, action)
+        frame_idx = 0
+        for start in range(0, n_frames, ANIMATE_BATCH):
+            chunk = all_poses[start:start + ANIMATE_BATCH]
+            batch = chunk + [chunk[-1]] * (ANIMATE_BATCH - len(chunk))
+            pngs = client.animate_with_skeleton(
+                reference_image_bytes=rotation_png,
+                image_size=image_size,
+                skeleton_frames=batch,
+                direction=direction,
+                seed=seed,
+            )
+            report.api_calls += 1
+            for j in range(len(chunk)):  # keep only the real frames
+                out[action].append((frame_idx, pngs[j]))
+                report.frames_written += 1
+                frame_idx += 1
     return out
+
+
+def _direction_seed(direction: str, action: str) -> int:
+    """Stable seed per (direction, action) so the 3-frame batches that make up
+    one cycle render consistently with each other and runs are reproducible."""
+    base = DIRECTIONS.index(direction) if direction in DIRECTIONS else len(DIRECTIONS)
+    return base * 10 + (0 if action == "walk" else 1)
 
 
 # =====================================================================

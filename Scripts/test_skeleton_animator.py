@@ -260,13 +260,12 @@ class DispatchTests(unittest.TestCase):
         self.assertIn("jump", str(cm.exception))
 
     def test_frame_counts_match_pipeline_constants(self):
-        # PixelLab /animate-with-skeleton requires exactly 3 frames per
-        # batch (undocumented server constraint, hit during cat-bengal-adult
-        # first run). Downstream normalize + atlas + AssetSpec.swift are
-        # dynamic and read frame_count from the zip metadata, so the
-        # smaller count flows through without code changes.
-        self.assertEqual(frames_for_action("walk"), 3)
-        self.assertEqual(frames_for_action("idle"), 3)
+        # Full-fidelity cycle lengths matching the PixelLab UI presets +
+        # AssetSpec.swift (walk 8, idle 5). The /animate-with-skeleton endpoint
+        # renders EXACTLY 3 pose images per call, so render_direction chains
+        # ceil(N/3) batches to reach these counts (padding + trimming the last).
+        self.assertEqual(frames_for_action("walk"), 8)
+        self.assertEqual(frames_for_action("idle"), 5)
         self.assertEqual(fps_for_action("walk"), 6)
         self.assertEqual(fps_for_action("idle"), 2)
 

@@ -28,7 +28,13 @@ from typing import Optional
 
 # Must mirror Scripts/normalize_pixellab.py.
 HEURISTIC_WALK_MIN_FRAMES = 6
-EXPECTED_FRAME_WIDTH = 68
+# Accepted bundle frame sizes: 68×68 is the v4-era / PixelLab-UI native size;
+# 64×64 is what the gen_pixellab_zip API path produces (PixelLab's skeleton /
+# animate endpoints only accept power-of-2 canvases). Both render identically
+# (SpriteAtlas stores per-zip frameSize; the view scales to a fixed box), so
+# either is a valid drop-in. 48×48 stays a FAIL — it's the wrong UI default.
+ACCEPTED_FRAME_SIZES = {(64, 64), (68, 68)}
+EXPECTED_FRAME_WIDTH = 68   # canonical reference size (cat-tabby decode test)
 EXPECTED_FRAME_HEIGHT = 68
 EXPECTED_ROTATION_DIRECTIONS = {
     "south", "south-east", "east", "north-east",
@@ -87,7 +93,7 @@ def validate(zip_path: Path) -> ValidationReport:
         char = meta.get("character", {})
         size = char.get("size", {})
         w, h = size.get("width"), size.get("height")
-        if w == EXPECTED_FRAME_WIDTH and h == EXPECTED_FRAME_HEIGHT:
+        if (w, h) in ACCEPTED_FRAME_SIZES:
             report.add("OK", "frame-size", f"Frame size {w}×{h}.")
         elif w == 48 and h == 48:
             report.add("FAIL", "frame-size-48",
@@ -97,9 +103,10 @@ def validate(zip_path: Path) -> ValidationReport:
                        "48×48 character that breaks MainBundleAssetCoverageTests "
                        "(see STATUS.md §0.3).")
         else:
+            accepted = " or ".join(f"{a}×{b}" for a, b in sorted(ACCEPTED_FRAME_SIZES))
             report.add("FAIL", "frame-size-other",
-                       f"Frame size {w}×{h} — expected {EXPECTED_FRAME_WIDTH}×{EXPECTED_FRAME_HEIGHT}.",
-                       "Verify the character was opened from a v4-era 68×68 reference.")
+                       f"Frame size {w}×{h} — expected {accepted}.",
+                       "Use a v4-era 68×68 reference (UI path) or the 64×64 API path.")
 
         # ─── Rotations ───────────────────────────────────────────────────
         rotations = meta.get("frames", {}).get("rotations", {})
