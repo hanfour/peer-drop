@@ -12,12 +12,23 @@ Run from repo root:
     python3 -m unittest Scripts.test_gen_pixellab_zip
 """
 
+import io
 import json
 import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+
+from PIL import Image
+
+
+def _png(seed: int, size: int = 68) -> bytes:
+    """A real decodable PNG — generate() now resizes source rotations via
+    Pillow before the API calls, so fixtures must be real images, not tags."""
+    buf = io.BytesIO()
+    Image.new("RGBA", (size, size), (seed % 255, (seed * 7) % 255, 0, 255)).save(buf, "PNG")
+    return buf.getvalue()
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -232,7 +243,7 @@ class GenerateTests(unittest.TestCase):
             tmp = Path(td)
             # Make a synthetic source zip in a temp Pets dir.
             src = make_source_zip(tmp, "test-species-stage",
-                                   {d: f"src-{d}".encode() for d in DIRECTIONS})
+                                   {d: _png(i) for i, d in enumerate(DIRECTIONS)})
             client = FakeClient()
             out = tmp / "out.zip"
 
@@ -255,6 +266,28 @@ class GenerateTests(unittest.TestCase):
             # 8 dirs × 3 calls each (1 estimate + 1 walk batch + 1 idle batch) = 24
             self.assertEqual(report.api_calls, 24)
             self.assertEqual(report.frames_written, 8 * 6)
+
+    def test_resizes_source_to_image_size_before_api(self):
+        # Regression: source rotations are 68×68 but PixelLab's endpoints only
+        # accept power-of-2 canvases (128/64/32/16) and 422 on 68×68. generate()
+        # must resize each rotation to image_size before any API call.
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            src = make_source_zip(tmp, "x-adult", {d: _png(i, size=68) for i, d in enumerate(DIRECTIONS)})
+            client = FakeClient()
+            import gen_pixellab_zip as gpz
+            original = gpz.PETS_DIR
+            gpz.PETS_DIR = tmp
+            try:
+                report = generate("x-adult", client=client, output_path=tmp / "out.zip", image_size=(64, 64))
+            finally:
+                gpz.PETS_DIR = original
+            self.assertEqual(report.errors, [])
+            self.assertTrue(client.estimate_calls, "expected estimate_skeleton to be called")
+            # Every image the API saw must be the requested 64×64, never the 68×68 source.
+            for image_bytes, image_size in client.estimate_calls:
+                self.assertEqual(Image.open(io.BytesIO(image_bytes)).size, (64, 64))
+                self.assertEqual(image_size, (64, 64))
 
     def test_missing_source_zip_returns_error_report(self):
         with tempfile.TemporaryDirectory() as td:
