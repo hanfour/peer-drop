@@ -33,9 +33,21 @@ public class SharedPetState {
     /// init when the new file does not yet exist.
     private static let legacyDefaultsKey = "petSnapshot"
 
+    /// Default App Group suite. nil on macOS — see SharedRenderedPet
+    /// .defaultSuiteName (audit round 24): no Mac widget/Live Activity reads
+    /// this, and touching the group container prompts for "other apps' data"
+    /// on every launch. nil routes to the temp-dir fallback.
+    public static var defaultSuiteName: String? {
+        #if os(macOS)
+        return nil
+        #else
+        return appGroupID
+        #endif
+    }
+
     private let containerURL: URL
 
-    public init(suiteName: String? = appGroupID) {
+    public init(suiteName: String? = defaultSuiteName) {
         if let suite = suiteName,
            let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
             self.containerURL = url
