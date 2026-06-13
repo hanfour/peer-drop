@@ -207,11 +207,19 @@ class BuildRawZipTests(unittest.TestCase):
                 png_count = sum(1 for n in names if n.endswith(".png"))
                 self.assertEqual(png_count, 56)
 
-                # Animation slots exist + each has 8 directions.
+                # Raw v2.0 schema: animation slots are UUID-keyed
+                # (animation-xxxx); normalize renames them to walk/idle later.
+                # Each slot carries an `_action` marker (added so normalize
+                # classifies walk vs idle deterministically instead of guessing
+                # by frame count — commit bff863b) plus all 8 directions.
                 anims = meta["frames"]["animations"]
                 self.assertEqual(len(anims), 2)  # walk + idle
-                for slot_dirs in anims.values():
-                    self.assertEqual(set(slot_dirs.keys()), set(DIRECTIONS))
+                actions_seen = set()
+                for slot in anims.values():
+                    self.assertIn(slot.get("_action"), {"walk", "idle"})
+                    actions_seen.add(slot["_action"])
+                    self.assertEqual(set(slot.keys()) - {"_action"}, set(DIRECTIONS))
+                self.assertEqual(actions_seen, {"walk", "idle"})
 
 
 # ─── generate (top-level) ──────────────────────────────────────────────

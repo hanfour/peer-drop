@@ -33,16 +33,19 @@ from gen_pixellab_zip import GenReport  # noqa: E402
 
 class PlanBatchTests(unittest.TestCase):
 
-    def test_quota_2000_fits_17_species(self):
-        # 2000 - 50 buffer = 1950 usable / 112 calls = 17.4 → 17 species
+    def test_quota_binds_when_candidates_exceed_capacity(self):
+        # When candidates outnumber what the quota allows, fit is quota-bound:
+        # (quota - buffer) // CALLS_PER_SPECIES. Derived from the constant so
+        # this stays correct if batching changes the per-species call count
+        # (it dropped 112 → 24 once 3-frame batching landed).
+        expected = (2000 - QUOTA_SAFETY_BUFFER) // CALLS_PER_SPECIES
         plan = plan_batch(
             quota=2000,
-            overrides=["species-" + str(i) for i in range(50)],
+            overrides=["species-" + str(i) for i in range(expected + 20)],
         )
-        self.assertEqual(plan.fit_in_quota, 17)
-        self.assertEqual(plan.calls_planned, 17 * CALLS_PER_SPECIES)
-        # Remaining = 2000 - 1904 = 96 (within the 50-buffer + extra change)
-        self.assertEqual(plan.calls_remaining, 2000 - 17 * CALLS_PER_SPECIES)
+        self.assertEqual(plan.fit_in_quota, expected)
+        self.assertEqual(plan.calls_planned, expected * CALLS_PER_SPECIES)
+        self.assertEqual(plan.calls_remaining, 2000 - expected * CALLS_PER_SPECIES)
 
     def test_quota_zero_fits_no_species(self):
         plan = plan_batch(quota=0, overrides=["a", "b"])
@@ -55,9 +58,8 @@ class PlanBatchTests(unittest.TestCase):
         self.assertEqual(plan.fit_in_quota, 3)
 
     def test_safety_buffer_respected(self):
-        # 2000 quota: 17 species × 112 = 1904, leaving 96 free.
-        # With buffer 50, we have 1950 usable, but 18 species would
-        # need 18×112 = 2016, exceeds usable, so 17 is the cap.
+        # Planned calls never exceed (quota - safety_buffer), regardless of the
+        # per-species call count.
         plan = plan_batch(quota=2000, overrides=[f"x{i}" for i in range(30)])
         self.assertLessEqual(plan.calls_planned, 2000 - QUOTA_SAFETY_BUFFER)
 
