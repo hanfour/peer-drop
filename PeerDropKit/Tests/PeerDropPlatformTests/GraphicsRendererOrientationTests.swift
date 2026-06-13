@@ -34,6 +34,44 @@ final class GraphicsRendererOrientationTests: XCTestCase {
         XCTAssertLessThan(bottomAlpha, 0.5, "nothing should be drawn at the bottom")
     }
 
+    func testPlatformImageDrawKeepsOrientation() throws {
+        // The mood SF Symbol overlay is drawn via PlatformImage.draw(in:)
+        // (NSImage.draw on macOS), which honours NSGraphicsContext.isFlipped
+        // rather than the CTM — so the round-22 CTM-only flip fixed the base
+        // sprite but left the mood icon upside-down (round-23 user report).
+        // Build a marker image whose TOP half is opaque, draw it full-canvas
+        // through the renderer, and assert the top stays opaque.
+        let side = 8
+        let markerCG = try makeTopHalfOpaqueImage(side: side)
+        let marker = try XCTUnwrap(
+            PlatformImage(platformCGImage: markerCG, size: CGSize(width: side, height: side)))
+
+        let renderer = PlatformGraphicsRenderer(size: CGSize(width: side, height: side))
+        let out = renderer.image { _ in
+            marker.draw(in: CGRect(x: 0, y: 0, width: side, height: side))
+        }
+        let cg = try XCTUnwrap(out.platformCGImage)
+        let topAlpha = try alpha(of: cg, x: 4, y: 1)
+        let bottomAlpha = try alpha(of: cg, x: 4, y: 6)
+        XCTAssertGreaterThan(topAlpha, 0.5, "PlatformImage.draw must keep the top at the top (mood icon orientation)")
+        XCTAssertLessThan(bottomAlpha, 0.5, "the transparent bottom half must stay at the bottom")
+    }
+
+    /// A `side`×`side` CGImage: top half opaque white, bottom half clear.
+    private func makeTopHalfOpaqueImage(side: Int) throws -> CGImage {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = try XCTUnwrap(CGContext(
+            data: nil, width: side, height: side,
+            bitsPerComponent: 8, bytesPerRow: side * 4, space: cs,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        // Flip to top-left so "top half" means the visual top.
+        ctx.translateBy(x: 0, y: CGFloat(side))
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: side, height: side / 2))
+        return try XCTUnwrap(ctx.makeImage())
+    }
+
     /// Reads a pixel's alpha straight from the CGImage's backing bytes.
     /// CGImage data is always stored top-left (row 0 == visual top), so this
     /// is an unambiguous orientation oracle — unlike redrawing through
