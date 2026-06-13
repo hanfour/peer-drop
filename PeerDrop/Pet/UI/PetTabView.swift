@@ -99,7 +99,7 @@ struct PetTabView: View {
 
             // MARK: - Stats
             Section("統計") {
-                LabeledContent("年齡", value: "\(engine.pet.ageInDays) 天")
+                LabeledContent("年齡", value: String(localized: "\(engine.pet.ageInDays) 天"))
                 LabeledContent("互動次數", value: "\(engine.pet.stats.totalInteractions)")
                 LabeledContent("清理便便", value: "\(engine.pet.stats.poopsCleaned)")
                 LabeledContent("遇見寵物", value: "\(engine.pet.stats.petsMet)")
@@ -262,7 +262,10 @@ struct PersonalityBarsView: View {
         }
     }
 
-    private func traitRow(_ label: String, value: Double) -> some View {
+    // LocalizedStringKey (not String): `Text(stringVariable)` is the *verbatim*
+    // initializer and would NOT localize the trait labels. The callers pass
+    // string literals so they resolve as keys against Localizable.xcstrings.
+    private func traitRow(_ label: LocalizedStringKey, value: Double) -> some View {
         HStack {
             Text(label)
                 .font(.caption2)
