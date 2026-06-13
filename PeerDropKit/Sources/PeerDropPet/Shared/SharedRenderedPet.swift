@@ -24,13 +24,26 @@ public final class SharedRenderedPet {
     public static let appGroupID = "group.com.hanfour.peerdrop"
     private static let filename = "pet-rendered.png"
 
+    /// Default App Group suite. nil on macOS: the bridge exists only for the
+    /// iOS widget + Live Activity, neither of which exists on the Mac, so
+    /// touching the App Group container there is pointless AND triggers a
+    /// "wants to access other apps' data" privacy prompt on every launch
+    /// (audit round 24). nil routes to the temp-dir fallback — no prompt.
+    public static var defaultSuiteName: String? {
+        #if os(macOS)
+        return nil
+        #else
+        return appGroupID
+        #endif
+    }
+
     private let containerURL: URL
     /// Write-failure log dedup flag (see write(_:)). Reset on success.
     private var didLogWriteFailure = false
 
     /// - Parameter minWriteInterval: throttle window for `write(_:)`.
     ///   Tests pass 0 so consecutive writes aren't dropped.
-    public init(suiteName: String? = appGroupID, minWriteInterval: TimeInterval = 1.0) {
+    public init(suiteName: String? = defaultSuiteName, minWriteInterval: TimeInterval = 1.0) {
         self.minWriteInterval = minWriteInterval
         if let suite = suiteName,
            let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
