@@ -38,15 +38,27 @@ class NormalizationReport:
     final_actions: list[str] = field(default_factory=list)
 
 
+# Underscore-prefixed slot keys are metadata markers (e.g. `_action`, added by
+# gen_pixellab_zip so heuristic_action can read the intended action instead of
+# guessing by frame count — commit bff863b), NOT compass directions. They must
+# be skipped everywhere a slot is iterated as directions, or they leak into the
+# normalized `directions` dict and downstream build_atlas treats the marker's
+# string value (e.g. "idle") as a frame-path list and crashes.
+def _is_direction(key: str) -> bool:
+    return not key.startswith("_")
+
+
 def first_dir_count(anim_dict: dict) -> int:
     """Frames per direction (sample first direction's array length)."""
-    for _, frame_list in anim_dict.items():
+    for key, frame_list in anim_dict.items():
+        if not _is_direction(key):
+            continue
         return len(frame_list)
     return 0
 
 
 def total_frames(anim_dict: dict) -> int:
-    return sum(len(v) for v in anim_dict.values())
+    return sum(len(v) for k, v in anim_dict.items() if _is_direction(k))
 
 
 def heuristic_action(anim_dict: dict) -> str:
@@ -130,6 +142,8 @@ def merge_same_action_directions(
     """
     for drop in drop_keys:
         for direction, paths in animations.get(drop, {}).items():
+            if not _is_direction(direction):
+                continue  # skip the `_action` marker — not a direction
             if direction in animations[keep]:
                 continue  # conflict — kept slot wins
             old_dir = extracted_root / "animations" / drop / direction
@@ -221,6 +235,8 @@ def normalize_metadata(
 
         new_directions = {}
         for direction, paths in animations[key].items():
+            if not _is_direction(direction):
+                continue  # drop the `_action` marker — only compass dirs ship
             new_paths = [p.replace(f"animations/{key}/", f"animations/{action}/")
                          for p in paths]
             new_directions[direction] = new_paths
