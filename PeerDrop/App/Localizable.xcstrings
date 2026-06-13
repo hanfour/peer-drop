@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Tap a treat to feed your pet" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "おやつをタップしてペットに与えよう" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "간식을 탭하여 먹이 주기" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "点一下点心餵食寵物" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "點一下點心餵食寵物" } }
+      }
+    },
+    "Yum! 🍽️" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "おいしい！🍽️" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "냠냠! 🍽️" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "好吃！🍽️" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "好吃！🍽️" } }
+      }
+    },
+    "Your pet isn't hungry yet" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ペットはまだお腹が空いていません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아직 배고프지 않아요" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "寵物還不餓" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "寵物還不餓" } }
+      }
+    },
+    "You're out of that treat" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "そのおやつはもうありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그 간식이 없습니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "沒有這種點心了" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "沒有這種點心了" } }
+      }
+    },
     "Tap to name" : {
       "localizations" : {
         "ja" : {

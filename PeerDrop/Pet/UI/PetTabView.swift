@@ -6,6 +6,7 @@ struct PetTabView: View {
     @State private var showNameAlert = false
     @State private var nameText = ""
     @State private var showWelcome = false
+    @State private var feedMessage: String?
     private let welcomeFlag = PetWelcomeFlag()
 
     var body: some View {
@@ -64,7 +65,13 @@ struct PetTabView: View {
 
             // MARK: - Food Inventory
             Section("食物庫存") {
-                FoodInventoryRow(inventory: engine.pet.foodInventory)
+                FoodInventoryRow(inventory: engine.pet.foodInventory, onFeed: feed)
+                if let feedMessage {
+                    Text(feedMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
+                }
             }
 
             // MARK: - Gene Info
@@ -169,6 +176,29 @@ struct PetTabView: View {
         PetPalettes.all.indices.contains(index) ? PetPalettes.all[index].primary : .gray
     }
 
+    /// Tap-to-feed (audit round 20): drop the treat just in front of the
+    /// floating pet so it visibly walks over and eats, and surface a short
+    /// reason when the feed is refused (cooldown / out of stock) instead of
+    /// the old silent no-op.
+    private func feed(_ type: FoodType) {
+        let petPos = engine.physicsState.position
+        let screenW = UIScreen.main.bounds.width
+        let dir: CGFloat = petPos.x < screenW / 2 ? 1 : -1
+        let dropX = max(40, min(screenW - 40, petPos.x + dir * 90))
+        let result = engine.dropFood(type, at: CGPoint(x: dropX, y: petPos.y))
+        let message: String
+        switch result {
+        case .fed:        message = String(localized: "Yum! 🍽️")
+        case .onCooldown: message = String(localized: "Your pet isn't hungry yet")
+        case .outOfStock: message = String(localized: "You're out of that treat")
+        }
+        withAnimation { feedMessage = message }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            await MainActor.run { withAnimation { if feedMessage == message { feedMessage = nil } } }
+        }
+    }
+
     /// Pure decision function for whether the v4.0.1 welcome reveal should
     /// be presented on PetTab open. Two conditions must hold:
     ///   • the per-install flag `shouldShow` is true (first PetTab open).
@@ -253,21 +283,37 @@ struct PersonalityBarsView: View {
 
 struct FoodInventoryRow: View {
     let inventory: FoodInventory
+    /// Tap-to-feed (audit round 20). Feeding used to be drag-only with no
+    /// hint — undiscoverable. Tapping a food now feeds the pet; drag is
+    /// kept for users who want to place food at a specific spot.
+    var onFeed: (FoodType) -> Void = { _ in }
 
     var body: some View {
-        HStack(spacing: 16) {
-            ForEach(FoodType.allCases) { food in
-                let count = inventory.count(of: food)
-                VStack(spacing: 2) {
-                    Text(food.emoji)
-                        .font(.title2)
-                        .draggable(food.rawValue)
-                    Text("\(count)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 20) {
+                ForEach(FoodType.allCases) { food in
+                    let count = inventory.count(of: food)
+                    Button {
+                        onFeed(food)
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text(food.emoji)
+                                .font(.title2)
+                                .opacity(count > 0 ? 1 : 0.35)
+                            Text("\(count)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(count == 0)
+                    .draggable(food.rawValue)
                 }
+                Spacer()
             }
-            Spacer()
+            Text(String(localized: "Tap a treat to feed your pet"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 }
