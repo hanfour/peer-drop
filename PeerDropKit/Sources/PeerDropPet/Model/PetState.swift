@@ -41,6 +41,14 @@ public struct PetState: Codable {
     /// the actual sweep). Optional + new in v4.0 → legacy v3.x JSON decodes as nil.
     public var migrationDoneAt: Date?
 
+    /// Wall-clock of the last persist (set by `PetStore.save` /
+    /// `PetCloudSync.syncFullState`). Drives cross-device conflict resolution:
+    /// when two devices hold the *same* pet, the most-recently-written copy
+    /// wins (see `PetConflictResolver`). New in the cross-device-sync change →
+    /// legacy JSON without this key decodes to `lastInteraction` (the best
+    /// available "freshness" proxy for a pre-sync record).
+    public var updatedAt: Date
+
     // MARK: - Computed
 
     public var ageInDays: Int {
@@ -66,7 +74,8 @@ public struct PetState: Codable {
         digestEndTime: Date? = nil,
         stats: PetStats = PetStats(),
         lastLoginDate: Date? = nil,
-        migrationDoneAt: Date? = nil
+        migrationDoneAt: Date? = nil,
+        updatedAt: Date? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.id = id
@@ -85,6 +94,7 @@ public struct PetState: Codable {
         self.stats = stats
         self.lastLoginDate = lastLoginDate
         self.migrationDoneAt = migrationDoneAt
+        self.updatedAt = updatedAt ?? lastInteraction
     }
 
     // MARK: - Codable (custom decoder for legacy JSON without schemaVersion)
@@ -109,6 +119,10 @@ public struct PetState: Codable {
         self.stats = (try? c.decode(PetStats.self, forKey: .stats)) ?? PetStats()
         self.lastLoginDate = try c.decodeIfPresent(Date.self, forKey: .lastLoginDate)
         self.migrationDoneAt = try c.decodeIfPresent(Date.self, forKey: .migrationDoneAt)
+        // Legacy (pre-sync) JSON has no updatedAt → fall back to lastInteraction,
+        // the closest stand-in for "last activity" so a migrated record doesn't
+        // read as written-at-epoch (which would lose every conflict).
+        self.updatedAt = (try? c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? nil) ?? self.lastInteraction
     }
 
     // MARK: - Factories

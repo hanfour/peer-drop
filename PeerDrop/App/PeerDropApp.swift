@@ -12,6 +12,9 @@ struct PeerDropApp: App {
     @StateObject private var connectionContext = ConnectionContext()
     @StateObject private var voicePlayer = VoicePlayer()
     @StateObject private var petEngine = PetEngine()
+    /// Cross-device pet sync (local ⇄ iCloud). Merges local + cloud at launch,
+    /// pushes on background, and observes live changes from other devices.
+    private let petSync = PetSyncCoordinator()
     @StateObject private var inboxService = InboxService()
     @StateObject private var cryptoMetrics = CryptoHardeningMetrics()
     @StateObject private var policyStore: SecurityPolicyStore = {
@@ -41,6 +44,7 @@ struct PeerDropApp: App {
     @State private var showInviteAccept = false
     @State private var showV4UpgradeOnboarding = false
     @State private var showV5UpgradeOnboarding = false
+    @State private var didStartPetSyncObserver = false
     @AppStorage("renderedImageVersion") private var renderedImageVersion: String = ""
 
     init() {
@@ -159,15 +163,24 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropWorkerURLMigrated")
                 }
 
-                // Load pet (mock for screenshots, saved for normal). For real
-                // pets we call loadAndMigrate so v3.x → v4.0 upgrades fill in
-                // subVariety / seed / migrationDoneAt at first launch.
-                // Idempotent — subsequent launches early-return without
-                // re-applying.
+                // Load pet (mock for screenshots, merged local⇄cloud for normal).
+                // resolvedLaunchPet calls loadAndMigrate under the hood so v3.x →
+                // v4.0 upgrades still fill in subVariety / seed / migrationDoneAt,
+                // then merges against the iCloud copy (PetConflictResolver) so the
+                // same pet shows across devices. Idempotent migration.
                 if ScreenshotModeProvider.shared.isActive {
                     petEngine.pet = ScreenshotModeProvider.shared.mockPetState
-                } else if let saved = try? PetStore().loadAndMigrate() {
+                } else if let saved = petSync.resolvedLaunchPet() {
                     petEngine.pet = saved
+                    // Observe live iCloud changes from other devices (register
+                    // once — onAppear can re-fire when the scene re-mounts).
+                    if !didStartPetSyncObserver {
+                        didStartPetSyncObserver = true
+                        petSync.observe(
+                            currentLocal: { petEngine.pet },
+                            onResolved: { merged in petEngine.pet = merged }
+                        )
+                    }
                     // M10 — show the v4.0 upgrade screen once for users
                     // whose pet just got migrated from v3.x. Brand-new v4.0
                     // installs (no migrationDoneAt) skip this.
@@ -257,8 +270,11 @@ struct PeerDropApp: App {
                 inboxService.disconnect()
                 connectionManager.tailnetStore.stopPeriodicProbe()
                 Task { await ConnectionMetrics.shared.flush() }
-                try? PetStore().save(petEngine.pet)
-                try? PetCloudSync().syncFullState(petEngine.pet)
+                // Persist locally + push to iCloud (full state + KVS ping) so
+                // other devices see this session's edits. Replaces the old
+                // save-then-syncFullState pair; push also bumps KVS metadata,
+                // which is what fires the other device's change observer.
+                petSync.push(petEngine.pet)
                 petEngine.syncSharedState()
                 petEngine.startLiveActivity()
                 // Pause the 6 FPS animation timer to avoid burning CPU/battery
