@@ -49,22 +49,28 @@ enum AppKitGraphicsRenderer {
             bytesPerRow: width * 4,
             bitsPerPixel: 32
         )!
-        let context = NSGraphicsContext(bitmapImageRep: bitmap)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-
         // Match UIGraphicsImageRenderer's coordinate system: top-left origin,
         // y increasing downward. `NSGraphicsContext(bitmapImageRep:)` is
         // bottom-left / y-up, the OPPOSITE of UIKit, so the shared drawing
         // code in PetRendererV3.composite (which manually y-flips for a
-        // UIKit-style top-left context) ended up double-flipped on macOS and
-        // rendered the pet UPSIDE-DOWN (live finding 2026-06-13). Flip the
-        // CTM here so the same closure produces identical output on both
-        // platforms — and NSImage.draw / CGContext.draw inside it behave as
-        // they do on iOS.
-        let cg = context.cgContext
+        // UIKit-style top-left context) ended up double-flipped on macOS.
+        //
+        // Two consumers read orientation DIFFERENTLY, so both must be made
+        // top-left (audit rounds 22 + 23):
+        //   • `CGContext.draw` (the base sprite) honours the CTM → flip the
+        //     CTM.
+        //   • `NSImage.draw` (the mood SF Symbol overlay) honours
+        //     `NSGraphicsContext.isFlipped`, NOT the CTM → so flipping only
+        //     the CTM fixed the sprite but left the mood icon upside-down
+        //     (round-23 user report 「心情符號也是顛倒的」). Wrap the same
+        //     CGContext in a `flipped: true` NSGraphicsContext so NSImage.draw
+        //     agrees with the CTM.
+        let cg = NSGraphicsContext(bitmapImageRep: bitmap)!.cgContext
         cg.translateBy(x: 0, y: CGFloat(height))
         cg.scaleBy(x: 1, y: -1)
+        let context = NSGraphicsContext(cgContext: cg, flipped: true)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
         drawing(cg)
         NSGraphicsContext.restoreGraphicsState()
 
