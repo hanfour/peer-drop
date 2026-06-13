@@ -73,7 +73,7 @@ public class PetAnimationController: ObservableObject {
     /// that wants to step the animation without a delta-time accumulator.
     /// Production v5 should let `advance(dt:)` handle frame progression.
     public func advanceFrame() {
-        currentFrame = (currentFrame + 1) % totalFrames
+        currentFrame = (currentFrame + 1) % max(totalFrames, 1)
     }
 
     /// Apply elapsed time. Called from the host CADisplayLink tick. Accumulates

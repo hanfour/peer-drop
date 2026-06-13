@@ -80,9 +80,15 @@ public struct FoodInventory: Codable, Equatable {
         return true
     }
 
+    /// Add `count` units of `type`. Inventory only ever grows through this
+    /// path, so non-positive counts are ignored (they'd otherwise produce a
+    /// negative on-screen count) and additions saturate at `Int.max` instead
+    /// of overflowing.
     public mutating func add(_ type: FoodType, count: Int = 1) {
+        guard count > 0 else { return }
         if let idx = items.firstIndex(where: { $0.type == type }) {
-            items[idx].count += count
+            let (sum, overflowed) = items[idx].count.addingReportingOverflow(count)
+            items[idx].count = overflowed ? Int.max : sum
         } else {
             items.append(FoodItem(type: type, count: count))
         }
