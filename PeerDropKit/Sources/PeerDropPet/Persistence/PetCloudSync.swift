@@ -34,9 +34,13 @@ public class PetCloudSync {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         let fileURL = dir.appendingPathComponent("pet.json")
-        let data = try encoder.encode(pet)
+        // Stamp the write time so cross-device conflict resolution can pick the
+        // most-recently-written copy (see PetConflictResolver).
+        var stamped = pet
+        stamped.updatedAt = Date()
+        let data = try encoder.encode(stamped)
         try data.write(to: fileURL, options: .atomic)
-        logger.debug("Synced full state to iCloud for pet \(pet.id)")
+        logger.debug("Synced full state to iCloud for pet \(stamped.id)")
     }
 
     /// Load pet state from iCloud Documents. Raw decode — does NOT apply
@@ -82,10 +86,13 @@ public class PetCloudSync {
         return PetStore.applyV4Migration(to: pet)
     }
 
-    /// Resolve conflict between local and cloud state. Higher XP wins.
+    /// Resolve conflict between local and cloud state. Delegates to the pure
+    /// `PetConflictResolver` (same-id → newest write wins; different-id → the
+    /// more-invested pet wins). Retained as an instance method for call-site
+    /// compatibility.
     public func resolveConflict(local: PetState, cloud: PetState) -> PetState {
-        let winner = local.experience >= cloud.experience ? local : cloud
-        logger.debug("Conflict resolved: winner has \(winner.experience) XP")
+        let winner = PetConflictResolver.resolve(local: local, cloud: cloud)
+        logger.debug("Conflict resolved: winner \(winner.id) has \(winner.experience) XP")
         return winner
     }
 

@@ -36,6 +36,12 @@ struct PeerDropMacApp: App {
     /// save), so persistence is driven off pet MUTATIONS instead — the same
     /// robust pattern ChatManager uses. Held for the app's lifetime.
     @State private var petSaveCancellable: AnyCancellable?
+    /// Cross-device pet sync (local ⇄ iCloud), now wired on Mac too (was
+    /// iOS-only). Merges local + cloud at launch, pushes on every debounced
+    /// mutation + on background, and observes live changes from iPhone/iPad.
+    /// No-ops gracefully on a Mac without the iCloud container provisioned.
+    private let petSync = PetSyncCoordinator()
+    @State private var didStartPetSyncObserver = false
     /// Round 11 audit fix: NearbyTab + GuidanceCard read this object
     /// via `@EnvironmentObject` to drive the discovery-help heuristics.
     /// Without it, the SwiftUI environment lookup fatals at first
@@ -210,21 +216,35 @@ struct PeerDropMacApp: App {
                         // background) save the local pet, mirroring iOS
                         // (PeerDropApp.onAppear / scenePhase). The didSet
                         // passive-aging hook (round 18) then evolves an overdue
-                        // pet on load. Cross-device CloudKit sync stays iOS-only
-                        // for now — this is just local persistence.
-                        if let saved = try? PetStore().loadAndMigrate() {
+                        // pet on load.
+                        //
+                        // Cross-device sync: resolvedLaunchPet merges the local
+                        // pet against the iCloud copy so the Mac shows the same
+                        // pet the user raised on iPhone/iPad. Degrades to plain
+                        // local load on a Mac without the iCloud container.
+                        if let saved = petSync.resolvedLaunchPet() {
                             petEngine.pet = saved
                         }
-                        // Auto-save on every pet mutation, debounced 1s, so
-                        // age/evolution/feeding survive a relaunch even when
-                        // no lifecycle save fires (see petSaveCancellable).
-                        // No dropFirst: the first emission persists the
-                        // just-loaded (and possibly auto-evolved on load) pet
-                        // too — re-saving identical bytes is harmless.
+                        // Observe live iCloud changes from other devices (register
+                        // once — onAppear re-fires when the main window reopens).
+                        if !didStartPetSyncObserver {
+                            didStartPetSyncObserver = true
+                            petSync.observe(
+                                currentLocal: { petEngine.pet },
+                                onResolved: { merged in petEngine.pet = merged }
+                            )
+                        }
+                        // Auto-save + cloud-push on every pet mutation, debounced
+                        // 1s, so age/evolution/feeding survive a relaunch AND
+                        // propagate to the user's other devices even when no
+                        // lifecycle save fires (macOS scenePhase is unreliable for
+                        // a menu-bar agent — see petSaveCancellable). No dropFirst:
+                        // the first emission persists the just-loaded pet too —
+                        // re-pushing identical bytes is harmless.
                         if petSaveCancellable == nil {
                             petSaveCancellable = petEngine.$pet
                                 .debounce(for: .seconds(1), scheduler: RunLoop.main)
-                                .sink { pet in try? PetStore().save(pet) }
+                                .sink { pet in petSync.push(pet) }
                         }
                         // M3: kick APNs registration. Matches iOS
                         // PeerDropApp.swift pattern. UN permission dialog
@@ -255,11 +275,12 @@ struct PeerDropMacApp: App {
                     switch newPhase {
                     case .background:
                         inboxService.disconnect()
-                        // Persist the pet so age/evolution/feeding survive a
-                        // relaunch (audit round 21). Skip in screenshot mode
-                        // so the mock pet never overwrites a real save.
+                        // Persist + push the pet so age/evolution/feeding survive
+                        // a relaunch (audit round 21) AND reach the user's other
+                        // devices. Skip in screenshot mode so the mock pet never
+                        // overwrites a real save.
                         if !ScreenshotModeProvider.shared.isActive {
-                            try? PetStore().save(petEngine.pet)
+                            petSync.push(petEngine.pet)
                             petEngine.syncSharedState()
                         }
                     case .active:

@@ -25,9 +25,15 @@ public class PetStore {
     /// Encode and write the pet state to petFile.
     public func save(_ pet: PetState) throws {
         try ensureDirectory(directory)
-        let data = try encoder.encode(pet)
+        // Stamp the write time so cross-device conflict resolution can pick the
+        // most-recently-written copy (see PetConflictResolver). Snapshots
+        // (saveEvolutionSnapshot) intentionally do NOT bump it — they're
+        // historical records, not the live pet.
+        var stamped = pet
+        stamped.updatedAt = Date()
+        let data = try encoder.encode(stamped)
         try data.write(to: petFile, options: .atomic)
-        logger.debug("Saved pet \(pet.id) at level \(pet.level.rawValue)")
+        logger.debug("Saved pet \(stamped.id) at level \(stamped.level.rawValue)")
     }
 
     /// Load pet state from petFile. Returns nil if file doesn't exist.

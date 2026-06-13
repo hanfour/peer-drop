@@ -5,6 +5,19 @@
     <!-- Hard requirement for Mac App Store -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
+    <!-- Cross-device pet sync: share the SAME iCloud container as the iOS
+         app (iCloud.com.hanfour.peerdrop) so the Mac shows the pet raised on
+         iPhone/iPad. Mirrors PeerDrop.entitlements. REQUIRES enabling the
+         iCloud capability (iCloud Documents + Key-Value storage) on the Mac
+         App ID in the Apple Developer portal and regenerating the Mac
+         provisioning profile — see docs/release/release-runbook.md. Until
+         then PetCloudSync no-ops and the Mac falls back to local-only pets. -->
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array>
+        <string>iCloud.com.hanfour.peerdrop</string>
+    </array>
+    <key>com.apple.developer.ubiquity-kvstore-identifier</key>
+    <string>$(TeamIdentifierPrefix)com.hanfour.peerdrop</string>
     <!-- Networking: outbound for relay + worker, incoming for Bonjour discovery -->
     <key>com.apple.security.network.client</key>
     <true/>

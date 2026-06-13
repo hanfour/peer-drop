@@ -329,8 +329,13 @@ Before `fastlane release_mac` can succeed end-to-end, three external pieces must
 The Mac bundle `com.hanfour.peerdrop.mac` needs the same App ID capability set as iOS (where applicable) plus Mac-specific entries:
 
 1. https://developer.apple.com/account → Identifiers → click `com.hanfour.peerdrop.mac` (create if absent: macOS App ID, description "PeerDrop for Mac")
-2. Enable: App Sandbox, Push Notifications, Bluetooth, Microphone, Networking (multicast)
-3. Save
+2. Enable: App Sandbox, Push Notifications, Bluetooth, Microphone, Networking (multicast), **iCloud**
+3. For **iCloud**: enable **Key-Value storage** + **iCloud Documents**, then bind the existing container **`iCloud.com.hanfour.peerdrop`** (the SAME container the iOS app uses — do NOT create a new `.mac` container, or the Mac and iPhone would sync to different stores and never show the same pet)
+4. Save
+
+> **Why iCloud on Mac:** cross-device pet sync (the Mac shows the pet raised on iPhone/iPad). `PetSyncCoordinator` reads + merges the iCloud copy at launch via `PetConflictResolver`. Until this capability + the regenerated profile are in place, `PetCloudSync` no-ops and the Mac falls back to local-only pets — the app still builds and runs, it just won't share pets. The matching entitlement keys are already in `PeerDropMac/App/PeerDrop-Mac.entitlements` (`com.apple.developer.icloud-container-identifiers` + `ubiquity-kvstore-identifier`); the local Mac Debug build will fail to sign with `Automatic` style until step 2/3 are saved on the portal. Verify Mac compilation meanwhile with `xcodebuild build -scheme PeerDropMac -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`.
+
+**Conflict-resolution behaviour to know before enabling sync:** the model is single-pet (`pet.json`), so when two devices hold *different* pets that have never synced, turning sync on converges them to **one** — `PetConflictResolver` keeps the more-invested pet (higher level → XP → interactions → older birthDate) and the other is discarded. The same pet edited on two devices resolves to the most-recently-written copy. This is inherent to single-pet sync; surface it in the v6.x reviewer/release notes if the audience has multiple devices with separate pets.
 
 Then regenerate the provisioning profile via fastlane:
 

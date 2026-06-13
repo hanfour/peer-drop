@@ -124,10 +124,11 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
         // `flushAllPendingPersists` lives on `ChatManager` (M1d-5 audit).
         // ConnectionManager exposes ChatManager via `public let chatManager`.
         connectionManager?.chatManager.flushAllPendingPersists()
-        // Persist the pet on quit (audit round 21) — scenePhase .background
-        // isn't guaranteed before a Cmd+Q termination on macOS.
+        // Persist + push the pet on quit (audit round 21) — scenePhase
+        // .background isn't guaranteed before a Cmd+Q termination on macOS.
+        // push() also syncs to iCloud so the last edits reach other devices.
         if let pet = petEngine?.pet {
-            try? PetStore().save(pet)
+            PetSyncCoordinator().push(pet)
         }
     }
 
