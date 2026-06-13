@@ -69,10 +69,20 @@ struct PetTabView: View {
 
             // MARK: - Gene Info
             Section("基因資訊") {
-                LabeledContent("體型", value: engine.pet.genome.body.rawValue)
-                LabeledContent("眼睛", value: engine.pet.genome.eyes.rawValue)
-                LabeledContent("花紋", value: engine.pet.genome.pattern.rawValue)
-                LabeledContent("配色", value: "#\(engine.pet.genome.paletteIndex)")
+                // Friendly localized names instead of raw enum rawValues
+                // ("cat"/"dizzy"/"stripe"/"#4") which read like debug output
+                // (audit round 18).
+                LabeledContent("體型", value: engine.pet.genome.body.displayName)
+                LabeledContent("眼睛", value: engine.pet.genome.eyes.displayName)
+                LabeledContent("花紋", value: engine.pet.genome.pattern.displayName)
+                LabeledContent("配色") {
+                    // A colour swatch of the palette's primary colour reads
+                    // far better than the bare index "#4".
+                    Circle()
+                        .fill(paletteColor(engine.pet.genome.paletteIndex))
+                        .frame(width: 18, height: 18)
+                        .overlay(Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: 0.5))
+                }
 
                 PersonalityBarsView(traits: engine.pet.genome.personalityTraits)
             }
@@ -151,6 +161,12 @@ struct PetTabView: View {
         case .excited: return "star"
         case .startled: return "exclamationmark.triangle"
         }
+    }
+
+    /// Primary colour of the pet's palette for the gene-info swatch, bounds
+    /// checked (paletteIndex is 0–7; PetPalettes.all has 9 entries).
+    private func paletteColor(_ index: Int) -> Color {
+        PetPalettes.all.indices.contains(index) ? PetPalettes.all[index].primary : .gray
     }
 
     /// Pure decision function for whether the v4.0.1 welcome reveal should
