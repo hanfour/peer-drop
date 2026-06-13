@@ -17,10 +17,24 @@ public struct EvolutionRequirement {
     /// adult→elder transition does. UI uses this to render an appropriate
     /// "stay active" caveat alongside the age progress.
     public let requiresRecentActivity: Bool
+    /// When `requiresRecentActivity` is true, the pet must have interacted
+    /// within this window for the transition to fire. nil when activity isn't
+    /// gated. This makes `EvolutionRequirement` the single source of truth for
+    /// every evolution threshold — `PetEngine.checkEvolution` reads these
+    /// values rather than re-declaring its own constants (which used to drift
+    /// from the UI's progress maths; see the resolved FIXME).
+    public let recentActivityWindow: TimeInterval?
 
-    public init(targetLevel: PetLevel, minimumAge: TimeInterval, requiresRecentActivity: Bool) {
-        self.targetLevel = targetLevel; self.minimumAge = minimumAge
+    public init(
+        targetLevel: PetLevel,
+        minimumAge: TimeInterval,
+        requiresRecentActivity: Bool,
+        recentActivityWindow: TimeInterval? = nil
+    ) {
+        self.targetLevel = targetLevel
+        self.minimumAge = minimumAge
         self.requiresRecentActivity = requiresRecentActivity
+        self.recentActivityWindow = recentActivityWindow
     }
 
     /// Returns the evolution requirement for evolving from the given level
@@ -37,7 +51,8 @@ public struct EvolutionRequirement {
             return EvolutionRequirement(
                 targetLevel: .elder,
                 minimumAge: 90 * 86400,
-                requiresRecentActivity: true
+                requiresRecentActivity: true,
+                recentActivityWindow: 30 * 86400
             )
         case .elder:
             return nil

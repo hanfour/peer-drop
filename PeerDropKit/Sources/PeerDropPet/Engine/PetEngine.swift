@@ -193,9 +193,19 @@ public class PetEngine: ObservableObject {
         syncSharedState()
     }
 
+    /// Hard cap on retained social-diary entries. Without it `socialLog` grows
+    /// unbounded across the app's lifetime — bloating the persisted pet.json
+    /// (now also synced to iCloud) and making `hasSocialRecently`'s O(n) scan
+    /// (run on every interaction) ever slower. Oldest entries are dropped; the
+    /// cap is generous enough that a normal player never loses a recent secret.
+    public static let maxSocialLogEntries = 200
+
     public func handlePetMeeting(partnerGreeting: PetGreeting) {
         let entry = socialEngine.onPetMeeting(myPet: pet, partnerGreeting: partnerGreeting)
         pet.socialLog.append(entry)
+        if pet.socialLog.count > Self.maxSocialLogEntries {
+            pet.socialLog.removeFirst(pet.socialLog.count - Self.maxSocialLogEntries)
+        }
         handleInteraction(.petMeeting)
         currentAction = .love
         for _ in 0..<3 {
@@ -350,27 +360,34 @@ public class PetEngine: ObservableObject {
     // Migration (one-shot, see migrateAgingForV5): existing pets that were
     // incorrectly promoted to elder under the old gate get demoted back to
     // adult at first v5 launch.
-    public static let adultToElderAgeDays: Double = 90
-    public static let adultToElderActivityWindowDays: Double = 30
+    /// Adult→elder thresholds, derived from `EvolutionRequirement` so there's
+    /// a single source of truth (these used to be standalone constants that
+    /// could drift from the requirement table the UI reads). Computed, not
+    /// stored, so any future edit to `EvolutionRequirement.for(.adult)` flows
+    /// through automatically. `migrateAgingForV5` reads these.
+    public static var adultToElderAgeDays: Double {
+        (EvolutionRequirement.for(.adult)?.minimumAge ?? 90 * 86400) / 86400
+    }
+    public static var adultToElderActivityWindowDays: Double {
+        (EvolutionRequirement.for(.adult)?.recentActivityWindow ?? 30 * 86400) / 86400
+    }
 
     private func checkEvolution() {
-        // FIXME(v5.x): EvolutionRequirement.for(.baby) thresholds (500 XP / 3 days) don't match checkEvolution()'s age-only 8-day rule. UI evolutionProgress + PetTabView "ready in ~Xh" hint will mislead users. Refactor in v5.x polish.
+        // Single source of truth: every threshold comes from
+        // `EvolutionRequirement` (same table the UI's evolutionProgress reads),
+        // so the progress bar and the actual transition can no longer drift —
+        // this resolves the long-standing FIXME about hard-coded 8-day / XP
+        // mismatches.
         let now = Date()
-        let ageInDays = now.timeIntervalSince(pet.birthDate) / 86400
+        let age = now.timeIntervalSince(pet.birthDate)
+        guard let req = EvolutionRequirement.for(pet.level) else { return } // elder = terminal
+        guard age >= req.minimumAge else { return }
 
-        switch pet.level {
-        case .baby:
-            if ageInDays >= 8 { evolve(to: .adult) }
-        case .adult:
-            // Both gates required: meaningful age AND ongoing engagement.
-            let daysSinceInteraction = now.timeIntervalSince(pet.lastInteraction) / 86400
-            if ageInDays >= Self.adultToElderAgeDays
-                && daysSinceInteraction < Self.adultToElderActivityWindowDays {
-                evolve(to: .elder)
-            }
-        case .elder:
-            return
+        if req.requiresRecentActivity {
+            let window = req.recentActivityWindow ?? .infinity
+            guard now.timeIntervalSince(pet.lastInteraction) < window else { return }
         }
+        evolve(to: req.targetLevel)
     }
 
     /// One-shot v5 migration: pets that were promoted to .elder under the
