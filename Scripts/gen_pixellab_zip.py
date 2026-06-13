@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a PixelLab-shaped raw zip for one species×stage via the API.
 
-Reads the existing v4 rotation-only zip in `PeerDrop/Resources/Pets/`,
+Reads the existing v4 rotation-only zip in `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`,
 estimates a per-direction skeleton, then renders walk (8 frames) +
 idle (5 frames) for each of 8 directions by perturbing the skeleton
 through `skeleton_animator.perturb` and calling
@@ -53,7 +53,7 @@ from skeleton_animator import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PETS_DIR = REPO_ROOT / "PeerDrop" / "Resources" / "Pets"
+PETS_DIR = REPO_ROOT / "PeerDropKit" / "Sources" / "PeerDropPet" / "Resources" / "Pets"
 
 DIRECTIONS = (
     "south", "south-east", "east", "north-east",

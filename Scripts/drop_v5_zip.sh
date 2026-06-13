@@ -32,7 +32,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PETS_DIR="$REPO_ROOT/PeerDrop/Resources/Pets"
+PETS_DIR="$REPO_ROOT/PeerDropKit/Sources/PeerDropPet/Resources/Pets"
 WHITELIST_FILE="$REPO_ROOT/PeerDropTests/Pet/MainBundleAssetCoverageTests.swift"
 NORMALIZE_SCRIPT="$REPO_ROOT/Scripts/normalize-pixellab-zip.sh"
 ATLAS_SCRIPT="$REPO_ROOT/Scripts/build_atlas.py"
@@ -194,7 +194,7 @@ cat <<EOF
 
 ${BOLD}${GREEN}✓ All checks passed.${RESET} Next step (you choose to run):
 
-    ${DIM}git add PeerDrop/Resources/Pets/${SPECIES_STAGE}.zip \\
+    ${DIM}git add PeerDropKit/Sources/PeerDropPet/Resources/Pets/${SPECIES_STAGE}.zip \\
         PeerDropTests/Pet/MainBundleAssetCoverageTests.swift${RESET}
 
     ${DIM}git commit -m "asset(v5): ${SPECIES_STAGE} — <details>"${RESET}

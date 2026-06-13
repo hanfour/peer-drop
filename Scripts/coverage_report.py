@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the v5 multi-frame coverage report from the bundled assets.
 
-Walks `PeerDrop/Resources/Pets/`, classifies every zip by its
+Walks `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`, classifies every zip by its
 `export_version` + atlas presence, groups by species family, and emits
 a Markdown report. Complements `compute_v5_coverage.sh` (which is a
 single-line shields.io badge JSON) by providing the detailed
@@ -27,7 +27,7 @@ from typing import Optional
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PETS_DIR = REPO_ROOT / "PeerDrop" / "Resources" / "Pets"
+PETS_DIR = REPO_ROOT / "PeerDropKit" / "Sources" / "PeerDropPet" / "Resources" / "Pets"
 COVERAGE_MD = REPO_ROOT / "docs" / "pet-design" / "ai-brief" / "COVERAGE.md"
 
 
@@ -109,7 +109,7 @@ def build_report(infos: list[ZipInfo]) -> str:
     lines.append("# v5 Multi-Frame Coverage Report")
     lines.append("")
     lines.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}")
-    lines.append("Source: `PeerDrop/Resources/Pets/`")
+    lines.append("Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`")
     lines.append("")
     lines.append("## Summary")
     lines.append("")
