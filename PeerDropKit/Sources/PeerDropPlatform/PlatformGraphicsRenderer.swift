@@ -52,7 +52,20 @@ enum AppKitGraphicsRenderer {
         let context = NSGraphicsContext(bitmapImageRep: bitmap)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
-        drawing(context.cgContext)
+
+        // Match UIGraphicsImageRenderer's coordinate system: top-left origin,
+        // y increasing downward. `NSGraphicsContext(bitmapImageRep:)` is
+        // bottom-left / y-up, the OPPOSITE of UIKit, so the shared drawing
+        // code in PetRendererV3.composite (which manually y-flips for a
+        // UIKit-style top-left context) ended up double-flipped on macOS and
+        // rendered the pet UPSIDE-DOWN (live finding 2026-06-13). Flip the
+        // CTM here so the same closure produces identical output on both
+        // platforms — and NSImage.draw / CGContext.draw inside it behave as
+        // they do on iOS.
+        let cg = context.cgContext
+        cg.translateBy(x: 0, y: CGFloat(height))
+        cg.scaleBy(x: 1, y: -1)
+        drawing(cg)
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: size)
