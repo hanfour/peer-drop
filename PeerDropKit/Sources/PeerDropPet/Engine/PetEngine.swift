@@ -263,6 +263,19 @@ public class PetEngine: ObservableObject {
         return .fed
     }
 
+    /// Feed without the drop-and-walk choreography (audit round 25). macOS
+    /// has no FloatingPetView behaviour loop to walk the pet to dropped
+    /// food and trigger `consumeFood()`, so the Mac pet UI feeds directly:
+    /// drop (consume from inventory + apply cooldown/stock rules) then eat
+    /// immediately. Returns the same FeedResult as `dropFood` for UI
+    /// feedback.
+    @discardableResult
+    public func feedDirectly(_ type: FoodType) -> FeedResult {
+        let result = dropFood(type, at: .zero)
+        if result == .fed { consumeFood() }
+        return result
+    }
+
     public func consumeFood() {
         guard let food = foodTarget else { return }
         foodTarget = nil

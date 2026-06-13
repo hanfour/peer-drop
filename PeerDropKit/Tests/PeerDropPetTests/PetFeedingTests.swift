@@ -78,4 +78,36 @@ final class PetFeedingTests: XCTestCase {
         let engine = PetEngine(pet: pet)
         XCTAssertEqual(engine.dropFood(.rice, at: CGPoint(x: 200, y: 600)), .onCooldown)
     }
+
+    // Audit round 25: macOS has no floating pet to walk to dropped food, so
+    // feedDirectly consumes immediately (drop + eat in one call) for the Mac
+    // pet UI. Returns the same FeedResult for UI feedback.
+
+    func testFeedDirectlyConsumesImmediately() {
+        var pet = PetState.newEgg()
+        pet.level = .baby
+        let engine = PetEngine(pet: pet)
+        let xpBefore = engine.pet.experience
+        XCTAssertEqual(engine.feedDirectly(.rice), .fed)
+        XCTAssertNil(engine.foodTarget, "feedDirectly must not leave an un-eaten target")
+        XCTAssertEqual(engine.pet.experience, xpBefore + 3)
+        XCTAssertEqual(engine.pet.lifeState, .digesting)
+    }
+
+    func testFeedDirectlyReportsOutOfStock() {
+        var pet = PetState.newEgg()
+        pet.level = .baby
+        pet.foodInventory.items = []
+        let engine = PetEngine(pet: pet)
+        XCTAssertEqual(engine.feedDirectly(.rice), .outOfStock)
+        XCTAssertNil(engine.foodTarget)
+    }
+
+    func testFeedDirectlyReportsCooldown() {
+        var pet = PetState.newEgg()
+        pet.level = .baby
+        pet.lastFedAt = Date()
+        let engine = PetEngine(pet: pet)
+        XCTAssertEqual(engine.feedDirectly(.rice), .onCooldown)
+    }
 }
