@@ -70,6 +70,25 @@ public final class PetRendererV3 {
     }
     private var lastComposite: (key: CompositeKey, image: CGImage)?
 
+    /// Tinted mood-overlay SF Symbols, cached per mood. The v5 multi-frame
+    /// path re-composites on every animator tick (~6–12 Hz) and deliberately
+    /// skips `lastComposite` (frameIndex changes each tick), so without this
+    /// the symbol image + tint were rebuilt every single frame — a synchronous
+    /// SF Symbol instantiation + tint on the main actor. The tinted icon is
+    /// identical across frames for a given mood (it's scaled into `iconRect`
+    /// at draw time, so it's size-independent), and there are only 6 moods, so
+    /// this tiny cache never evicts. @MainActor isolation makes the dictionary
+    /// access race-free.
+    private var moodIconCache: [PetMood: PlatformImage] = [:]
+
+    private func tintedMoodIcon(_ mood: PetMood) -> PlatformImage? {
+        if let cached = moodIconCache[mood] { return cached }
+        let icon = PlatformImage(platformSystemName: MoodOverlay.iconName(mood))?
+            .platformWithTintColor(MoodOverlay.tintColor(mood))
+        if let icon { moodIconCache[mood] = icon }
+        return icon
+    }
+
     public init(service: SpriteService = .shared) {
         self.service = service
         #if DEBUG
@@ -229,13 +248,12 @@ public final class PetRendererV3 {
                 width: side,
                 height: side
             )
-            let iconName = MoodOverlay.iconName(mood)
-            let tint = MoodOverlay.tintColor(mood)
-            if let icon = PlatformImage(platformSystemName: iconName)?.platformWithTintColor(tint) {
+            if let icon = tintedMoodIcon(mood) {
                 // Draw via PlatformImage's draw(in:) which respects the
                 // current graphics context. UIImage.draw(in:) works on iOS;
                 // NSImage.draw(in:) works on macOS — both honor the current
-                // graphics context set by PlatformGraphicsRenderer.
+                // graphics context set by PlatformGraphicsRenderer. The tinted
+                // icon is cached per mood (see tintedMoodIcon).
                 icon.draw(in: iconRect)
             }
         }

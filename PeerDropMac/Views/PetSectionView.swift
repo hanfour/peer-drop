@@ -22,6 +22,9 @@ struct PetSectionView: View {
         ScrollView {
             VStack(spacing: 20) {
                 PetSpriteView(size: 200)
+                    .accessibilityElement()
+                    .accessibilityLabel(petEngine.pet.name ?? String(localized: "Your pet"))
+                    .accessibilityAddTraits(.isImage)
                 header
                 evolutionSection
                 foodSection
@@ -117,6 +120,7 @@ struct PetSectionView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(count == 0)
+                        .accessibilityHint(Text("Tap a treat to feed your pet"))
                     }
                     Spacer()
                 }
@@ -141,6 +145,7 @@ struct PetSectionView: View {
                         .fill(paletteColor(petEngine.pet.genome.paletteIndex))
                         .frame(width: 16, height: 16)
                         .overlay(Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: 0.5))
+                        .accessibilityLabel("配色")
                 }
                 Divider()
                 personalityBars
