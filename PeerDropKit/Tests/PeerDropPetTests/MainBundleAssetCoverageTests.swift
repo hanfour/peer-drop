@@ -250,6 +250,10 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "hamster-campbell-elder",
         "hamster-golden-adult",
         "hamster-golden-baby",
+        // First asset via the gen_pixellab_zip API path (2026-06-13): 64×64
+        // (API canvas) + full 8-frame walk / 5-frame idle. Renders identically
+        // to the 68×68 UI-export zips.
+        "hamster-white-adult",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
