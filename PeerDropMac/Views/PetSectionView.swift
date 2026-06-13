@@ -172,7 +172,7 @@ struct PetSectionView: View {
     private var statsSection: some View {
         GroupBox(String(localized: "統計")) {
             VStack(spacing: 8) {
-                LabeledContent(String(localized: "年齡"), value: "\(petEngine.pet.ageInDays) 天")
+                LabeledContent(String(localized: "年齡"), value: String(localized: "\(petEngine.pet.ageInDays) 天"))
                 LabeledContent(String(localized: "互動次數"), value: "\(petEngine.pet.stats.totalInteractions)")
                 LabeledContent(String(localized: "清理便便"), value: "\(petEngine.pet.stats.poopsCleaned)")
                 LabeledContent(String(localized: "遇見寵物"), value: "\(petEngine.pet.stats.petsMet)")

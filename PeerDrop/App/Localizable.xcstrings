@@ -1,6 +1,226 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%lld 天" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld days" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%lld日" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%lld일" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 天" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%lld 天" } }
+      }
+    },
+    "食物庫存" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Food" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "えさ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "먹이" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "食物库存" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "食物庫存" } }
+      }
+    },
+    "基因資訊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Genes" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "遺伝子" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "유전자" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "基因信息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "基因資訊" } }
+      }
+    },
+    "統計" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stats" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "統計" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "통계" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "统计" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "統計" } }
+      }
+    },
+    "體型" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Body" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "体型" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "체형" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "体型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "體型" } }
+      }
+    },
+    "眼睛" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Eyes" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "目" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "눈" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "眼睛" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "眼睛" } }
+      }
+    },
+    "花紋" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pattern" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "模様" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "무늬" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "花纹" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "花紋" } }
+      }
+    },
+    "配色" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カラー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "색상" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配色" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "配色" } }
+      }
+    },
+    "獨立" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Independent" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自立心" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "독립심" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "独立" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "獨立" } }
+      }
+    },
+    "活力" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Energy" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "活発さ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "활력" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "活力" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "活力" } }
+      }
+    },
+    "膽小" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timid" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "臆病" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "소심함" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "胆小" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "膽小" } }
+      }
+    },
+    "調皮" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mischief" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "いたずら" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "장난기" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "调皮" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "調皮" } }
+      }
+    },
+    "年齡" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Age" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "年齢" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "나이" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "年龄" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "年齡" } }
+      }
+    },
+    "互動次數" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interactions" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ふれあい回数" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "상호작용 횟수" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "互动次数" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "互動次數" } }
+      }
+    },
+    "清理便便" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Poops Cleaned" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "うんち掃除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "응가 청소" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理便便" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理便便" } }
+      }
+    },
+    "遇見寵物" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pets Met" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "出会ったペット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "만난 펫" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "遇见宠物" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "遇見寵物" } }
+      }
+    },
+    "吃過食物" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Foods Eaten" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "食べたごはん" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "먹은 음식" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "吃过食物" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "吃過食物" } }
+      }
+    },
+    "幫寵物取個名字吧！" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Give your pet a name!" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ペットに名前をつけよう！" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "펫에게 이름을 지어주세요!" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "给宠物取个名字吧！" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "幫寵物取個名字吧！" } }
+      }
+    },
+    "名字" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Name" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "名前" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이름" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "名字" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "名字" } }
+      }
+    },
+    "確定" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "決定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "확인" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确定" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "確定" } }
+      }
+    },
+    "取消" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キャンセル" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "취소" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取消" } }
+      }
+    },
+    "輸入寵物的名字" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter your pet's name" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ペットの名前を入力" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "펫 이름 입력" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入宠物的名字" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入寵物的名字" } }
+      }
+    },
     "Tap a treat to feed your pet" : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "おやつをタップしてペットに与えよう" } },
