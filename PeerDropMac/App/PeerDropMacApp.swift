@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import PeerDropCore
 import PeerDropPlatform
 import PeerDropPet
@@ -29,6 +30,12 @@ struct PeerDropMacApp: App {
     /// in onAppear (needs petEngine.animator) and kept alive app-wide so
     /// the MenuBarExtra sprite stays animated with the main window closed.
     @State private var petTickDriver: PetTickDriver?
+    /// Debounced auto-save of the pet (audit round 21). macOS scenePhase
+    /// `.background` and applicationWillTerminate don't fire reliably for a
+    /// menu-bar-agent app (verified: neither Cmd+H nor Quit triggered a
+    /// save), so persistence is driven off pet MUTATIONS instead — the same
+    /// robust pattern ChatManager uses. Held for the app's lifetime.
+    @State private var petSaveCancellable: AnyCancellable?
     /// Round 11 audit fix: NearbyTab + GuidanceCard read this object
     /// via `@EnvironmentObject` to drive the discovery-help heuristics.
     /// Without it, the SwiftUI environment lookup fatals at first
@@ -207,6 +214,17 @@ struct PeerDropMacApp: App {
                         // for now — this is just local persistence.
                         if let saved = try? PetStore().loadAndMigrate() {
                             petEngine.pet = saved
+                        }
+                        // Auto-save on every pet mutation, debounced 1s, so
+                        // age/evolution/feeding survive a relaunch even when
+                        // no lifecycle save fires (see petSaveCancellable).
+                        // No dropFirst: the first emission persists the
+                        // just-loaded (and possibly auto-evolved on load) pet
+                        // too — re-saving identical bytes is harmless.
+                        if petSaveCancellable == nil {
+                            petSaveCancellable = petEngine.$pet
+                                .debounce(for: .seconds(1), scheduler: RunLoop.main)
+                                .sink { pet in try? PetStore().save(pet) }
                         }
                         // M3: kick APNs registration. Matches iOS
                         // PeerDropApp.swift pattern. UN permission dialog
