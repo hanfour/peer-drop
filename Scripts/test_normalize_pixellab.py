@@ -85,6 +85,13 @@ class HeuristicTests(unittest.TestCase):
         anim = {"south": ["a"] * HEURISTIC_WALK_MIN_FRAMES}
         self.assertEqual(heuristic_action(anim), "walk")
 
+    def test_action_marker_overrides_frame_count(self):
+        # A 3-frame slot would look like idle by frame count, but the `_action`
+        # marker (commit bff863b) makes the walk/idle classification explicit so
+        # short walk cycles aren't silently dropped/misfiled.
+        self.assertEqual(heuristic_action({"_action": "walk", "south": ["a", "b", "c"]}), "walk")
+        self.assertEqual(heuristic_action({"_action": "idle", "south": ["a"] * 8}), "idle")
+
     def test_threshold_boundary_5_frames_is_idle(self):
         anim = {"south": ["a"] * (HEURISTIC_WALK_MIN_FRAMES - 1)}
         self.assertEqual(heuristic_action(anim), "idle")
@@ -98,6 +105,15 @@ class FirstDirCountTests(unittest.TestCase):
 
     def test_empty_anim_returns_zero(self):
         self.assertEqual(first_dir_count({}), 0)
+
+    def test_skips_action_marker_when_counting(self):
+        # Regression: `_action` is a metadata marker (its value is the string
+        # "walk"/"idle"), not a direction. Counting it would return len of the
+        # string (4) instead of the real frame count, and — worse — leak the
+        # marker into normalized `directions` where build_atlas treats the
+        # string as a frame-path list and crashes ("['i','d','l',...]").
+        anim = {"_action": "walk", "south": ["a", "b", "c"]}
+        self.assertEqual(first_dir_count(anim), 3)  # not len("walk") == 4
 
 
 class PickWinnerTests(unittest.TestCase):
