@@ -318,13 +318,32 @@ struct FloatingPetView: View {
 
     private func screenSurfaces() -> ScreenSurfaces {
         let screen = UIScreen.main.bounds
+        // `ground` is the sprite CENTRE's resting y. The old hard-coded
+        // `height - 80` ignored the tab bar + home-indicator safe area, so
+        // the 128pt sprite's lower half sat squarely on the tab buttons
+        // (audit round 18 live finding). Rest the sprite frame's BOTTOM
+        // edge on the tab bar's top edge instead, computed from the real
+        // bottom safe-area inset (34 on notched devices, 0 on older ones).
+        let tabBarHeight: CGFloat = 49
+        let tabBarTop = screen.height - Self.bottomSafeAreaInset() - tabBarHeight
         return ScreenSurfaces(
-            ground: screen.height - 80,
+            ground: tabBarTop - displaySize / 2,
             ceiling: 60,
             leftWall: 20,
             rightWall: screen.width - 20,
             dynamicIslandRect: CGRect(x: screen.width / 2 - 62, y: 0, width: 124, height: 37)
         )
+    }
+
+    /// Bottom safe-area inset read from the active window. FloatingPetView
+    /// is an `.ignoresSafeArea()` overlay using `UIScreen.main.bounds`, so
+    /// the inset isn't available via the SwiftUI environment here.
+    private static func bottomSafeAreaInset() -> CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.bottom ?? 0
     }
 
     private func clamp(_ value: CGFloat, _ minVal: CGFloat, _ maxVal: CGFloat) -> CGFloat {
