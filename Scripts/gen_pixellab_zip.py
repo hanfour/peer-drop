@@ -305,6 +305,12 @@ def generate(
     if not rotations:
         report.errors.append(f"no rotations in source zip: {src}")
         return report
+    # The v4-era source rotations are 68×68, but PixelLab's skeleton / animate
+    # endpoints only accept power-of-2 canvases (128/64/32/16) and 422 on 68×68.
+    # Resize each rotation to the requested image_size before any API call so an
+    # unsupported source size never reaches the endpoint.
+    from pixellab_client import _resize_png
+    rotations = {d: _resize_png(png, image_size) for d, png in rotations.items()}
 
     rendered: dict[str, dict[str, list[tuple[int, bytes]]]] = {}
     for direction, png in rotations.items():
