@@ -245,10 +245,22 @@ public class PetEngine: ObservableObject {
 
     // MARK: - Feeding
 
-    public func dropFood(_ type: FoodType, at position: CGPoint) {
-        if let lastFed = pet.lastFedAt, Date().timeIntervalSince(lastFed) < feedCooldown { return }
-        guard pet.foodInventory.consume(type) else { return }
+    /// Outcome of a feed attempt, so the UI can tell the user WHY nothing
+    /// happened instead of a silent no-op (audit round 20).
+    public enum FeedResult: Equatable {
+        case fed
+        case onCooldown
+        case outOfStock
+    }
+
+    @discardableResult
+    public func dropFood(_ type: FoodType, at position: CGPoint) -> FeedResult {
+        if let lastFed = pet.lastFedAt, Date().timeIntervalSince(lastFed) < feedCooldown {
+            return .onCooldown
+        }
+        guard pet.foodInventory.consume(type) else { return .outOfStock }
         foodTarget = DroppedFood(type: type, position: position)
+        return .fed
     }
 
     public func consumeFood() {
