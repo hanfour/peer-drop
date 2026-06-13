@@ -4,6 +4,7 @@ import UserNotifications
 import os
 import PeerDropCore
 import PeerDropPlatform
+import PeerDropPet
 
 @MainActor
 final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNotificationCenterDelegate {
@@ -16,6 +17,12 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
     /// lifecycle hooks (terminate flush, file open) can call into
     /// ConnectionManager. Weak to avoid retaining beyond scene scope.
     weak var connectionManager: ConnectionManager?
+
+    /// Wired by `PeerDropMacApp` at scene appearance so the terminate hook
+    /// can persist the pet on Cmd+Q (audit round 21). scenePhase
+    /// `.background` covers Cmd+H / window-close, but a straight quit may
+    /// not deliver it before termination — this is the belt-and-braces save.
+    weak var petEngine: PetEngine?
 
     /// M3: owns the macOS CallProvider implementation. Strong reference
     /// because PeerDropMacApp registers it via
@@ -117,6 +124,11 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
         // `flushAllPendingPersists` lives on `ChatManager` (M1d-5 audit).
         // ConnectionManager exposes ChatManager via `public let chatManager`.
         connectionManager?.chatManager.flushAllPendingPersists()
+        // Persist the pet on quit (audit round 21) — scenePhase .background
+        // isn't guaranteed before a Cmd+Q termination on macOS.
+        if let pet = petEngine?.pet {
+            try? PetStore().save(pet)
+        }
     }
 
     // MARK: - M3: APNs registration

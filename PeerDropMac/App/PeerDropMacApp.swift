@@ -80,9 +80,11 @@ struct PeerDropMacApp: App {
                 .environmentObject(appDelegate)
                 .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
-                    // Wire AppDelegate's weak ref so lifecycle hooks
-                    // (terminate flush) can reach ConnectionManager.
+                    // Wire AppDelegate's weak refs so lifecycle hooks
+                    // (terminate flush) can reach ConnectionManager + persist
+                    // the pet on quit (audit round 21).
                     appDelegate.connectionManager = connectionManager
+                    appDelegate.petEngine = petEngine
 
                     // Start the pet animation clock (see petTickDriver doc).
                     // onAppear can re-fire when the main window reopens;
@@ -194,6 +196,18 @@ struct PeerDropMacApp: App {
                     if ScreenshotModeProvider.shared.isActive {
                         petEngine.pet = ScreenshotModeProvider.shared.mockPetState
                     } else {
+                        // Audit round 21: the Mac app never loaded a persisted
+                        // pet — it ran on the throwaway `.newEgg()` from
+                        // PetEngine(), so the Mac pet was always a fresh baby
+                        // that never aged or survived a relaunch. Load + (on
+                        // background) save the local pet, mirroring iOS
+                        // (PeerDropApp.onAppear / scenePhase). The didSet
+                        // passive-aging hook (round 18) then evolves an overdue
+                        // pet on load. Cross-device CloudKit sync stays iOS-only
+                        // for now — this is just local persistence.
+                        if let saved = try? PetStore().loadAndMigrate() {
+                            petEngine.pet = saved
+                        }
                         // M3: kick APNs registration. Matches iOS
                         // PeerDropApp.swift pattern. UN permission dialog
                         // shows once; subsequent launches re-register silently.
@@ -223,6 +237,13 @@ struct PeerDropMacApp: App {
                     switch newPhase {
                     case .background:
                         inboxService.disconnect()
+                        // Persist the pet so age/evolution/feeding survive a
+                        // relaunch (audit round 21). Skip in screenshot mode
+                        // so the mock pet never overwrites a real save.
+                        if !ScreenshotModeProvider.shared.isActive {
+                            try? PetStore().save(petEngine.pet)
+                            petEngine.syncSharedState()
+                        }
                     case .active:
                         inboxService.connect()
                     default:
