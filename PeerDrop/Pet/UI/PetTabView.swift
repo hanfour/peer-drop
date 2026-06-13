@@ -181,9 +181,18 @@ struct PetNameButton: View {
             showAlert = true
         } label: {
             HStack(spacing: 4) {
-                Text(name ?? "???")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                // Unnamed pets showed a bare "???" which read like a bug
+                // (audit round 18). Show an inviting, lower-emphasis prompt
+                // instead — the pencil already signals it's editable.
+                if let name, !name.isEmpty {
+                    Text(name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text(String(localized: "Tap to name"))
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
                 Image(systemName: "pencil")
                     .font(.caption)
                     .foregroundStyle(.secondary)
