@@ -162,14 +162,14 @@ class RenderDirectionTests(unittest.TestCase):
             client=client, direction="south",
             rotation_png=b"south-bytes", image_size=(68, 68), report=report,
         )
-        # PixelLab /animate-with-skeleton requires exactly 3 frames per
-        # batch — see fix(scripts) commit. Each action becomes one batched
-        # API call.
-        self.assertEqual(len(result["walk"]), 3)
-        self.assertEqual(len(result["idle"]), 3)
-        # 1 estimate + 1 walk batch + 1 idle batch = 3 API calls
-        self.assertEqual(report.api_calls, 3)
-        self.assertEqual(report.frames_written, 6)
+        # /animate-with-skeleton renders EXACTLY 3 poses per call, so the
+        # 8-frame walk / 5-frame idle cycles are chained over ceil(N/3)
+        # batches (3+3+2 walk, 3+2 idle) with the padded extras trimmed.
+        self.assertEqual(len(result["walk"]), 8)
+        self.assertEqual(len(result["idle"]), 5)
+        # 1 estimate + 3 walk batches + 2 idle batches = 6 API calls
+        self.assertEqual(report.api_calls, 6)
+        self.assertEqual(report.frames_written, 13)
 
     def test_empty_skeleton_skips_direction(self):
         report = GenReport(species_stage="test", output_path=Path("/tmp/x"))
@@ -263,9 +263,10 @@ class GenerateTests(unittest.TestCase):
 
             self.assertEqual(report.errors, [])
             self.assertTrue(out.is_file())
-            # 8 dirs × 3 calls each (1 estimate + 1 walk batch + 1 idle batch) = 24
-            self.assertEqual(report.api_calls, 24)
-            self.assertEqual(report.frames_written, 8 * 6)
+            # 8 dirs × 6 calls each (1 estimate + 3 walk batches + 2 idle batches) = 48
+            self.assertEqual(report.api_calls, 8 * 6)
+            # 8 dirs × (8 walk + 5 idle frames) = 104
+            self.assertEqual(report.frames_written, 8 * 13)
 
     def test_resizes_source_to_image_size_before_api(self):
         # Regression: source rotations are 68×68 but PixelLab's endpoints only

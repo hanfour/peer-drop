@@ -127,12 +127,15 @@ class ValidationFrameSizeTests(unittest.TestCase):
         finding = next(f for f in report.findings if f.code == "frame-size-48")
         self.assertIn("HAPPY EXPRESSION", finding.suggestion)
 
-    def test_64x64_fails_as_generic_size_mismatch(self):
+    def test_64x64_accepted_as_api_path_size(self):
+        # 64×64 is the gen_pixellab_zip API-path size (PixelLab endpoints only
+        # accept power-of-2 canvases). It renders identically to the 68×68 UI
+        # size, so it's a valid drop-in — frame-size must report OK, not FAIL.
         path = make_raw_zip(frame_size=(64, 64))
         self.addCleanup(path.unlink, missing_ok=True)
         report = validate(path)
-        self.assertTrue(report.has_failure)
-        self.assertEqual(severities(report).get("frame-size-other"), "FAIL")
+        self.assertEqual(severities(report).get("frame-size"), "OK")
+        self.assertIsNone(severities(report).get("frame-size-other"))
 
 
 class ValidationRotationTests(unittest.TestCase):
