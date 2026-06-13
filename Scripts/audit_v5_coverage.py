@@ -26,7 +26,7 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PETS_DIR = REPO_ROOT / "PeerDrop" / "Resources" / "Pets"
+PETS_DIR = REPO_ROOT / "PeerDropKit" / "Sources" / "PeerDropPet" / "Resources" / "Pets"
 
 # v5.0.1 genome distribution from PetGenome.BodyGene.from(personalityGene:)
 # Keep in sync with the switch in PetGenome.swift.

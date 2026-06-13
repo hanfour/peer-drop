@@ -3,7 +3,7 @@
 # Compute v5 asset-coverage stats for the README badge.
 #
 # - `covered`  = entries in `expectedV5Coverage` set inside MainBundleAssetCoverageTests.swift
-# - `total`    = .zip files under PeerDrop/Resources/Pets/ (the v4 bundle minus anything
+# - `total`    = .zip files under PeerDropKit/Sources/PeerDropPet/Resources/Pets/ (the v4 bundle minus anything
 #                already removed; ground truth for "what's shipping in the app right now")
 # - `percent`  = covered / total × 100, integer floor
 # - `color`    = shields.io tier: red <10, orange <33, yellow <66, yellowgreen <90, green ≥90
@@ -26,7 +26,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # harness (Scripts/test_compute_v5_coverage.sh) sets these to point at
 # synthetic fixtures.
 COVERAGE_FILE="${COVERAGE_FILE_OVERRIDE:-$REPO_ROOT/PeerDropTests/Pet/MainBundleAssetCoverageTests.swift}"
-PETS_DIR="${PETS_DIR_OVERRIDE:-$REPO_ROOT/PeerDrop/Resources/Pets}"
+PETS_DIR="${PETS_DIR_OVERRIDE:-$REPO_ROOT/PeerDropKit/Sources/PeerDropPet/Resources/Pets}"
 
 if [[ ! -f "$COVERAGE_FILE" ]]; then
     echo "ERROR: not found: $COVERAGE_FILE" >&2

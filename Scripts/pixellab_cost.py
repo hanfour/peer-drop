@@ -41,7 +41,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PETS_DIR = REPO_ROOT / "PeerDrop" / "Resources" / "Pets"
+PETS_DIR = REPO_ROOT / "PeerDropKit" / "Sources" / "PeerDropPet" / "Resources" / "Pets"
 
 DEFAULT_PRICE_PER_CALL = 0.008
 DEFAULT_FRAMES_PER_SPECIES = 104  # 8×8 walk + 8×5 idle

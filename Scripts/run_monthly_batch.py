@@ -37,7 +37,7 @@ from gen_pixellab_zip import generate, GenReport
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PETS_DIR = REPO_ROOT / "PeerDrop" / "Resources" / "Pets"
+PETS_DIR = REPO_ROOT / "PeerDropKit" / "Sources" / "PeerDropPet" / "Resources" / "Pets"
 WHITELIST_FILE = REPO_ROOT / "PeerDropTests" / "Pet" / "MainBundleAssetCoverageTests.swift"
 
 CALLS_PER_SPECIES = 24    # 8 estimate-skeleton + 8 walk batches + 8 idle batches (batch mode = 3 frames per call)
@@ -176,7 +176,7 @@ def print_followup(reports: list[GenReport], staging_dir: Path) -> None:
         print(f"")
         print(f"Then test + commit:")
         print(f"  xcodebuild test -only-testing:PeerDropTests/Pet/MainBundleAssetCoverageTests")
-        print(f"  git add PeerDrop/Resources/Pets/*.zip "
+        print(f"  git add PeerDropKit/Sources/PeerDropPet/Resources/Pets/*.zip "
               f"PeerDropTests/Pet/MainBundleAssetCoverageTests.swift "
               f"docs/pet-design/ai-brief/COVERAGE.md")
         print(f"  python3 Scripts/coverage_report.py --write")
