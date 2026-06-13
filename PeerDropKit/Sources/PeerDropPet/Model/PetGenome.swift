@@ -54,6 +54,24 @@ public enum BodyGene: String, Codable, CaseIterable {
         default:      return .slime     // 4%
         }
     }
+
+    /// User-facing species name. The gene-info UI previously surfaced the
+    /// raw rawValue ("cat", "slime") which read like debug output (audit
+    /// round 18). Hard-coded zh-Hant台灣用語 to match the module's existing
+    /// displayName pattern (PetLevel / PetMood), which has no string catalog.
+    public var displayName: String {
+        switch self {
+        case .cat: return "貓咪"
+        case .dog: return "狗狗"
+        case .rabbit: return "兔子"
+        case .bird: return "小鳥"
+        case .frog: return "青蛙"
+        case .bear: return "熊熊"
+        case .dragon: return "小龍"
+        case .octopus: return "章魚"
+        case .slime: return "史萊姆"
+        }
+    }
 }
 
 public enum EyeGene: String, Codable, CaseIterable {
@@ -61,6 +79,15 @@ public enum EyeGene: String, Codable, CaseIterable {
     case round
     case line
     case dizzy
+
+    public var displayName: String {
+        switch self {
+        case .dot: return "豆豆眼"
+        case .round: return "圓滾眼"
+        case .line: return "瞇瞇眼"
+        case .dizzy: return "暈眩眼"
+        }
+    }
 }
 
 public enum LimbGene: String, Codable, CaseIterable {
@@ -73,6 +100,14 @@ public enum PatternGene: String, Codable, CaseIterable {
     case none
     case stripe
     case spot
+
+    public var displayName: String {
+        switch self {
+        case .none: return "純色"
+        case .stripe: return "條紋"
+        case .spot: return "斑點"
+        }
+    }
 }
 
 // MARK: - PersonalityTraits
