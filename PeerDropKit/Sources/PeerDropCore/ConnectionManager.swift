@@ -518,19 +518,28 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Multi-Connection Management
 
     /// Get a connection by peer ID.
+    ///
+    /// Falls back to matching the peer's identity UUID (audit round 17):
+    /// relay connections are keyed "relay-<code>" but carry the peer's
+    /// REAL identity after the hello swap, while every UI surface
+    /// (menu bar, NearbyTab, chat windows) looks peers up by identity
+    /// UUID. Without the alias scan all of those lookups missed for
+    /// relay peers — chat sends silently returned before even
+    /// persisting the bubble. Linear scan is fine: maxConnections ≤ 5.
     public func connection(for peerID: String) -> PeerConnection? {
-        connections[peerID]
+        if let direct = connections[peerID] { return direct }
+        return connections.values.first { $0.peerIdentity.id == peerID }
     }
 
     /// Check if a peer is connected.
     public func isConnected(to peerID: String) -> Bool {
-        connections[peerID]?.state.isConnected ?? false
+        connection(for: peerID)?.state.isConnected ?? false
     }
 
     /// Focus on a specific peer connection.
     public func focus(on peerID: String) {
-        guard connections[peerID] != nil else { return }
-        focusedPeerID = peerID
+        guard let conn = connection(for: peerID) else { return }
+        focusedPeerID = conn.id
     }
 
     /// Add a new peer connection.
@@ -2675,7 +2684,7 @@ public final class ConnectionManager: ObservableObject {
 
     /// Disconnect from a specific peer.
     public func disconnect(from peerID: String) async {
-        guard let peerConn = connections[peerID] else { return }
+        guard let peerConn = connection(for: peerID) else { return }
         if peerID == focusedPeerID {
             activeConnection = nil
         }
@@ -3030,6 +3039,28 @@ public final class ConnectionManager: ObservableObject {
             }
             deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
             logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+
+        case .hello:
+            // Relay identity swap (audit round 17, live finding 2026-06-13):
+            // a manual room-code connection is keyed "relay-<code>" with a
+            // placeholder PeerIdentity (supportsSecureChannel = true, no
+            // public key). The post-connect hello carries the REAL identity,
+            // but this per-peer handler had no .hello case, so the swap that
+            // handleMessageLegacy performs (keyed by identity.id — which
+            // never matches the relay key anyway) silently never happened.
+            // The trust gate then saw a secure-capable peer with no key and
+            // no contact and permanently blocked outgoing chat with
+            // "peer not user-trusted". Swap the identity, let checkPeerTrust
+            // create the .unknown contact the gate requires (idempotent for
+            // already-known peers), and (re)trigger secure-channel
+            // negotiation now that capabilities are known.
+            if let payload = message.payload,
+               let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
+                peerConnection.updatePeerIdentity(identity)
+                checkPeerTrust(peerIdentity: identity)
+                triggerSecureChannelNegotiation(for: peerConnection)
+                logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
+            }
 
         default:
             break
@@ -3627,7 +3658,9 @@ public final class ConnectionManager: ObservableObject {
     /// Send text message to a specific peer.
     public func sendTextMessage(_ text: String, to peerID: String, replyTo: ChatMessage? = nil) {
         guard FeatureSettings.isChatEnabled else { return }
-        guard let peerConn = connections[peerID] else { return }
+        // connection(for:) — relay peers are keyed "relay-<code>" while UI
+        // surfaces pass the identity UUID (audit round 17 alias lookup).
+        guard let peerConn = connection(for: peerID) else { return }
         let peer = peerConn.peerIdentity
 
         let payload = TextMessagePayload(

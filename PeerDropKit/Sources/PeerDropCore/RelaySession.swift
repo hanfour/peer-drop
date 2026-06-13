@@ -372,11 +372,13 @@ public final class RelaySession {
             Task { @MainActor in
                 guard case .pending = self.outcome else { return }
                 self.signaling.sendSDP(offer.sdp, type: "offer")
+                self.startNegotiationTimeout()
             }
         }
         if peerAlreadyJoined {
             guard case .pending = outcome else { return }
             signaling.sendSDP(offer.sdp, type: "offer")
+            startNegotiationTimeout()
         }
 
         // SDP answer
@@ -431,7 +433,21 @@ public final class RelaySession {
             }
         }
 
-        // 30s negotiation timeout
+        // Negotiation timeout is started from onPeerJoined (or the
+        // peerAlreadyJoined fast path), NOT here. The 30s clock used to run
+        // from room creation, which also covered the human "read the code
+        // to the other person and let them type it" window — live-verified
+        // 2026-06-13: a manual code entry took ~43s and the creator had
+        // already failed with negotiationTimeout before the joiner arrived.
+        // "Waiting for peer to join…" is user-cancellable and the worker
+        // expires idle rooms, so the waiting phase needs no local timer.
+    }
+
+    /// Arms the 30s negotiation timeout. Called when a joiner appears —
+    /// from that point SDP/ICE either completes quickly or never will.
+    @MainActor
+    private func startNegotiationTimeout() {
+        guard phase3Task == nil else { return }
         phase3Task = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             guard let self else { return }
