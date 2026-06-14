@@ -4,17 +4,26 @@ import PeerDropPet
 
 final class PetGenomeV2Tests: XCTestCase {
 
-    func testBodyGeneHas9Cases() {
-        // v5.0.1: ghost retired (was 10). See BodyGene declaration.
-        XCTAssertEqual(BodyGene.allCases.count, 9)
+    func testBodyGeneHasAllFamilyCases() {
+        // Expanded 9 → 34 (2026-06-14) so every SpeciesCatalog family is
+        // hatchable (the expansion families' sprites were previously dead).
+        XCTAssertEqual(BodyGene.allCases.count, 34)
     }
 
-    func testBodyGeneFromPersonalityGene() {
-        // v5.0.1 distribution: cat 50%, dog 10%, rabbit 8%, bird 8%,
-        // frog 6%, bear 6%, dragon 4%, octopus 4%, slime 4%.
-        XCTAssertEqual(BodyGene.from(personalityGene: 0.05), .cat)
-        XCTAssertEqual(BodyGene.from(personalityGene: 0.85), .bear)
-        XCTAssertEqual(BodyGene.from(personalityGene: 0.99), .slime)
+    func testCatDominatesHatchDistribution() {
+        // Cat stays the most common family (best v5 walk/idle coverage).
+        XCTAssertEqual(BodyGene.from(personalityGene: 0.0), .cat)
+        XCTAssertEqual(BodyGene.from(personalityGene: 0.1), .cat)
+    }
+
+    func testEveryBodyGeneIsHatchable() {
+        // Sweep [0,1): every family must be reachable by some personalityGene,
+        // else its bundled sprites are unreachable (the exact bug this fixes).
+        var seen = Set<BodyGene>()
+        var pg = 0.0
+        while pg < 1.0 { seen.insert(BodyGene.from(personalityGene: pg)); pg += 0.0005 }
+        XCTAssertEqual(seen, Set(BodyGene.allCases),
+                       "unreachable: \(Set(BodyGene.allCases).subtracting(seen).map(\.rawValue).sorted())")
     }
 
     func testPaletteIndexDecoupledFromBody() {

@@ -20,6 +20,33 @@ extension BodyGene {
         case .dragon:  return SpeciesID("dragon-western")
         case .octopus: return SpeciesID("octopus")
         case .slime:   return SpeciesID("slime-green")
+        // Expansion families (2026-06-14): default = the family's first
+        // catalogued variant. BodyGeneMappingTests pins that each resolves.
+        case .cow:      return SpeciesID("cow-highland")
+        case .deer:     return SpeciesID("deer-moose")
+        case .duck:     return SpeciesID("duck-mallard")
+        case .fox:      return SpeciesID("fox-arctic")
+        case .hamster:  return SpeciesID("hamster-campbell")
+        case .hedgehog: return SpeciesID("hedgehog-brown")
+        case .horse:    return SpeciesID("horse-black")
+        case .lizard:   return SpeciesID("lizard-bearded")
+        case .otter:    return SpeciesID("otter-river")
+        case .owl:      return SpeciesID("owl-barn")
+        case .parrot:   return SpeciesID("parrot-budgie")
+        case .penguin:  return SpeciesID("penguin-crested")
+        case .phoenix:  return SpeciesID("phoenix-fire")
+        case .pig:      return SpeciesID("pig-black")
+        case .pigeon:   return SpeciesID("pigeon-grey")
+        case .raccoon:  return SpeciesID("raccoon-arctic")
+        case .redpanda: return SpeciesID("redpanda-snow")
+        case .sheep:    return SpeciesID("sheep-goat")
+        case .sloth:    return SpeciesID("sloth-threetoed")
+        case .snake:    return SpeciesID("snake-ball")
+        case .squirrel: return SpeciesID("squirrel-flying")
+        case .totoro:   return SpeciesID("totoro-grey")
+        case .turtle:   return SpeciesID("turtle-sea")
+        case .unicorn:  return SpeciesID("unicorn-dark")
+        case .wolf:     return SpeciesID("wolf-black")
         }
     }
 }

@@ -41,7 +41,7 @@ final class GhostMigrationTests: XCTestCase {
     }
 
     func test_bodyGeneDecoder_throwsOnGenuinelyUnknownString() {
-        let json = "\"phoenix\"".data(using: .utf8)!  // not a BodyGene case
+        let json = "\"notaspecies-xyzzy\"".data(using: .utf8)!  // not any BodyGene case
         XCTAssertThrowsError(try JSONDecoder().decode(BodyGene.self, from: json))
     }
 

@@ -3,7 +3,16 @@ import Foundation
 // MARK: - Gene Enums
 
 public enum BodyGene: String, Codable, CaseIterable {
+    // Core families (most v5-animation coverage).
     case cat, dog, rabbit, bird, frog, bear, dragon, octopus, slime
+    // Expansion families unlocked 2026-06-14 — these already had bundled sprites
+    // + SpeciesCatalog entries (and even variant-rarity tags like `pig-boar`),
+    // but no BodyGene case, so `resolvedSpeciesID` (keyed on `body.rawValue`)
+    // could never select them: 71% of bundled assets were unreachable. Adding
+    // the cases makes every SpeciesCatalog family hatchable.
+    case cow, deer, duck, fox, hamster, hedgehog, horse, lizard, otter, owl
+    case parrot, penguin, phoenix, pig, pigeon, raccoon, redpanda, sheep, sloth
+    case snake, squirrel, totoro, turtle, unicorn, wolf
 
     /// Map legacy values from earlier genome saves.
     ///
@@ -42,16 +51,28 @@ public enum BodyGene: String, Codable, CaseIterable {
     /// `docs/release/v5.0.x-cadence.md`. As more species reach v5 schema,
     /// rebalance back toward uniform.
     public static func from(personalityGene pg: Double) -> BodyGene {
-        switch pg {
-        case ..<0.50: return .cat       // 50% (v5 animated)
-        case ..<0.60: return .dog       // 10%
-        case ..<0.68: return .rabbit    // 8%
-        case ..<0.76: return .bird      // 8%
-        case ..<0.82: return .frog      // 6%
-        case ..<0.88: return .bear      // 6%
-        case ..<0.92: return .dragon    // 4%
-        case ..<0.96: return .octopus   // 4%
-        default:      return .slime     // 4%
+        // Weighted hatch distribution over a `pg` in [0, 1). Core families stay
+        // common (they have the most v5 walk/idle coverage so they animate);
+        // the 25 expansion families are rarer but reachable so their bundled
+        // sprites actually appear in the app. Auto-scales as cases are added.
+        let p = min(max(pg, 0), 0.999_999)
+        let total = allCases.reduce(0.0) { $0 + $1.hatchWeight }
+        var threshold = p * total
+        for body in allCases {
+            threshold -= body.hatchWeight
+            if threshold < 0 { return body }
+        }
+        return .cat
+    }
+
+    /// Relative hatch likelihood. Cat dominates (best-tested v5 species); the
+    /// other 8 core families are common; the 25 expansion families share a
+    /// smaller-but-non-trivial tail (≈1.4% each).
+    var hatchWeight: Double {
+        switch self {
+        case .cat: return 20
+        case .dog, .rabbit, .bird, .frog, .bear, .dragon, .octopus, .slime: return 6
+        default: return 1.5
         }
     }
 
@@ -70,6 +91,31 @@ public enum BodyGene: String, Codable, CaseIterable {
         case .dragon: return "小龍"
         case .octopus: return "章魚"
         case .slime: return "史萊姆"
+        case .cow: return "牛牛"
+        case .deer: return "鹿鹿"
+        case .duck: return "鴨鴨"
+        case .fox: return "狐狸"
+        case .hamster: return "倉鼠"
+        case .hedgehog: return "刺蝟"
+        case .horse: return "馬兒"
+        case .lizard: return "蜥蜴"
+        case .otter: return "水獺"
+        case .owl: return "貓頭鷹"
+        case .parrot: return "鸚鵡"
+        case .penguin: return "企鵝"
+        case .phoenix: return "鳳凰"
+        case .pig: return "豬豬"
+        case .pigeon: return "鴿子"
+        case .raccoon: return "浣熊"
+        case .redpanda: return "小熊貓"
+        case .sheep: return "綿羊"
+        case .sloth: return "樹懶"
+        case .snake: return "蛇蛇"
+        case .squirrel: return "松鼠"
+        case .totoro: return "龍貓"
+        case .turtle: return "烏龜"
+        case .unicorn: return "獨角獸"
+        case .wolf: return "狼狼"
         }
     }
 }
