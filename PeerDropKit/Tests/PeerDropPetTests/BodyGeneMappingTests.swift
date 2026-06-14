@@ -61,4 +61,19 @@ final class BodyGeneMappingTests: XCTestCase {
                             "BodyGene.\(body) maps to \(body.defaultSpeciesID.rawValue) which does not resolve in SpeciesCatalog")
         }
     }
+
+    // MARK: - every catalog family must be hatchable (no unreachable sprites)
+
+    func test_everyCatalogFamilyHasABodyGene() {
+        // Regression guard for the 2026-06-14 finding: a SpeciesCatalog family
+        // with no matching BodyGene can never be produced by `resolvedSpeciesID`
+        // (keyed on `body.rawValue`), so its bundled sprites are dead assets.
+        // 25 families were unreachable (71% of bundle). Adding a catalog family
+        // now requires adding the BodyGene case too — this test enforces it.
+        let catalogFamilies = Set(SpeciesCatalog.allIDs.map(\.family))
+        let bodyFamilies = Set(BodyGene.allCases.map(\.rawValue))
+        let unreachable = catalogFamilies.subtracting(bodyFamilies).sorted()
+        XCTAssertEqual(unreachable, [],
+                       "SpeciesCatalog families with no BodyGene (unreachable sprites): \(unreachable)")
+    }
 }
