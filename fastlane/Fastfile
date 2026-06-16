@@ -465,6 +465,11 @@ platform :ios do
       skip_screenshots: true,
       skip_metadata: false,
       metadata_path: "./fastlane/metadata",
+      # `fastlane/metadata/macos/` holds the Mac (v6.0) App Store metadata
+      # (added in the M4 work). iOS `deliver` scans the whole metadata dir and
+      # rejects `macos` as an unknown language code — this flag tells it to skip
+      # unrecognised dirs instead of erroring. Only valid iOS locale dirs upload.
+      ignore_language_directory_validation: true,
       submit_for_review: should_submit,
       automatic_release: should_submit,
       phased_release: false,
