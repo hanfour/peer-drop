@@ -267,6 +267,15 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "slime-fire-adult",
         "slime-metal-adult",
         "slime-water-adult",
+        // Full-auto batch 3 (2026-06-18): baby+elder for dragon & slime (both
+        // core families now animate at every stage) + the available stages of
+        // the single-variety families (bird/frog/octopus only ship those
+        // stages as sources; their other stages fall back gracefully).
+        "dragon-western-baby", "dragon-eastern-baby", "dragon-fire-baby", "dragon-ice-baby",
+        "dragon-western-elder", "dragon-eastern-elder", "dragon-fire-elder", "dragon-ice-elder",
+        "slime-green-baby", "slime-clear-baby", "slime-fire-baby", "slime-metal-baby", "slime-water-baby",
+        "slime-green-elder", "slime-clear-elder", "slime-fire-elder", "slime-metal-elder", "slime-water-elder",
+        "bird-elder", "frog-elder", "octopus-baby", "octopus-elder",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
