@@ -254,6 +254,12 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         // (API canvas) + full 8-frame walk / 5-frame idle. Renders identically
         // to the 68×68 UI-export zips.
         "hamster-white-adult",
+        // Full-auto batch (2026-06-17): dragon adults — first v5 animation for
+        // a high-exposure static BodyGene family. 64×64, 8-frame walk/idle.
+        "dragon-western-adult",
+        "dragon-eastern-adult",
+        "dragon-fire-adult",
+        "dragon-ice-adult",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
