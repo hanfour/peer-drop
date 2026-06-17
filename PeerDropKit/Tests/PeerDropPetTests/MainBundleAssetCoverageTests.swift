@@ -260,6 +260,13 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "dragon-eastern-adult",
         "dragon-fire-adult",
         "dragon-ice-adult",
+        // Full-auto batch 2 (2026-06-17): slime adults — the other high-exposure
+        // static BodyGene family. 64×64, 8-frame walk/idle (blob squash/bounce).
+        "slime-green-adult",
+        "slime-clear-adult",
+        "slime-fire-adult",
+        "slime-metal-adult",
+        "slime-water-adult",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
