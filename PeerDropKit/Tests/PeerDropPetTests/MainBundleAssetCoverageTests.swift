@@ -276,6 +276,13 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "slime-green-baby", "slime-clear-baby", "slime-fire-baby", "slime-metal-baby", "slime-water-baby",
         "slime-green-elder", "slime-clear-elder", "slime-fire-elder", "slime-metal-elder", "slime-water-elder",
         "bird-elder", "frog-elder", "octopus-baby", "octopus-elder",
+        // Full-auto batch 4 (2026-06-18): first 3 expansion families animated at
+        // adult (all variants each) — totoro, unicorn, otter. 64×64, 8-frame
+        // walk/idle. Remaining expansion families are a low-exposure multi-month
+        // tail (run_monthly_batch).
+        "totoro-grey-adult", "totoro-large-adult", "totoro-mini-adult", "totoro-white-adult",
+        "unicorn-dark-adult", "unicorn-rainbow-adult", "unicorn-white-adult",
+        "otter-river-adult", "otter-sea-adult",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
