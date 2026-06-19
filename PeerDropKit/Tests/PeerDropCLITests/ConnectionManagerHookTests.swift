@@ -20,4 +20,17 @@ final class ConnectionManagerHookTests: XCTestCase {
         XCTAssertEqual(received?.peerID, "peer-123")
         XCTAssertEqual(received?.text, "hello from phone")
     }
+
+    @MainActor
+    func test_onTextMessageReceived_doesNotFireForNonTextMessage() throws {
+        let cm = ConnectionManager()
+        var fired = false
+        cm.onTextMessageReceived = { _, _ in fired = true }
+
+        // A non-text control message must not trigger the text hook.
+        let msg = PeerMessage.disconnect(senderID: "peer-9")
+        cm.dispatchTextForTesting(msg, from: "peer-9")
+
+        XCTAssertFalse(fired)
+    }
 }

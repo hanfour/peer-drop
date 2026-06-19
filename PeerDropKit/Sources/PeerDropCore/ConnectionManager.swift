@@ -2886,6 +2886,7 @@ public final class ConnectionManager: ObservableObject {
                 }
                 return
             }
+            // Decoded again here: the onTextMessageReceived hook above is fire-and-forget; this path owns persistence + delivery receipt.
             guard let payload = try? message.decodePayload(TextMessagePayload.self) else {
                 logger.warning("Failed to decode TextMessagePayload")
                 return
@@ -3710,10 +3711,12 @@ public final class ConnectionManager: ObservableObject {
     /// Send a plain chat message to a connected peer. Builds a TextMessagePayload
     /// and routes it through the peer's (encrypted) PeerConnection.
     /// Intended for CLI / headless callers; bypasses chat-feature flag and trust gate.
+    /// Unlike `sendTextMessage(_:to:)` (the UI path), this does NOT enforce the per-send trust gate or persist to chat history — the CLI only ever sends to already-attached, paired peers.
     public func sendText(_ text: String, to peerID: String) async throws {
         guard let connection = connection(for: peerID) else {
             throw ConnectionError.notConnected
         }
+        // reply/threading fields omitted — CLI callers send standalone messages.
         let payload = TextMessagePayload(
             text: text,
             senderName: localIdentity.displayName
