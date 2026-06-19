@@ -36,14 +36,9 @@ struct PeerDropCLI {
         let store = cm.trustedContactStore
         var bag = Set<AnyCancellable>()
 
-        // session is assigned immediately after bridge construction; the
-        // onMessage closure is only ever called after start(), which is invoked
-        // below — by that point session is non-nil.
-        var session: AgentSession!
-        let bridge = try! ProcessBridge(command: opts.command) { text in
-            session.broadcast(text)
-        }
-        session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
+        let bridge = ProcessBridge(command: opts.command)
+        let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
+        bridge.onMessage = { [weak session] text in session?.broadcast(text) }
         session.wire()
 
         bridge.onExit = { code in

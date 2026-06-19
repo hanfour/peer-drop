@@ -5,7 +5,13 @@ import Darwin
 /// PTY output → OutputSegmenter (→ chat messages); inbound text → PTY input.
 final class ProcessBridge {
     private let command: [String]
-    private let segmenter: OutputSegmenter
+    private let idle: DispatchTimeInterval
+    /// Lazily created so `onMessage` can be set after `init` but before
+    /// `start()`. The first access (from the read source event handler) is
+    /// always after the caller has assigned `onMessage`.
+    private lazy var segmenter = OutputSegmenter(idle: idle, emit: { [weak self] text in
+        self?.onMessage?(text)
+    })
     /// Replaced with a fresh instance on every `start()` call so the bridge
     /// is restart-safe (a `Process` cannot be re-run once it has been run).
     private var process: Process?
@@ -13,17 +19,21 @@ final class ProcessBridge {
     private var readSource: DispatchSourceRead?
     private let writeQueue = DispatchQueue(label: "peerdrop.cli.bridge.write")
 
+    /// Set this before calling `start()`. Called on an arbitrary dispatch
+    /// queue (the OutputSegmenter timer queue); callers that update UI or
+    /// actor-isolated state must hop to their own actor/queue inside this closure.
+    var onMessage: ((String) -> Void)?
+
     /// Called on an arbitrary queue (the Process termination queue).
     /// Callers that update UI or actor-isolated state must hop to their own
     /// actor/queue inside this closure.
     var onExit: ((Int32) -> Void)?
 
     init(command: [String],
-         idle: DispatchTimeInterval = .milliseconds(350),
-         onMessage: @escaping (String) -> Void) throws {
+         idle: DispatchTimeInterval = .milliseconds(350)) {
         precondition(!command.isEmpty, "command must not be empty")
         self.command = command
-        self.segmenter = OutputSegmenter(idle: idle, emit: onMessage)
+        self.idle = idle
     }
 
     func start() {

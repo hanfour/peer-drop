@@ -5,10 +5,11 @@ final class ProcessBridgeTests: XCTestCase {
     func test_echoCommandProducesOutputMessage() async throws {
         let exp = expectation(description: "output")
         var got = ""
-        let bridge = try ProcessBridge(
+        let bridge = ProcessBridge(
             command: ["/bin/echo", "hello-bridge"],
             idle: .milliseconds(80)
-        ) { text in
+        )
+        bridge.onMessage = { text in
             got += text
             if got.contains("hello-bridge") { exp.fulfill() }
         }
@@ -21,10 +22,11 @@ final class ProcessBridgeTests: XCTestCase {
     func test_inputIsWrittenToChild() async throws {
         let exp = expectation(description: "roundtrip")
         var got = ""
-        let bridge = try ProcessBridge(
+        let bridge = ProcessBridge(
             command: ["/bin/cat"],
             idle: .milliseconds(80)
-        ) { text in
+        )
+        bridge.onMessage = { text in
             got += text
             if got.contains("ping-123") { exp.fulfill() }
         }
@@ -36,10 +38,10 @@ final class ProcessBridgeTests: XCTestCase {
 
     func test_exitCallbackFiresWhenChildEnds() async throws {
         let exp = expectation(description: "exit")
-        let bridge = try ProcessBridge(
+        let bridge = ProcessBridge(
             command: ["/bin/echo", "bye"],
             idle: .milliseconds(80)
-        ) { _ in }
+        )
         bridge.onExit = { code in
             XCTAssertEqual(code, 0)
             exp.fulfill()
@@ -51,10 +53,10 @@ final class ProcessBridgeTests: XCTestCase {
     func test_restartRelaunchesProcess() async throws {
         let exits = expectation(description: "two exits")
         exits.expectedFulfillmentCount = 2
-        let bridge = try ProcessBridge(
+        let bridge = ProcessBridge(
             command: ["/bin/echo", "again"],
             idle: .milliseconds(80)
-        ) { _ in }
+        )
         // Trigger the second start() from within the first onExit to avoid
         // timing sensitivity: we know the first run has fully exited before
         // relaunching, and onExit must fire a second time for the relaunch.
