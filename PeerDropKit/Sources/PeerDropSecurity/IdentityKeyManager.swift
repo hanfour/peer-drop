@@ -190,7 +190,10 @@ public final class IdentityKeyManager {
                 kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                 kSecUseDataProtectionKeychain as String: true,
             ]
-            SecItemAdd(addQuery as CFDictionary, nil)
+            let migrateStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if migrateStatus != errSecSuccess && migrateStatus != errSecDuplicateItem {
+                Self.logger.debug("legacy→data-protection keychain migration add failed for \(account): \(migrateStatus)")
+            }
         }
 
         return KeychainMigration.load(

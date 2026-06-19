@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Security
+import os.log
 
 public final class ChatDataEncryptor {
     public static let shared = ChatDataEncryptor()
@@ -14,6 +15,7 @@ public final class ChatDataEncryptor {
 
     private static let keychainService = "com.peerdrop.chatdata"
     private static let keychainAccount = "aes256-key"
+    private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatDataEncryptor")
 
     private var cachedKey: SymmetricKey?
     private let lock = NSLock()
@@ -84,7 +86,10 @@ public final class ChatDataEncryptor {
             // Remove return-data directives that are invalid on SecItemAdd.
             addQuery.removeValue(forKey: kSecReturnData as String)
             addQuery.removeValue(forKey: kSecMatchLimit as String)
-            SecItemAdd(addQuery as CFDictionary, nil)
+            let migrateStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if migrateStatus != errSecSuccess && migrateStatus != errSecDuplicateItem {
+                Self.logger.debug("legacy→data-protection keychain migration add failed: \(migrateStatus)")
+            }
             // Intentionally not deleting the legacy copy — if the add silently
             // fails (e.g. errSecMissingEntitlement) we would lose the key forever.
         }

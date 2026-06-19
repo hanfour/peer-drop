@@ -21,9 +21,9 @@ import Foundation
 /// `Bundle.main.bundleURL.pathExtension`.
 enum KeychainMigration {
 
-    /// True only when running inside a real .app bundle (iOS or macOS app),
-    /// where probing the legacy macOS keychain is safe. False for the headless
-    /// CLI and xctest runners, where a legacy keychain query can hang on securityd.
+    /// True only when running inside a real .app bundle where a legacy keychain
+    /// probe is safe (macOS CLI/xctest guard). iOS has no legacy keychain; this
+    /// flag is a no-op on iOS. On macOS headless contexts, a legacy probe hangs on securityd.
     static var canProbeLegacyKeychain: Bool {
         Bundle.main.bundleURL.pathExtension == "app"
     }
