@@ -10,13 +10,21 @@ final class AgentSessionIntegrationTests: XCTestCase {
         let cm = ConnectionManager()
         let store = cm.trustedContactStore
 
-        var broadcast: [String] = []
-        // `cat` echoes its stdin to stdout, so an inbound line comes back out.
+        let lock = NSLock()
+        var got = ""
+        let echoed = expectation(description: "token echoed back out through the bridge")
+
+        // `cat` echoes its stdin to stdout (PTY echo is disabled, so this is cat's
+        // own output, not terminal echo).
         let bridge = ProcessBridge(command: ["/bin/cat"], idle: .milliseconds(80))
         let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
-        bridge.onMessage = { text in
-            broadcast.append(text)
-            session.broadcast(text)
+        bridge.onMessage = { [weak session] text in
+            lock.lock()
+            got += text
+            let done = got.contains("roundtrip-XYZ")
+            lock.unlock()
+            session?.broadcast(text)   // exercises the broadcast leg (no connected peer → harmless)
+            if done { echoed.fulfill() }
         }
         session.wire()
         bridge.start()
@@ -26,17 +34,7 @@ final class AgentSessionIntegrationTests: XCTestCase {
         let msg = try PeerMessage.textMessage(payload, senderID: "peer-1")
         cm.dispatchTextForTesting(msg, from: "peer-1")
 
-        // Wait for the child to echo it back through the segmenter.
-        try await waitUntil(timeout: 5) { broadcast.contains { $0.contains("roundtrip-XYZ") } }
-        XCTAssertTrue(broadcast.contains { $0.contains("roundtrip-XYZ") })
+        await fulfillment(of: [echoed], timeout: 5)
         bridge.terminate()
-    }
-
-    private func waitUntil(timeout: TimeInterval, _ cond: () -> Bool) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !cond() {
-            if Date() > deadline { XCTFail("timed out"); return }
-            try await Task.sleep(nanoseconds: 50_000_000)
-        }
     }
 }
