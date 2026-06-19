@@ -92,6 +92,33 @@ struct PeerDropCLI {
             }
             .store(in: &bag)
 
+        // One-time enrollment prompt for new relay (remote) peers.
+        // SAS is nil for relay first-contacts — show the fingerprint instead.
+        cm.$pendingFirstContact
+            .compactMap { $0 }
+            .sink { pending in
+                Task.detached {
+                    print("\nPair with \(pending.senderDisplayName) (relay)?")
+                    if let sas = pending.sas {
+                        print("SAS: \(sas)  (verify it matches the phone)")
+                    } else {
+                        print("Verify this fingerprint matches the phone:\n  \(pending.fingerprint)")
+                    }
+                    print("Approve? [y/N] ", terminator: "")
+                    let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
+                    await MainActor.run {
+                        if answer == "y" {
+                            cm.approveFirstContact(fingerprint: pending.fingerprint)
+                            print("paired ✓ — future connections auto-accept")
+                        } else {
+                            cm.rejectFirstContact(fingerprint: pending.fingerprint)
+                            print("rejected")
+                        }
+                    }
+                }
+            }
+            .store(in: &bag)
+
         bridge.start()
         cm.startDiscovery()
 
