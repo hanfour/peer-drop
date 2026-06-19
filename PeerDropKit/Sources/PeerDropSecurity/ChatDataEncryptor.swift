@@ -45,7 +45,13 @@ public final class ChatDataEncryptor {
             kSecAttrService as String: Self.keychainService,
             kSecAttrAccount as String: Self.keychainAccount,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            // Pin to the data-protection keychain on both iOS and macOS.
+            // Without this flag macOS falls through to the legacy CSSM/file
+            // keychain, which blocks the main thread waiting for securityd
+            // credentials in non-app-bundle CLI or test contexts.
+            // (Same fix applied to CertificateManager — see project notes.)
+            kSecUseDataProtectionKeychain as String: true,
         ]
 
         var result: AnyObject?
@@ -67,7 +73,8 @@ public final class ChatDataEncryptor {
             kSecAttrService as String: Self.keychainService,
             kSecAttrAccount as String: Self.keychainAccount,
             kSecValueData as String: keyData,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecUseDataProtectionKeychain as String: true,
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)

@@ -126,12 +126,19 @@ public final class IdentityKeyManager {
     }
 
     private func saveToKeychain(data: Data, account: String) {
+        // kSecUseDataProtectionKeychain pins all operations to the modern
+        // data-protection keychain on both iOS and macOS, bypassing the
+        // legacy CSSM/file keychain. Without this flag, macOS falls through
+        // to securityd's legacy path which blocks the main thread waiting for
+        // the login-keychain password in CLI and test contexts. Identical fix
+        // applied to ChatDataEncryptor; see project CertificateManager notes.
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         SecItemDelete(query as CFDictionary)
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -146,7 +153,8 @@ public final class IdentityKeyManager {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -158,7 +166,8 @@ public final class IdentityKeyManager {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         SecItemDelete(query as CFDictionary)
     }
