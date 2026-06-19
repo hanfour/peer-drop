@@ -209,6 +209,10 @@ public final class ConnectionManager: ObservableObject {
     public var onPeerConnectedForPet: ((String) -> Void)?
     public var onPeerDisconnectedForPet: ((String) -> Void)?
 
+    /// Headless/CLI hook: fires with (peerID, text) when a `.textMessage` is
+    /// decoded from a peer. The app UI path is unaffected (app passes nil).
+    public var onTextMessageReceived: ((String, String) -> Void)?
+
     // MARK: - Multi-Connection Support
 
     /// All active peer connections, keyed by peerID.
@@ -2775,6 +2779,15 @@ public final class ConnectionManager: ObservableObject {
     private func handleMessage(_ message: PeerMessage, from senderID: String) {
         logger.info("handleMessage: \(String(describing: message.type)) from \(senderID)")
 
+        // CLI/headless hook: fire onTextMessageReceived before any connection-existence
+        // check so the callback works even when the peer is not in `connections`.
+        // The app passes nil for this closure, making this a no-op for the live UI path.
+        if message.type == .textMessage,
+           let payload = try? message.decodePayload(TextMessagePayload.self),
+           let hook = onTextMessageReceived {
+            hook(senderID, payload.text)
+        }
+
         // Route to specific peer connection if it exists
         if let peerConn = connections[senderID] {
             handleMessageForPeer(message, peerConnection: peerConn)
@@ -3694,6 +3707,21 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Send a plain chat message to a connected peer. Builds a TextMessagePayload
+    /// and routes it through the peer's (encrypted) PeerConnection.
+    /// Intended for CLI / headless callers; bypasses chat-feature flag and trust gate.
+    public func sendText(_ text: String, to peerID: String) async throws {
+        guard let connection = connection(for: peerID) else {
+            throw ConnectionError.notConnected
+        }
+        let payload = TextMessagePayload(
+            text: text,
+            senderName: localIdentity.displayName
+        )
+        let message = try PeerMessage.textMessage(payload, senderID: localIdentity.id)
+        try await connection.sendMessage(message)
+    }
+
     public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
@@ -4226,6 +4254,15 @@ public final class ConnectionManager: ObservableObject {
         guard parts.count == 4 else { return false }
         return parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127
     }
+
+    #if DEBUG
+    /// Test seam: routes a pre-built PeerMessage through handleMessage as if it arrived from peerID.
+    /// Allows unit tests to exercise the full decode + hook path without a live NW connection.
+    @MainActor
+    public func dispatchTextForTesting(_ message: PeerMessage, from peerID: String) {
+        handleMessage(message, from: peerID)
+    }
+    #endif
 }
 
 public enum ConnectionError: Error, LocalizedError {

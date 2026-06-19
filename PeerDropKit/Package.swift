@@ -121,7 +121,11 @@ let package = Package(
         ),
         .testTarget(
             name: "PeerDropCLITests",
-            dependencies: ["peerdrop-cli"]
+            dependencies: [
+                "peerdrop-cli",
+                "PeerDropCore",
+                "PeerDropProtocol",
+            ]
         ),
     ]
 )
