@@ -25,12 +25,17 @@ final class AgentSession {
 
     /// Pure trust decision used by the connection-accept path and unit tests.
     /// `nonisolated` so the test can call it without `await`.
+    ///
+    /// Policy: only `.verified` or `.linked` contacts auto-accept.
+    /// A contact that exists but has `trustLevel == .unknown` still requires
+    /// enrollment — the peer has not yet been paired/verified.
     nonisolated static func decideTrust(
         identityKey: Data,
         store: TrustedContactStore
     ) -> TrustDecision {
         guard let contact = store.find(byPublicKey: identityKey) else { return .enroll }
-        return contact.isBlocked ? .reject : .autoAccept
+        if contact.isBlocked { return .reject }
+        return contact.trustLevel == .unknown ? .enroll : .autoAccept
     }
 
     // MARK: - Properties
@@ -47,7 +52,7 @@ final class AgentSession {
     /// Confined to the main actor.
     private var scrollback: [String] = []
 
-    private let scrollbackCap = 200
+    private static let scrollbackCap = 200
 
     // MARK: - Init
 
@@ -68,8 +73,13 @@ final class AgentSession {
     @MainActor
     func wire() {
         cm.onTextMessageReceived = { [weak self] peerID, text in
-            // This closure is called on the main actor (ConnectionManager fires it there).
-            self?.attachedPeerIDs.insert(peerID)
+            // Confine the attachedPeerIDs mutation explicitly to the main actor so
+            // this code remains correct even if the call-site actor context ever
+            // changes (e.g. ConnectionManager loses its @MainActor annotation).
+            // bridge.send is thread-safe (internal writeQueue) and stays outside the hop.
+            Task { @MainActor [weak self] in
+                self?.attachedPeerIDs.insert(peerID)
+            }
             self?.bridge.send(text)
         }
     }
@@ -106,8 +116,8 @@ final class AgentSession {
     @MainActor
     private func appendScrollback(_ text: String) {
         scrollback.append(text)
-        if scrollback.count > scrollbackCap {
-            scrollback.removeFirst(scrollback.count - scrollbackCap)
+        if scrollback.count > Self.scrollbackCap {
+            scrollback.removeFirst(scrollback.count - Self.scrollbackCap)
         }
     }
 }

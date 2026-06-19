@@ -47,4 +47,15 @@ final class AgentSessionTests: XCTestCase {
         store.add(c)
         XCTAssertEqual(AgentSession.decideTrust(identityKey: key, store: store), .reject)
     }
+
+    /// A contact that is in the store, not blocked, but has `trustLevel == .unknown`
+    /// must return `.enroll` — they have not yet been paired or verified.
+    func test_unknownTrustLevelContactRequiresEnrollment() {
+        let store = TrustedContactStore.inMemory()
+        let key = Data((0..<32).map { UInt8($0) })
+        store.add(TrustedContact(displayName: "pending",
+                                 identityPublicKey: key,
+                                 trustLevel: .unknown))
+        XCTAssertEqual(AgentSession.decideTrust(identityKey: key, store: store), .enroll)
+    }
 }
