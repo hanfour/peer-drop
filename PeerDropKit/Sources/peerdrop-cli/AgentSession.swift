@@ -66,6 +66,24 @@ final class AgentSession {
         self.store = store
     }
 
+    // MARK: - Reconnect Detection
+
+    /// A peer that has already interacted (is in `known`) and is connecting again
+    /// is a RECONNECT → replay scrollback so it catches up. A brand-new peer
+    /// (not in `known`) gets nothing dumped on it.
+    nonisolated static func shouldReplayOnConnect(peerID: String, known: Set<String>) -> Bool {
+        known.contains(peerID)
+    }
+
+    /// Call when a peer (re)connects. Replays the buffered process output only to
+    /// reconnecting peers. Must run on the main actor (attachedPeerIDs/scrollback are main-confined).
+    @MainActor
+    func handlePeerConnected(_ peerID: String) {
+        if Self.shouldReplayOnConnect(peerID: peerID, known: attachedPeerIDs) {
+            replayScrollback(to: peerID)
+        }
+    }
+
     // MARK: - Wiring
 
     /// Installs the `onTextMessageReceived` hook on the ConnectionManager.

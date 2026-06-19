@@ -58,4 +58,18 @@ final class AgentSessionTests: XCTestCase {
                                  trustLevel: .unknown))
         XCTAssertEqual(AgentSession.decideTrust(identityKey: key, store: store), .enroll)
     }
+
+    // MARK: - shouldReplayOnConnect
+
+    func test_shouldReplayOnConnect_trueForKnownPeer() {
+        XCTAssertTrue(AgentSession.shouldReplayOnConnect(peerID: "p1", known: ["p1", "p2"]))
+    }
+
+    func test_shouldReplayOnConnect_falseForNewPeer() {
+        XCTAssertFalse(AgentSession.shouldReplayOnConnect(peerID: "new", known: ["p1"]))
+    }
+
+    func test_shouldReplayOnConnect_falseForEmptyKnown() {
+        XCTAssertFalse(AgentSession.shouldReplayOnConnect(peerID: "p1", known: []))
+    }
 }
