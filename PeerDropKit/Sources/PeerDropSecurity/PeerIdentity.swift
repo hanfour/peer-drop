@@ -64,16 +64,26 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
 
     @MainActor
     public static func local(certificateFingerprint: String? = nil) -> PeerIdentity {
-        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName")
+        // When a CLI file-store namespace is active, use a per-instance
+        // UserDefaults suite so the stable ID + display name persist per --name.
+        // App path (nil) falls back to .standard — identical to prior behavior.
+        let defaults: UserDefaults = {
+            if let ns = PeerDropPersistence.fileStore?.namespace {
+                return UserDefaults(suiteName: "com.peerdrop.cli.\(ns)") ?? .standard
+            }
+            return .standard
+        }()
+
+        let name = defaults.string(forKey: "peerDropDisplayName")
             ?? PlatformDependencies.shared.deviceName().currentName
 
         // Persist local identity ID so message history survives across launches
         let stableID: String
-        if let saved = UserDefaults.standard.string(forKey: localIDKey) {
+        if let saved = defaults.string(forKey: localIDKey) {
             stableID = saved
         } else {
             stableID = UUID().uuidString
-            UserDefaults.standard.set(stableID, forKey: localIDKey)
+            defaults.set(stableID, forKey: localIDKey)
         }
 
         return PeerIdentity(

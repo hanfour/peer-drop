@@ -126,6 +126,12 @@ public final class IdentityKeyManager {
     }
 
     private func saveToKeychain(data: Data, account: String) {
+        // CLI file-store path: persist to a 0600 file instead of the keychain.
+        // The non-bundle CLI cannot use the macOS data-protection keychain.
+        if PeerDropPersistence.writeKeyFile("identity-\(account).key", data) {
+            return
+        }
+
         // kSecUseDataProtectionKeychain pins all operations to the modern
         // data-protection keychain on both iOS and macOS, bypassing the
         // legacy CSSM/file keychain. Without this flag, macOS falls through
@@ -148,6 +154,11 @@ public final class IdentityKeyManager {
     }
 
     private func loadFromKeychain(account: String) -> Data? {
+        // CLI file-store path: load from 0600 file instead of the keychain.
+        if let data = PeerDropPersistence.readKeyFile("identity-\(account).key") {
+            return data
+        }
+
         // Base attributes shared between both keychain probes and the migration add.
         let baseAttrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -205,6 +216,10 @@ public final class IdentityKeyManager {
     }
 
     private func deleteFromKeychain(account: String) {
+        // CLI file-store path: delete the file instead of the keychain item.
+        // If fileStore is nil, PeerDropPersistence.deleteKeyFile is a no-op.
+        PeerDropPersistence.deleteKeyFile("identity-\(account).key")
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,

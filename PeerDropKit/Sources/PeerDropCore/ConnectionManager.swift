@@ -300,11 +300,13 @@ public final class ConnectionManager: ObservableObject {
     public let chatManager = ChatManager()
     public let groupStore = DeviceGroupStore()
     public let clipboardSyncManager = ClipboardSyncManager()
-    public let trustedContactStore = TrustedContactStore()
+    public let trustedContactStore = TrustedContactStore(
+        storageKey: PeerDropPersistence.scopedKey("trusted-contacts"))
 
     // MARK: - Remote Communication (Phase 2)
 
-    public let preKeyStore = PreKeyStore()
+    public let preKeyStore = PreKeyStore(
+        storageKey: PeerDropPersistence.scopedKey("prekey-store"))
     public private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
     public private(set) lazy var remoteSessionManager = RemoteSessionManager(
         preKeyStore: preKeyStore,

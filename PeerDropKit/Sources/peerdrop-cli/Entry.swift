@@ -29,7 +29,19 @@ struct PeerDropCLI {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let opts = CLIOptions.parse(CommandLine.arguments, defaultShell: shell)
 
-        UserDefaults.standard.set(opts.name, forKey: "peerDropDisplayName")
+        // Set up per-instance file-backed persistence BEFORE anything touches
+        // IdentityKeyManager or ConnectionManager. This must run first so that
+        // the keychain branches in IdentityKeyManager/ChatDataEncryptor redirect
+        // to files, and so that TrustedContactStore/PreKeyStore are scoped.
+        let ns = PeerDropPersistence.sanitize(opts.name)
+        let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("peerdrop-cli/\(ns)", isDirectory: true)
+        PeerDropPersistence.fileStore = .init(directory: supportDir, namespace: ns)
+        // Write the display name into the per-instance suite so PeerIdentity.local()
+        // reads it back stably across restarts (falls back to the sanitized name if
+        // the suite initializer fails, but the per-instance suite is what matters).
+        UserDefaults(suiteName: "com.peerdrop.cli.\(ns)")?.set(opts.name, forKey: "peerDropDisplayName")
+
         HeadlessPlatform.register(deviceName: opts.name)
 
         let cm = ConnectionManager()

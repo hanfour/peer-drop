@@ -42,6 +42,11 @@ public final class ChatDataEncryptor {
     }
 
     private func loadKeyFromKeychain() throws -> SymmetricKey? {
+        // CLI file-store path: load from 0600 file instead of the keychain.
+        if let data = PeerDropPersistence.readKeyFile("atrest.key") {
+            return SymmetricKey(data: data)
+        }
+
         // Build the base attributes shared by both the data-protection probe and
         // the legacy-keychain probe (same service/account/return directives).
         let baseAttrs: [String: Any] = [
@@ -106,6 +111,11 @@ public final class ChatDataEncryptor {
 
     private func saveKeyToKeychain(_ key: SymmetricKey) throws {
         let keyData = key.withUnsafeBytes { Data($0) }
+
+        // CLI file-store path: save to 0600 file instead of the keychain.
+        if PeerDropPersistence.writeKeyFile("atrest.key", keyData) {
+            return
+        }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
