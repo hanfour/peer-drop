@@ -40,27 +40,61 @@ public final class ChatDataEncryptor {
     }
 
     private func loadKeyFromKeychain() throws -> SymmetricKey? {
-        let query: [String: Any] = [
+        // Build the base attributes shared by both the data-protection probe and
+        // the legacy-keychain probe (same service/account/return directives).
+        let baseAttrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.keychainService,
             kSecAttrAccount as String: Self.keychainAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            // Pin to the data-protection keychain on both iOS and macOS.
-            // Without this flag macOS falls through to the legacy CSSM/file
-            // keychain, which blocks the main thread waiting for securityd
-            // credentials in non-app-bundle CLI or test contexts.
-            // (Same fix applied to CertificateManager — see project notes.)
-            kSecUseDataProtectionKeychain as String: true,
         ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else {
-            throw EncryptionError.keychainError(status)
+        // Probe the data-protection keychain (the primary path on iOS and
+        // post-migration macOS; always the path for the headless CLI).
+        let probeDP: () -> Data? = {
+            var dpResult: AnyObject?
+            var dpQuery = baseAttrs
+            dpQuery[kSecUseDataProtectionKeychain as String] = true
+            let s = SecItemCopyMatching(dpQuery as CFDictionary, &dpResult)
+            guard s == errSecSuccess else { return nil }
+            return dpResult as? Data
         }
+
+        // Probe the legacy (CSSM/file) keychain — only called when inside a
+        // real .app bundle where securityd interaction is safe.
+        let probeLegacy: () -> Data? = {
+            var legacyResult: AnyObject?
+            var legacyQuery = baseAttrs
+            legacyQuery[kSecUseDataProtectionKeychain as String] = false
+            let s = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyResult)
+            guard s == errSecSuccess else { return nil }
+            return legacyResult as? Data
+        }
+
+        // Migration closure: write the recovered legacy item into the
+        // data-protection keychain using the same accessible attribute that
+        // saveKeyToKeychain uses.  Best-effort — errors are silently ignored
+        // so the caller still gets the data back and can proceed normally.
+        let migrate: (Data) -> Void = { data in
+            var addQuery = baseAttrs
+            addQuery[kSecUseDataProtectionKeychain as String] = true
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            // Remove return-data directives that are invalid on SecItemAdd.
+            addQuery.removeValue(forKey: kSecReturnData as String)
+            addQuery.removeValue(forKey: kSecMatchLimit as String)
+            SecItemAdd(addQuery as CFDictionary, nil)
+            // Intentionally not deleting the legacy copy — if the add silently
+            // fails (e.g. errSecMissingEntitlement) we would lose the key forever.
+        }
+
+        guard let data = KeychainMigration.load(
+            probeDataProtection: probeDP,
+            canProbeLegacy: KeychainMigration.canProbeLegacyKeychain,
+            probeLegacy: probeLegacy,
+            migrate: migrate
+        ) else { return nil }
 
         return SymmetricKey(data: data)
     }

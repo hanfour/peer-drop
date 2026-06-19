@@ -148,18 +148,57 @@ public final class IdentityKeyManager {
     }
 
     private func loadFromKeychain(account: String) -> Data? {
-        let query: [String: Any] = [
+        // Base attributes shared between both keychain probes and the migration add.
+        let baseAttrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseDataProtectionKeychain as String: true,
         ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess else { return nil }
-        return result as? Data
+
+        // Primary probe: data-protection keychain (iOS default; post-migration macOS;
+        // CLI path — never hits legacy below).
+        let probeDP: () -> Data? = {
+            var dpResult: AnyObject?
+            var q = baseAttrs
+            q[kSecUseDataProtectionKeychain as String] = true
+            guard SecItemCopyMatching(q as CFDictionary, &dpResult) == errSecSuccess else { return nil }
+            return dpResult as? Data
+        }
+
+        // Legacy probe: only executed inside a real .app bundle where securityd
+        // interaction is safe (guarded by KeychainMigration.canProbeLegacyKeychain).
+        let probeLegacy: () -> Data? = {
+            var legacyResult: AnyObject?
+            var q = baseAttrs
+            q[kSecUseDataProtectionKeychain as String] = false
+            guard SecItemCopyMatching(q as CFDictionary, &legacyResult) == errSecSuccess else { return nil }
+            return legacyResult as? Data
+        }
+
+        // Migration: write the legacy data into the data-protection keychain.
+        // Uses the same kSecAttrAccessible value as saveToKeychain.
+        // Best-effort — errors silently ignored; the legacy copy is intentionally
+        // left in place to avoid key loss if the add fails (e.g. missing entitlement).
+        let migrate: (Data) -> Void = { [keychainService] data in
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: keychainService,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                kSecUseDataProtectionKeychain as String: true,
+            ]
+            SecItemAdd(addQuery as CFDictionary, nil)
+        }
+
+        return KeychainMigration.load(
+            probeDataProtection: probeDP,
+            canProbeLegacy: KeychainMigration.canProbeLegacyKeychain,
+            probeLegacy: probeLegacy,
+            migrate: migrate
+        )
     }
 
     private func deleteFromKeychain(account: String) {
