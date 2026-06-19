@@ -217,8 +217,11 @@ public final class IdentityKeyManager {
 
     private func deleteFromKeychain(account: String) {
         // CLI file-store path: delete the file instead of the keychain item.
-        // If fileStore is nil, PeerDropPersistence.deleteKeyFile is a no-op.
-        PeerDropPersistence.deleteKeyFile("identity-\(account).key")
+        // The non-bundle CLI cannot use the macOS data-protection keychain.
+        if PeerDropPersistence.fileStore != nil {
+            PeerDropPersistence.deleteKeyFile("identity-\(account).key")
+            return
+        }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
