@@ -47,4 +47,34 @@ final class ProcessBridgeTests: XCTestCase {
         bridge.start()
         await fulfillment(of: [exp], timeout: 5)
     }
+
+    func test_restartRelaunchesProcess() async throws {
+        let exits = expectation(description: "two exits")
+        exits.expectedFulfillmentCount = 2
+        let bridge = try ProcessBridge(
+            command: ["/bin/echo", "again"],
+            idle: .milliseconds(80)
+        ) { _ in }
+        // Trigger the second start() from within the first onExit to avoid
+        // timing sensitivity: we know the first run has fully exited before
+        // relaunching, and onExit must fire a second time for the relaunch.
+        let relaunched = expectation(description: "relaunched")
+        relaunched.expectedFulfillmentCount = 1
+        var exitCount = 0
+        bridge.onExit = { code in
+            XCTAssertEqual(code, 0)
+            exits.fulfill()
+            exitCount += 1
+            if exitCount == 1 {
+                // Hop off the termination queue before calling start() again.
+                DispatchQueue.global().async {
+                    bridge.start()
+                    relaunched.fulfill()
+                }
+            }
+        }
+        bridge.start()
+        await fulfillment(of: [relaunched, exits], timeout: 8)
+        bridge.terminate()
+    }
 }
