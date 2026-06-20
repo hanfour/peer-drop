@@ -1,4 +1,31 @@
 let term, fit, ws, backoff = 1000, currentSession = null, reconnect = false;
+let ctrlActive = false;
+
+// Detect touch/coarse-pointer devices early and add body class for CSS
+if (window.matchMedia("(pointer: coarse)").matches) {
+  document.body.classList.add("touch");
+}
+
+// --- byte helpers ---
+
+function sendBytes(arr) {            // arr = array of byte values
+  if (!ws || ws.readyState !== 1) return;
+  const f = new Uint8Array(arr.length + 1); f[0] = 0x00; f.set(arr, 1);
+  ws.send(f);
+}
+
+const SEQ = {
+  esc:   [0x1b],
+  tab:   [0x09],
+  stab:  [0x1b, 0x5b, 0x5a],   // ESC [ Z — Shift+Tab / back-tab
+  up:    [0x1b, 0x5b, 0x41],   // ESC [ A
+  down:  [0x1b, 0x5b, 0x42],   // ESC [ B
+  right: [0x1b, 0x5b, 0x43],   // ESC [ C
+  left:  [0x1b, 0x5b, 0x44],   // ESC [ D
+  ctrlc: [0x03],
+};
+
+// --- terminal setup ---
 
 function setupTerm() {
   if (term) return;
@@ -8,9 +35,17 @@ function setupTerm() {
   term.open(document.getElementById("term"));
   term.onData((d) => {
     if (!ws || ws.readyState !== 1) return;
+    if (ctrlActive && d.length >= 1) {
+      const c = d.charCodeAt(0);
+      // Transform to control code: letters and most printable chars → c & 0x1f
+      // (e.g. 'c'→0x03, 'a'→0x01, 'z'→0x1a)
+      sendBytes([(c & 0x1f)]);
+      ctrlActive = false;
+      document.getElementById("ctrlkey").classList.remove("active");
+      return;
+    }
     const bytes = new TextEncoder().encode(d);
-    const f = new Uint8Array(bytes.length + 1); f[0] = 0x00; f.set(bytes, 1);
-    ws.send(f);
+    sendBytes(Array.from(bytes));
   });
   term.onResize(() => sendResize());
   window.addEventListener("resize", () => { if (fit) { fit.fit(); sendResize(); } });
@@ -70,6 +105,30 @@ async function loadPresets() {
     }
   } catch (e) { el.textContent = "error: " + e; }
 }
+
+// --- key bar wiring ---
+
+// Ctrl sticky modifier
+document.getElementById("ctrlkey").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  ctrlActive = !ctrlActive;
+  document.getElementById("ctrlkey").classList.toggle("active", ctrlActive);
+  if (term) term.focus();
+});
+
+// All [data-seq] buttons
+document.querySelectorAll("#keybar [data-seq]").forEach((btn) => {
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();   // prevent focus steal from terminal
+  });
+  btn.addEventListener("click", (e) => {
+    const seq = SEQ[btn.dataset.seq];
+    if (seq) sendBytes(seq);
+    if (term) term.focus();
+  });
+});
+
+// --- global event wiring ---
 
 document.getElementById("switch").onclick = showPicker;
 setInterval(() => { if (ws && ws.readyState === 1) ws.send(new Uint8Array([0x02])); }, 30000);  // keepalive

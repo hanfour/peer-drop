@@ -12,10 +12,39 @@
   .preset .run{color:#5c5;font-size:12px;margin-left:8px}
   #switch{display:none;position:fixed;top:6px;right:8px;z-index:11;background:#222;color:#ccc;
           border:1px solid #444;border-radius:5px;padding:4px 8px;cursor:pointer;font-family:inherit;font-size:12px}
+  /* Key bar — hidden by default (desktop/fine pointer); shown on touch */
+  #keybar{display:none;flex-direction:row;align-items:center;overflow-x:auto;
+          background:#111;border-top:1px solid #333;padding:4px 6px;gap:4px;
+          position:fixed;bottom:0;left:0;right:0;z-index:10;height:48px;box-sizing:border-box;
+          -webkit-overflow-scrolling:touch}
+  #keybar button{min-width:44px;min-height:40px;padding:0 10px;background:#222;color:#ddd;
+                 border:1px solid #444;border-radius:5px;cursor:pointer;
+                 font-family:Menlo,monospace;font-size:13px;white-space:nowrap;flex-shrink:0;
+                 -webkit-tap-highlight-color:transparent;user-select:none}
+  #keybar button:active{background:#333}
+  #keybar button.active{background:#1a4a1a;border-color:#5c5;color:#5c5}
+  /* Show keybar and shrink terminal on coarse pointer (touch) or body.touch */
+  @media (pointer: coarse) {
+    #keybar{display:flex}
+    #term{height:calc(100% - 56px)}
+  }
+  body.touch #keybar{display:flex}
+  body.touch #term{height:calc(100% - 56px)}
 </style></head><body>
 <div id="picker"><h1>webterm — choose a session</h1><div id="presets"></div></div>
 <div id="term"></div>
 <button id="switch">≡ sessions</button>
+<div id="keybar">
+  <button data-seq="esc">Esc</button>
+  <button data-seq="tab">Tab</button>
+  <button data-seq="stab">⇧Tab</button>
+  <button id="ctrlkey">Ctrl</button>
+  <button data-seq="left">←</button>
+  <button data-seq="up">↑</button>
+  <button data-seq="down">↓</button>
+  <button data-seq="right">→</button>
+  <button data-seq="ctrlc">^C</button>
+</div>
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/xterm-addon-fit.js"></script>
 <script src="/app.js"></script></body></html>
