@@ -3,7 +3,7 @@ import JWTKit
 
 /// Validates a Cloudflare Access JWT: signature (via the team JWKS / injected
 /// keys), audience (the Access app AUD tag), expiry, and the email claim.
-public struct CfAccessVerifier {
+public struct CfAccessVerifier: Sendable {
     struct Claims: JWTPayload {
         let aud: AudienceClaim
         let email: String

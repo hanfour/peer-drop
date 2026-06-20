@@ -43,20 +43,30 @@ public enum AuthGate {
 
 /// Hummingbird 2.x middleware that enforces `AuthGate` on every request.
 ///
-/// Cookie name: `"wt_session"` (set by the login route after password verification).
-/// Cloudflare Access JWT header: `"Cf-Access-Authenticated-User-Email"` (injected by the CF proxy
-/// after it validates the JWT — we trust the header value here because the JWT itself was
-/// already verified upstream by Cloudflare before the request reaches this server).
+/// Cookie name: `"webterm-session"` (set by the login route after password verification).
+/// Cloudflare mode: validates the `Cf-Access-Jwt-Assertion` JWT cryptographically via
+/// `CfAccessVerifier` (signature + audience + email + expiry). The plaintext email header
+/// `Cf-Access-Authenticated-User-Email` is NOT used — it is spoofable if the origin is ever
+/// reachable without the Cloudflare proxy in front of it.
 public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
     public let mode: AuthMode
     public let expectedHost: String
     /// Name of the session cookie set by the login endpoint.
     public let cookieName: String
+    /// Present in cloudflare mode to cryptographically validate the Cf-Access-Jwt-Assertion JWT.
+    /// Nil in password mode.
+    public let cfVerifier: CfAccessVerifier?
 
-    public init(mode: AuthMode, expectedHost: String, cookieName: String = "wt_session") {
+    public init(
+        mode: AuthMode,
+        expectedHost: String,
+        cookieName: String = "webterm-session",
+        cfVerifier: CfAccessVerifier? = nil
+    ) {
         self.mode = mode
         self.expectedHost = expectedHost
         self.cookieName = cookieName
+        self.cfVerifier = cfVerifier
     }
 
     public func handle(
@@ -65,8 +75,15 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
         next: (Request, Context) async throws -> Response
     ) async throws -> Response {
         let cookie = request.cookies[cookieName]?.value
-        // swiftlint:disable:next force_unwrapping
-        let cfEmail = request.headers[HTTPField.Name("Cf-Access-Authenticated-User-Email")!]
+
+        // Validate the Cloudflare Access JWT cryptographically — never trust the plaintext email header.
+        var cfEmail: String? = nil
+        if case .cloudflare = mode, let verifier = cfVerifier,
+           // swiftlint:disable:next force_unwrapping
+           let assertion = request.headers[HTTPField.Name("Cf-Access-Jwt-Assertion")!] {
+            cfEmail = try? await verifier.verify(assertion)
+        }
+
         let origin = request.headers[.origin]
 
         let decision = AuthGate.decide(
