@@ -123,6 +123,7 @@ let package = Package(
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
             ]
         ),
+        .testTarget(name: "WebTermTests", dependencies: ["webterm"]),
         .executableTarget(
             name: "peerdrop-cli",
             dependencies: [
