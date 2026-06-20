@@ -12,7 +12,9 @@ public struct WebTermConfig: Sendable {
 
     /// TCP port to bind on. Use 0 to let the OS assign a free port (useful in tests).
     public var port: Int
-    /// Expected `Host` header value — requests with a different host are rejected (CSRF defence).
+    /// Expected hostname checked against the `Origin` header — requests from a different origin host
+    /// are rejected with 403 (CSRF / DNS-rebinding defence). Set to your public hostname in production
+    /// (e.g. `term.yourdomain.com`). Defaults to `"localhost"` for local development.
     public var expectedHost: String
     /// Authentication mode.
     public var auth: Auth

@@ -42,10 +42,18 @@ public final class TerminalSession {
     private var pty: PTYProcess?
     private var clients: [ClientID: (Data) -> Void] = [:]
     private let lock = NSLock()
+    /// Set to `true` after the first successful `start()` call.
+    /// Subsequent calls are no-ops so multiple WS connections sharing
+    /// the same cached TerminalSession do not spawn extra attach PTYs.
+    private var isStarted: Bool = false
 
     public init(id: String) { self.id = id }
 
     public func start() {
+        lock.lock()
+        guard !isStarted else { lock.unlock(); return }
+        isStarted = true
+        lock.unlock()
         let pty = PTYProcess(command: ["/usr/bin/env", "tmux", "attach-session", "-t", id])
         pty.onBytes = { [weak self] data in
             guard let self else { return }

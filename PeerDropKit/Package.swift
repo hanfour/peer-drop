@@ -133,6 +133,7 @@ let package = Package(
             dependencies: [
                 "webterm",
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
+                .product(name: "HummingbirdWSTesting", package: "hummingbird-websocket"),
             ]
         ),
         .executableTarget(

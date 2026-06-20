@@ -3,7 +3,7 @@ import Foundation
 // Load config from environment variables or defaults.
 // WEBTERM_PASSWORD_HASH: PBKDF2 hash from PasswordHash.make(_:).
 // WEBTERM_PORT: TCP port (default 7681).
-// WEBTERM_HOST: Expected host header (default "localhost").
+// WEBTERM_HOST: Expected hostname for Origin-header check (default "localhost"; set to your real public hostname in production).
 // WEBTERM_SECRET: 32-byte hex-encoded session HMAC secret. If absent, a random secret is generated.
 
 let env = ProcessInfo.processInfo.environment

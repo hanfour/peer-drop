@@ -73,12 +73,17 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
 
         // Issue a signed session cookie (24-hour TTL)
         let token = SessionToken.issue(subject: "owner", ttl: 86_400, secret: cfg.sessionSecret)
+        // SameSite=Strict: mitigates CSRF / cross-origin WS attacks on all browsers.
+        // Secure: added when not serving localhost (local dev works over plain HTTP).
+        let isSecure = cfg.expectedHost != "localhost"
         let cookie = Cookie(
             name: "webterm-session",
             value: token,
             maxAge: 86400,
             path: "/",
-            httpOnly: true
+            secure: isSecure,
+            httpOnly: true,
+            sameSite: .strict
         )
         var response = Response.redirect(to: "/", type: .normal)
         response.setCookie(cookie)
@@ -149,37 +154,30 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
         },
         onUpgrade: { inbound, outbound, context in
             // The sessionId in the URL is the raw preset ID (e.g. "shell").
-            // The tmux session was created with the prefixed name.
             let sessionId = context.requestContext.parameters.get("sessionId") ?? ""
 
             // Validate sessionId: only alphanumeric, underscore, hyphen
             let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
             guard !sessionId.isEmpty, sessionId.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
-                // Invalid sessionId — close WS immediately
+                // Invalid sessionId — reject unknown preset IDs and close WS immediately
                 return
             }
 
-            // If the client passes the full tmux name (webterm-shell) we use it directly;
-            // if just the preset id (shell) we prefix it.
-            let tmuxID: String
-            if sessionId.hasPrefix(TmuxControl.prefix) {
-                tmuxID = sessionId
-            } else {
-                tmuxID = TmuxControl.prefix + sessionId
-            }
-
-            // Find or create the TerminalSession
-            guard TmuxControl.exists(tmuxID) else {
-                // Session doesn't exist — close WS immediately
+            // Create-or-attach via SessionManager.
+            // - openSession(presetID:) calls TmuxControl.createIfNeeded internally,
+            //   so on a FRESH server this will spawn the tmux session before connecting.
+            // - SessionManager caches TerminalSession by tmux id, so multiple concurrent
+            //   WS connections (browser tabs) share one TerminalSession object.
+            guard let session = try? sessionManager.openSession(presetID: sessionId) else {
+                // Unknown preset id (not configured) — reject
                 return
             }
 
-            // Attach to session
-            let session = TerminalSession(id: tmuxID)
             let clientID = session.addClient { data in
                 let frame = WSFrame.data(data).encoded()
                 Task { try? await outbound.write(.binary(ByteBuffer(bytes: frame))) }
             }
+            // start() is idempotent: first call attaches a PTY, subsequent calls are no-ops.
             session.start()
 
             defer {

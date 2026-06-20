@@ -29,8 +29,13 @@ Defense layers in depth:
    edge before they reach the tunnel.
 3. **App auth gate** — every HTTP route and every WS upgrade is checked by
    `AuthMiddleware`. A valid signed `webterm-session` cookie (HMAC-SHA256) is required.
-4. **Host header guard** — `WEBTERM_HOST` must match the `Host` header; mismatches are
-   rejected (CSRF / DNS-rebinding defence).
+4. **Origin check** — When a browser sends an `Origin` header (all cross-origin requests
+   and WS upgrades), `AuthMiddleware` compares the `Origin` host against `WEBTERM_HOST`
+   and returns 403 if they do not match (CSRF / DNS-rebinding defence). Requests without
+   an `Origin` header (e.g. direct `curl`) are allowed through — they are already blocked
+   by Cloudflare Access and the password/JWT layer above. **You must set `WEBTERM_HOST` to
+   your real public hostname** (e.g. `term.yourdomain.com`) in production; the default
+   `localhost` is for local development only.
 
 ---
 
@@ -304,7 +309,7 @@ let cfg = WebTermConfig(port: port, expectedHost: expectedHost,
 |---|---|---|
 | `webterm-session` cookie invalid after restart | `WEBTERM_SECRET` not set or changes on restart | Set a stable hex secret (Step 2) |
 | Login fails with correct password | Hash was generated for wrong password or was truncated | Regenerate hash (Step 3) |
-| 403 / "Host header mismatch" | `WEBTERM_HOST` doesn't match the domain in the URL | Set `WEBTERM_HOST=term.yourdomain.com` |
+| 403 / "Origin mismatch" from browser | `WEBTERM_HOST` doesn't match the domain in the browser's `Origin` header | Set `WEBTERM_HOST=term.yourdomain.com` |
 | Blank page after login | xterm.js static assets not found in bundle | Ensure binary was built with `swift build` (not `swift run`) from within `PeerDropKit/` |
 | Tunnel connects but pages 404 | `httpHostHeader` missing in cloudflared-config.yml | Add `httpHostHeader: "term.yourdomain.com"` to the ingress rule |
 | `tmux: no server running` | tmux not in PATH for the launchd process | Add `/opt/homebrew/bin` to `PATH` in the plist `EnvironmentVariables` |
@@ -327,11 +332,11 @@ keyboards). A Phase 2 bar of common keys would make mobile use practical.
 Access are supported. Adding Google / GitHub OAuth would allow the Cloudflare-free path
 without a shared password.
 
-**(d) WS endpoint creates `TerminalSession` directly rather than via `SessionManager`.**
-`WebServer.swift`'s `/ws/:sessionId` handler calls `TerminalSession(id:)` directly
-instead of going through `SessionManager.openSession(presetID:)`. Unifying the lookup
-through `SessionManager` would make session lifecycle management cleaner and easier to
-test.
+**(d) ✅ Fixed — WS endpoint now create-or-attaches via `SessionManager`.**
+`WebServer.swift`'s `/ws/:sessionId` handler calls `SessionManager.openSession(presetID:)`
+which runs `TmuxControl.createIfNeeded` before connecting, so a fresh server no longer
+rejects the first WebSocket connection. Multiple concurrent browser tabs share one cached
+`TerminalSession` object; `TerminalSession.start()` is idempotent (second call is a no-op).
 
 **(e) Reboot auto-recreate of tmux sessions (Phase 2).** After a machine reboot, tmux
 sessions are gone. The frontend will reconnect to webterm but find no live sessions.
