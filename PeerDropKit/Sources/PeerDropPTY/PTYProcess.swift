@@ -20,6 +20,9 @@ public final class PTYProcess {
         self.command = command
     }
 
+    /// Whether the child process is currently running.
+    public var isRunning: Bool { process?.isRunning ?? false }
+
     public func start() {
         guard !(process?.isRunning ?? false) else { return }
         readSource?.cancel(); readSource = nil; masterFD = -1
@@ -60,6 +63,15 @@ public final class PTYProcess {
         writeQueue.async { [weak self] in
             guard let self, self.masterFD >= 0 else { return }
             _ = data.withUnsafeBytes { write(self.masterFD, $0.baseAddress, $0.count) }
+        }
+    }
+
+    /// Set the PTY window size so the child's terminal layout matches the browser.
+    public func resize(cols: UInt16, rows: UInt16) {
+        writeQueue.async { [weak self] in
+            guard let self, self.masterFD >= 0 else { return }
+            var ws = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
+            _ = ioctl(self.masterFD, UInt(TIOCSWINSZ), &ws)
         }
     }
 

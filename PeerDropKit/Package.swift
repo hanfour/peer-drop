@@ -120,6 +120,7 @@ let package = Package(
                 "PeerDropSecurity",
                 "PeerDropTransport",
                 "PeerDropProtocol",
+                "PeerDropPTY",
             ]
         ),
         .testTarget(
