@@ -76,6 +76,11 @@ final class WebServerIntegrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Decode helpers for /api/sessions preset-selector tests
+
+    private struct PresetInfo: Decodable { let id: String; let name: String; let running: Bool }
+    private struct SessionsResponse: Decodable { let presets: [PresetInfo] }
+
     /// GET /api/sessions is auth-gated.
     func test_sessionsEndpointRequiresAuth() async throws {
         let cfg = WebTermConfig.test(password: "hunter2")
@@ -84,6 +89,40 @@ final class WebServerIntegrationTests: XCTestCase {
         try await app.test(.router) { client in
             try await client.execute(uri: "/api/sessions", method: .get) { res in
                 XCTAssertEqual(res.status, .unauthorized)
+            }
+        }
+    }
+
+    /// Authenticated GET /api/sessions returns JSON with a `presets` array containing "shell".
+    func testSessionsReturnsPresets() async throws {
+        let cfg = WebTermConfig.test(password: "hunter2")
+        let app = try buildApplication(cfg)
+
+        try await app.test(.router) { client in
+            // 1. Login → cookie
+            var cookiePair = ""
+            try await client.execute(
+                uri: "/login",
+                method: .post,
+                headers: [.contentType: "application/x-www-form-urlencoded"],
+                body: ByteBuffer(string: "password=hunter2")
+            ) { res in
+                XCTAssertEqual(res.status, .seeOther)
+                let setCookie = res.headers[.setCookie] ?? ""
+                cookiePair = setCookie.split(separator: ";").first.map(String.init) ?? setCookie
+            }
+
+            // 2. Authenticated GET /api/sessions → 200 with presets JSON
+            try await client.execute(
+                uri: "/api/sessions",
+                method: .get,
+                headers: [.cookie: cookiePair]
+            ) { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = Data(buffer: res.body)
+                let decoded = try JSONDecoder().decode(SessionsResponse.self, from: body)
+                XCTAssertFalse(decoded.presets.isEmpty, "Expected at least one preset")
+                XCTAssertTrue(decoded.presets.contains { $0.id == "shell" }, "Expected built-in 'shell' preset in response; got: \(decoded.presets.map(\.id))")
             }
         }
     }

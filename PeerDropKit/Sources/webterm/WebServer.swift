@@ -109,14 +109,19 @@ public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier?
         staticFileResponse(named: "index", extension: "html", subdirectory: "Resources", contentType: "text/html; charset=utf-8")
     }
 
-    // GET /api/sessions — list running session IDs (auth-gated)
+    // GET /api/sessions — list presets with running status (auth-gated)
     router.get("/api/sessions") { _, _ -> Response in
-        let ids = sessionManager.runningSessionIDs()
-        let json = "[" + ids.map { #""\#($0)""# }.joined(separator: ",") + "]"
+        struct PresetInfo: Codable { let id: String; let name: String; let running: Bool }
+        struct SessionsResponse: Codable { let presets: [PresetInfo] }
+        let running = Set(sessionManager.runningSessionIDs())
+        let infos = sessionManager.allPresets.map { p in
+            PresetInfo(id: p.id, name: p.name, running: running.contains(TmuxControl.prefix + p.id))
+        }
+        let data = try JSONEncoder().encode(SessionsResponse(presets: infos))
         return Response(
             status: .ok,
             headers: [.contentType: "application/json"],
-            body: .init(byteBuffer: ByteBuffer(string: json))
+            body: .init(byteBuffer: ByteBuffer(bytes: data))
         )
     }
 

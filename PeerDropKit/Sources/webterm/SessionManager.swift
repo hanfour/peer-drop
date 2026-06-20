@@ -16,6 +16,8 @@ public final class SessionManager {
         let s = TerminalSession(id: tmuxID); sessions[tmuxID] = s; return s
     }
 
+    public var allPresets: [Preset] { presets.all }
+
     public func runningSessionIDs() -> [String] {
         presets.all.map { TmuxControl.prefix + $0.id }.filter { TmuxControl.exists($0) }
     }
