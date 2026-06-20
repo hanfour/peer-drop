@@ -15,8 +15,8 @@ final class CfAccessKeysTests: XCTestCase {
 
     // MARK: - certsURL
 
-    func test_certsURL_shape() {
-        let url = CfAccessKeys.certsURL(team: "myteam")
+    func test_certsURL_shape() throws {
+        let url = try CfAccessKeys.certsURL(team: "myteam")
         XCTAssertEqual(url.absoluteString,
                        "https://myteam.cloudflareaccess.com/cdn-cgi/access/certs")
     }

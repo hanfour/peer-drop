@@ -59,6 +59,10 @@ if case .cloudflare(let team, let aud, let ownerEmail) = auth {
         let keys = try await CfAccessKeys.fetch(team: team)
         cfVerifier = CfAccessVerifier(audience: aud, ownerEmail: ownerEmail, keys: keys)
         print("webterm: Cloudflare Access JWKS loaded for team '\(team)'.")
+    } catch let error as CfAccessKeysError {
+        print("ERROR: \(error)")
+        print("ERROR: Cloudflare-delegated auth cannot function. Fix CF_ACCESS_TEAM and network connectivity, then restart.")
+        exit(1)
     } catch {
         print("ERROR: Failed to fetch Cloudflare Access JWKS for team '\(team)': \(error)")
         print("ERROR: Cloudflare-delegated auth cannot function. Fix CF_ACCESS_TEAM and network connectivity, then restart.")
