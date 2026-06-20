@@ -17,7 +17,8 @@ function sendResize() {
 }
 
 function connect() {
-  ws = new WebSocket(`wss://${location.host}/ws/${sessionId}`);
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/${sessionId}`);
   ws.binaryType = "arraybuffer";
   ws.onopen = () => { backoff = 1000; sendResize(); };
   ws.onmessage = (e) => {
