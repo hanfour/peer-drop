@@ -262,7 +262,7 @@ TTL, HMAC-SHA256).
 This is the **recommended mode** for initial deployment. Combined with Cloudflare Access
 (Step 5) it gives two independent auth layers.
 
-### Cloudflare-delegated mode (follow-up — see Known Follow-Ups §a)
+### Cloudflare-delegated mode (now functional)
 
 Set the three `CF_*` environment variables instead of `WEBTERM_PASSWORD_HASH`:
 
@@ -272,10 +272,26 @@ Set the three `CF_*` environment variables instead of `WEBTERM_PASSWORD_HASH`:
 | `CF_ACCESS_TEAM` | Your Cloudflare Zero Trust team name (e.g. `myteam`) |
 | `CF_ACCESS_OWNER_EMAIL` | The owner email that must appear in the JWT |
 
-In this mode webterm validates the `Cf-Access-Jwt-Assertion` header (RS256, issued by
-Cloudflare). **This is currently fail-closed**: the JWKS fetch from
-`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` is not yet wired. Every
-request will be denied until that wiring is added. Use password mode until then.
+**How to find the AUD tag:** Cloudflare Zero Trust → Access → Applications → open your
+app → scroll to the bottom → copy the **Application Audience (AUD) Tag** (a 64-char hex
+string).
+
+In this mode webterm fetches the team JWKS from
+`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` at startup, loads the public
+keys into a `JWTKeyCollection`, and uses them to validate every `Cf-Access-Jwt-Assertion`
+JWT (signature, audience, owner email, and expiry). If the JWKS fetch fails at startup
+(bad team name, no network, non-2xx response) webterm prints a clear error and exits
+non-zero — it will not start in a broken state.
+
+> **One caveat — startup-only key refresh:** The JWKS is fetched once at startup. If
+> Cloudflare rotates its signing keys while webterm is running, new JWTs signed with the
+> rotated key will fail verification until webterm is restarted. Periodic auto-refresh is a
+> planned future enhancement (see Known Follow-Ups §a). In practice, Cloudflare Access key
+> rotation is rare and typically announced; a restart resolves it immediately.
+
+Both password mode and Cloudflare-delegated mode are fully functional. Password mode is
+the simpler choice for initial deployment; Cloudflare-delegated mode eliminates the need
+for a separate password when Cloudflare Access is already the perimeter gate.
 
 ---
 
@@ -318,11 +334,11 @@ let cfg = WebTermConfig(port: port, expectedHost: expectedHost,
 
 ## Known follow-ups
 
-**(a) Cloudflare-delegated mode needs JWKS wired.** `CfAccessVerifier` is implemented
-(RS256 JWT validation) but the async fetch of the team JWKS from
-`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` and its caching are not yet
-wired in `main.swift`. Until that wiring is added, all CF-mode requests are denied
-(fail-closed). Use password mode + Cloudflare Access for a secure, functional setup today.
+**(a) ✅ Fixed — Cloudflare-delegated mode is now functional.** `CfAccessKeys.fetch(team:)`
+fetches the JWKS at startup and populates a `JWTKeyCollection`; `main.swift` builds the
+`CfAccessVerifier` from those keys and passes it into `buildApplication`. The one remaining
+enhancement is **periodic JWKS auto-refresh** (currently keys are fetched once at startup;
+a Cloudflare key rotation requires a webterm restart to pick up new public keys).
 
 **(b) Mobile on-screen key bar (Phase 2).** The xterm.js frontend has no special key
 overlay for mobile browsers (Escape, Ctrl, arrow keys are inaccessible on on-screen

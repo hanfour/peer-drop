@@ -1,6 +1,7 @@
 import Foundation
 import Hummingbird
 import HummingbirdWebSocket
+import JWTKit
 
 // MARK: - Public entry point
 
@@ -16,7 +17,17 @@ import HummingbirdWebSocket
 ///
 /// The WS endpoint auth gate reads the `webterm-session` cookie from the upgrade request's
 /// `Cookie` header and validates it with `AuthGate.decide` before allowing the upgrade.
-public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationProtocol {
+/// Build and return a Hummingbird `Application` wired with all WebTerm routes.
+///
+/// - Parameters:
+///   - cfg: The WebTerm configuration (auth mode, port, host, presets).
+///   - cfVerifier: An optional pre-built `CfAccessVerifier` whose `JWTKeyCollection`
+///     was populated by fetching the team JWKS. Pass this when `cfg.auth` is
+///     `.cloudflare(...)` so that JWT verification actually works. When `nil`
+///     in cloudflare mode the middleware falls back to an empty key collection
+///     (fail-closed: every request is denied with a JWT verification error).
+///     Has no effect in password mode.
+public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier? = nil) throws -> some ApplicationProtocol {
     // Shared session manager
     let sessionManager = SessionManager(presets: PresetStore(presets: cfg.presets))
 
@@ -91,7 +102,7 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
     }
 
     // Apply auth middleware — all routes added AFTER this call require authentication
-    router.add(middleware: makeAuthMiddleware(cfg: cfg) as AuthMiddleware<BasicRequestContext>)
+    router.add(middleware: makeAuthMiddleware(cfg: cfg, cfVerifier: cfVerifier) as AuthMiddleware<BasicRequestContext>)
 
     // GET / — terminal page (auth-gated); serves index.html from bundle
     router.get("/") { _, _ -> Response in
@@ -145,7 +156,7 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
     // request BEFORE the WebSocket handshake, so the async CF JWT verify
     // (cloudflare mode) and the cookie check (password mode) both run here.
     // A failed auth throws HTTPError(.unauthorized) and the upgrade is denied.
-    wsRouter.add(middleware: makeAuthMiddleware(cfg: cfg) as AuthMiddleware<BasicWebSocketRequestContext>)
+    wsRouter.add(middleware: makeAuthMiddleware(cfg: cfg, cfVerifier: cfVerifier) as AuthMiddleware<BasicWebSocketRequestContext>)
 
     wsRouter.ws("/ws/:sessionId",
         shouldUpgrade: { _, _ -> RouterShouldUpgrade in
@@ -222,7 +233,16 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
 /// Build the `AuthMiddleware` appropriate for the config's auth mode.
 /// Generic over `Context` so the same factory works for both the HTTP router
 /// (`BasicRequestContext`) and the WS router (`BasicWebSocketRequestContext`).
-private func makeAuthMiddleware<Context: RequestContext>(cfg: WebTermConfig) -> AuthMiddleware<Context> {
+///
+/// - Parameters:
+///   - cfg: The WebTerm configuration.
+///   - cfVerifier: A pre-built `CfAccessVerifier` whose keys were loaded from the
+///     team JWKS. If `nil` in cloudflare mode, falls back to an empty-key verifier
+///     (fail-closed: every JWT verification will throw).
+private func makeAuthMiddleware<Context: RequestContext>(
+    cfg: WebTermConfig,
+    cfVerifier: CfAccessVerifier? = nil
+) -> AuthMiddleware<Context> {
     switch cfg.auth {
     case .password:
         return AuthMiddleware.password(
@@ -230,12 +250,14 @@ private func makeAuthMiddleware<Context: RequestContext>(cfg: WebTermConfig) -> 
             expectedHost: cfg.expectedHost
         )
     case .cloudflare(_, let aud, let ownerEmail):
-        // Note: for Cloudflare mode, CfAccessVerifier needs a JWTKeyCollection loaded from
-        // the team JWKS. That async setup happens in the composition root (main.swift).
-        // For now, fall back to a minimal verifier with no keys (all CF requests will be
-        // denied until keys are loaded). This is intentional — the composition root should
-        // call `buildApplication` only after the verifier is ready.
-        let verifier = CfAccessVerifier(audience: aud, ownerEmail: ownerEmail, keys: .init())
+        // Use the injected verifier (with real JWKS keys) when available.
+        // Fall back to an empty-key verifier so the behaviour is fail-closed:
+        // all CF requests are denied rather than accidentally allowed.
+        let verifier = cfVerifier ?? CfAccessVerifier(
+            audience: aud,
+            ownerEmail: ownerEmail,
+            keys: JWTKeyCollection()
+        )
         return AuthMiddleware.cloudflare(
             verifier: verifier,
             expectedHost: cfg.expectedHost

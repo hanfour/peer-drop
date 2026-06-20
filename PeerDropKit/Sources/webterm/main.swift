@@ -48,5 +48,23 @@ let cfg = WebTermConfig(
     presets: []
 )
 
-let app = try buildApplication(cfg)
+// In cloudflare mode, fetch the team JWKS before starting the server.
+// This is the composition root for CfAccessVerifier: we resolve the async
+// network call here so that buildApplication receives a ready verifier.
+// If the fetch fails we print a clear error and exit non-zero — the operator
+// must fix the team name / network before retrying. Fail-closed.
+var cfVerifier: CfAccessVerifier? = nil
+if case .cloudflare(let team, let aud, let ownerEmail) = auth {
+    do {
+        let keys = try await CfAccessKeys.fetch(team: team)
+        cfVerifier = CfAccessVerifier(audience: aud, ownerEmail: ownerEmail, keys: keys)
+        print("webterm: Cloudflare Access JWKS loaded for team '\(team)'.")
+    } catch {
+        print("ERROR: Failed to fetch Cloudflare Access JWKS for team '\(team)': \(error)")
+        print("ERROR: Cloudflare-delegated auth cannot function. Fix CF_ACCESS_TEAM and network connectivity, then restart.")
+        exit(1)
+    }
+}
+
+let app = try buildApplication(cfg, cfVerifier: cfVerifier)
 try await app.runService()
