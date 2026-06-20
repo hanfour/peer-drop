@@ -57,16 +57,16 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
     /// Nil in password mode.
     public let cfVerifier: CfAccessVerifier?
 
-    public init(
+    private init(
         mode: AuthMode,
         expectedHost: String,
-        cookieName: String = "webterm-session",
-        cfVerifier: CfAccessVerifier? = nil
+        cfVerifier: CfAccessVerifier?,
+        cookieName: String
     ) {
         self.mode = mode
         self.expectedHost = expectedHost
-        self.cookieName = cookieName
         self.cfVerifier = cfVerifier
+        self.cookieName = cookieName
     }
 
     public func handle(
@@ -81,7 +81,11 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
         if case .cloudflare = mode, let verifier = cfVerifier,
            // swiftlint:disable:next force_unwrapping
            let assertion = request.headers[HTTPField.Name("Cf-Access-Jwt-Assertion")!] {
-            cfEmail = try? await verifier.verify(assertion)
+            do {
+                cfEmail = try await verifier.verify(assertion)
+            } catch {
+                context.logger.notice("Cf-Access JWT rejected: \(error)")
+            }
         }
 
         let origin = request.headers[.origin]
@@ -102,5 +106,23 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
         case .denyForbidden:
             throw HTTPError(.forbidden)
         }
+    }
+}
+
+// MARK: - Factory Initialisers
+
+extension AuthMiddleware {
+    /// Password mode: gate on the signed session cookie. No Cf-Access verifier.
+    public static func password(secret: Data, expectedHost: String,
+                                cookieName: String = "webterm-session") -> AuthMiddleware {
+        AuthMiddleware(mode: .password(secret: secret), expectedHost: expectedHost,
+                       cfVerifier: nil, cookieName: cookieName)
+    }
+
+    /// Cloudflare mode: REQUIRES a CfAccessVerifier — you cannot build this mode without one.
+    public static func cloudflare(verifier: CfAccessVerifier, expectedHost: String,
+                                  cookieName: String = "webterm-session") -> AuthMiddleware {
+        AuthMiddleware(mode: .cloudflare, expectedHost: expectedHost,
+                       cfVerifier: verifier, cookieName: cookieName)
     }
 }
