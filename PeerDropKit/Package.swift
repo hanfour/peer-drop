@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PeerDropSecurity", targets: ["PeerDropSecurity"]),
         .library(name: "PeerDropProtocol", targets: ["PeerDropProtocol"]),
         .library(name: "PeerDropPet", targets: ["PeerDropPet"]),
+        .library(name: "PeerDropPTY", targets: ["PeerDropPTY"]),
     ],
     dependencies: [
         // External SPM packages — re-declared here so PeerDropKit can be
@@ -110,6 +111,8 @@ let package = Package(
                 .copy("Resources"),
             ]
         ),
+        .target(name: "PeerDropPTY"),
+        .testTarget(name: "PeerDropPTYTests", dependencies: ["PeerDropPTY"]),
         .executableTarget(
             name: "peerdrop-cli",
             dependencies: [
