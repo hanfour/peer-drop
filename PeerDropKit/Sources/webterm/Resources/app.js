@@ -124,6 +124,11 @@ document.querySelectorAll("#keybar [data-seq]").forEach((btn) => {
   btn.addEventListener("click", (e) => {
     const seq = SEQ[btn.dataset.seq];
     if (seq) sendBytes(seq);
+    // Clear Ctrl sticky state when any key-bar button is tapped
+    if (ctrlActive) {
+      ctrlActive = false;
+      document.getElementById("ctrlkey").classList.remove("active");
+    }
     if (term) term.focus();
   });
 });

@@ -26,9 +26,11 @@
   /* Show keybar and shrink terminal on coarse pointer (touch) or body.touch */
   @media (pointer: coarse) {
     #keybar{display:flex}
+    /* 56px = 48px key bar height + 8px breathing room */
     #term{height:calc(100% - 56px)}
   }
   body.touch #keybar{display:flex}
+  /* 56px = 48px key bar height + 8px breathing room */
   body.touch #term{height:calc(100% - 56px)}
 </style></head><body>
 <div id="picker"><h1>webterm — choose a session</h1><div id="presets"></div></div>
