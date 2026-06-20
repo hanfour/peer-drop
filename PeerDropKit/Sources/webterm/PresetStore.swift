@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Preset: Codable, Equatable {
+public struct Preset: Codable, Equatable, Sendable {
     public let id: String
     public let name: String
     public let command: String

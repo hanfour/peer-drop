@@ -12,16 +12,13 @@ import HummingbirdWebSocket
 ///   POST /login    → 303 redirect + session cookie on success, 401 on bad password
 ///   GET  /api/sessions  → 200 JSON list of running session IDs (auth-gated)
 ///   POST /api/sessions  → 200 JSON {id} for a new/reattached session (auth-gated)
-///   WS   /ws/:sessionId → WebSocket terminal (auth-gated via shouldUpgrade)
+///   WS   /ws/:sessionId → WebSocket terminal (auth-gated via AuthMiddleware on upgrade request)
 ///
 /// The WS endpoint auth gate reads the `webterm-session` cookie from the upgrade request's
 /// `Cookie` header and validates it with `AuthGate.decide` before allowing the upgrade.
 public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationProtocol {
     // Shared session manager
     let sessionManager = SessionManager(presets: PresetStore(presets: cfg.presets))
-
-    // Build the auth middleware from cfg
-    let authMiddleware = makeAuthMiddleware(cfg: cfg)
 
     // MARK: HTTP Router
 
@@ -74,7 +71,7 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
     }
 
     // Apply auth middleware — all routes added AFTER this call require authentication
-    router.add(middleware: authMiddleware)
+    router.add(middleware: makeAuthMiddleware(cfg: cfg) as AuthMiddleware<BasicRequestContext>)
 
     // GET / — status page (auth-gated)
     router.get("/") { _, _ -> Response in
@@ -114,25 +111,20 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
         )
     }
 
-    // MARK: WebSocket Router (auth-gated via shouldUpgrade)
+    // MARK: WebSocket Router (auth-gated via AuthMiddleware on upgrade request)
 
     let wsRouter = Router(context: BasicWebSocketRequestContext.self)
 
+    // Apply the same AuthMiddleware to the WS router.
+    // Hummingbird runs the wsRouter middleware chain on the HTTP upgrade
+    // request BEFORE the WebSocket handshake, so the async CF JWT verify
+    // (cloudflare mode) and the cookie check (password mode) both run here.
+    // A failed auth throws HTTPError(.unauthorized) and the upgrade is denied.
+    wsRouter.add(middleware: makeAuthMiddleware(cfg: cfg) as AuthMiddleware<BasicWebSocketRequestContext>)
+
     wsRouter.ws("/ws/:sessionId",
-        shouldUpgrade: { request, context -> RouterShouldUpgrade in
-            // Auth gate: validate session cookie before allowing WS upgrade
-            let cookie = request.cookies["webterm-session"]?.value
-            let origin = request.headers[.origin]
-            let decision = AuthGate.decide(
-                mode: authModeFrom(cfg: cfg),
-                cookie: cookie,
-                cfJWTValidEmail: nil,  // CF JWT validation not wired in WS path (needs async verifier)
-                origin: origin,
-                expectedHost: cfg.expectedHost
-            )
-            guard decision == .allow else {
-                return .dontUpgrade
-            }
+        shouldUpgrade: { _, _ -> RouterShouldUpgrade in
+            // Auth is enforced by the AuthMiddleware above; just approve the upgrade.
             return .upgrade([:])
         },
         onUpgrade: { inbound, outbound, context in
@@ -202,7 +194,9 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
 // MARK: - Helpers
 
 /// Build the `AuthMiddleware` appropriate for the config's auth mode.
-private func makeAuthMiddleware(cfg: WebTermConfig) -> AuthMiddleware<BasicRequestContext> {
+/// Generic over `Context` so the same factory works for both the HTTP router
+/// (`BasicRequestContext`) and the WS router (`BasicWebSocketRequestContext`).
+private func makeAuthMiddleware<Context: RequestContext>(cfg: WebTermConfig) -> AuthMiddleware<Context> {
     switch cfg.auth {
     case .password:
         return AuthMiddleware.password(
@@ -220,16 +214,6 @@ private func makeAuthMiddleware(cfg: WebTermConfig) -> AuthMiddleware<BasicReque
             verifier: verifier,
             expectedHost: cfg.expectedHost
         )
-    }
-}
-
-/// Extract the `AuthMode` from config (for use in the WS shouldUpgrade gate).
-private func authModeFrom(cfg: WebTermConfig) -> AuthMode {
-    switch cfg.auth {
-    case .password:
-        return .password(secret: cfg.sessionSecret)
-    case .cloudflare:
-        return .cloudflare
     }
 }
 
