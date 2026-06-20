@@ -24,6 +24,8 @@ let package = Package(
         // pinned versions.
         .package(url: "https://github.com/stasel/WebRTC", exact: "125.0.0"),
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.19"),
+        .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
+        .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.0.0"),
     ],
     targets: [
         .target(
@@ -113,6 +115,14 @@ let package = Package(
         ),
         .target(name: "PeerDropPTY"),
         .testTarget(name: "PeerDropPTYTests", dependencies: ["PeerDropPTY"]),
+        .executableTarget(
+            name: "webterm",
+            dependencies: [
+                "PeerDropPTY",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+            ]
+        ),
         .executableTarget(
             name: "peerdrop-cli",
             dependencies: [
