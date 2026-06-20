@@ -1,0 +1,29 @@
+# Cloudflare Tunnel configuration for webterm.
+#
+# Replace:
+#   <TUNNEL_ID>    — UUID shown by `cloudflared tunnel create webterm`
+#   YOU            — your macOS username
+#   yourdomain.com — your domain (must already be on Cloudflare)
+#
+# Install at: ~/.cloudflared/config.yml
+# Then run:   cloudflared tunnel run webterm
+#
+# See deploy/SETUP.md §4 for the full cloudflared setup walkthrough.
+
+tunnel: <TUNNEL_ID>
+credentials-file: /Users/YOU/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # All traffic to term.yourdomain.com → webterm on localhost:7681.
+  # Cloudflare Access enforces authentication BEFORE requests reach this rule
+  # (configure in the Zero Trust dashboard — see SETUP.md §5).
+  - hostname: term.yourdomain.com
+    service: http://127.0.0.1:7681
+    originRequest:
+      # The tunnel presents itself as the tunnel's hostname, not localhost,
+      # so we must override the Host header webterm sees.
+      # This must match WEBTERM_HOST in your launchd plist / environment.
+      httpHostHeader: "term.yourdomain.com"
+
+  # Catch-all: return 404 for any other hostname routed through this tunnel.
+  - service: http_status:404
