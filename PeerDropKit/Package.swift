@@ -125,7 +125,13 @@ let package = Package(
                 .product(name: "JWTKit", package: "jwt-kit"),
             ]
         ),
-        .testTarget(name: "WebTermTests", dependencies: ["webterm"]),
+        .testTarget(
+            name: "WebTermTests",
+            dependencies: [
+                "webterm",
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+            ]
+        ),
         .executableTarget(
             name: "peerdrop-cli",
             dependencies: [
