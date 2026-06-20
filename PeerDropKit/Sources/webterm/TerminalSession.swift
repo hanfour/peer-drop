@@ -3,6 +3,8 @@ import PeerDropPTY
 
 /// Thin wrapper over the `tmux` CLI for session lifecycle.
 enum TmuxControl {
+    /// Namespace prefix that CALLERS (e.g. SessionManager) prepend to a preset id
+    /// to form the tmux session name. createIfNeeded/kill take the full id as-is.
     static let prefix = "webterm-"
 
     @discardableResult
@@ -22,9 +24,11 @@ enum TmuxControl {
         guard !exists(id) else { return }
         var args = ["new-session", "-d", "-s", id]
         if let cwd { args += ["-c", cwd] }
-        args += ["bash", "-lc", command]   // run the command in a login shell
+        args += ["bash", "-lc", command]
+        // Use tmux's ';' command separator (its own argv element) so new-session and
+        // set-option run in a single tmux invocation — no race if the command exits fast.
+        args += [";", "set-option", "-t", id, "remain-on-exit", "on"]
         _ = try tmux(args)
-        _ = try tmux(["set-option", "-t", id, "remain-on-exit", "on"])
     }
 
     @discardableResult
