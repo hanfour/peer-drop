@@ -138,4 +138,51 @@ final class CfAccessKeysTests: XCTestCase {
             // Expected — wrong key.
         }
     }
+
+    // MARK: - Key swap via CfAccessKeySource
+
+    func test_keySwap_verifierPicksUpNewKeys() async throws {
+        // Set up key A (initial) and key B (rotated).
+        let keyA = ES256PrivateKey()
+        let keyB = ES256PrivateKey()
+
+        // Build public JWKS for both keys.
+        func publicJWKSCollection(_ key: ES256PrivateKey, kid: String) async throws -> JWTKeyCollection {
+            guard let params = key.publicKey.parameters else {
+                XCTFail("Could not extract EC public key parameters"); fatalError()
+            }
+            let jwk = JWK.ecdsa(.es256, identifier: JWKIdentifier(string: kid),
+                                 x: params.x, y: params.y, curve: .p256, privateKey: nil)
+            let json = String(data: try JSONEncoder().encode(JWKS(keys: [jwk])), encoding: .utf8)!
+            return try await CfAccessKeys.keyCollection(fromJWKSJSON: json)
+        }
+
+        let keysA = try await publicJWKSCollection(keyA, kid: "ka")
+        let keysB = try await publicJWKSCollection(keyB, kid: "kb")
+
+        // Sign a token with key B (simulating Cloudflare after key rotation).
+        let signingKeys = JWTKeyCollection()
+        await signingKeys.add(ecdsa: keyB, kid: "kb")
+        let token = try await signingKeys.sign(
+            CfClaims(aud: "AUD", email: "owner@example.com",
+                     exp: .init(value: Date().addingTimeInterval(3600))),
+            kid: "kb"
+        )
+
+        // 1. Verifier initialized with key A — must FAIL (token signed with B).
+        let verifier = CfAccessVerifier(audience: "AUD", ownerEmail: "owner@example.com", keys: keysA)
+        do {
+            _ = try await verifier.verify(token)
+            XCTFail("expected verification failure before key swap")
+        } catch {
+            // Expected: wrong key.
+        }
+
+        // 2. Swap in key B (simulating periodic auto-refresh picking up rotated keys).
+        await verifier.source.replace(with: keysB)
+
+        // 3. After swap, verify must SUCCEED.
+        let email = try await verifier.verify(token)
+        XCTAssertEqual(email, "owner@example.com")
+    }
 }

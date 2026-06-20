@@ -69,3 +69,26 @@ public enum CfAccessKeysError: Error, CustomStringConvertible {
         }
     }
 }
+
+extension CfAccessKeys {
+    /// Periodically re-fetch the team JWKS into `source`. On fetch failure, keeps the
+    /// existing keys (fail-stale — don't lock everyone out on a network blip).
+    /// Returns the Task so the caller can retain/cancel it.
+    @discardableResult
+    public static func startPeriodicRefresh(
+        team: String,
+        into source: CfAccessKeySource,
+        interval: Duration = .seconds(3600)
+    ) -> Task<Void, Never> {
+        Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                if Task.isCancelled { break }
+                if let fresh = try? await fetch(team: team) {
+                    await source.replace(with: fresh)
+                }
+                // On transient fetch failure: keep current keys (fail-stale).
+            }
+        }
+    }
+}

@@ -58,7 +58,7 @@ if case .cloudflare(let team, let aud, let ownerEmail) = auth {
     do {
         let keys = try await CfAccessKeys.fetch(team: team)
         cfVerifier = CfAccessVerifier(audience: aud, ownerEmail: ownerEmail, keys: keys)
-        print("webterm: Cloudflare Access JWKS loaded for team '\(team)'.")
+        print("webterm: Cloudflare Access JWKS loaded for team '\(team)'. Auto-refresh every 3600s.")
     } catch let error as CfAccessKeysError {
         print("ERROR: \(error)")
         print("ERROR: Cloudflare-delegated auth cannot function. Fix CF_ACCESS_TEAM and network connectivity, then restart.")
@@ -68,6 +68,12 @@ if case .cloudflare(let team, let aud, let ownerEmail) = auth {
         print("ERROR: Cloudflare-delegated auth cannot function. Fix CF_ACCESS_TEAM and network connectivity, then restart.")
         exit(1)
     }
+}
+
+// Retain the JWKS refresh task for the process lifetime so it isn't cancelled on drop.
+var jwksRefreshTask: Task<Void, Never>? = nil
+if case .cloudflare(let team, _, _) = auth, let verifier = cfVerifier {
+    jwksRefreshTask = CfAccessKeys.startPeriodicRefresh(team: team, into: verifier.source)
 }
 
 let app = try buildApplication(cfg, cfVerifier: cfVerifier)

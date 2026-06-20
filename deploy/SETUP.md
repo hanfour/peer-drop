@@ -283,11 +283,11 @@ JWT (signature, audience, owner email, and expiry). If the JWKS fetch fails at s
 (bad team name, no network, non-2xx response) webterm prints a clear error and exits
 non-zero — it will not start in a broken state.
 
-> **One caveat — startup-only key refresh:** The JWKS is fetched once at startup. If
-> Cloudflare rotates its signing keys while webterm is running, new JWTs signed with the
-> rotated key will fail verification until webterm is restarted. Periodic auto-refresh is a
-> planned future enhancement (see Known Follow-Ups §a). In practice, Cloudflare Access key
-> rotation is rare and typically announced; a restart resolves it immediately.
+> **Auto-refresh:** webterm now auto-refreshes the Cloudflare JWKS hourly in a background
+> task. Key rotation is handled automatically — no restart needed. On a transient fetch
+> failure (network blip, non-2xx response) the previous keys are kept in service
+> (fail-stale), so a momentary JWKS endpoint outage will not lock anyone out. Restart is
+> only required when changing `CF_ACCESS_TEAM`, `CF_ACCESS_AUD`, or `CF_ACCESS_OWNER_EMAIL`.
 
 Both password mode and Cloudflare-delegated mode are fully functional. Password mode is
 the simpler choice for initial deployment; Cloudflare-delegated mode eliminates the need
@@ -334,11 +334,12 @@ let cfg = WebTermConfig(port: port, expectedHost: expectedHost,
 
 ## Known follow-ups
 
-**(a) ✅ Fixed — Cloudflare-delegated mode is now functional.** `CfAccessKeys.fetch(team:)`
-fetches the JWKS at startup and populates a `JWTKeyCollection`; `main.swift` builds the
-`CfAccessVerifier` from those keys and passes it into `buildApplication`. The one remaining
-enhancement is **periodic JWKS auto-refresh** (currently keys are fetched once at startup;
-a Cloudflare key rotation requires a webterm restart to pick up new public keys).
+**(a) ✅ Fixed — Cloudflare-delegated mode is now functional, with hourly JWKS auto-refresh.**
+`CfAccessKeys.fetch(team:)` fetches the JWKS at startup; `main.swift` builds a
+`CfAccessVerifier` (backed by a `CfAccessKeySource` actor) and immediately starts a
+background `Task` that re-fetches and swaps in the latest keys every 3600 seconds.
+On a transient fetch failure the previous keys are kept (fail-stale). No restart needed
+on Cloudflare key rotation.
 
 **(b) Mobile on-screen key bar (Phase 2).** The xterm.js frontend has no special key
 overlay for mobile browsers (Escape, Ctrl, arrow keys are inaccessible on on-screen
