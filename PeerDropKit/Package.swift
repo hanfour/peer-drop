@@ -123,6 +123,9 @@ let package = Package(
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
                 .product(name: "JWTKit", package: "jwt-kit"),
+            ],
+            resources: [
+                .copy("Resources"),
             ]
         ),
         .testTarget(

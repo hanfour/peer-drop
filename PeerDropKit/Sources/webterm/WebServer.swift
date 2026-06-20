@@ -24,6 +24,21 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
 
     let router = Router(context: BasicRequestContext.self)
 
+    // Public static assets — registered BEFORE auth middleware so the browser
+    // can load JS/CSS without a session cookie. These files contain no secrets.
+    router.get("/app.js") { _, _ -> Response in
+        staticFileResponse(named: "app", extension: "js", subdirectory: "Resources", contentType: "text/javascript; charset=utf-8")
+    }
+    router.get("/vendor/xterm.js") { _, _ -> Response in
+        staticFileResponse(named: "xterm", extension: "js", subdirectory: "Resources/vendor", contentType: "text/javascript; charset=utf-8")
+    }
+    router.get("/vendor/xterm.css") { _, _ -> Response in
+        staticFileResponse(named: "xterm", extension: "css", subdirectory: "Resources/vendor", contentType: "text/css; charset=utf-8")
+    }
+    router.get("/vendor/xterm-addon-fit.js") { _, _ -> Response in
+        staticFileResponse(named: "xterm-addon-fit", extension: "js", subdirectory: "Resources/vendor", contentType: "text/javascript; charset=utf-8")
+    }
+
     // /login routes — exempt from auth middleware (added BEFORE auth middleware is applied)
     router.get("/login") { _, _ -> Response in
         let html = loginPageHTML()
@@ -73,13 +88,9 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
     // Apply auth middleware — all routes added AFTER this call require authentication
     router.add(middleware: makeAuthMiddleware(cfg: cfg) as AuthMiddleware<BasicRequestContext>)
 
-    // GET / — status page (auth-gated)
+    // GET / — terminal page (auth-gated); serves index.html from bundle
     router.get("/") { _, _ -> Response in
-        Response(
-            status: .ok,
-            headers: [.contentType: "application/json"],
-            body: .init(byteBuffer: ByteBuffer(string: #"{"status":"ok"}"#))
-        )
+        staticFileResponse(named: "index", extension: "html", subdirectory: "Resources", contentType: "text/html; charset=utf-8")
     }
 
     // GET /api/sessions — list running session IDs (auth-gated)
@@ -232,6 +243,36 @@ private func makeAuthMiddleware<Context: RequestContext>(cfg: WebTermConfig) -> 
             expectedHost: cfg.expectedHost
         )
     }
+}
+
+/// Read a resource file from Bundle.module and return an HTTP Response with the given
+/// content-type. Returns 404 if the file cannot be found in the bundle.
+///
+/// SwiftPM's `.copy("Resources")` preserves the directory tree, so resource files live at
+/// `Resources/<name>.<ext>` or `Resources/vendor/<name>.<ext>` inside the module bundle.
+private func staticFileResponse(
+    named name: String,
+    extension ext: String,
+    subdirectory: String,
+    contentType: String
+) -> Response {
+    guard let url = Bundle.module.url(
+        forResource: name,
+        withExtension: ext,
+        subdirectory: subdirectory
+    ),
+    let data = try? Data(contentsOf: url) else {
+        return Response(
+            status: .notFound,
+            headers: [.contentType: "text/plain"],
+            body: .init(byteBuffer: ByteBuffer(string: "Not found"))
+        )
+    }
+    return Response(
+        status: .ok,
+        headers: [.contentType: contentType],
+        body: .init(byteBuffer: ByteBuffer(bytes: data))
+    )
 }
 
 /// Minimal `application/x-www-form-urlencoded` parser.
