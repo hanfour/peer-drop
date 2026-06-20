@@ -11,7 +11,7 @@ import JWTKit
 ///   GET  /         → 200 (auth-gated; serves index.html terminal page)
 ///   GET  /login    → 200 (login form HTML; exempt from auth)
 ///   POST /login    → 303 redirect + session cookie on success, 401 on bad password
-///   GET  /api/sessions  → 200 JSON list of running session IDs (auth-gated)
+///   GET  /api/sessions  → 200 JSON {presets:[{id,name,running}]} (auth-gated)
 ///   POST /api/sessions  → 200 JSON {id} for a new/reattached session (auth-gated)
 ///   WS   /ws/:sessionId → WebSocket terminal (auth-gated via AuthMiddleware on upgrade request)
 ///

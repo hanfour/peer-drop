@@ -25,10 +25,11 @@ function sendResize() {
 
 function connect(sessionId) {
   currentSession = sessionId; reconnect = true;
+  backoff = 1000;
   document.getElementById("picker").style.display = "none";
   document.getElementById("term").style.display = "block";
   document.getElementById("switch").style.display = "block";
-  setupTerm(); fit.fit();
+  setupTerm(); term.reset(); fit.fit();
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/${sessionId}`);
   ws.binaryType = "arraybuffer";
