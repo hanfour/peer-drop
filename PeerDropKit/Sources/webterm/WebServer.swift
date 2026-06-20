@@ -100,14 +100,23 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
         let params = parseFormURLEncoded(bodyString)
         let presetID = params["presetId"] ?? "shell"
 
+        // Validate presetID: only alphanumeric, underscore, hyphen
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+        guard !presetID.isEmpty, presetID.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+            throw HTTPError(.badRequest, message: "Invalid preset ID")
+        }
+
         _ = try sessionManager.openSession(presetID: presetID)
         // Return the tmux session ID (prefixed) so the client can connect via WS /ws/<id>
         let tmuxID = TmuxControl.prefix + presetID
-        let json = #"{"id":"\#(tmuxID)"}"#
+
+        // JSON-encode the response
+        struct SessionResponse: Codable { let id: String }
+        let data = try JSONEncoder().encode(SessionResponse(id: tmuxID))
         return Response(
             status: .ok,
             headers: [.contentType: "application/json"],
-            body: .init(byteBuffer: ByteBuffer(string: json))
+            body: .init(byteBuffer: ByteBuffer(bytes: data))
         )
     }
 
@@ -131,6 +140,14 @@ public func buildApplication(_ cfg: WebTermConfig) throws -> some ApplicationPro
             // The sessionId in the URL is the raw preset ID (e.g. "shell").
             // The tmux session was created with the prefixed name.
             let sessionId = context.requestContext.parameters.get("sessionId") ?? ""
+
+            // Validate sessionId: only alphanumeric, underscore, hyphen
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+            guard !sessionId.isEmpty, sessionId.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+                // Invalid sessionId — close WS immediately
+                return
+            }
+
             // If the client passes the full tmux name (webterm-shell) we use it directly;
             // if just the preset id (shell) we prefix it.
             let tmuxID: String
