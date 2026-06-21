@@ -209,6 +209,10 @@ public final class ConnectionManager: ObservableObject {
     public var onPeerConnectedForPet: ((String) -> Void)?
     public var onPeerDisconnectedForPet: ((String) -> Void)?
 
+    /// Headless/CLI hook: fires with (peerID, text) when a `.textMessage` is
+    /// decoded from a peer. The app UI path is unaffected (app passes nil).
+    public var onTextMessageReceived: ((String, String) -> Void)?
+
     // MARK: - Multi-Connection Support
 
     /// All active peer connections, keyed by peerID.
@@ -296,11 +300,13 @@ public final class ConnectionManager: ObservableObject {
     public let chatManager = ChatManager()
     public let groupStore = DeviceGroupStore()
     public let clipboardSyncManager = ClipboardSyncManager()
-    public let trustedContactStore = TrustedContactStore()
+    public let trustedContactStore = TrustedContactStore(
+        storageKey: PeerDropPersistence.scopedKey("trusted-contacts"))
 
     // MARK: - Remote Communication (Phase 2)
 
-    public let preKeyStore = PreKeyStore()
+    public let preKeyStore = PreKeyStore(
+        storageKey: PeerDropPersistence.scopedKey("prekey-store"))
     public private(set) lazy var mailboxManager = MailboxManager(preKeyStore: preKeyStore)
     public private(set) lazy var remoteSessionManager = RemoteSessionManager(
         preKeyStore: preKeyStore,
@@ -2775,6 +2781,15 @@ public final class ConnectionManager: ObservableObject {
     private func handleMessage(_ message: PeerMessage, from senderID: String) {
         logger.info("handleMessage: \(String(describing: message.type)) from \(senderID)")
 
+        // CLI/headless hook: fire onTextMessageReceived before any connection-existence
+        // check so the callback works even when the peer is not in `connections`.
+        // The app passes nil for this closure, making this a no-op for the live UI path.
+        if message.type == .textMessage,
+           let payload = try? message.decodePayload(TextMessagePayload.self),
+           let hook = onTextMessageReceived {
+            hook(senderID, payload.text)
+        }
+
         // Route to specific peer connection if it exists
         if let peerConn = connections[senderID] {
             handleMessageForPeer(message, peerConnection: peerConn)
@@ -2873,6 +2888,7 @@ public final class ConnectionManager: ObservableObject {
                 }
                 return
             }
+            // Decoded again here: the onTextMessageReceived hook above is fire-and-forget; this path owns persistence + delivery receipt.
             guard let payload = try? message.decodePayload(TextMessagePayload.self) else {
                 logger.warning("Failed to decode TextMessagePayload")
                 return
@@ -3060,6 +3076,22 @@ public final class ConnectionManager: ObservableObject {
                 checkPeerTrust(peerIdentity: identity)
                 triggerSecureChannelNegotiation(for: peerConnection)
                 logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
+            }
+
+        case .secureHandshake, .secureEnvelope:
+            // The ConnectionManager receive loop and the PeerConnection receive
+            // loop BOTH read this NWConnection, and NWConnection hands each frame
+            // to exactly one of them. When the ConnectionManager loop wins a
+            // secure-channel frame it would otherwise hit `default: break` and be
+            // dropped — stranding the handshake (→ fallback-plaintext → no SAS →
+            // blocked sends), which is what broke phone↔CLI pairing (the CLI is
+            // the acceptor and establishes fine; the phone-as-initiator dropped
+            // the CLI's bundle here). Forward it to the PeerConnection's own
+            // handler. This is the frame's single delivery (only one loop ever
+            // receives it); `handleIncomingMessage` is idempotent regardless.
+            Task {
+                do { try await peerConnection.handleIncomingMessage(message) }
+                catch { logger.error("Forwarded secure-channel frame failed: \(error.localizedDescription)") }
             }
 
         default:
@@ -3694,6 +3726,23 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Send a plain chat message to a connected peer. Builds a TextMessagePayload
+    /// and routes it through the peer's (encrypted) PeerConnection.
+    /// Intended for CLI / headless callers; bypasses chat-feature flag and trust gate.
+    /// Unlike `sendTextMessage(_:to:)` (the UI path), this does NOT enforce the per-send trust gate or persist to chat history — the CLI only ever sends to already-attached, paired peers.
+    public func sendText(_ text: String, to peerID: String) async throws {
+        guard let connection = connection(for: peerID) else {
+            throw ConnectionError.notConnected
+        }
+        // reply/threading fields omitted — CLI callers send standalone messages.
+        let payload = TextMessagePayload(
+            text: text,
+            senderName: localIdentity.displayName
+        )
+        let message = try PeerMessage.textMessage(payload, senderID: localIdentity.id)
+        try await connection.sendMessage(message)
+    }
+
     public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
@@ -3983,10 +4032,19 @@ public final class ConnectionManager: ObservableObject {
             logger.warning("Secure channel up but peer has no identityPublicKey — cannot pin")
             return
         }
-        if trustedContactStore.find(byPublicKey: peerPublicKey) != nil {
+        // A contact recorded by `checkPeerTrust` during the inbound HELLO exists
+        // with `.unknown` trust — recorded, NOT verified. Treating "key on file"
+        // as `.matched` would skip the first-trust SAS and silently green-lock an
+        // unverified peer. Only a *verified* contact (`.linked`/`.verified`) is a
+        // real match; an `.unknown` one must still surface the SAS to be elevated.
+        // (This is the acceptor side: the initiator never pre-adds, so it already
+        // reaches first-trust; without this the acceptor — phone OR CLI — never
+        // prompts, so local-Wi-Fi pairing can never complete on the accepting end.)
+        let existingByKey = trustedContactStore.find(byPublicKey: peerPublicKey)
+        if let existingByKey, existingByKey.trustLevel != .unknown {
             peerConnection.setPinningVerdict(.matched)
             logger.info("Pinning: matched existing contact for \(identity.displayName, privacy: .public)")
-        } else if let stored = trustedContactStore.find(byDeviceId: identity.id) {
+        } else if existingByKey == nil, let stored = trustedContactStore.find(byDeviceId: identity.id) {
             peerConnection.setPinningVerdict(.mismatch(stored: stored.keyFingerprint, received: fingerprint))
             logger.warning("Pinning: KEY MISMATCH for \(identity.displayName, privacy: .public) — stored=\(stored.keyFingerprint, privacy: .public) received=\(fingerprint, privacy: .public)")
         } else {
@@ -4002,6 +4060,28 @@ public final class ConnectionManager: ObservableObject {
                 peerPublicKey: peerPublicKey,
                 fingerprint: fingerprint,
                 sas: sas)
+        }
+
+        // Double-Ratchet bootstrap. `LocalSecureChannel.establish` makes the
+        // lex-smaller identity the initiator (gets a sending chain) and the other
+        // the responder (NO sending chain until it RECEIVES — `encrypt` throws
+        // `noSendChain`). So the responder can't send the FIRST message. The
+        // initiator can, so have it send one tiny encrypted no-op now: the
+        // responder's first receive runs a DH ratchet that yields it a sending
+        // chain, letting EITHER peer send first. Without this, whichever side is
+        // the lex-responder (e.g. a phone driving a CLI that needs to send the
+        // first command) could never send. `typingIndicator(false)` is a no-op on
+        // receipt (just clears the typing state) and rides the normal encrypted path.
+        if peerConnection.secureChannel?.isInitiator == true {
+            let senderID = localIdentity.id
+            Task { [weak peerConnection] in
+                guard let peerConnection,
+                      let msg = try? PeerMessage.typingIndicator(
+                        TypingIndicatorPayload(isTyping: false, timestamp: Date()),
+                        senderID: senderID)
+                else { return }
+                try? await peerConnection.sendMessage(msg)
+            }
         }
     }
 
@@ -4226,6 +4306,15 @@ public final class ConnectionManager: ObservableObject {
         guard parts.count == 4 else { return false }
         return parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127
     }
+
+    #if DEBUG
+    /// Test seam: routes a pre-built PeerMessage through handleMessage as if it arrived from peerID.
+    /// Allows unit tests to exercise the full decode + hook path without a live NW connection.
+    @MainActor
+    public func dispatchTextForTesting(_ message: PeerMessage, from peerID: String) {
+        handleMessage(message, from: peerID)
+    }
+    #endif
 }
 
 public enum ConnectionError: Error, LocalizedError {

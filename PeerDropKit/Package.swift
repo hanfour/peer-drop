@@ -110,5 +110,22 @@ let package = Package(
                 .copy("Resources"),
             ]
         ),
+        .executableTarget(
+            name: "peerdrop-cli",
+            dependencies: [
+                "PeerDropCore",
+                "PeerDropSecurity",
+                "PeerDropTransport",
+                "PeerDropProtocol",
+            ]
+        ),
+        .testTarget(
+            name: "PeerDropCLITests",
+            dependencies: [
+                "peerdrop-cli",
+                "PeerDropCore",
+                "PeerDropProtocol",
+            ]
+        ),
     ]
 )

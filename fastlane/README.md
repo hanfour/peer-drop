@@ -173,6 +173,72 @@ Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:
 
 Example: fastlane submit_only version:4.0.0 build:1
 
+### ios screenshots_mac
+
+```sh
+[bundle exec] fastlane ios screenshots_mac
+```
+
+Capture Mac App Store screenshots via PeerDropMacUITests
+
+Output: ./fastlane/screenshots_mac/<lang>/*.png
+
+macOS uses the host's screen resolution (no simulator); capture at
+
+highest available DPI and downsample post-hoc for the smaller ASC
+
+size brackets if needed.
+
+### ios check_status_mac
+
+```sh
+[bundle exec] fastlane ios check_status_mac
+```
+
+Print ASC review status for the Mac App: live + in-flight versions
+
+### ios release_mac
+
+```sh
+[bundle exec] fastlane ios release_mac
+```
+
+Build + upload Mac binary to App Store (and submit unless submit:false)
+
+Auto-loads reviewer notes from docs/release/v<version>-reviewer-notes.md.
+
+Default behavior: submit:true automatically (matches iOS release lane);
+
+pass submit:false to leave v6.0.0 in PREPARE_FOR_SUBMISSION so the IAP
+
+tip jar can be attached via Playwright before submission.
+
+### ios submit_mac_only
+
+```sh
+[bundle exec] fastlane ios submit_mac_only
+```
+
+Submit an already-uploaded Mac TestFlight build for review (no rebuild)
+
+Args: version:X.Y.Z build:N [auto_release:true] [phased:false] [no_review_notes:true]
+
+Example: fastlane submit_mac_only version:6.0.0 build:1
+
+Use after `release_mac submit:false` + Playwright IAP attach.
+
+### ios release_now_mac
+
+```sh
+[bundle exec] fastlane ios release_now_mac
+```
+
+Release the current PENDING_DEVELOPER_RELEASE Mac version to App Store.
+
+Use after an approved Mac version was submitted without auto-release
+
+(e.g. `fastlane release_mac submit:false` + IAP attach + submit_mac_only).
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.

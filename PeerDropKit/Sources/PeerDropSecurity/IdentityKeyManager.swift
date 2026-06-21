@@ -126,12 +126,25 @@ public final class IdentityKeyManager {
     }
 
     private func saveToKeychain(data: Data, account: String) {
+        // CLI file-store path: persist to a 0600 file instead of the keychain.
+        // The non-bundle CLI cannot use the macOS data-protection keychain.
+        if PeerDropPersistence.writeKeyFile("identity-\(account).key", data) {
+            return
+        }
+
+        // kSecUseDataProtectionKeychain pins all operations to the modern
+        // data-protection keychain on both iOS and macOS, bypassing the
+        // legacy CSSM/file keychain. Without this flag, macOS falls through
+        // to securityd's legacy path which blocks the main thread waiting for
+        // the login-keychain password in CLI and test contexts. Identical fix
+        // applied to ChatDataEncryptor; see project CertificateManager notes.
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         SecItemDelete(query as CFDictionary)
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -141,24 +154,80 @@ public final class IdentityKeyManager {
     }
 
     private func loadFromKeychain(account: String) -> Data? {
-        let query: [String: Any] = [
+        // CLI file-store path: load from 0600 file instead of the keychain.
+        if let data = PeerDropPersistence.readKeyFile("identity-\(account).key") {
+            return data
+        }
+
+        // Base attributes shared between both keychain probes and the migration add.
+        let baseAttrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
         ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess else { return nil }
-        return result as? Data
+
+        // Primary probe: data-protection keychain (iOS default; post-migration macOS;
+        // CLI path — never hits legacy below).
+        let probeDP: () -> Data? = {
+            var dpResult: AnyObject?
+            var q = baseAttrs
+            q[kSecUseDataProtectionKeychain as String] = true
+            guard SecItemCopyMatching(q as CFDictionary, &dpResult) == errSecSuccess else { return nil }
+            return dpResult as? Data
+        }
+
+        // Legacy probe: only executed inside a real .app bundle where securityd
+        // interaction is safe (guarded by KeychainMigration.canProbeLegacyKeychain).
+        let probeLegacy: () -> Data? = {
+            var legacyResult: AnyObject?
+            var q = baseAttrs
+            q[kSecUseDataProtectionKeychain as String] = false
+            guard SecItemCopyMatching(q as CFDictionary, &legacyResult) == errSecSuccess else { return nil }
+            return legacyResult as? Data
+        }
+
+        // Migration: write the legacy data into the data-protection keychain.
+        // Uses the same kSecAttrAccessible value as saveToKeychain.
+        // Best-effort — errors silently ignored; the legacy copy is intentionally
+        // left in place to avoid key loss if the add fails (e.g. missing entitlement).
+        let migrate: (Data) -> Void = { [keychainService] data in
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: keychainService,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                kSecUseDataProtectionKeychain as String: true,
+            ]
+            let migrateStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if migrateStatus != errSecSuccess && migrateStatus != errSecDuplicateItem {
+                Self.logger.debug("legacy→data-protection keychain migration add failed for \(account): \(migrateStatus)")
+            }
+        }
+
+        return KeychainMigration.load(
+            probeDataProtection: probeDP,
+            canProbeLegacy: KeychainMigration.canProbeLegacyKeychain,
+            probeLegacy: probeLegacy,
+            migrate: migrate
+        )
     }
 
     private func deleteFromKeychain(account: String) {
+        // CLI file-store path: delete the file instead of the keychain item.
+        // The non-bundle CLI cannot use the macOS data-protection keychain.
+        if PeerDropPersistence.fileStore != nil {
+            PeerDropPersistence.deleteKeyFile("identity-\(account).key")
+            return
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
         ]
         SecItemDelete(query as CFDictionary)
     }

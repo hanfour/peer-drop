@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Security
+import os.log
 
 public final class ChatDataEncryptor {
     public static let shared = ChatDataEncryptor()
@@ -14,6 +15,7 @@ public final class ChatDataEncryptor {
 
     private static let keychainService = "com.peerdrop.chatdata"
     private static let keychainAccount = "aes256-key"
+    private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatDataEncryptor")
 
     private var cachedKey: SymmetricKey?
     private let lock = NSLock()
@@ -40,21 +42,69 @@ public final class ChatDataEncryptor {
     }
 
     private func loadKeyFromKeychain() throws -> SymmetricKey? {
-        let query: [String: Any] = [
+        // CLI file-store path: load from 0600 file instead of the keychain.
+        if let data = PeerDropPersistence.readKeyFile("atrest.key") {
+            return SymmetricKey(data: data)
+        }
+
+        // Build the base attributes shared by both the data-protection probe and
+        // the legacy-keychain probe (same service/account/return directives).
+        let baseAttrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.keychainService,
             kSecAttrAccount as String: Self.keychainAccount,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
         ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else {
-            throw EncryptionError.keychainError(status)
+        // Probe the data-protection keychain (the primary path on iOS and
+        // post-migration macOS; always the path for the headless CLI).
+        let probeDP: () -> Data? = {
+            var dpResult: AnyObject?
+            var dpQuery = baseAttrs
+            dpQuery[kSecUseDataProtectionKeychain as String] = true
+            let s = SecItemCopyMatching(dpQuery as CFDictionary, &dpResult)
+            guard s == errSecSuccess else { return nil }
+            return dpResult as? Data
         }
+
+        // Probe the legacy (CSSM/file) keychain — only called when inside a
+        // real .app bundle where securityd interaction is safe.
+        let probeLegacy: () -> Data? = {
+            var legacyResult: AnyObject?
+            var legacyQuery = baseAttrs
+            legacyQuery[kSecUseDataProtectionKeychain as String] = false
+            let s = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyResult)
+            guard s == errSecSuccess else { return nil }
+            return legacyResult as? Data
+        }
+
+        // Migration closure: write the recovered legacy item into the
+        // data-protection keychain using the same accessible attribute that
+        // saveKeyToKeychain uses.  Best-effort — errors are silently ignored
+        // so the caller still gets the data back and can proceed normally.
+        let migrate: (Data) -> Void = { data in
+            var addQuery = baseAttrs
+            addQuery[kSecUseDataProtectionKeychain as String] = true
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            // Remove return-data directives that are invalid on SecItemAdd.
+            addQuery.removeValue(forKey: kSecReturnData as String)
+            addQuery.removeValue(forKey: kSecMatchLimit as String)
+            let migrateStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if migrateStatus != errSecSuccess && migrateStatus != errSecDuplicateItem {
+                Self.logger.debug("legacy→data-protection keychain migration add failed: \(migrateStatus)")
+            }
+            // Intentionally not deleting the legacy copy — if the add silently
+            // fails (e.g. errSecMissingEntitlement) we would lose the key forever.
+        }
+
+        guard let data = KeychainMigration.load(
+            probeDataProtection: probeDP,
+            canProbeLegacy: KeychainMigration.canProbeLegacyKeychain,
+            probeLegacy: probeLegacy,
+            migrate: migrate
+        ) else { return nil }
 
         return SymmetricKey(data: data)
     }
@@ -62,12 +112,18 @@ public final class ChatDataEncryptor {
     private func saveKeyToKeychain(_ key: SymmetricKey) throws {
         let keyData = key.withUnsafeBytes { Data($0) }
 
+        // CLI file-store path: save to 0600 file instead of the keychain.
+        if PeerDropPersistence.writeKeyFile("atrest.key", keyData) {
+            return
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.keychainService,
             kSecAttrAccount as String: Self.keychainAccount,
             kSecValueData as String: keyData,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecUseDataProtectionKeychain as String: true,
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)

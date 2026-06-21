@@ -174,12 +174,18 @@ public final class RemoteSessionManager: ObservableObject {
 
     // MARK: - Session Persistence
 
-    private static let sessionsDirectory: URL = {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Security/sessions", isDirectory: true)
+    private static var sessionsDirectory: URL {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Security", isDirectory: true)
+        let dir: URL
+        if let ns = PeerDropPersistence.fileStore?.namespace {
+            dir = base.appendingPathComponent("sessions-\(ns)", isDirectory: true)
+        } else {
+            dir = base.appendingPathComponent("sessions", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
-    }()
+    }
 
     private let encryptor = ChatDataEncryptor.shared
 
