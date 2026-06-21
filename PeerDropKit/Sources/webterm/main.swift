@@ -40,12 +40,26 @@ if let hash = env["WEBTERM_PASSWORD_HASH"] {
     auth = .password(hash: PasswordHash.make("changeme"))
 }
 
+// Load presets from a JSON file specified by WEBTERM_PRESETS.
+// If the env var is unset → no custom presets (only the built-in "shell" preset).
+// If set but the file is missing or malformed → print a WARNING and continue with [].
+var presets: [Preset] = []
+if let presetsPath = env["WEBTERM_PRESETS"] {
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: presetsPath))
+        presets = try JSONDecoder().decode([Preset].self, from: data)
+        print("webterm: Loaded \(presets.count) preset(s) from \(presetsPath).")
+    } catch {
+        print("WARNING: could not load WEBTERM_PRESETS from \(presetsPath): \(error). Continuing with no custom presets.")
+    }
+}
+
 let cfg = WebTermConfig(
     port: port,
     expectedHost: expectedHost,
     auth: auth,
     sessionSecret: sessionSecret,
-    presets: []
+    presets: presets
 )
 
 // In cloudflare mode, fetch the team JWKS before starting the server.
@@ -76,5 +90,5 @@ if case .cloudflare(let team, _, _) = auth, let verifier = cfVerifier {
     jwksRefreshTask = CfAccessKeys.startPeriodicRefresh(team: team, into: verifier.source)
 }
 
-let app = try buildApplication(cfg, cfVerifier: cfVerifier)
+let app = try buildApplication(cfg, cfVerifier: cfVerifier, autostartPresets: true)
 try await app.runService()

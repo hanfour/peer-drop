@@ -27,9 +27,28 @@ import JWTKit
 ///     in cloudflare mode the middleware falls back to an empty key collection
 ///     (fail-closed: every request is denied with a JWT verification error).
 ///     Has no effect in password mode.
-public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier? = nil) throws -> some ApplicationProtocol {
+///   - autostartPresets: When true, tmux sessions for all presets with `autostart == true`
+///     are created immediately after the `SessionManager` is built. Failures are logged
+///     to stderr and skipped — one bad preset cannot block server startup.
+///     Defaults to `false` so that test callers using `buildApplication(cfg)` do not
+///     accidentally spawn tmux processes.
+public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier? = nil,
+                             autostartPresets: Bool = false) throws -> some ApplicationProtocol {
     // Shared session manager
     let sessionManager = SessionManager(presets: PresetStore(presets: cfg.presets))
+
+    // Boot auto-recreate: create tmux sessions for presets with autostart == true.
+    // Idempotent (TmuxControl.createIfNeeded is a no-op when the session already exists).
+    // Failure-tolerant: a single bad preset must not prevent the server from starting.
+    if autostartPresets {
+        for p in cfg.presets where p.autostart {
+            do {
+                _ = try sessionManager.openSession(presetID: p.id)
+            } catch {
+                fputs("webterm: WARNING \u{2014} autostart preset '\(p.id)' failed: \(error)\n", stderr)
+            }
+        }
+    }
 
     // MARK: HTTP Router
 

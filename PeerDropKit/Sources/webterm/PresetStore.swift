@@ -6,8 +6,22 @@ public struct Preset: Codable, Equatable, Sendable {
     public let command: String
     public let cwd: String?
     public let env: [String: String]?
-    public init(id: String, name: String, command: String, cwd: String?, env: [String: String]?) {
-        self.id = id; self.name = name; self.command = command; self.cwd = cwd; self.env = env
+    public let autostart: Bool
+
+    public init(id: String, name: String, command: String, cwd: String?, env: [String: String]?, autostart: Bool = false) {
+        self.id = id; self.name = name; self.command = command; self.cwd = cwd; self.env = env; self.autostart = autostart
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, command, cwd, env, autostart }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        command = try c.decode(String.self, forKey: .command)
+        cwd = try c.decodeIfPresent(String.self, forKey: .cwd)
+        env = try c.decodeIfPresent([String: String].self, forKey: .env)
+        autostart = try c.decodeIfPresent(Bool.self, forKey: .autostart) ?? false
     }
 }
 

@@ -298,24 +298,79 @@ for a separate password when Cloudflare Access is already the perimeter gate.
 ## Presets
 
 Presets let the frontend offer named "launch into X" buttons (e.g. "Claude Code",
-"Monitoring"). They are configured via the `WEBTERM_*` environment variables or by
-modifying `main.swift` to pass a `presets:` array to `WebTermConfig`.
+"Monitoring"). The built-in `shell` preset always exists and launches `$SHELL` (or `/bin/zsh`).
 
-The built-in `shell` preset always exists and launches `$SHELL` (or `/bin/zsh`).
+### Configuring presets via a JSON file (`WEBTERM_PRESETS`)
 
-To add a preset via `main.swift` (rebuild required):
+Set the `WEBTERM_PRESETS` environment variable to the path of a JSON file containing
+an array of preset objects. No rebuild is required — just edit the file and restart webterm.
 
-```swift
-let presets = [
-    Preset(id: "claude", name: "Claude Code",
-           command: "claude",
-           cwd: "/path/to/your/project",
-           env: nil),
+**JSON schema:**
+
+```json
+[
+  {
+    "id":        "string — unique ID, alphanumeric/underscore/hyphen only",
+    "name":      "string — display label in the UI",
+    "command":   "string — shell command to run in the tmux session",
+    "cwd":       "string? — optional working directory (null or omit to inherit webterm's cwd)",
+    "env":       "object? — optional extra env vars {"KEY": "value"} (null or omit to skip)",
+    "autostart": "bool?  — if true, the session is (re)created at webterm startup (default: false)"
+  }
 ]
-let cfg = WebTermConfig(port: port, expectedHost: expectedHost,
-                        auth: auth, sessionSecret: sessionSecret,
-                        presets: presets)
 ```
+
+**Example** — launch a Claude Code session in a project directory on every startup:
+
+```json
+[
+  {
+    "id": "claude",
+    "name": "Claude Code — Projects/foo",
+    "command": "claude",
+    "cwd": "/Users/you/Projects/foo",
+    "autostart": true
+  },
+  {
+    "id": "logs",
+    "name": "Server Logs",
+    "command": "tail -f /var/log/system.log",
+    "autostart": false
+  }
+]
+```
+
+Save this as e.g. `~/.config/webterm/presets.json` and add to the launchd plist:
+
+```xml
+<key>WEBTERM_PRESETS</key>
+<string>/Users/you/.config/webterm/presets.json</string>
+```
+
+If `WEBTERM_PRESETS` is unset, only the built-in `shell` preset is available.
+If the file is missing or contains invalid JSON, webterm prints a `WARNING` and starts
+with no custom presets — it does **not** refuse to start.
+
+### Autostart: sessions that come back after every reboot
+
+A preset with `"autostart": true` has its tmux session (re)created every time webterm
+starts — including when the launchd agent starts at login/boot.
+
+**What "autostart" means in practice:**
+
+- After a machine reboot, tmux sessions are gone. Normally the frontend would show the
+  preset in the list but find no live session until a user opens it. With `autostart: true`
+  the session is already running by the time the first browser tab opens.
+- The session is created FRESH on each webterm start (not resumed). Any previous session
+  state is gone once the machine rebooted.
+- `TmuxControl.createIfNeeded` is used under the hood — if a session with that ID already
+  exists (e.g. webterm restarted without a reboot), no duplicate is spawned.
+- If one autostart preset fails (bad command, unreachable cwd), webterm logs a WARNING
+  to stderr and continues starting up — it does not abort.
+
+**Recommendation:** set `autostart: true` for long-lived sessions you always want running
+(e.g. an always-on Claude Code session, a monitoring tail). Leave it `false` (default) for
+on-demand sessions you only need occasionally.
 
 ---
 
@@ -355,7 +410,8 @@ which runs `TmuxControl.createIfNeeded` before connecting, so a fresh server no 
 rejects the first WebSocket connection. Multiple concurrent browser tabs share one cached
 `TerminalSession` object; `TerminalSession.start()` is idempotent (second call is a no-op).
 
-**(e) Reboot auto-recreate of tmux sessions (Phase 2).** After a machine reboot, tmux
-sessions are gone. The frontend will reconnect to webterm but find no live sessions.
-A Phase 2 enhancement could auto-recreate a default session on startup (e.g. via
-`SessionManager` initialisation) or add a "relaunch" button in the UI.
+**(e) ✅ Done — Boot auto-recreate via `autostart: true` presets.**
+Presets with `autostart: true` in the `WEBTERM_PRESETS` JSON file are (re)created as tmux
+sessions every time webterm starts, including at boot via the launchd agent. The sessions
+come back FRESH (not resumed mid-task) since a reboot clears all tmux state. One failed
+autostart does not block server startup. See the **Presets** section above for full docs.
