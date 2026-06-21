@@ -320,7 +320,8 @@ an array of preset objects. No rebuild is required — just edit the file and re
 ]
 ```
 
-**Example** — launch a Claude Code session in a project directory on every startup:
+**Example** — launch a Claude Code session in a project directory on every startup, with
+extra environment variables injected into the tmux session:
 
 ```json
 [
@@ -329,6 +330,7 @@ an array of preset objects. No rebuild is required — just edit the file and re
     "name": "Claude Code — Projects/foo",
     "command": "claude",
     "cwd": "/Users/you/Projects/foo",
+    "env": { "ANTHROPIC_MODEL": "claude-opus-4-5", "NO_COLOR": "1" },
     "autostart": true
   },
   {

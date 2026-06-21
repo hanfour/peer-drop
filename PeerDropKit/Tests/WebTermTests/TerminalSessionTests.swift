@@ -3,6 +3,32 @@ import XCTest
 @testable import PeerDropPTY
 
 final class TerminalSessionTests: XCTestCase {
+    /// Verify that env vars passed to `TmuxControl.createIfNeeded` are visible in the
+    /// session command. Uses `-e KEY=VALUE` tmux new-session flags (tmux 3.x).
+    func test_createIfNeeded_envVarsVisibleInSession() async throws {
+        let id = "webterm-envtest-\(ProcessInfo.processInfo.processIdentifier)"
+        defer { _ = try? TmuxControl.kill(id) }
+
+        try TmuxControl.createIfNeeded(
+            id: id,
+            command: "printf \"VAL=$WT_ENV_TEST\"; sleep 20",
+            cwd: nil,
+            env: ["WT_ENV_TEST": "hello123"]
+        )
+
+        let exp = expectation(description: "env var visible in session output")
+        exp.assertForOverFulfill = false
+        let session = TerminalSession(id: id)
+        var received = Data()
+        _ = session.addClient { bytes in
+            received.append(bytes)
+            if String(decoding: received, as: UTF8.self).contains("VAL=hello123") { exp.fulfill() }
+        }
+        session.start()
+        await fulfillment(of: [exp], timeout: 10)
+        session.detach()
+    }
+
     func test_attachReceivesOutputAndSurvivesReattach() async throws {
         let id = "webtermtest-\(ProcessInfo.processInfo.processIdentifier)"
         defer { _ = try? TmuxControl.kill(id) }

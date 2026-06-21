@@ -50,7 +50,7 @@ if let presetsPath = env["WEBTERM_PRESETS"] {
         presets = try JSONDecoder().decode([Preset].self, from: data)
         print("webterm: Loaded \(presets.count) preset(s) from \(presetsPath).")
     } catch {
-        print("WARNING: could not load WEBTERM_PRESETS from \(presetsPath): \(error). Continuing with no custom presets.")
+        fputs("WARNING: could not load WEBTERM_PRESETS from \(presetsPath): \(error). Continuing with no custom presets.\n", stderr)
     }
 }
 

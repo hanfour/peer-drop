@@ -20,10 +20,13 @@ enum TmuxControl {
         ((try? tmux(["has-session", "-t", id])) ?? 1) == 0
     }
 
-    static func createIfNeeded(id: String, command: String, cwd: String?) throws {
+    static func createIfNeeded(id: String, command: String, cwd: String?, env: [String: String]? = nil) throws {
         guard !exists(id) else { return }
         var args = ["new-session", "-d", "-s", id]
         if let cwd { args += ["-c", cwd] }
+        if let env {
+            for (k, v) in env { args += ["-e", "\(k)=\(v)"] }
+        }
         args += ["bash", "-lc", command]
         // Use tmux's ';' command separator (its own argv element) so new-session and
         // set-option run in a single tmux invocation — no race if the command exits fast.

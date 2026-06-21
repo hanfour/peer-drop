@@ -10,7 +10,7 @@ public final class SessionManager {
     public func openSession(presetID: String) throws -> TerminalSession {
         guard let p = presets.preset(presetID) else { throw WebTermError.unknownPreset(presetID) }
         let tmuxID = TmuxControl.prefix + p.id
-        try TmuxControl.createIfNeeded(id: tmuxID, command: p.command, cwd: p.cwd)
+        try TmuxControl.createIfNeeded(id: tmuxID, command: p.command, cwd: p.cwd, env: p.env)
         lock.lock(); defer { lock.unlock() }
         if let existing = sessions[tmuxID] { return existing }
         let s = TerminalSession(id: tmuxID); sessions[tmuxID] = s; return s
