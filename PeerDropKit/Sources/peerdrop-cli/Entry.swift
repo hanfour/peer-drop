@@ -81,12 +81,21 @@ struct PeerDropCLI {
             .compactMap { $0 }
             .sink { req in
                 let key = req.peerIdentity.identityPublicKey ?? Data()
-                switch AgentSession.decideTrust(identityKey: key, store: store) {
-                case .reject:
-                    print("rejecting blocked peer \(req.peerIdentity.displayName)")
-                    cm.rejectConnection()
-                case .autoAccept, .enroll:
-                    cm.acceptConnection()
+                let decision = AgentSession.decideTrust(identityKey: key, store: store)
+                // `pendingIncomingRequest` is published via @Published's `willSet`, so the
+                // stored property is still nil while this sink runs synchronously.
+                // `acceptConnection()`/`rejectConnection()` re-read that property and bail
+                // ("no pending request") if it's nil — so defer to the next main-actor tick,
+                // by which point the assignment has completed. The app path is immune: a
+                // human taps the consent sheet long after the property is set.
+                Task { @MainActor in
+                    switch decision {
+                    case .reject:
+                        print("rejecting blocked peer \(req.peerIdentity.displayName)")
+                        cm.rejectConnection()
+                    case .autoAccept, .enroll:
+                        cm.acceptConnection()
+                    }
                 }
             }
             .store(in: &bag)
