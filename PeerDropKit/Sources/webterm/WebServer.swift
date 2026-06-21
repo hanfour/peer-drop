@@ -77,6 +77,13 @@ public func buildApplication(
         staticFileResponse(named: "xterm-addon-fit", extension: "js", subdirectory: "Resources/vendor", contentType: "text/javascript; charset=utf-8")
     }
 
+    // F3: favicon — public, returns 204 No Content.
+    // Browsers auto-request /favicon.ico; if gated it would produce 401 console noise on
+    // every page load. 204 is the simplest correct answer (no icon file to serve).
+    router.get("/favicon.ico") { _, _ -> Response in
+        Response(status: .noContent, headers: [:], body: .init(byteBuffer: ByteBuffer()))
+    }
+
     // /login routes — exempt from auth middleware (added BEFORE auth middleware is applied)
     router.get("/login") { _, _ -> Response in
         // Generate a 16-byte random CSRF token (32 hex chars).

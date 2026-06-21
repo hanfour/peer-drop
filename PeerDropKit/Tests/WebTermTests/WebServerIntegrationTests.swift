@@ -57,15 +57,15 @@ final class WebServerIntegrationTests: XCTestCase {
 
     // MARK: - Core flow tests
 
-    /// Full 401 → login → 200 flow via the in-process router test framework.
+    /// Full redirect-to-login → login → 200 flow via the in-process router test framework.
     func test_unauthenticatedRootIs401_andLoginThenAllows() async throws {
         let cfg = WebTermConfig.test(password: "hunter2")
         let app = try buildApplication(cfg)
 
         try await app.test(.router) { client in
-            // 1. Unauthenticated GET / → 401
+            // 1. Unauthenticated GET / → 303 redirect to /login (F4 fix)
             try await client.execute(uri: "/", method: .get) { res in
-                XCTAssertEqual(res.status, .unauthorized)
+                XCTAssertEqual(res.status, .seeOther)
             }
 
             // 2. Login using the helper (handles CSRF)
@@ -181,6 +181,51 @@ final class WebServerIntegrationTests: XCTestCase {
             let lower = setCookie.lowercased()
             XCTAssertTrue(lower.contains("samesite=strict"), "Cookie must contain SameSite=Strict; got: \(setCookie)")
             XCTAssertTrue(lower.contains("; secure"), "Cookie must include Secure for non-localhost; got: \(setCookie)")
+        }
+    }
+
+    // MARK: - E2E UX fix tests
+
+    /// F3: GET /favicon.ico must be public (no auth required) and return 204 No Content.
+    func test_faviconIsPublicAnd204() async throws {
+        let cfg = WebTermConfig.test(password: "hunter2")
+        let app = try buildApplication(cfg)
+
+        try await app.test(.router) { client in
+            // No cookie — must succeed without auth
+            try await client.execute(uri: "/favicon.ico", method: .get) { res in
+                XCTAssertEqual(res.status, .noContent,
+                    "Expected 204 No Content for /favicon.ico without auth; got \(res.status)")
+            }
+        }
+    }
+
+    /// F4: Unauthenticated GET / must redirect to /login (303), not return 401.
+    func test_unauthenticatedRootRedirectsToLogin() async throws {
+        let cfg = WebTermConfig.test(password: "hunter2")
+        let app = try buildApplication(cfg)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/", method: .get) { res in
+                XCTAssertEqual(res.status, .seeOther,
+                    "Unauthenticated GET / should redirect to /login with 303; got \(res.status)")
+                let location = res.headers[.location] ?? ""
+                XCTAssertEqual(location, "/login",
+                    "Location header must be /login; got '\(location)'")
+            }
+        }
+    }
+
+    /// F4 (API path): Unauthenticated GET /api/sessions must still return 401, not redirect.
+    func test_unauthenticatedApiSessionsStill401() async throws {
+        let cfg = WebTermConfig.test(password: "hunter2")
+        let app = try buildApplication(cfg)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/api/sessions", method: .get) { res in
+                XCTAssertEqual(res.status, .unauthorized,
+                    "Unauthenticated GET /api/sessions should still be 401; got \(res.status)")
+            }
         }
     }
 

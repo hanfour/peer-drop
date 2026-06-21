@@ -1,5 +1,8 @@
 let term, fit, ws, backoff = 1000, currentSession = null, reconnect = false;
 let ctrlActive = false;
+// F1: consecutive WS close counter — reset on a successful open, incremented on each close.
+// After 3 consecutive failures we show a one-time troubleshooting hint.
+let wsFailCount = 0, wsHintShown = false;
 
 // Detect touch/coarse-pointer devices early and add body class for CSS
 if (window.matchMedia("(pointer: coarse)").matches) {
@@ -68,11 +71,22 @@ function connect(sessionId) {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/${sessionId}`);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { backoff = 1000; sendResize(); };
+  ws.onopen = () => { backoff = 1000; wsFailCount = 0; wsHintShown = false; sendResize(); };
   ws.onmessage = (e) => { const u = new Uint8Array(e.data); if (u[0] === 0x00) term.write(u.slice(1)); };
   ws.onclose = () => {
     if (!reconnect) return;
+    wsFailCount++;
     term.write("\r\n[disconnected — reconnecting…]\r\n");
+    // F1: after 3 consecutive failures without a successful open, show a clear hint once.
+    if (wsFailCount >= 3 && !wsHintShown) {
+      wsHintShown = true;
+      term.write(
+        "\r\n[unable to connect to the terminal session]\r\n" +
+        "If you self-host: ensure WEBTERM_HOST matches the exact host in your browser's\r\n" +
+        "address bar (e.g. localhost vs 127.0.0.1 vs your domain) — an Origin mismatch\r\n" +
+        "rejects the WebSocket. Also check the webterm server + cloudflared are running.\r\n"
+      );
+    }
     setTimeout(() => { if (reconnect) connect(currentSession); }, backoff);
     backoff = Math.min(backoff * 2, 15000);
   };

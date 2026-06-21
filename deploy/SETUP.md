@@ -397,9 +397,57 @@ on-demand sessions you only need occasionally.
 | `webterm-session` cookie invalid after restart | `WEBTERM_SECRET` not set or changes on restart | Set a stable hex secret (Step 2) |
 | Login fails with correct password | Hash was generated for wrong password or was truncated | Regenerate hash (Step 3) |
 | 403 / "Origin mismatch" from browser | `WEBTERM_HOST` doesn't match the domain in the browser's `Origin` header | Set `WEBTERM_HOST=term.yourdomain.com` |
+| Page loads but terminal shows "[unable to connect]" / loops "reconnecting…" | `WEBTERM_HOST` mismatch with the URL you're browsing | See **WEBTERM_HOST must exactly match your browser's host** below |
 | Blank page after login | xterm.js static assets not found in bundle | Ensure binary was built with `swift build` (not `swift run`) from within `PeerDropKit/` |
 | Tunnel connects but pages 404 | `httpHostHeader` missing in cloudflared-config.yml | Add `httpHostHeader: "term.yourdomain.com"` to the ingress rule |
 | `tmux: no server running` | tmux not in PATH for the launchd process | Add `/opt/homebrew/bin` to `PATH` in the plist `EnvironmentVariables` |
+
+### WEBTERM_HOST must EXACTLY match the host you browse to
+
+`WEBTERM_HOST` is used in two ways:
+
+1. **Cookie security flag** — when `WEBTERM_HOST != "localhost"`, session cookies get
+   `Secure` set (HTTPS-only delivery).
+2. **WebSocket Origin check** — the browser sends an `Origin` header on every WebSocket
+   upgrade (e.g. `Origin: https://term.yourdomain.com`). webterm compares the host in that
+   header to `WEBTERM_HOST` and **rejects** the upgrade with HTTP 403 if they don't match.
+
+**The key gotcha:** the _page_ still loads (HTTP GET navigations don't send an `Origin`
+header), so the browser shows the terminal UI — but then every WebSocket connection attempt
+is rejected silently. The terminal loops "reconnecting…" and after 3 failures shows a
+troubleshooting hint.
+
+Common mismatches that break WebSocket but not page load:
+
+| You browse to | `WEBTERM_HOST` you set | Result |
+|---|---|---|
+| `https://127.0.0.1:7681` | `localhost` | WS rejected (host mismatch) |
+| `https://localhost:7681` | `127.0.0.1` | WS rejected |
+| `https://term.example.com` | `term.example.com` | ✅ Works |
+| `http://localhost:7681` | `localhost` | ✅ Works (local dev) |
+
+**Fix:** set `WEBTERM_HOST` to exactly the hostname you type in the browser's address bar —
+no scheme, no port, no trailing slash. For production behind cloudflared, this is your
+public domain (e.g. `term.yourdomain.com`).
+
+### Set a fixed WEBTERM_SECRET to survive restarts
+
+`WEBTERM_SECRET` is the HMAC-SHA256 key that signs session cookies. If it is **not set**,
+webterm generates a new random secret on every start. This means:
+
+- Every webterm restart (including the launchd agent restarting it after a crash or reboot)
+  **invalidates all existing browser sessions** — users must log in again.
+- The tmux sessions themselves survive (they're managed by tmux, not webterm), but the
+  browser cookies become invalid.
+
+**Fix:** generate a stable secret once (Step 2) and set it permanently in the launchd plist:
+
+```xml
+<key>WEBTERM_SECRET</key>
+<string><!-- 64 hex chars from: openssl rand -hex 32 --></string>
+```
+
+This secret only needs to be changed if you suspect it has been compromised.
 
 ---
 

@@ -142,6 +142,13 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
             }
             return response
         case .denyUnauthorized:
+            // F4: browsing to the bare / while logged out should land on the login form,
+            // not a raw 401 page. Redirect GET / → /login only; all other gated paths
+            // (API endpoints, WS upgrades, /logout) keep the existing 401 behaviour so
+            // clients can detect auth failures programmatically.
+            if request.method == .get && request.uri.path == "/" {
+                return Response.redirect(to: "/login", type: .normal)
+            }
             throw HTTPError(.unauthorized)
         case .denyForbidden:
             throw HTTPError(.forbidden)
