@@ -4016,10 +4016,19 @@ public final class ConnectionManager: ObservableObject {
             logger.warning("Secure channel up but peer has no identityPublicKey — cannot pin")
             return
         }
-        if trustedContactStore.find(byPublicKey: peerPublicKey) != nil {
+        // A contact recorded by `checkPeerTrust` during the inbound HELLO exists
+        // with `.unknown` trust — recorded, NOT verified. Treating "key on file"
+        // as `.matched` would skip the first-trust SAS and silently green-lock an
+        // unverified peer. Only a *verified* contact (`.linked`/`.verified`) is a
+        // real match; an `.unknown` one must still surface the SAS to be elevated.
+        // (This is the acceptor side: the initiator never pre-adds, so it already
+        // reaches first-trust; without this the acceptor — phone OR CLI — never
+        // prompts, so local-Wi-Fi pairing can never complete on the accepting end.)
+        let existingByKey = trustedContactStore.find(byPublicKey: peerPublicKey)
+        if let existingByKey, existingByKey.trustLevel != .unknown {
             peerConnection.setPinningVerdict(.matched)
             logger.info("Pinning: matched existing contact for \(identity.displayName, privacy: .public)")
-        } else if let stored = trustedContactStore.find(byDeviceId: identity.id) {
+        } else if existingByKey == nil, let stored = trustedContactStore.find(byDeviceId: identity.id) {
             peerConnection.setPinningVerdict(.mismatch(stored: stored.keyFingerprint, received: fingerprint))
             logger.warning("Pinning: KEY MISMATCH for \(identity.displayName, privacy: .public) — stored=\(stored.keyFingerprint, privacy: .public) received=\(fingerprint, privacy: .public)")
         } else {
