@@ -256,8 +256,22 @@ launchctl print gui/$(id -u)/com.cloudflare.cloudflared
 ### Password mode (recommended — works today)
 
 Set `WEBTERM_PASSWORD_HASH` from Step 3. Leave `CF_ACCESS_AUD`, `CF_ACCESS_TEAM`, and
-`CF_ACCESS_OWNER_EMAIL` unset. webterm issues a signed `webterm-session` cookie (24-hour
-TTL, HMAC-SHA256).
+`CF_ACCESS_OWNER_EMAIL` unset. webterm issues a signed `webterm-session` cookie backed by
+a **sliding idle-timeout** (HMAC-SHA256). The cookie is automatically refreshed on every
+authenticated HTTP request, so active terminal use keeps the session alive indefinitely
+(up to the absolute cap).
+
+**Session timeout configuration:**
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `WEBTERM_IDLE_MINUTES` | `30` | Session expires after this many minutes of inactivity |
+| `WEBTERM_MAX_SESSION_HOURS` | `12` | Absolute cap — sessions cannot exceed this duration regardless of activity |
+
+The frontend sends an HTTP heartbeat (`GET /api/ping`) every 5 minutes while the page is
+open. This ensures an active terminal session (which otherwise only produces WebSocket
+traffic) also keeps the HTTP session cookie alive. The ping route is auth-gated, so every
+heartbeat extends the idle window.
 
 This is the **recommended mode** for initial deployment. Combined with Cloudflare Access
 (Step 5) it gives two independent auth layers.
@@ -402,9 +416,11 @@ on Cloudflare key rotation.
 overlay for mobile browsers (Escape, Ctrl, arrow keys are inaccessible on on-screen
 keyboards). A Phase 2 bar of common keys would make mobile use practical.
 
-**(c) OAuth / third-party login (Phase 2).** Currently only password and Cloudflare
-Access are supported. Adding Google / GitHub OAuth would allow the Cloudflare-free path
-without a shared password.
+**(c) Third-party / social login (Google/GitHub): use `cloudflare` auth mode and configure
+your identity provider in the **Cloudflare Zero Trust dashboard** → Access → Identity
+Providers. webterm validates the resulting Access JWT (RS256 signature, audience, owner
+email, expiry) via `CfAccessVerifier`. No separate app-level OAuth implementation is needed
+— Cloudflare handles the OAuth / OIDC dance and webterm only ever sees the signed CF JWT.
 
 **(d) ✅ Fixed — WS endpoint now create-or-attaches via `SessionManager`.**
 `WebServer.swift`'s `/ws/:sessionId` handler calls `SessionManager.openSession(presetID:)`

@@ -144,15 +144,15 @@ public func buildApplication(
         // Correct password — clear the failure window
         await rateLimiter.recordSuccess()
 
-        // Issue a signed session cookie (24-hour TTL)
-        let token = SessionToken.issue(subject: "owner", ttl: 86_400, secret: cfg.sessionSecret)
+        // Issue a signed session cookie with the configured idle TTL.
+        let token = SessionToken.issue(subject: "owner", idleTTL: cfg.idleTTL, secret: cfg.sessionSecret)
         // SameSite=Strict: mitigates CSRF / cross-origin WS attacks on all browsers.
         // Secure: added when not serving localhost (local dev works over plain HTTP).
         let isSecure = cfg.expectedHost != "localhost"
         let cookie = Cookie(
             name: "webterm-session",
             value: token,
-            maxAge: 86400,
+            maxAge: Int(cfg.idleTTL),
             path: "/",
             secure: isSecure,
             httpOnly: true,
@@ -208,6 +208,16 @@ public func buildApplication(
             headers: [.contentType: "application/json"],
             body: .init(byteBuffer: ByteBuffer(bytes: data))
         )
+    }
+
+    // GET /api/ping — lightweight heartbeat (auth-gated)
+    //
+    // Returns 204 No Content. Because it is auth-gated and in password mode the middleware
+    // slides the session cookie on the response, hitting this endpoint keeps an active
+    // terminal session alive without requiring HTTP traffic on the WebSocket path.
+    // The frontend calls this every ~5 minutes while the page is open.
+    router.get("/api/ping") { _, _ -> Response in
+        Response(status: .noContent, headers: [:], body: .init(byteBuffer: ByteBuffer()))
     }
 
     // POST /api/sessions — open or reattach a session (auth-gated)
@@ -337,7 +347,9 @@ private func makeAuthMiddleware<Context: RequestContext>(
     case .password:
         return AuthMiddleware.password(
             secret: cfg.sessionSecret,
-            expectedHost: cfg.expectedHost
+            expectedHost: cfg.expectedHost,
+            idleTTL: cfg.idleTTL,
+            maxAge: cfg.maxSessionAge
         )
     case .cloudflare(_, let aud, let ownerEmail):
         // Use the injected verifier (with real JWKS keys) when available.

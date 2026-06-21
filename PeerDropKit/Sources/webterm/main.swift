@@ -54,12 +54,19 @@ if let presetsPath = env["WEBTERM_PRESETS"] {
     }
 }
 
+let idleMinutes = env["WEBTERM_IDLE_MINUTES"].flatMap(Double.init) ?? 30
+let maxSessionHours = env["WEBTERM_MAX_SESSION_HOURS"].flatMap(Double.init) ?? 12
+let idleTTL: TimeInterval = idleMinutes * 60
+let maxSessionAge: TimeInterval = maxSessionHours * 3600
+
 let cfg = WebTermConfig(
     port: port,
     expectedHost: expectedHost,
     auth: auth,
     sessionSecret: sessionSecret,
-    presets: presets
+    presets: presets,
+    idleTTL: idleTTL,
+    maxSessionAge: maxSessionAge
 )
 
 // In cloudflare mode, fetch the team JWKS before starting the server.

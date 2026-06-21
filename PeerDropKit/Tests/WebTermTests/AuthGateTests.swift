@@ -5,7 +5,7 @@ final class AuthGateTests: XCTestCase {
     let secret = Data("server-secret-32-bytes-or-more!!".utf8)
 
     func test_passwordMode_validCookieAllows() {
-        let cookie = SessionToken.issue(subject: "owner", ttl: 3600, secret: secret)
+        let cookie = SessionToken.issue(subject: "owner", idleTTL: 3600, secret: secret)
         let d = AuthGate.decide(mode: .password(secret: secret),
                                 cookie: cookie, cfJWTValidEmail: nil, origin: "https://t.example.com",
                                 expectedHost: "t.example.com")
@@ -24,7 +24,7 @@ final class AuthGateTests: XCTestCase {
         XCTAssertEqual(d, .allow)
     }
     func test_badOriginDenies() {
-        let cookie = SessionToken.issue(subject: "owner", ttl: 3600, secret: secret)
+        let cookie = SessionToken.issue(subject: "owner", idleTTL: 3600, secret: secret)
         let d = AuthGate.decide(mode: .password(secret: secret),
                                 cookie: cookie, cfJWTValidEmail: nil, origin: "https://evil.example.com",
                                 expectedHost: "t.example.com")

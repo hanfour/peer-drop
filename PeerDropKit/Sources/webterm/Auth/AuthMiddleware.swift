@@ -20,7 +20,8 @@ public enum AuthGate {
         cookie: String?,
         cfJWTValidEmail: String?,
         origin: String?,
-        expectedHost: String
+        expectedHost: String,
+        maxAge: TimeInterval = 12 * 3600
     ) -> AuthDecision {
         // Origin check: defence against cross-site WS / form posts.
         // Absent origin (e.g. curl) is allowed; a present but mismatching host is forbidden.
@@ -29,7 +30,7 @@ public enum AuthGate {
         }
         switch mode {
         case .password(let secret):
-            guard let cookie, SessionToken.verify(cookie, secret: secret) != nil else {
+            guard let cookie, SessionToken.verify(cookie, secret: secret, maxAge: maxAge) != nil else {
                 return .denyUnauthorized
             }
             return .allow
@@ -41,13 +42,19 @@ public enum AuthGate {
 
 // MARK: - Hummingbird HTTP Middleware
 
-/// Hummingbird 2.x middleware that enforces `AuthGate` on every request.
+/// Hummingbird 2.x middleware that enforces `AuthGate` on every request and, in password mode,
+/// slides (refreshes) the session cookie on every authenticated response.
 ///
 /// Cookie name: `"webterm-session"` (set by the login route after password verification).
 /// Cloudflare mode: validates the `Cf-Access-Jwt-Assertion` JWT cryptographically via
 /// `CfAccessVerifier` (signature + audience + email + expiry). The plaintext email header
 /// `Cf-Access-Authenticated-User-Email` is NOT used — it is spoofable if the origin is ever
 /// reachable without the Cloudflare proxy in front of it.
+///
+/// Sliding: on every successful authenticated request in password mode, the middleware calls
+/// `SessionToken.slide(...)` and sets the resulting refreshed token as `Set-Cookie` on the
+/// response, extending the idle window. If `slide` returns nil (absolute cap exceeded) the
+/// response is returned as-is and the cookie will expire naturally.
 public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
     public let mode: AuthMode
     public let expectedHost: String
@@ -56,17 +63,25 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
     /// Present in cloudflare mode to cryptographically validate the Cf-Access-Jwt-Assertion JWT.
     /// Nil in password mode.
     public let cfVerifier: CfAccessVerifier?
+    /// Idle TTL passed to `SessionToken.slide` on each successful request (password mode only).
+    public let idleTTL: TimeInterval
+    /// Absolute session cap passed to `SessionToken.verify` and `SessionToken.slide`.
+    public let maxAge: TimeInterval
 
     private init(
         mode: AuthMode,
         expectedHost: String,
         cfVerifier: CfAccessVerifier?,
-        cookieName: String
+        cookieName: String,
+        idleTTL: TimeInterval,
+        maxAge: TimeInterval
     ) {
         self.mode = mode
         self.expectedHost = expectedHost
         self.cfVerifier = cfVerifier
         self.cookieName = cookieName
+        self.idleTTL = idleTTL
+        self.maxAge = maxAge
     }
 
     public func handle(
@@ -95,17 +110,48 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
             cookie: cookie,
             cfJWTValidEmail: cfEmail,
             origin: origin,
-            expectedHost: expectedHost
+            expectedHost: expectedHost,
+            maxAge: maxAge
         )
 
         switch decision {
         case .allow:
-            return try await next(request, context)
+            var response = try await next(request, context)
+            // In password mode, slide (refresh) the session cookie so active use
+            // keeps the session alive within the idle window.
+            if case .password = mode, let rawCookie = cookie {
+                if let slid = SessionToken.slide(
+                    rawCookie,
+                    secret: modeSecret,
+                    idleTTL: idleTTL,
+                    maxAge: maxAge
+                ) {
+                    let isSecure = expectedHost != "localhost"
+                    let refreshed = Cookie(
+                        name: cookieName,
+                        value: slid,
+                        maxAge: Int(idleTTL),
+                        path: "/",
+                        secure: isSecure,
+                        httpOnly: true,
+                        sameSite: .strict
+                    )
+                    response.setCookie(refreshed)
+                }
+                // If slide returns nil (absolute cap hit), don't set a new cookie — let it expire.
+            }
+            return response
         case .denyUnauthorized:
             throw HTTPError(.unauthorized)
         case .denyForbidden:
             throw HTTPError(.forbidden)
         }
+    }
+
+    /// Extracts the raw secret bytes from the password mode case.
+    private var modeSecret: Data {
+        if case .password(let secret) = mode { return secret }
+        return Data()
     }
 }
 
@@ -113,16 +159,45 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
 
 extension AuthMiddleware {
     /// Password mode: gate on the signed session cookie. No Cf-Access verifier.
-    public static func password(secret: Data, expectedHost: String,
-                                cookieName: String = "webterm-session") -> AuthMiddleware {
-        AuthMiddleware(mode: .password(secret: secret), expectedHost: expectedHost,
-                       cfVerifier: nil, cookieName: cookieName)
+    ///
+    /// - Parameters:
+    ///   - secret: HMAC-SHA256 secret for session cookie verification and sliding.
+    ///   - expectedHost: Host checked against the `Origin` header.
+    ///   - cookieName: Cookie name (default `"webterm-session"`).
+    ///   - idleTTL: Idle window in seconds; extended on each authenticated request (default 1800 s).
+    ///   - maxAge: Absolute session cap in seconds (default 43200 s).
+    public static func password(
+        secret: Data,
+        expectedHost: String,
+        cookieName: String = "webterm-session",
+        idleTTL: TimeInterval = 30 * 60,
+        maxAge: TimeInterval = 12 * 3600
+    ) -> AuthMiddleware {
+        AuthMiddleware(
+            mode: .password(secret: secret),
+            expectedHost: expectedHost,
+            cfVerifier: nil,
+            cookieName: cookieName,
+            idleTTL: idleTTL,
+            maxAge: maxAge
+        )
     }
 
     /// Cloudflare mode: REQUIRES a CfAccessVerifier — you cannot build this mode without one.
-    public static func cloudflare(verifier: CfAccessVerifier, expectedHost: String,
-                                  cookieName: String = "webterm-session") -> AuthMiddleware {
-        AuthMiddleware(mode: .cloudflare, expectedHost: expectedHost,
-                       cfVerifier: verifier, cookieName: cookieName)
+    public static func cloudflare(
+        verifier: CfAccessVerifier,
+        expectedHost: String,
+        cookieName: String = "webterm-session",
+        idleTTL: TimeInterval = 30 * 60,
+        maxAge: TimeInterval = 12 * 3600
+    ) -> AuthMiddleware {
+        AuthMiddleware(
+            mode: .cloudflare,
+            expectedHost: expectedHost,
+            cfVerifier: verifier,
+            cookieName: cookieName,
+            idleTTL: idleTTL,
+            maxAge: maxAge
+        )
     }
 }

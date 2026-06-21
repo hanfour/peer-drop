@@ -151,5 +151,14 @@ document.querySelectorAll("#keybar [data-seq]").forEach((btn) => {
 // --- global event wiring ---
 
 document.getElementById("switch").onclick = showPicker;
-setInterval(() => { if (ws && ws.readyState === 1) ws.send(new Uint8Array([0x02])); }, 30000);  // keepalive
+setInterval(() => { if (ws && ws.readyState === 1) ws.send(new Uint8Array([0x02])); }, 30000);  // WS keepalive (30 s)
+
+// HTTP heartbeat — refreshes the session cookie (sliding idle-timeout) while the terminal
+// is open. Active terminal use only produces WS traffic; this heartbeat ensures the HTTP
+// auth middleware sees a request every 5 minutes and can slide the cookie forward.
+// 5 min is well within the default 30-min idle window.
+setInterval(() => {
+  fetch("/api/ping", { credentials: "same-origin" }).catch(() => {});
+}, 5 * 60 * 1000);  // 5 minutes
+
 loadPresets();
