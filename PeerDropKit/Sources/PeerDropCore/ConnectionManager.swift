@@ -3078,6 +3078,22 @@ public final class ConnectionManager: ObservableObject {
                 logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
             }
 
+        case .secureHandshake, .secureEnvelope:
+            // The ConnectionManager receive loop and the PeerConnection receive
+            // loop BOTH read this NWConnection, and NWConnection hands each frame
+            // to exactly one of them. When the ConnectionManager loop wins a
+            // secure-channel frame it would otherwise hit `default: break` and be
+            // dropped — stranding the handshake (→ fallback-plaintext → no SAS →
+            // blocked sends), which is what broke phone↔CLI pairing (the CLI is
+            // the acceptor and establishes fine; the phone-as-initiator dropped
+            // the CLI's bundle here). Forward it to the PeerConnection's own
+            // handler. This is the frame's single delivery (only one loop ever
+            // receives it); `handleIncomingMessage` is idempotent regardless.
+            Task {
+                do { try await peerConnection.handleIncomingMessage(message) }
+                catch { logger.error("Forwarded secure-channel frame failed: \(error.localizedDescription)") }
+            }
+
         default:
             break
         }

@@ -434,7 +434,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// handled internally; business messages are forwarded to
     /// `onMessageReceived`. Pulled out of `startReceiving` so the secure
     /// channel logic stays testable and the receive loop stays small.
-    private func handleIncomingMessage(_ message: PeerMessage) async throws {
+    public func handleIncomingMessage(_ message: PeerMessage) async throws {
         switch message.type {
         case .secureHandshake:
             try await handleIncomingSecureHandshake(message)
