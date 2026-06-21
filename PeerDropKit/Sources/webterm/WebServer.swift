@@ -9,8 +9,10 @@ import JWTKit
 ///
 /// Routes:
 ///   GET  /         → 200 (auth-gated; serves index.html terminal page)
-///   GET  /login    → 200 (login form HTML; exempt from auth)
-///   POST /login    → 303 redirect + session cookie on success, 401 on bad password
+///   GET  /login    → 200 (login form HTML; exempt from auth; sets CSRF cookie)
+///   POST /login    → 303 redirect + session cookie on success, 401 on bad password,
+///                    403 on CSRF mismatch, 429 on too many failures
+///   POST /logout   → 303 redirect to /login + clears session cookie (auth-gated)
 ///   GET  /api/sessions  → 200 JSON {presets:[{id,name,running}]} (auth-gated)
 ///   POST /api/sessions  → 200 JSON {id} for a new/reattached session (auth-gated)
 ///   WS   /ws/:sessionId → WebSocket terminal (auth-gated via AuthMiddleware on upgrade request)
@@ -32,8 +34,14 @@ import JWTKit
 ///     to stderr and skipped — one bad preset cannot block server startup.
 ///     Defaults to `false` so that test callers using `buildApplication(cfg)` do not
 ///     accidentally spawn tmux processes.
-public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier? = nil,
-                             autostartPresets: Bool = false) throws -> some ApplicationProtocol {
+///   - rateLimiter: Injectable login rate-limiter. Defaults to a new shared limiter.
+///     Pass a custom instance (with an injected clock) in tests.
+public func buildApplication(
+    _ cfg: WebTermConfig,
+    cfVerifier: CfAccessVerifier? = nil,
+    autostartPresets: Bool = false,
+    rateLimiter: LoginRateLimiter = LoginRateLimiter()
+) throws -> some ApplicationProtocol {
     // Shared session manager
     let sessionManager = SessionManager(presets: PresetStore(presets: cfg.presets))
 
@@ -71,24 +79,55 @@ public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier?
 
     // /login routes — exempt from auth middleware (added BEFORE auth middleware is applied)
     router.get("/login") { _, _ -> Response in
-        let html = loginPageHTML()
+        // Generate a 16-byte random CSRF token (32 hex chars).
+        let tokenBytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
+        let csrfToken = tokenBytes.map { String(format: "%02x", $0) }.joined()
+
+        let isSecure = cfg.expectedHost != "localhost"
+        let csrfCookie = Cookie(
+            name: "webterm-csrf",
+            value: csrfToken,
+            maxAge: 600,          // 10 minutes; the form must be submitted within that window
+            path: "/",
+            secure: isSecure,
+            httpOnly: true,
+            sameSite: .strict
+        )
+
+        let html = loginPageHTML(csrfToken: csrfToken)
         var response = Response(
             status: .ok,
             headers: [.contentType: "text/html; charset=utf-8"],
             body: .init(byteBuffer: ByteBuffer(string: html))
         )
-        _ = response  // suppress mutation warning
+        response.setCookie(csrfCookie)
         return response
     }
 
     router.post("/login") { request, _ -> Response in
-        // Parse application/x-www-form-urlencoded body
+        // ── Rate-limit check (before doing ANY crypto work) ──────────────────
+        guard await !rateLimiter.isLimited() else {
+            throw HTTPError(.tooManyRequests, message: "Too many failed login attempts — try again later")
+        }
+
+        // ── Parse form body ───────────────────────────────────────────────────
         let body = try await request.body.collect(upTo: 65_536)
         let bodyString = String(buffer: body)
         let params = parseFormURLEncoded(bodyString)
         let password = params["password"] ?? ""
+        let csrfField = params["csrf"] ?? ""
 
-        // Validate password against stored hash
+        // ── CSRF double-submit check ──────────────────────────────────────────
+        // Read the webterm-csrf cookie that GET /login set; compare to the
+        // hidden field value using constant-time XOR-accumulate so the check
+        // is not vulnerable to a timing oracle on the token.
+        let csrfCookie = request.cookies["webterm-csrf"]?.value ?? ""
+        guard !csrfField.isEmpty, !csrfCookie.isEmpty,
+              constantTimeEqual(csrfField, csrfCookie) else {
+            throw HTTPError(.forbidden, message: "CSRF token mismatch")
+        }
+
+        // ── Password check ────────────────────────────────────────────────────
         let isValid: Bool
         if case .password(let hash) = cfg.auth {
             isValid = PasswordHash.verify(password, against: hash)
@@ -98,8 +137,12 @@ public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier?
         }
 
         guard isValid else {
+            await rateLimiter.recordFailure()
             throw HTTPError(.unauthorized, message: "Invalid password")
         }
+
+        // Correct password — clear the failure window
+        await rateLimiter.recordSuccess()
 
         // Issue a signed session cookie (24-hour TTL)
         let token = SessionToken.issue(subject: "owner", ttl: 86_400, secret: cfg.sessionSecret)
@@ -122,6 +165,29 @@ public func buildApplication(_ cfg: WebTermConfig, cfVerifier: CfAccessVerifier?
 
     // Apply auth middleware — all routes added AFTER this call require authentication
     router.add(middleware: makeAuthMiddleware(cfg: cfg, cfVerifier: cfVerifier) as AuthMiddleware<BasicRequestContext>)
+
+    // POST /logout — auth-gated (registered AFTER the auth middleware).
+    //
+    // Clears the session cookie in THIS browser by setting maxAge=0.
+    // Stateless caveat: the JWT/HMAC token itself remains valid until its TTL (24 h).
+    // This is by design for a single-tenant, localhost-bound tool — the only threat
+    // model that "logout" addresses is an unattended browser tab, not a stolen token.
+    // If stolen-token revocation is needed in the future, add a server-side denylist.
+    router.post("/logout") { request, _ -> Response in
+        let isSecure = cfg.expectedHost != "localhost"
+        let clearCookie = Cookie(
+            name: "webterm-session",
+            value: "",
+            maxAge: 0,
+            path: "/",
+            secure: isSecure,
+            httpOnly: true,
+            sameSite: .strict
+        )
+        var response = Response.redirect(to: "/login", type: .normal)
+        response.setCookie(clearCookie)
+        return response
+    }
 
     // GET / — terminal page (auth-gated); serves index.html from bundle
     router.get("/") { _, _ -> Response in
@@ -333,8 +399,19 @@ private func parseFormURLEncoded(_ body: String) -> [String: String] {
     return result
 }
 
-/// Simple HTML login form.
-private func loginPageHTML() -> String {
+/// Constant-time string equality using XOR-accumulate over UTF-8 bytes.
+/// Returns false immediately if lengths differ (length difference is not secret).
+func constantTimeEqual(_ a: String, _ b: String) -> Bool {
+    let ab = Array(a.utf8)
+    let bb = Array(b.utf8)
+    guard ab.count == bb.count else { return false }
+    var diff: UInt8 = 0
+    for (x, y) in zip(ab, bb) { diff |= x ^ y }
+    return diff == 0
+}
+
+/// Simple HTML login form with CSRF hidden field.
+private func loginPageHTML(csrfToken: String) -> String {
     """
     <!DOCTYPE html>
     <html>
@@ -342,6 +419,7 @@ private func loginPageHTML() -> String {
     <body>
       <h1>WebTerm</h1>
       <form method="post" action="/login">
+        <input type="hidden" name="csrf" value="\(csrfToken)">
         <label>Password: <input type="password" name="password" autofocus></label>
         <button type="submit">Login</button>
       </form>
@@ -349,4 +427,3 @@ private func loginPageHTML() -> String {
     </html>
     """
 }
-

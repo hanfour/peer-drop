@@ -8,6 +8,55 @@ import WSClient
 
 final class WebServerIntegrationTests: XCTestCase {
 
+    // MARK: - Login helper
+
+    /// Full GET /login → POST /login flow that satisfies the CSRF double-submit requirement.
+    ///
+    /// 1. GET /login — extract the `webterm-csrf` cookie value from `Set-Cookie`.
+    /// 2. POST /login — send the csrf field in the body AND echo the `webterm-csrf` cookie back.
+    /// 3. Assert 303 and return the raw `Set-Cookie` header string (for downstream assertions).
+    @discardableResult
+    func login(
+        client: some TestClientProtocol,
+        password: String,
+        origin: String? = nil,
+        expectedStatus: HTTPResponse.Status = .seeOther
+    ) async throws -> String {
+        // Step 1: GET /login to obtain the CSRF cookie
+        var csrfCookieValue = ""
+        try await client.execute(uri: "/login", method: .get) { res in
+            let setCookieHeader = res.headers[.setCookie] ?? ""
+            // Parse `webterm-csrf=<value>` from the Set-Cookie header
+            for part in setCookieHeader.split(separator: ";") {
+                let trimmed = part.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("webterm-csrf=") {
+                    csrfCookieValue = String(trimmed.dropFirst("webterm-csrf=".count))
+                    break
+                }
+            }
+        }
+
+        // Step 2: POST /login with the CSRF cookie echoed back and the csrf hidden field
+        var loginSetCookie = ""
+        var requestHeaders: HTTPFields = [.contentType: "application/x-www-form-urlencoded",
+                                          .cookie: "webterm-csrf=\(csrfCookieValue)"]
+        if let origin { requestHeaders[.origin] = origin }
+
+        try await client.execute(
+            uri: "/login",
+            method: .post,
+            headers: requestHeaders,
+            body: ByteBuffer(string: "password=\(password)&csrf=\(csrfCookieValue)")
+        ) { res in
+            XCTAssertEqual(res.status, expectedStatus)
+            loginSetCookie = res.headers[.setCookie] ?? ""
+        }
+
+        return loginSetCookie
+    }
+
+    // MARK: - Core flow tests
+
     /// Full 401 → login → 200 flow via the in-process router test framework.
     func test_unauthenticatedRootIs401_andLoginThenAllows() async throws {
         let cfg = WebTermConfig.test(password: "hunter2")
@@ -19,22 +68,12 @@ final class WebServerIntegrationTests: XCTestCase {
                 XCTAssertEqual(res.status, .unauthorized)
             }
 
-            // 2. POST /login with correct password → 303 + Set-Cookie
-            var cookie = ""
-            try await client.execute(
-                uri: "/login",
-                method: .post,
-                headers: [.contentType: "application/x-www-form-urlencoded"],
-                body: ByteBuffer(string: "password=hunter2")
-            ) { res in
-                XCTAssertEqual(res.status, .seeOther)
-                let setCookie = res.headers[.setCookie] ?? ""
-                XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie header after login")
-                cookie = setCookie
-            }
+            // 2. Login using the helper (handles CSRF)
+            let setCookie = try await login(client: client, password: "hunter2")
 
-            // 3. Extract just the name=value part of the cookie (strip attributes)
-            let cookiePair = cookie.split(separator: ";").first.map(String.init) ?? cookie
+            // 3. Extract just the name=value part of the session cookie (strip attributes)
+            XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie header after login")
+            let cookiePair = setCookie.split(separator: ";").first.map(String.init) ?? setCookie
 
             // 4. Authenticated GET / → 200
             try await client.execute(
@@ -53,14 +92,7 @@ final class WebServerIntegrationTests: XCTestCase {
         let app = try buildApplication(cfg)
 
         try await app.test(.router) { client in
-            try await client.execute(
-                uri: "/login",
-                method: .post,
-                headers: [.contentType: "application/x-www-form-urlencoded"],
-                body: ByteBuffer(string: "password=wrong-battery-staple")
-            ) { res in
-                XCTAssertEqual(res.status, .unauthorized)
-            }
+            try await login(client: client, password: "wrong-battery-staple", expectedStatus: .unauthorized)
         }
     }
 
@@ -99,18 +131,9 @@ final class WebServerIntegrationTests: XCTestCase {
         let app = try buildApplication(cfg)
 
         try await app.test(.router) { client in
-            // 1. Login → cookie
-            var cookiePair = ""
-            try await client.execute(
-                uri: "/login",
-                method: .post,
-                headers: [.contentType: "application/x-www-form-urlencoded"],
-                body: ByteBuffer(string: "password=hunter2")
-            ) { res in
-                XCTAssertEqual(res.status, .seeOther)
-                let setCookie = res.headers[.setCookie] ?? ""
-                cookiePair = setCookie.split(separator: ";").first.map(String.init) ?? setCookie
-            }
+            // 1. Login → cookie (via CSRF-aware helper)
+            let setCookie = try await login(client: client, password: "hunter2")
+            let cookiePair = setCookie.split(separator: ";").first.map(String.init) ?? setCookie
 
             // 2. Authenticated GET /api/sessions → 200 with presets JSON
             try await client.execute(
@@ -134,19 +157,11 @@ final class WebServerIntegrationTests: XCTestCase {
         let app = try buildApplication(cfg)
 
         try await app.test(.router) { client in
-            try await client.execute(
-                uri: "/login",
-                method: .post,
-                headers: [.contentType: "application/x-www-form-urlencoded"],
-                body: ByteBuffer(string: "password=hunter2")
-            ) { res in
-                XCTAssertEqual(res.status, .seeOther)
-                let setCookie = res.headers[.setCookie] ?? ""
-                XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie header")
-                let lower = setCookie.lowercased()
-                XCTAssertTrue(lower.contains("samesite=strict"), "Cookie must contain SameSite=Strict; got: \(setCookie)")
-                XCTAssertFalse(lower.contains("; secure"), "Cookie must NOT include Secure for localhost; got: \(setCookie)")
-            }
+            let setCookie = try await login(client: client, password: "hunter2")
+            XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie header")
+            let lower = setCookie.lowercased()
+            XCTAssertTrue(lower.contains("samesite=strict"), "Cookie must contain SameSite=Strict; got: \(setCookie)")
+            XCTAssertFalse(lower.contains("; secure"), "Cookie must NOT include Secure for localhost; got: \(setCookie)")
         }
     }
 
@@ -157,22 +172,15 @@ final class WebServerIntegrationTests: XCTestCase {
         let app = try buildApplication(cfg)
 
         try await app.test(.router) { client in
-            try await client.execute(
-                uri: "/login",
-                method: .post,
-                headers: [
-                    .contentType: "application/x-www-form-urlencoded",
-                    // Include matching Origin so the auth gate doesn't 403 us
-                    .origin: "https://term.example.com",
-                ],
-                body: ByteBuffer(string: "password=hunter2")
-            ) { res in
-                XCTAssertEqual(res.status, .seeOther)
-                let setCookie = res.headers[.setCookie] ?? ""
-                let lower = setCookie.lowercased()
-                XCTAssertTrue(lower.contains("samesite=strict"), "Cookie must contain SameSite=Strict; got: \(setCookie)")
-                XCTAssertTrue(lower.contains("; secure"), "Cookie must include Secure for non-localhost; got: \(setCookie)")
-            }
+            let setCookie = try await login(
+                client: client,
+                password: "hunter2",
+                origin: "https://term.example.com"
+            )
+            XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie header")
+            let lower = setCookie.lowercased()
+            XCTAssertTrue(lower.contains("samesite=strict"), "Cookie must contain SameSite=Strict; got: \(setCookie)")
+            XCTAssertTrue(lower.contains("; secure"), "Cookie must include Secure for non-localhost; got: \(setCookie)")
         }
     }
 
@@ -210,20 +218,11 @@ final class WebServerIntegrationTests: XCTestCase {
         XCTAssertFalse(TmuxControl.exists(tmuxID), "tmux session must not exist before WS connect")
 
         try await app.test(.live) { client in
-            // 1. Login → get session cookie
-            var cookiePair = ""
-            try await client.execute(
-                uri: "/login",
-                method: .post,
-                headers: [.contentType: "application/x-www-form-urlencoded"],
-                body: ByteBuffer(string: "password=wstest")
-            ) { res in
-                XCTAssertEqual(res.status, .seeOther)
-                let setCookie = res.headers[.setCookie] ?? ""
-                XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie after login")
-                // Strip cookie attributes — keep only name=value
-                cookiePair = setCookie.split(separator: ";").first.map(String.init) ?? setCookie
-            }
+            // 1. Login → get session cookie (via CSRF-aware helper)
+            let setCookie = try await login(client: client, password: "wstest")
+            XCTAssertFalse(setCookie.isEmpty, "Expected Set-Cookie after login")
+            // Strip cookie attributes — keep only name=value
+            let cookiePair = setCookie.split(separator: ";").first.map(String.init) ?? setCookie
 
             // 2. Connect via WebSocket to /ws/<presetID> WITHOUT a prior /api/sessions call.
             //    The onUpgrade handler must create-or-attach the tmux session via SessionManager.

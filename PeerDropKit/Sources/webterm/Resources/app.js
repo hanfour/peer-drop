@@ -106,6 +106,21 @@ async function loadPresets() {
   } catch (e) { el.textContent = "error: " + e; }
 }
 
+// --- logout ---
+
+// POST /logout is auth-gated and origin-checked (SameSite=Strict session cookie),
+// so no separate CSRF token is needed for logout itself.
+document.getElementById("logout-btn").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/logout", { method: "POST", credentials: "same-origin" });
+    // Server responds with 303 → /login; after the POST resolves, redirect manually
+    // so the browser lands cleanly on the login page regardless of redirect-following.
+    window.location = "/login";
+  } catch (_) {
+    window.location = "/login";
+  }
+});
+
 // --- key bar wiring ---
 
 // Ctrl sticky modifier

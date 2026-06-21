@@ -417,3 +417,47 @@ Presets with `autostart: true` in the `WEBTERM_PRESETS` JSON file are (re)create
 sessions every time webterm starts, including at boot via the launchd agent. The sessions
 come back FRESH (not resumed mid-task) since a reboot clears all tmux state. One failed
 autostart does not block server startup. See the **Presets** section above for full docs.
+
+---
+
+## Login hardening (added in feat/webterm)
+
+### CSRF protection (double-submit cookie + hidden field)
+
+`GET /login` generates a 16-byte random token (32 hex chars), sets it as a
+`webterm-csrf` cookie (`httpOnly`, `SameSite=Strict`, `Path=/`, `maxAge=600s`,
+`Secure` on non-localhost hosts), and embeds the same token as a
+`<input type="hidden" name="csrf">` in the form.
+
+`POST /login` reads both the `csrf` form field and the `webterm-csrf` cookie and
+rejects with **403 Forbidden** if either is absent or they do not match
+(constant-time XOR-accumulate comparison). The CSRF check runs **before** the
+password is verified, so an attacker who cannot read the cookie cannot reach the
+password check at all. This guards against cross-site form submission even if the
+`SameSite=Strict` cookie attribute is bypassed by an old browser.
+
+### Global login rate-limit (brute-force defence)
+
+`LoginRateLimiter` (actor, injectable clock) tracks failed login timestamps in a
+sliding window. Policy: **≥ 5 failures within 60 seconds → 429 Too Many Requests**.
+
+The check fires **before** password verification so the PBKDF2 work (200 000
+iterations) is never performed under throttling. A correct login calls
+`recordSuccess()` which clears the failure history immediately. A wrong password
+calls `recordFailure()` then returns 401 as before.
+
+Because this is a single-tenant tool tunnelled through `127.0.0.1`, per-IP keying
+is meaningless — the global counter is the correct choice.
+
+### `/logout` endpoint
+
+`POST /logout` is **auth-gated** (registered after `AuthMiddleware`). It clears the
+session cookie by returning `Set-Cookie: webterm-session=; Max-Age=0; ...` then
+**303-redirects** to `/login`. The frontend's "Logout" button POSTs to `/logout`
+with `credentials: "same-origin"` and then navigates to `/login`.
+
+**Stateless caveat:** the HMAC-SHA256 session token itself remains valid until its
+24-hour TTL expires — clearing the cookie logs out the current browser only. This
+is intentional for a single-tenant localhost tool. If revocation of stolen tokens
+is required in the future, add a server-side token denylist (e.g. a `Set<String>`
+actor keyed on the token's `iat` claim).

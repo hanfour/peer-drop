@@ -32,8 +32,13 @@
   body.touch #keybar{display:flex}
   /* 56px = 48px key bar height + 8px breathing room */
   body.touch #term{height:calc(100% - 56px)}
+  /* Logout button */
+  #logout-btn{display:block;margin-top:24px;background:none;color:#555;border:none;
+              cursor:pointer;font-family:inherit;font-size:12px;padding:0;text-align:left}
+  #logout-btn:hover{color:#999}
 </style></head><body>
-<div id="picker"><h1>webterm — choose a session</h1><div id="presets"></div></div>
+<div id="picker"><h1>webterm — choose a session</h1><div id="presets"></div>
+<button id="logout-btn">Logout</button></div>
 <div id="term"></div>
 <button id="switch">≡ sessions</button>
 <div id="keybar">
