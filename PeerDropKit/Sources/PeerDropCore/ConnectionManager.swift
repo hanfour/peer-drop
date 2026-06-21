@@ -4061,6 +4061,28 @@ public final class ConnectionManager: ObservableObject {
                 fingerprint: fingerprint,
                 sas: sas)
         }
+
+        // Double-Ratchet bootstrap. `LocalSecureChannel.establish` makes the
+        // lex-smaller identity the initiator (gets a sending chain) and the other
+        // the responder (NO sending chain until it RECEIVES — `encrypt` throws
+        // `noSendChain`). So the responder can't send the FIRST message. The
+        // initiator can, so have it send one tiny encrypted no-op now: the
+        // responder's first receive runs a DH ratchet that yields it a sending
+        // chain, letting EITHER peer send first. Without this, whichever side is
+        // the lex-responder (e.g. a phone driving a CLI that needs to send the
+        // first command) could never send. `typingIndicator(false)` is a no-op on
+        // receipt (just clears the typing state) and rides the normal encrypted path.
+        if peerConnection.secureChannel?.isInitiator == true {
+            let senderID = localIdentity.id
+            Task { [weak peerConnection] in
+                guard let peerConnection,
+                      let msg = try? PeerMessage.typingIndicator(
+                        TypingIndicatorPayload(isTyping: false, timestamp: Date()),
+                        senderID: senderID)
+                else { return }
+                try? await peerConnection.sendMessage(msg)
+            }
+        }
     }
 
     /// Set the published prompt that drives `FirstContactVerificationSheet`

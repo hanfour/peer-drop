@@ -105,6 +105,14 @@ public final class LocalSecureChannel {
     /// truncate-and-display approach with larger digits).
     public let shortAuthenticationString: String
 
+    /// True if this side is the Double Ratchet *initiator* (lex-smaller identity
+    /// key). The initiator gets a sending chain immediately; the responder has
+    /// NO sending chain until it receives a message (`encrypt` throws
+    /// `noSendChain`). Exposed so the connection layer can have the initiator
+    /// send a tiny bootstrap message on establish — once the responder receives
+    /// it, its DH ratchet yields a sending chain, so EITHER peer can send first.
+    public let isInitiator: Bool
+
     /// Fingerprint of the peer's identity key. Same format as
     /// `IdentityKeyManager.fingerprint` for round-trip verification:
     /// `"A1B2 C3D4 E5F6 G7H8 I9J0"`.
@@ -121,11 +129,13 @@ public final class LocalSecureChannel {
     private init(
         ratchet: DoubleRatchetSession,
         peerIdentityPublicKey: Curve25519.KeyAgreement.PublicKey,
-        shortAuthenticationString: String
+        shortAuthenticationString: String,
+        isInitiator: Bool
     ) {
         self.ratchet = ratchet
         self.peerIdentityPublicKey = peerIdentityPublicKey
         self.shortAuthenticationString = shortAuthenticationString
+        self.isInitiator = isInitiator
     }
 
     // MARK: - Handshake API
@@ -223,7 +233,8 @@ public final class LocalSecureChannel {
         return LocalSecureChannel(
             ratchet: ratchet,
             peerIdentityPublicKey: peerIdentityKey,
-            shortAuthenticationString: sas
+            shortAuthenticationString: sas,
+            isInitiator: iAmInitiator
         )
     }
 
