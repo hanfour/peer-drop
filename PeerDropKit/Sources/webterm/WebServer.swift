@@ -169,7 +169,8 @@ public func buildApplication(
     // POST /logout — auth-gated (registered AFTER the auth middleware).
     //
     // Clears the session cookie in THIS browser by setting maxAge=0.
-    // Stateless caveat: the JWT/HMAC token itself remains valid until its TTL (24 h).
+    // Stateless caveat: the JWT/HMAC token itself remains usable until it idle-expires
+    // (default 30 min) or hits the absolute max-session cap (default 12 h).
     // This is by design for a single-tenant, localhost-bound tool — the only threat
     // model that "logout" addresses is an unattended browser tab, not a stolen token.
     // If stolen-token revocation is needed in the future, add a server-side denylist.
