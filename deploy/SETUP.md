@@ -87,29 +87,17 @@ Save this value — it goes into `WEBTERM_SECRET` in the launchd plist.
 ## Step 3 — Generate a password hash (password auth mode)
 
 WebTerm uses PBKDF2-HMAC-SHA256 (200 000 iterations, 16-byte random salt). There is no
-built-in `hash-password` subcommand in the binary; generate a hash with a short Swift
-one-liner:
+built-in `hash-password` subcommand in the binary; use the helper script. It prompts for
+the password **without echoing it** (via `getpass`), so the password never lands in your
+shell history or the process argv — and you don't have to paste a multi-line snippet that
+terminals tend to mangle:
 
 ```bash
-swift -e '
-import Foundation
-import CommonCrypto
-import Security
-
-func pbkdf2(_ password: String) -> String {
-    var salt = [UInt8](repeating: 0, count: 16)
-    _ = SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt)
-    var out = [UInt8](repeating: 0, count: 32)
-    CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), password, password.utf8.count,
-        salt, salt.count, CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256), 200_000, &out, out.count)
-    return "pbkdf2$200000$\(Data(salt).base64EncodedString())$\(Data(out).base64EncodedString())"
-}
-print(pbkdf2("YOUR_CHOSEN_PASSWORD"))
-'
+swift deploy/hash-password.swift
 ```
 
-Replace `YOUR_CHOSEN_PASSWORD` with a strong password (16+ chars recommended). The output
-is a string like:
+Type your password at the `Choose a webterm password:` prompt (16+ chars recommended). It
+prints a hash like:
 
 ```
 pbkdf2$200000$abc123...base64.../$xyz456...base64.../
