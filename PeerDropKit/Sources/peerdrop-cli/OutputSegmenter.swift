@@ -50,8 +50,11 @@ final class OutputSegmenter {
         guard !buffer.isEmpty else { return }
         let text = String(decoding: buffer, as: UTF8.self)
         buffer.removeAll(keepingCapacity: true)
-        let stripped = AnsiStripper.strip(text)
-        guard !stripped.isEmpty else { return }
-        emit(stripped)
+        // Remove ANSI escapes, then apply the surviving cursor controls
+        // (\b, \r, \n) so line-editor echo and prompt repaints collapse to the
+        // clean text a terminal would show — not artifacts like `eecho`.
+        let cleaned = TerminalLineNormalizer.normalize(AnsiStripper.strip(text))
+        guard !cleaned.isEmpty else { return }
+        emit(cleaned)
     }
 }

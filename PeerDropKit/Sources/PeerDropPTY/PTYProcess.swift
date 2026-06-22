@@ -5,6 +5,9 @@ import Darwin
 /// no line buffering). The terminal-faithful core extracted from ProcessBridge.
 public final class PTYProcess {
     private let command: [String]
+    /// Optional environment for the child. `nil` inherits the parent's
+    /// environment unchanged (the webterm path relies on this default).
+    private let environment: [String: String]?
     private var process: Process?
     private var masterFD: Int32 = -1
     private var readSource: DispatchSourceRead?
@@ -15,9 +18,10 @@ public final class PTYProcess {
     /// Child exit, with status. Fires on an arbitrary queue.
     public var onExit: ((Int32) -> Void)?
 
-    public init(command: [String]) {
+    public init(command: [String], environment: [String: String]? = nil) {
         precondition(!command.isEmpty, "command must not be empty")
         self.command = command
+        self.environment = environment
     }
 
     /// Whether the child process is currently running.
@@ -37,6 +41,7 @@ public final class PTYProcess {
         let slaveHandle = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
         proc.executableURL = URL(fileURLWithPath: command[0])
         proc.arguments = Array(command.dropFirst())
+        if let environment { proc.environment = environment }
         proc.standardInput = slaveHandle
         proc.standardOutput = slaveHandle
         proc.standardError = slaveHandle

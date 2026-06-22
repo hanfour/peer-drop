@@ -48,7 +48,20 @@ struct PeerDropCLI {
         let store = cm.trustedContactStore
         var bag = Set<AnyCancellable>()
 
-        let bridge = ProcessBridge(command: opts.command)
+        // Pick the backing bridge. Agent mode runs an AI CLI headless (one
+        // plain-text reply per message); otherwise wrap a process in a PTY —
+        // for the default shell with a clean config so the chat shows just
+        // command output.
+        let bridge: MessageBridge
+        if opts.isAgent {
+            bridge = AgentBridge(
+                baseCommand: opts.command,
+                permissionMode: opts.agentYolo ? "bypassPermissions" : "plan"
+            )
+        } else {
+            let (launchCommand, launchEnv) = ShellLauncher.resolve(opts, configDir: supportDir)
+            bridge = ProcessBridge(command: launchCommand, environment: launchEnv)
+        }
         let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
         bridge.onMessage = { [weak session] text in session?.broadcast(text) }
         session.wire()
@@ -73,7 +86,19 @@ struct PeerDropCLI {
         }
 
         print("peerdrop-cli ready · fingerprint \(IdentityKeyManager.shared.fingerprint)")
-        print("wrapping: \(opts.command.joined(separator: " "))")
+        if opts.isAgent {
+            if opts.agentYolo {
+                print("agent: \(opts.command.joined(separator: " ")) · permission bypassPermissions ⚠️  EXECUTES edits & commands")
+            } else {
+                print("agent: \(opts.command.joined(separator: " ")) · permission plan — answers & reads files, no edits/exec")
+            }
+            // `plan` blocks edits/exec but still runs READ-ONLY tools
+            // (Read/Bash `cat`/Grep/WebFetch), so a paired peer can have the
+            // agent read & return host file contents. Be explicit about it.
+            print("⚠️  a paired peer can ask the agent to read & return file contents from \(FileManager.default.currentDirectoryPath) and the host — pair only devices you trust.")
+        } else {
+            print("wrapping: \(opts.command.joined(separator: " "))")
+        }
         print("advertising as \"\(opts.name)\" — waiting for a connection…")
 
         // Trust-gated incoming connection handler.
@@ -162,7 +187,7 @@ struct PeerDropCLI {
     /// The signal sources must be retained for their lifetime; they are stored
     /// in the caller's `bag` via an opaque wrapper so ARC keeps them alive.
     @MainActor
-    private static func installSignalHandlers(bridge: ProcessBridge, retained bag: inout Set<AnyCancellable>) {
+    private static func installSignalHandlers(bridge: MessageBridge, retained bag: inout Set<AnyCancellable>) {
         // Tell the kernel to ignore the default SIGINT/SIGTERM actions so our
         // DispatchSource handlers get a chance to run instead of the process
         // being killed immediately by the default handler.
