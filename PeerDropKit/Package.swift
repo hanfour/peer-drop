@@ -26,7 +26,12 @@ let package = Package(
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.19"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.0.0"),
-        .package(url: "https://github.com/vapor/jwt-kit.git", from: "5.0.0"),
+        // Pinned below 5.3.0: JWTKit 5.3+ added ML-DSA (post-quantum) types that
+        // need a newer Swift/CryptoKit toolchain than the CI runner (macos-15 /
+        // Xcode 16) ships, so 5.3–5.5 fail to compile in CI with
+        // "cannot find type 'MLDSA65'/'MLDSA87'". webterm only uses ES256/RS256 +
+        // JWKS for Cloudflare Access JWT validation (no ML-DSA), so 5.2.x suffices.
+        .package(url: "https://github.com/vapor/jwt-kit.git", "5.0.0" ..< "5.3.0"),
     ],
     targets: [
         .target(
