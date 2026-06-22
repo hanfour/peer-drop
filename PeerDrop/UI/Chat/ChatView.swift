@@ -55,6 +55,17 @@ struct ChatView: View {
         }
     }
 
+    /// A headless peer (peerdrop-cli: a shell or AI agent) has no audio and no
+    /// useful file handling, so the chat hides the attach + voice-message
+    /// affordances and leaves a text-only composer.
+    private var isPeerHeadless: Bool {
+        if let pc = connectionManager.connection(for: peerID) {
+            return pc.peerIdentity.isHeadless
+        }
+        return connectionManager.connectedPeer?.id == peerID
+            && (connectionManager.connectedPeer?.isHeadless ?? false)
+    }
+
     /// Check if this peer is disconnected.
     private var isPeerDisconnected: Bool {
         if let peerConn = connectionManager.connection(for: peerID) {
@@ -409,15 +420,18 @@ struct ChatView: View {
             }
 
             HStack(spacing: 8) {
-                // + Attachment button
-                Button {
-                    showAttachmentMenu = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.gray)
+                // + Attachment button — hidden for headless peers (a shell/agent
+                // has no useful file handling).
+                if !isPeerHeadless {
+                    Button {
+                        showAttachmentMenu = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.gray)
+                    }
+                    .accessibilityLabel("Attach")
                 }
-                .accessibilityLabel("Attach")
 
                 // Text field
                 TextField("Message", text: $messageText)
@@ -438,20 +452,23 @@ struct ChatView: View {
                         )
                     }
 
-                // Send or Mic button
+                // Send or Mic button. A headless peer can't play audio, so it
+                // gets no voice-message button — just send when there's text.
                 if messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button {
-                        if voiceRecorder.isRecording {
-                            stopAndSendVoiceMessage()
-                        } else {
-                            startVoiceRecording()
+                    if !isPeerHeadless {
+                        Button {
+                            if voiceRecorder.isRecording {
+                                stopAndSendVoiceMessage()
+                            } else {
+                                startVoiceRecording()
+                            }
+                        } label: {
+                            Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : Color.gray)
                         }
-                    } label: {
-                        Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(voiceRecorder.isRecording ? Color.red : Color.gray)
+                        .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                     }
-                    .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                 } else {
                     Button {
                         sendMessage()

@@ -41,15 +41,19 @@ struct ConnectionView: View {
 
                     if case .connected = connectionManager.state {
                         HStack(spacing: 32) {
-                            circleButton(icon: "doc.fill", label: "Send File", color: .blue, disabled: !fileTransferEnabled) {
-                                if fileTransferEnabled {
-                                    showFilePicker = true
-                                } else {
-                                    disabledFeatureName = "File Transfer"
-                                    showFeatureDisabledAlert = true
+                            // A headless peer (peerdrop-cli shell/agent) has no
+                            // useful file handling — only the chat applies.
+                            if !peer.isHeadless {
+                                circleButton(icon: "doc.fill", label: "Send File", color: .blue, disabled: !fileTransferEnabled) {
+                                    if fileTransferEnabled {
+                                        showFilePicker = true
+                                    } else {
+                                        disabledFeatureName = "File Transfer"
+                                        showFeatureDisabledAlert = true
+                                    }
                                 }
+                                .accessibilityIdentifier("send-file-button")
                             }
-                            .accessibilityIdentifier("send-file-button")
 
                             ZStack(alignment: .topTrailing) {
                                 circleButton(icon: "message.fill", label: "Chat", color: .orange, disabled: !chatEnabled) {
@@ -73,17 +77,20 @@ struct ConnectionView: View {
                                 }
                             }
 
-                            circleButton(icon: "phone.fill", label: "Voice Call", color: .green, disabled: !voiceCallEnabled) {
-                                if voiceCallEnabled {
-                                    Task {
-                                        await connectionManager.voiceCallManager?.startCall(to: peer.id)
+                            // No audio device on a headless peer — hide the call.
+                            if !peer.isHeadless {
+                                circleButton(icon: "phone.fill", label: "Voice Call", color: .green, disabled: !voiceCallEnabled) {
+                                    if voiceCallEnabled {
+                                        Task {
+                                            await connectionManager.voiceCallManager?.startCall(to: peer.id)
+                                        }
+                                    } else {
+                                        disabledFeatureName = "Voice Calls"
+                                        showFeatureDisabledAlert = true
                                     }
-                                } else {
-                                    disabledFeatureName = "Voice Calls"
-                                    showFeatureDisabledAlert = true
                                 }
+                                .accessibilityIdentifier("voice-call-button")
                             }
-                            .accessibilityIdentifier("voice-call-button")
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .sheet(isPresented: $showFilePicker) {

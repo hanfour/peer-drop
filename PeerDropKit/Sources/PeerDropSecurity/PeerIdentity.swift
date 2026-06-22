@@ -17,23 +17,30 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
     /// half-up. v5.0.x and earlier wire payloads decode this key as
     /// `false` via the custom decoder below.
     public let supportsSecureChannel: Bool
+    /// Headless peer (e.g. the `peerdrop-cli` tool: a shell or AI agent). It has
+    /// no audio device and no useful file handling, so the UI hides voice-call,
+    /// voice-message, and file-transfer affordances for it. Older peers' hello
+    /// payloads omit this key and decode as `false` (a normal user device).
+    public let isHeadless: Bool
 
-    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true) {
+    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false) {
         self.id = UUID().uuidString
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
         self.identityPublicKey = identityPublicKey
         self.identityFingerprint = identityFingerprint
         self.supportsSecureChannel = supportsSecureChannel
+        self.isHeadless = isHeadless
     }
 
-    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true) {
+    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false) {
         self.id = id
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
         self.identityPublicKey = identityPublicKey
         self.identityFingerprint = identityFingerprint
         self.supportsSecureChannel = supportsSecureChannel
+        self.isHeadless = isHeadless
     }
 
     // MARK: - Codable (backward-compat decode)
@@ -42,6 +49,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         case id, displayName, certificateFingerprint
         case identityPublicKey, identityFingerprint
         case supportsSecureChannel
+        case isHeadless
     }
 
     public init(from decoder: Decoder) throws {
@@ -54,6 +62,8 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         // Default `false` for v5.0.x peers whose hello payload doesn't
         // include the key. Local()'s default sets true going forward.
         self.supportsSecureChannel = try c.decodeIfPresent(Bool.self, forKey: .supportsSecureChannel) ?? false
+        // Older peers omit this; absent ⇒ a normal (non-headless) user device.
+        self.isHeadless = try c.decodeIfPresent(Bool.self, forKey: .isHeadless) ?? false
     }
 
     private static let localIDKey = "peerDropLocalIdentityID"
@@ -92,7 +102,11 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
             certificateFingerprint: certificateFingerprint,
             identityPublicKey: IdentityKeyManager.shared.publicKey.rawRepresentation,
             identityFingerprint: IdentityKeyManager.shared.fingerprint,
-            supportsSecureChannel: true
+            supportsSecureChannel: true,
+            // Only peerdrop-cli activates a file-store namespace; the app never
+            // does. So an active file store cleanly marks this as a headless
+            // terminal/agent peer rather than a real user device.
+            isHeadless: PeerDropPersistence.fileStore != nil
         )
     }
 }
