@@ -35,7 +35,7 @@ guard let raw = getpass("Choose a webterm password: ") else {
 }
 let password = String(cString: raw)
 guard password.count >= 8 else {
-    FileHandle.standardError.write(Data("error: password too short (use 16+ chars)\n".utf8))
+    FileHandle.standardError.write(Data("error: password too short — 8 character minimum (16+ recommended)\n".utf8))
     exit(1)
 }
 print(pbkdf2(password))

@@ -2747,6 +2747,18 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Message Receive Loop
 
     private func startReceiving() {
+        // FOLLOWUP (design debt — tracked, not yet done): this legacy
+        // single-connection loop reads `activeConnection` while the per-peer
+        // `PeerConnection` runs its OWN receive loop on the SAME NWConnection,
+        // so the two race for each frame. Correctness today relies on
+        // NWConnection's single-delivery guarantee plus `handleMessageForPeer`
+        // forwarding any secure-channel frame this loop wins to the
+        // PeerConnection (instead of dropping it). The proper fix is a single
+        // owning reader per connection — stop this loop once a PeerConnection
+        // takes the connection over. Deferred as a dedicated, separately
+        // reviewed+tested refactor: it touches `connectionGeneration` ownership
+        // and the early hello/connectionAccept handoff in shipping crypto, so a
+        // hasty change here risks re-introducing connect/handshake bugs.
         guard let connection = activeConnection else {
             logger.warning("startReceiving: no activeConnection!")
             return
