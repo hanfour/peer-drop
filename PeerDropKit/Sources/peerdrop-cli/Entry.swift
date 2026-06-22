@@ -48,11 +48,20 @@ struct PeerDropCLI {
         let store = cm.trustedContactStore
         var bag = Set<AnyCancellable>()
 
-        // For the default shell, inject a clean config (no line-editor echo,
-        // empty prompt) so the chat shows just command output. An explicit
-        // `-- cmd` is launched as-is.
-        let (launchCommand, launchEnv) = ShellLauncher.resolve(opts, configDir: supportDir)
-        let bridge = ProcessBridge(command: launchCommand, environment: launchEnv)
+        // Pick the backing bridge. Agent mode runs an AI CLI headless (one
+        // plain-text reply per message); otherwise wrap a process in a PTY —
+        // for the default shell with a clean config so the chat shows just
+        // command output.
+        let bridge: MessageBridge
+        if opts.isAgent {
+            bridge = AgentBridge(
+                baseCommand: opts.command,
+                permissionMode: opts.agentYolo ? "bypassPermissions" : "plan"
+            )
+        } else {
+            let (launchCommand, launchEnv) = ShellLauncher.resolve(opts, configDir: supportDir)
+            bridge = ProcessBridge(command: launchCommand, environment: launchEnv)
+        }
         let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
         bridge.onMessage = { [weak session] text in session?.broadcast(text) }
         session.wire()
@@ -77,7 +86,12 @@ struct PeerDropCLI {
         }
 
         print("peerdrop-cli ready · fingerprint \(IdentityKeyManager.shared.fingerprint)")
-        print("wrapping: \(opts.command.joined(separator: " "))")
+        if opts.isAgent {
+            print("agent: \(opts.command.joined(separator: " ")) · permission "
+                  + (opts.agentYolo ? "bypassPermissions ⚠️ (executes)" : "plan (read-only)"))
+        } else {
+            print("wrapping: \(opts.command.joined(separator: " "))")
+        }
         print("advertising as \"\(opts.name)\" — waiting for a connection…")
 
         // Trust-gated incoming connection handler.
@@ -166,7 +180,7 @@ struct PeerDropCLI {
     /// The signal sources must be retained for their lifetime; they are stored
     /// in the caller's `bag` via an opaque wrapper so ARC keeps them alive.
     @MainActor
-    private static func installSignalHandlers(bridge: ProcessBridge, retained bag: inout Set<AnyCancellable>) {
+    private static func installSignalHandlers(bridge: MessageBridge, retained bag: inout Set<AnyCancellable>) {
         // Tell the kernel to ignore the default SIGINT/SIGTERM actions so our
         // DispatchSource handlers get a chance to run instead of the process
         // being killed immediately by the default handler.

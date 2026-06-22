@@ -40,7 +40,7 @@ final class AgentSession {
 
     // MARK: - Properties
 
-    private let bridge: ProcessBridge
+    private let bridge: MessageBridge
     private let cm: ConnectionManager
     private let store: TrustedContactStore
 
@@ -57,7 +57,7 @@ final class AgentSession {
     // MARK: - Init
 
     init(
-        bridge: ProcessBridge,
+        bridge: MessageBridge,
         connectionManager: ConnectionManager,
         store: TrustedContactStore
     ) {

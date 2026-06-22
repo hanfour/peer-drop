@@ -7,7 +7,7 @@ import PeerDropPTY
 /// The raw PTY plumbing (openpty, DispatchSourceRead, fd lifetime) lives in
 /// PTYProcess; this layer adds the chat-mode contract (line-based send, idle-flush
 /// segmentation, ANSI stripping) on top.
-final class ProcessBridge {
+final class ProcessBridge: MessageBridge {
     private let command: [String]
     private let environment: [String: String]?
     private let idle: DispatchTimeInterval
