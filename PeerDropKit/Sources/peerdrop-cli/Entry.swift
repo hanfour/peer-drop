@@ -87,8 +87,15 @@ struct PeerDropCLI {
 
         print("peerdrop-cli ready · fingerprint \(IdentityKeyManager.shared.fingerprint)")
         if opts.isAgent {
-            print("agent: \(opts.command.joined(separator: " ")) · permission "
-                  + (opts.agentYolo ? "bypassPermissions ⚠️ (executes)" : "plan (read-only)"))
+            if opts.agentYolo {
+                print("agent: \(opts.command.joined(separator: " ")) · permission bypassPermissions ⚠️  EXECUTES edits & commands")
+            } else {
+                print("agent: \(opts.command.joined(separator: " ")) · permission plan — answers & reads files, no edits/exec")
+            }
+            // `plan` blocks edits/exec but still runs READ-ONLY tools
+            // (Read/Bash `cat`/Grep/WebFetch), so a paired peer can have the
+            // agent read & return host file contents. Be explicit about it.
+            print("⚠️  a paired peer can ask the agent to read & return file contents from \(FileManager.default.currentDirectoryPath) and the host — pair only devices you trust.")
         } else {
             print("wrapping: \(opts.command.joined(separator: " "))")
         }

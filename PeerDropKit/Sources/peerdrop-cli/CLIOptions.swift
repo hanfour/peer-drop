@@ -11,8 +11,11 @@ struct CLIOptions {
     /// Headless agent mode: each chat message runs the command via `-p` and the
     /// reply is one plain-text bubble (see `AgentBridge`).
     var isAgent: Bool
-    /// Escalates the agent's permission mode from `plan` (read-only) to
-    /// `bypassPermissions` (executes edits/commands). Implies `isAgent`.
+    /// Escalates the agent's permission mode from `plan` to `bypassPermissions`
+    /// (executes edits/commands). Implies `isAgent`. NOTE: even the default
+    /// `plan` still runs read-only tools, so a paired peer can have the agent
+    /// read & return host file contents — `bypassPermissions` additionally lets
+    /// it modify files and run commands.
     var agentYolo: Bool
 
     static func parse(_ argv: [String], defaultShell: String) -> CLIOptions {

@@ -21,6 +21,11 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
     /// no audio device and no useful file handling, so the UI hides voice-call,
     /// voice-message, and file-transfer affordances for it. Older peers' hello
     /// payloads omit this key and decode as `false` (a normal user device).
+    ///
+    /// This is a self-reported UI hint, NOT a security boundary: a peer can claim
+    /// any value, and the only effect is which affordances the UI offers (a peer
+    /// spuriously claiming `true` would merely hide the local user's own
+    /// send-file/call/mic buttons for that conversation — cosmetic, recoverable).
     public let isHeadless: Bool
 
     public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false) {

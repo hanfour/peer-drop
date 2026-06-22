@@ -17,6 +17,12 @@ import Foundation
 /// grid and no cursor addressing (those escapes are removed upstream). It
 /// models a single logical line with an overwrite cursor — enough to clean up
 /// the output of a line-based program for chat display.
+///
+/// Known limitation: it does not model erase-to-EOL (`ESC[K`, which AnsiStripper
+/// removes before this runs), so a program that repaints a SHORTER line via
+/// `\r` + new text + `ESC[K` will leave the old tail behind. The clean-shell
+/// launch path (`ShellLauncher`) avoids this because zsh repaints by padding
+/// the full width with spaces; an arbitrary wrapped program may not.
 enum TerminalLineNormalizer {
     static func normalize(_ s: String) -> String {
         var lines: [String] = []

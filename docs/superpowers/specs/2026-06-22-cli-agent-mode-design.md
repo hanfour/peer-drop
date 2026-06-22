@@ -29,7 +29,7 @@ context preserved across turns — using `claude -p` instead of its TUI.
 | 2 | Architecture | New `AgentBridge`, alongside `ProcessBridge`, both conforming to a `MessageBridge` protocol. `AgentSession` depends on the protocol, so trust-gating/wiring is unchanged. `Entry` selects the bridge from `--agent`. |
 | 3 | Per-message flow | Incoming chat msg → run `claude -p "<msg>" --continue --output-format text --permission-mode <mode>` in the cwd → capture stdout → emit one clean chat bubble (batch). |
 | 4 | Continuity | `--continue` (resume the most recent conversation in the cwd) for v1. Follow-up: pin a `--session-id` for isolation. |
-| 5 | **Safety** | Default `--permission-mode plan` → claude explores/answers/plans but does **not** execute edits or commands. A phone message can't drive destructive actions by default. Opt-in `--agent-yolo` → `--permission-mode bypassPermissions`. |
+| 5 | **Safety** | Default `--permission-mode plan` → claude does **not** execute edits or run commands (those auto-deny with no TTY). ⚠️ **It DOES still run read-only tools (Read/Bash `cat`/Grep/WebFetch) with no prompt — so a paired peer can have the agent read & return host file contents (an exfiltration surface).** Plan stays the default because reading project context to answer is the feature's value; the CLI banner states this explicitly and the threat model is "control your OWN trusted device's agent." Opt-in `--agent-yolo` → `--permission-mode bypassPermissions` additionally permits edits + command execution. |
 
 **Other:** messages are processed serially (one `claude` at a time, ordered);
 non-zero exit / no output → a short error bubble (never silent); cwd = where
