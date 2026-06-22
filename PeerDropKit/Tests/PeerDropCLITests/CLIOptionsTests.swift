@@ -5,6 +5,7 @@ final class CLIOptionsTests: XCTestCase {
     func test_defaultsToShellWhenNoCommand() {
         let o = CLIOptions.parse(["peerdrop-cli"], defaultShell: "/bin/zsh")
         XCTAssertEqual(o.command, ["/bin/zsh"])
+        XCTAssertTrue(o.isDefaultShell)
         XCTAssertFalse(o.restart)
         XCTAssertNotNil(o.name)
     }
@@ -17,5 +18,6 @@ final class CLIOptionsTests: XCTestCase {
         XCTAssertEqual(o.name, "claude@proj")
         XCTAssertTrue(o.restart)
         XCTAssertEqual(o.command, ["claude", "--foo"])
+        XCTAssertFalse(o.isDefaultShell)
     }
 }

@@ -9,6 +9,7 @@ import PeerDropPTY
 /// segmentation, ANSI stripping) on top.
 final class ProcessBridge {
     private let command: [String]
+    private let environment: [String: String]?
     private let idle: DispatchTimeInterval
     /// Lazily created so `onMessage` can be set after `init` but before
     /// `start()`. The first access (from the PTY onBytes callback) is
@@ -31,9 +32,11 @@ final class ProcessBridge {
     var onExit: ((Int32) -> Void)?
 
     init(command: [String],
+         environment: [String: String]? = nil,
          idle: DispatchTimeInterval = .milliseconds(350)) {
         precondition(!command.isEmpty, "command must not be empty")
         self.command = command
+        self.environment = environment
         self.idle = idle
     }
 
@@ -41,7 +44,7 @@ final class ProcessBridge {
         // Guard against double-start while already running.
         if let existing = pty, existing.isRunning { return }
 
-        let p = PTYProcess(command: command)
+        let p = PTYProcess(command: command, environment: environment)
         p.onBytes = { [weak self] data in
             self?.segmenter.ingest(data)
         }

@@ -36,6 +36,38 @@ final class ProcessBridgeTests: XCTestCase {
         bridge.terminate()
     }
 
+    func test_defaultShellChat_emitsBareOutput_noEchoNoPrompt() async throws {
+        // Full integration: the clean-shell launch config + the output pipeline
+        // (PTY → AnsiStripper → TerminalLineNormalizer) must turn `echo hi` into
+        // a chat message that is just the command OUTPUT — none of the ZLE echo
+        // (`eecho`), the echoed command, or the shell prompt.
+        let opts = CLIOptions.parse(["peerdrop-cli"], defaultShell: "/bin/zsh")
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bridgetest-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let (command, env) = ShellLauncher.resolve(opts, configDir: dir)
+
+        let exp = expectation(description: "echo output")
+        var messages: [String] = []
+        let bridge = ProcessBridge(command: command, environment: env, idle: .milliseconds(120))
+        bridge.onMessage = { text in
+            messages.append(text)
+            if text.contains("hi") { exp.fulfill() }
+        }
+        bridge.start()
+        // Let the interactive shell load its (clean) rc before the first command.
+        try await Task.sleep(nanoseconds: 600_000_000)
+        bridge.send("echo hi")
+        await fulfillment(of: [exp], timeout: 6)
+        bridge.terminate()
+
+        let joined = messages.joined(separator: "\u{1F}")
+        XCTAssertTrue(joined.contains("hi"), "expected output, got: \(messages)")
+        XCTAssertFalse(joined.contains("eecho"), "leaked ZLE echo artifact: \(messages)")
+        XCTAssertFalse(joined.contains("echo hi"), "leaked echoed command: \(messages)")
+        XCTAssertFalse(joined.contains("%"), "leaked shell prompt: \(messages)")
+    }
+
     func test_exitCallbackFiresWhenChildEnds() async throws {
         let exp = expectation(description: "exit")
         let bridge = ProcessBridge(

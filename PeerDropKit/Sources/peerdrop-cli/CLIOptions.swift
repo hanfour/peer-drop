@@ -4,6 +4,10 @@ struct CLIOptions {
     var name: String
     var restart: Bool
     var command: [String]
+    /// True when no explicit `-- cmd` was given and `command` fell back to the
+    /// login shell. The clean-shell config (see `ShellLauncher`) is applied only
+    /// in this case, so an explicit program (e.g. `claude`) is launched as-is.
+    var isDefaultShell: Bool
 
     static func parse(_ argv: [String], defaultShell: String) -> CLIOptions {
         var name: String? = nil
@@ -24,8 +28,9 @@ struct CLIOptions {
             i += 1
         }
 
+        let isDefaultShell = command.isEmpty
         if command.isEmpty { command = [defaultShell] }
         let resolvedName = name ?? (Host.current().localizedName ?? "peerdrop-cli")
-        return CLIOptions(name: resolvedName, restart: restart, command: command)
+        return CLIOptions(name: resolvedName, restart: restart, command: command, isDefaultShell: isDefaultShell)
     }
 }

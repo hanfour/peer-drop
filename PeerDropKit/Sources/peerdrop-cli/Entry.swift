@@ -48,7 +48,11 @@ struct PeerDropCLI {
         let store = cm.trustedContactStore
         var bag = Set<AnyCancellable>()
 
-        let bridge = ProcessBridge(command: opts.command)
+        // For the default shell, inject a clean config (no line-editor echo,
+        // empty prompt) so the chat shows just command output. An explicit
+        // `-- cmd` is launched as-is.
+        let (launchCommand, launchEnv) = ShellLauncher.resolve(opts, configDir: supportDir)
+        let bridge = ProcessBridge(command: launchCommand, environment: launchEnv)
         let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
         bridge.onMessage = { [weak session] text in session?.broadcast(text) }
         session.wire()
