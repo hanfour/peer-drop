@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PeerDropSecurity", targets: ["PeerDropSecurity"]),
         .library(name: "PeerDropProtocol", targets: ["PeerDropProtocol"]),
         .library(name: "PeerDropPet", targets: ["PeerDropPet"]),
+        .library(name: "PeerDropPTY", targets: ["PeerDropPTY"]),
     ],
     dependencies: [
         // External SPM packages — re-declared here so PeerDropKit can be
@@ -23,6 +24,14 @@ let package = Package(
         // pinned versions.
         .package(url: "https://github.com/stasel/WebRTC", exact: "125.0.0"),
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.19"),
+        .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
+        .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.0.0"),
+        // Pinned below 5.3.0: JWTKit 5.3+ added ML-DSA (post-quantum) types that
+        // need a newer Swift/CryptoKit toolchain than the CI runner (macos-15 /
+        // Xcode 16) ships, so 5.3–5.5 fail to compile in CI with
+        // "cannot find type 'MLDSA65'/'MLDSA87'". webterm only uses ES256/RS256 +
+        // JWKS for Cloudflare Access JWT validation (no ML-DSA), so 5.2.x suffices.
+        .package(url: "https://github.com/vapor/jwt-kit.git", "5.0.0" ..< "5.3.0"),
     ],
     targets: [
         .target(
@@ -110,6 +119,28 @@ let package = Package(
                 .copy("Resources"),
             ]
         ),
+        .target(name: "PeerDropPTY"),
+        .testTarget(name: "PeerDropPTYTests", dependencies: ["PeerDropPTY"]),
+        .executableTarget(
+            name: "webterm",
+            dependencies: [
+                "PeerDropPTY",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+                .product(name: "JWTKit", package: "jwt-kit"),
+            ],
+            resources: [
+                .copy("Resources"),
+            ]
+        ),
+        .testTarget(
+            name: "WebTermTests",
+            dependencies: [
+                "webterm",
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+                .product(name: "HummingbirdWSTesting", package: "hummingbird-websocket"),
+            ]
+        ),
         .executableTarget(
             name: "peerdrop-cli",
             dependencies: [
@@ -117,6 +148,7 @@ let package = Package(
                 "PeerDropSecurity",
                 "PeerDropTransport",
                 "PeerDropProtocol",
+                "PeerDropPTY",
             ]
         ),
         .testTarget(

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd user agent for webterm.
+
+  BEFORE installing:
+    1. Replace /Users/YOU with your actual home directory ($HOME).
+    2. Set WEBTERM_PASSWORD_HASH to the output of the hash-password script
+       (see deploy/SETUP.md §3 — Password hash).
+    3. Set WEBTERM_SECRET to a 64-char hex string (32 random bytes in hex).
+       Generate with: openssl rand -hex 32
+    4. Set WEBTERM_HOST to the hostname Cloudflare forwards to localhost
+       (e.g. term.yourdomain.com). This stops host-header spoofing.
+    5. Optionally set WEBTERM_PORT (default 7681).
+
+  Install:
+    cp deploy/webterm.launchd.plist ~/Library/LaunchAgents/com.hanfour.webterm.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hanfour.webterm.plist
+
+  Uninstall:
+    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hanfour.webterm.plist
+
+  Reload after editing:
+    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hanfour.webterm.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hanfour.webterm.plist
+
+  Check status:
+    launchctl print gui/$(id -u)/com.hanfour.webterm
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hanfour.webterm</string>
+
+    <!-- Path to the release binary built by:
+         cd PeerDropKit && swift build -c release - -product webterm
+         Binary lands at PeerDropKit/.build/release/webterm                  -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOU/Projects/applications/peer-drop/PeerDropKit/.build/release/webterm</string>
+    </array>
+
+    <!-- Environment variables consumed by main.swift.
+         WEBTERM_PASSWORD_HASH  — PBKDF2 hash (see SETUP.md §3)
+         WEBTERM_SECRET         — 64-char hex; stable across restarts so
+                                  existing cookies survive webterm restarts
+         WEBTERM_HOST           — Expected Host header (CSRF guard)
+         WEBTERM_PORT           — TCP port; default 7681 if omitted           -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>WEBTERM_PASSWORD_HASH</key>
+        <string>REPLACE_WITH_HASH</string>
+
+        <key>WEBTERM_SECRET</key>
+        <string>REPLACE_WITH_64_HEX_CHARS</string>
+
+        <key>WEBTERM_HOST</key>
+        <string>term.YOURDOMAIN.com</string>
+
+        <key>WEBTERM_PORT</key>
+        <string>7681</string>
+
+        <!-- PATH so tmux and your shell are found by the server process -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Working directory (optional — webterm is stateless w.r.t. cwd) -->
+    <key>WorkingDirectory</key>
+    <string>/Users/YOU</string>
+
+    <!-- stdout/stderr — tail these to debug the server -->
+    <key>StandardOutPath</key>
+    <string>/Users/YOU/Library/Logs/webterm/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOU/Library/Logs/webterm/stderr.log</string>
+
+    <!-- Restart automatically if the process exits -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Start at user login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Throttle rapid restart loops (seconds) -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
