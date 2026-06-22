@@ -272,6 +272,14 @@ public final class ConnectionManager: ObservableObject {
     /// Tracks the current connection attempt so stale callbacks are ignored.
     private var connectionGeneration: UUID = UUID()
 
+    /// True while the legacy single-connection receive loop (`startReceiving`,
+    /// initiator-only) owns `activeConnection`. `addConnection` flips it false the
+    /// instant a `PeerConnection` takes that connection over, so the legacy loop
+    /// breaks before its next read and the PeerConnection loop becomes the SOLE
+    /// reader — eliminating the dual-reader race (previously only papered over by
+    /// forwarding raced secure-channel frames in `handleMessageForPeer`).
+    private var legacyReaderActive = false
+
     // MARK: - Network Path Monitoring
     private var pathMonitor: NWPathMonitor?
     private var lastNetworkPath: NWPath?
@@ -552,6 +560,14 @@ public final class ConnectionManager: ObservableObject {
     private func addConnection(_ peerConnection: PeerConnection) {
         let peerID = peerConnection.id
         connections[peerID] = peerConnection
+
+        // Single-reader handoff: if this PeerConnection now owns the very
+        // NWConnection the legacy initiator loop is reading, stop that loop so
+        // the PeerConnection's own receive loop is the SOLE reader (no dual-read
+        // race). No-op for acceptors/relay, which never start the legacy loop.
+        if let pcConn = peerConnection.nwConnection, let active = activeConnection, pcConn === active {
+            legacyReaderActive = false
+        }
 
         // Set up callbacks
         peerConnection.onStateChange = { [weak self] newState in
@@ -2746,28 +2762,26 @@ public final class ConnectionManager: ObservableObject {
 
     // MARK: - Message Receive Loop
 
+    /// The initiator's pre-PeerConnection reader. It reads `activeConnection` only
+    /// until the `connectionAccept` it is waiting for arrives — at which point
+    /// `handleMessageLegacy` synchronously creates the peer's `PeerConnection`
+    /// (via `addConnection`), which flips `legacyReaderActive` false so this loop
+    /// breaks before its next read and the PeerConnection's own loop becomes the
+    /// SOLE reader of the connection. (Acceptors never run this loop — they read
+    /// the HELLO/request inline.) This single-owning-reader handoff replaces the
+    /// old dual-reader race; the secure-frame forward in `handleMessageForPeer`
+    /// is now only a belt-and-suspenders safety net.
     private func startReceiving() {
-        // FOLLOWUP (design debt — tracked, not yet done): this legacy
-        // single-connection loop reads `activeConnection` while the per-peer
-        // `PeerConnection` runs its OWN receive loop on the SAME NWConnection,
-        // so the two race for each frame. Correctness today relies on
-        // NWConnection's single-delivery guarantee plus `handleMessageForPeer`
-        // forwarding any secure-channel frame this loop wins to the
-        // PeerConnection (instead of dropping it). The proper fix is a single
-        // owning reader per connection — stop this loop once a PeerConnection
-        // takes the connection over. Deferred as a dedicated, separately
-        // reviewed+tested refactor: it touches `connectionGeneration` ownership
-        // and the early hello/connectionAccept handoff in shipping crypto, so a
-        // hasty change here risks re-introducing connect/handshake bugs.
         guard let connection = activeConnection else {
             logger.warning("startReceiving: no activeConnection!")
             return
         }
         let generation = connectionGeneration
+        legacyReaderActive = true
         logger.info("Entering receive loop (gen=\(generation.uuidString.prefix(8)))")
 
         Task {
-            while activeConnection != nil && connectionGeneration == generation {
+            while activeConnection != nil && connectionGeneration == generation && legacyReaderActive {
                 do {
                     let message = try await connection.receiveMessage()
                     // Verify this loop still owns the connection
@@ -3091,16 +3105,15 @@ public final class ConnectionManager: ObservableObject {
             }
 
         case .secureHandshake, .secureEnvelope:
-            // The ConnectionManager receive loop and the PeerConnection receive
-            // loop BOTH read this NWConnection, and NWConnection hands each frame
-            // to exactly one of them. When the ConnectionManager loop wins a
-            // secure-channel frame it would otherwise hit `default: break` and be
-            // dropped — stranding the handshake (→ fallback-plaintext → no SAS →
-            // blocked sends), which is what broke phone↔CLI pairing (the CLI is
-            // the acceptor and establishes fine; the phone-as-initiator dropped
-            // the CLI's bundle here). Forward it to the PeerConnection's own
-            // handler. This is the frame's single delivery (only one loop ever
-            // receives it); `handleIncomingMessage` is idempotent regardless.
+            // Safety net (should be unreachable). The single-reader handoff
+            // (`legacyReaderActive`, flipped false in addConnection) stops the
+            // legacy initiator loop before it can read any secure-channel frame,
+            // so the PeerConnection's own loop is the sole reader and these never
+            // route through here. If a future code path ever reintroduced a
+            // second reader, dropping the frame via `default: break` would strand
+            // the handshake (→ plaintext fallback → no SAS → blocked sends), so
+            // forward it to the PeerConnection instead. Each frame is delivered
+            // once and `handleIncomingMessage` is idempotent regardless.
             Task {
                 do { try await peerConnection.handleIncomingMessage(message) }
                 catch { logger.error("Forwarded secure-channel frame failed: \(error.localizedDescription)") }
