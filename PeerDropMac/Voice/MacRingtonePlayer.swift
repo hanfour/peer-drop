@@ -7,15 +7,14 @@ import os
 ///
 /// **Asset source:**
 ///   - Preferred: `PeerDropMac/Resources/Ringtone.caf` bundled into the
-///     `.app` (loopable, mono, 44.1 kHz, ~5s).
-///   - Fallback: `NSSound(named: "Glass")` re-triggered every ~3s.
-///     Used when `Ringtone.caf` is missing from the bundle (early dev
-///     builds before the audio asset has been commissioned). The
-///     fallback keeps voice-call code paths exercisable while the
-///     production asset is in flight. Sandboxed apps may have
+///     `.app` (loopable, mono, 44.1 kHz, 3.18 s; CC0 — provenance and
+///     processing steps in `PeerDropMac/Resources/README.md`).
+///   - Fallback: `NSSound(named: "Glass")` re-triggered every ~3s. Only
+///     a last-resort safety net for builds that somehow strip the
+///     resource — NOT a production path: sandboxed apps may have
 ///     `NSSound(named:)` return nil for system sounds in some
-///     configurations; the ringtone is then visually-only until
-///     Ringtone.caf is added.
+///     configurations, leaving the ringtone visually-only. A missing
+///     `Ringtone.caf` is a ship blocker, not a degraded mode.
 ///
 /// **DND mode:** `start(silent: true)` keeps the timer + panel semantics
 /// uniform (the player still "plays" so cleanup paths are symmetric)
@@ -26,6 +25,7 @@ import os
 final class MacRingtonePlayer {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop.mac", category: "Ringtone")
     private var player: AVAudioPlayer?
+    private var fadeStopTask: Task<Void, Never>?
     private var fallbackTask: Task<Void, Never>?
     private var fallbackSilent: Bool = false
 
@@ -72,12 +72,18 @@ final class MacRingtonePlayer {
     func stop(fadeOut: TimeInterval = 0.2) {
         fallbackTask?.cancel()
         fallbackTask = nil
+        fadeStopTask?.cancel()
+        fadeStopTask = nil
 
         guard let player, player.isPlaying else { return }
         if fadeOut > 0 {
             player.setVolume(0, fadeDuration: fadeOut)
-            Task { @MainActor [weak player] in
+            // Must stay cancellable: start() calls stop(fadeOut: 0) first,
+            // and a ring re-started inside the fade window would otherwise
+            // be killed when this delayed stop fires.
+            fadeStopTask = Task { @MainActor [weak player] in
                 try? await Task.sleep(for: .seconds(fadeOut))
+                guard !Task.isCancelled else { return }
                 player?.stop()
             }
         } else {

@@ -2,12 +2,27 @@
 
 Bundled resources for the macOS app.
 
-## `Ringtone.caf` (M3)
+## `Ringtone.caf` (M3 / M4 Task 2 — DONE)
 
-Incoming-call ringtone. Loopable AAC-in-CAF, mono, 44.1 kHz, ≤6s, ~50 KB target.
+Incoming-call ringtone. Loopable AAC-in-CAF, mono, 44.1 kHz, 3.18 s, 17 KB.
 
-**Source:** human action required before Mac App Store ship. Suggested:
-- Commission a short branded ring, or
-- Use a CC0 source (e.g. Freesound) and convert: `afconvert -d aac -f caff Source.aiff Ringtone.caf`
+**Provenance (keep for App Review / licensing traceability):**
+- Source: "8bit Ringtone [FREE TO USE] [LOOPABLE]" by **YXMusic**,
+  Freesound #423652 — <https://freesound.org/people/YXMusic/sounds/423652/>
+- License: **Creative Commons 0 (CC0 1.0)** — no attribution required,
+  commercial use permitted. License verified on the sound page 2026-07-03.
+- Processing: original is a 12.7 s file containing the same ring phrase
+  4× with gaps (period 3.178 s). One full period (ring + trailing gap,
+  0.596 s → 3.774 s) was cut so `AVAudioPlayer(numberOfLoops: -1)`
+  reproduces the original cadence seamlessly:
+  ```bash
+  ffmpeg -ss 0.596 -to 3.774 -i 423652_8481610-hq.mp3 -ac 1 -ar 44100 ring.wav
+  afconvert -f caff -d aac -b 64000 ring.wav Ringtone.caf
+  ```
 
-Until the file is added, `MacRingtonePlayer` falls back to `NSSound(named: "Glass")` looped every ~3s so M3 dev builds remain audible. The fallback is **not** acceptable for production — sandboxed apps cannot reference `/System/Library/Sounds/`, so the Glass loop may not play at all in shipped builds depending on sandbox configuration.
+`MacRingtonePlayer` prefers this bundled file. The `NSSound(named: "Glass")`
+fallback remains only as a last-resort safety net for builds that somehow
+strip the resource — it is **not** production-acceptable: sandboxed apps
+cannot reliably reference system sounds (`NSSound(named:)` may return nil),
+leaving incoming calls visually-only. If `Ringtone.caf` ever goes missing
+from the bundle, treat it as a ship blocker, not a degraded mode.
