@@ -20,5 +20,9 @@ Incoming-call ringtone. Loopable AAC-in-CAF, mono, 44.1 kHz, 3.18 s, 17 KB.
   afconvert -f caff -d aac -b 64000 ring.wav Ringtone.caf
   ```
 
-`MacRingtonePlayer` prefers this bundled file; the `NSSound(named: "Glass")`
-fallback remains only as a safety net for builds that strip resources.
+`MacRingtonePlayer` prefers this bundled file. The `NSSound(named: "Glass")`
+fallback remains only as a last-resort safety net for builds that somehow
+strip the resource — it is **not** production-acceptable: sandboxed apps
+cannot reliably reference system sounds (`NSSound(named:)` may return nil),
+leaving incoming calls visually-only. If `Ringtone.caf` ever goes missing
+from the bundle, treat it as a ship blocker, not a degraded mode.
