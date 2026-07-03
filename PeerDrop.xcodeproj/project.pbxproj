@@ -195,6 +195,7 @@
 		9A235E33827AC9E33BECB54C /* ConnectionE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52261C190C8AD9BEA9B35F /* ConnectionE2ETests.swift */; };
 		9C46933AE9ED40CF1729A0D9 /* LoopbackIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */; };
 		9D130FED28374CD0B195708C /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */; };
+		9E3D6352D8B7C1BCC8721E0A /* Ringtone.caf in Resources */ = {isa = PBXBuildFile; fileRef = A510B35484AB026C531FBA38 /* Ringtone.caf */; };
 		9F9662F64C669221246F63E8 /* SnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C0D4FA1E9B081F5960A5F5 /* SnapshotTests.swift */; };
 		A01B7F8249D416A5EE360E68 /* SecurityDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */; };
 		A1AEBDDB05403449E578811E /* MenuBarStatusIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DEFF053897DB8E4771B7A7A /* MenuBarStatusIcon.swift */; };
@@ -546,6 +547,7 @@
 		A3DEBE03E5EDAD5B8CA5C7DC /* TipJarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarManager.swift; sourceTree = "<group>"; };
 		A4C80BFCC4EAF2CB326660AA /* DataChannelTransportReassemblyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportReassemblyTests.swift; sourceTree = "<group>"; };
 		A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewView.swift; sourceTree = "<group>"; };
+		A510B35484AB026C531FBA38 /* Ringtone.caf */ = {isa = PBXFileReference; path = Ringtone.caf; sourceTree = "<group>"; };
 		A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifierTests.swift; sourceTree = "<group>"; };
 		A58E46F49381937D21F420B9 /* TailnetPeerEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntryTests.swift; sourceTree = "<group>"; };
 		A69C76B9E074A59DBABB7808 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -748,6 +750,14 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		23FF5FC18FA56B70FA216EE6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A510B35484AB026C531FBA38 /* Ringtone.caf */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		27C871958EB5E8E427248037 /* PeerDropMacUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -882,6 +892,7 @@
 				AF73266DB60BE5DCC0E42F4B /* Adapters */,
 				19F5C630122A80C5A0D78496 /* App */,
 				60B904511703E7DCE0CB3EC9 /* DragAndDrop */,
+				23FF5FC18FA56B70FA216EE6 /* Resources */,
 				7480E5F261C36127AAE31E79 /* Views */,
 				8A4682705E899D9A1AAC2947 /* Voice */,
 			);
@@ -1438,6 +1449,7 @@
 				EA4316C1978763699FE325B7 /* Assets.xcassets in Resources */,
 				1538EB0F7463092158CB0623 /* Localizable.xcstrings in Resources */,
 				757ED76D1F06C99EBEB531A3 /* PrivacyInfo.xcprivacy in Resources */,
+				9E3D6352D8B7C1BCC8721E0A /* Ringtone.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
