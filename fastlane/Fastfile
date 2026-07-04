@@ -396,6 +396,24 @@ platform :ios do
     version = version_match ? version_match[1] : nil
     UI.message("Detected MARKETING_VERSION: #{version || '(unknown)'}")
 
+    # Guard: every language's release_notes.txt must mention the version
+    # being shipped. v5.4.0 → v5.5.2 all reached review with v5.3's
+    # What's New because nothing forced the metadata refresh and this
+    # lane uploads metadata (skip_metadata: false). Found 2026-07-03.
+    if version
+      stale = %w[en-US zh-Hant zh-Hans ja ko].reject do |lang|
+        notes_file = File.expand_path("metadata/#{lang}/release_notes.txt", __dir__)
+        File.exist?(notes_file) && File.read(notes_file).include?(version)
+      end
+      unless stale.empty?
+        UI.user_error!(
+          "release_notes.txt doesn't mention #{version} for: #{stale.join(', ')}. " \
+          "Update fastlane/metadata/*/release_notes.txt (What's New) before shipping — " \
+          "otherwise the App Store keeps showing a previous version's notes."
+        )
+      end
+    end
+
     review_info = nil
     if version
       major_minor = version[/^\d+\.\d+/]
@@ -691,6 +709,21 @@ platform :ios do
     version_match = File.read(File.expand_path("../project.yml", __dir__)).match(/MARKETING_VERSION:\s*"([^"]+)"/)
     version = version_match ? version_match[1] : nil
     UI.message("Detected MARKETING_VERSION: #{version || '(unknown)'}")
+
+    # Same staleness guard as the iOS release lane, against the Mac
+    # metadata tree (fastlane/metadata/macos/). See release lane comment.
+    if version
+      stale = %w[en-US zh-Hant zh-Hans ja ko].reject do |lang|
+        notes_file = File.expand_path("metadata/macos/#{lang}/release_notes.txt", __dir__)
+        File.exist?(notes_file) && File.read(notes_file).include?(version)
+      end
+      unless stale.empty?
+        UI.user_error!(
+          "macOS release_notes.txt doesn't mention #{version} for: #{stale.join(', ')}. " \
+          "Update fastlane/metadata/macos/*/release_notes.txt before shipping."
+        )
+      end
+    end
 
     review_info = nil
     if version
