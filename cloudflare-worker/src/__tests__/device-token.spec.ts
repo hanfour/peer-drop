@@ -14,7 +14,7 @@ import { encode as cborEncode } from "cbor2";
 import { issueToken, verifyToken, freshTokenPayload } from "../deviceToken";
 import { verifyAssertion } from "../appAttest";
 
-const TEST_SECRET = "test-token-secret-deterministic";
+import { TEST_TOKEN_SECRET as TEST_SECRET } from "./testSecrets";
 const API_KEY = "test-api-key-12345";
 
 describe("HMAC token round-trip", () => {

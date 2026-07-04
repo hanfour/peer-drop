@@ -13,10 +13,11 @@
 import { SELF, env } from "cloudflare:test";
 import { describe, it, expect, beforeEach } from "vitest";
 import { issueToken, freshTokenPayload } from "../deviceToken";
-
-const API_KEY = "test-api-key-12345";
-const TOKEN_SECRET = "test-token-secret-deterministic"; // matches vitest.config.mts
-const ANALYTICS_KEY = "test-analytics-key-67890";
+import {
+  TEST_API_KEY as API_KEY,
+  TEST_ANALYTICS_KEY as ANALYTICS_KEY,
+  TEST_TOKEN_SECRET as TOKEN_SECRET,
+} from "./testSecrets";
 
 // Wipe today's metrics + the config key so each test starts from a known
 // baseline. We can't list across the whole namespace cheaply, but the only
@@ -86,6 +87,35 @@ describe("metric-ingest — auth + validation", () => {
       "10.0.1.18",
     );
     expect(resp.status).toBe(201);
+  });
+
+  // /debug/metric is a plain POST — query-string credentials are
+  // rejected by design (isHeaderAuthorized): URLs land in request logs,
+  // and the operator key must never be loggable. Only the WS upgrade
+  // route legitimately uses `?token=`.
+  it("returns 401 when the API key is passed as a query param", async () => {
+    const resp = await SELF.fetch(
+      `https://example.com/debug/metric?apiKey=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "10.0.1.20" },
+        body: metricBody(),
+      },
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  it("returns 401 when a valid Bearer token is passed as a query param", async () => {
+    const token = await issueToken(freshTokenPayload("metric-dev-3"), TOKEN_SECRET);
+    const resp = await SELF.fetch(
+      `https://example.com/debug/metric?token=${encodeURIComponent(token)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "10.0.1.21" },
+        body: metricBody(),
+      },
+    );
+    expect(resp.status).toBe(401);
   });
 
   it("returns 401 with an expired Bearer token and no API key", async () => {
