@@ -12,8 +12,10 @@
 
 import { SELF, env } from "cloudflare:test";
 import { describe, it, expect, beforeEach } from "vitest";
+import { issueToken, freshTokenPayload } from "../deviceToken";
 
 const API_KEY = "test-api-key-12345";
+const TOKEN_SECRET = "test-token-secret-deterministic"; // matches vitest.config.mts
 const ANALYTICS_KEY = "test-analytics-key-67890";
 
 // Wipe today's metrics + the config key so each test starts from a known
@@ -70,6 +72,33 @@ describe("metric-ingest — auth + validation", () => {
     const body = (await resp.json()) as { ok: boolean; id: string };
     expect(body.ok).toBe(true);
     expect(body.id).toMatch(/^metric:\d{4}-\d{2}-\d{2}:[0-9a-f-]{36}$/);
+  });
+
+  // Regression pin for the 2026-07-05 fix: v5.3+ devices whose App
+  // Attest succeeded send `Authorization: Bearer …` (WorkerAuthHelper
+  // prefers it), and the old requireKey(API_KEY) gate 401'd them all —
+  // production telemetry silently blackholed for ~7 weeks.
+  it("returns 201 with a valid App-Attest Bearer token", async () => {
+    const token = await issueToken(freshTokenPayload("metric-dev-1"), TOKEN_SECRET);
+    const resp = await postMetric(
+      metricBody(),
+      { Authorization: `Bearer ${token}` },
+      "10.0.1.18",
+    );
+    expect(resp.status).toBe(201);
+  });
+
+  it("returns 401 with an expired Bearer token and no API key", async () => {
+    const token = await issueToken(
+      { deviceId: "metric-dev-2", scope: "default", expires: Math.floor(Date.now() / 1000) - 60 },
+      TOKEN_SECRET,
+    );
+    const resp = await postMetric(
+      metricBody(),
+      { Authorization: `Bearer ${token}` },
+      "10.0.1.19",
+    );
+    expect(resp.status).toBe(401);
   });
 
   it("returns 413 when payload exceeds 4 KB", async () => {

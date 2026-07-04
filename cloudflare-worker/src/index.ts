@@ -420,10 +420,17 @@ export default {
       return jsonResponse({ ok: true, id: reportId }, 201);
     }
 
-    // POST /debug/metric — ingest connection telemetry (API_KEY required)
+    // POST /debug/metric — ingest connection telemetry. Accepts the
+    // same credentials as the data-plane routes (App-Attest Bearer OR
+    // legacy X-API-Key). This was `requireKey` (X-API-Key ONLY) until
+    // 2026-07-05, which 401'd every v5.3+ device whose App Attest
+    // succeeded — WorkerAuthHelper prefers Bearer, the client-side
+    // "silently drop" policy ate the failures, and production
+    // telemetry ingest was a blackhole for ~7 weeks.
     if (path === "/debug/metric" && request.method === "POST") {
-      const unauth = requireKey(request, env, "API_KEY");
-      if (unauth) return unauth;
+      if (!(await isRequestAuthorized(request, url, env))) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
       // Payload size limit: 4 KB
       const body = await request.text();
       if (body.length > 4 * 1024) {
