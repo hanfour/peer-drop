@@ -635,11 +635,10 @@ export default {
     }
 
     // POST /v2/device/attest — register a new device via Apple App Attest.
-    // Returns a short-lived bearer token + caches the device's public
-    // key for subsequent /v2/device/assert calls. Stub mode until pkijs
-    // attestation chain validation lands (see ./deviceToken.ts TODO);
-    // returns 501 so the iOS client can detect partial deployment and
-    // stay on the X-API-Key fallback.
+    // Runs the full pkijs attestation-chain verification (./appAttest.ts):
+    // returns a short-lived bearer token + caches the device's public
+    // key for subsequent /v2/device/assert calls. Invalid attestations
+    // get 400 with the verifier's reason.
     if (path === "/v2/device/attest" && request.method === "POST") {
       if (!env.TOKEN_SECRET) {
         return jsonResponse({ error: "Server misconfigured: TOKEN_SECRET not set" }, 500);
@@ -704,7 +703,8 @@ export default {
 
     // POST /v2/device/assert — refresh the bearer token by proving the
     // device still controls the Secure Enclave keypair registered at
-    // /v2/device/attest time. Stub like /attest above.
+    // /v2/device/attest time. Verifies the ECDSA assertion signature +
+    // strictly-increasing counter against the cached public key.
     if (path === "/v2/device/assert" && request.method === "POST") {
       if (!env.TOKEN_SECRET) {
         return jsonResponse({ error: "Server misconfigured: TOKEN_SECRET not set" }, 500);

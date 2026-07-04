@@ -6,12 +6,17 @@
 // public key, and issues a short-lived HMAC-signed bearer token.
 //
 // This module owns:
-//   1. HMAC token issue + verify (production-ready)
-//   2. App Attest attestation verification — STUB, see TODO below
-//   3. App Attest assertion verification — STUB, see TODO below
+//   1. HMAC token issue + verify
+//   2. App Attest attestation verification — re-exported from
+//      ./appAttest.ts (full pkijs + cbor2 implementation, live since
+//      commit 44aea71)
+//   3. App Attest assertion verification — same
 //
-// See docs/plans/2026-05-13-worker-auth-redesign.md §B1 for the spec
-// and the planned pkijs-based attestation chain validation.
+// See docs/plans/2026-05-13-worker-auth-redesign.md §B1 for the spec.
+// NOTE for auditors: this header previously said the verifiers were
+// stubs long after they shipped, and two independent 2026-07-03 audit
+// passes reported the stale claim as fact. Behavior lives in
+// ./appAttest.ts — read that, not this summary.
 
 const TOKEN_TTL_SECONDS = 15 * 60;          // 15-minute bearer tokens
 const HMAC_ALGORITHM = { name: "HMAC", hash: "SHA-256" } as const;
@@ -99,15 +104,6 @@ export {
   type AssertionInput as AppAttestAssertionParams,
   type AssertionResult as AppAttestAssertionResult,
 } from "./appAttest";
-
-/// Kept for back-compat with the stub-era route handlers. Will be
-/// removed once those switch to plain `Error` handling.
-export class AttestationNotImplemented extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = "AttestationNotImplemented";
-  }
-}
 
 // =====================================================================
 // Helpers — base64url + HMAC key import
