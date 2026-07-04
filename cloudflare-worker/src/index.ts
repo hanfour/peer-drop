@@ -420,10 +420,22 @@ export default {
       return jsonResponse({ ok: true, id: reportId }, 201);
     }
 
-    // POST /debug/metric — ingest connection telemetry (API_KEY required)
+    // POST /debug/metric — ingest connection telemetry. Accepts the
+    // same credentials as the data-plane routes (App-Attest Bearer OR
+    // X-API-Key) but HEADER-ONLY: unlike isRequestAuthorized there is
+    // deliberately no `?apiKey=`/`?token=` query lane here — this is a
+    // plain POST (no WebSocket-upgrade excuse), and credentials in
+    // URLs end up in request logs where they can be replayed.
+    //
+    // History: this was `requireKey` (X-API-Key ONLY) until 2026-07-05,
+    // which 401'd every v5.3+ device whose App Attest succeeded —
+    // WorkerAuthHelper prefers Bearer, the client-side "silently drop"
+    // policy ate the failures, and production telemetry ingest was a
+    // blackhole for ~7 weeks.
     if (path === "/debug/metric" && request.method === "POST") {
-      const unauth = requireKey(request, env, "API_KEY");
-      if (unauth) return unauth;
+      if (!(await isHeaderAuthorized(request, env))) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
       // Payload size limit: 4 KB
       const body = await request.text();
       if (body.length > 4 * 1024) {
@@ -1144,6 +1156,31 @@ async function isRequestAuthorized(request: Request, url: URL, env: Env): Promis
   }
   const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
   return providedKey === env.API_KEY;
+}
+
+/**
+ * Header-only variant of isRequestAuthorized for plain HTTP routes
+ * (currently /debug/metric). Same credentials — Bearer or X-API-Key —
+ * but never reads the query string: only the WebSocket upgrade has a
+ * legitimate need for `?token=`, and credentials in URLs leak into
+ * request logs where they can be captured and replayed.
+ */
+async function isHeaderAuthorized(request: Request, env: Env): Promise<boolean> {
+  const headerBearer = request.headers.get("Authorization");
+  const headerToken = headerBearer?.startsWith("Bearer ")
+    ? headerBearer.slice("Bearer ".length).trim()
+    : null;
+  if (headerToken && env.TOKEN_SECRET) {
+    try {
+      const { verifyToken } = await import("./deviceToken");
+      await verifyToken(headerToken, env.TOKEN_SECRET);
+      return true;
+    } catch {
+      // Fall through to the operator X-API-Key header.
+    }
+  }
+  const providedKey = request.headers.get("X-API-Key");
+  return providedKey != null && providedKey === env.API_KEY;
 }
 
 /**

@@ -12,9 +12,12 @@
 
 import { SELF, env } from "cloudflare:test";
 import { describe, it, expect, beforeEach } from "vitest";
-
-const API_KEY = "test-api-key-12345";
-const ANALYTICS_KEY = "test-analytics-key-67890";
+import { issueToken, freshTokenPayload } from "../deviceToken";
+import {
+  TEST_API_KEY as API_KEY,
+  TEST_ANALYTICS_KEY as ANALYTICS_KEY,
+  TEST_TOKEN_SECRET as TOKEN_SECRET,
+} from "./testSecrets";
 
 // Wipe today's metrics + the config key so each test starts from a known
 // baseline. We can't list across the whole namespace cheaply, but the only
@@ -70,6 +73,62 @@ describe("metric-ingest — auth + validation", () => {
     const body = (await resp.json()) as { ok: boolean; id: string };
     expect(body.ok).toBe(true);
     expect(body.id).toMatch(/^metric:\d{4}-\d{2}-\d{2}:[0-9a-f-]{36}$/);
+  });
+
+  // Regression pin for the 2026-07-05 fix: v5.3+ devices whose App
+  // Attest succeeded send `Authorization: Bearer …` (WorkerAuthHelper
+  // prefers it), and the old requireKey(API_KEY) gate 401'd them all —
+  // production telemetry silently blackholed for ~7 weeks.
+  it("returns 201 with a valid App-Attest Bearer token", async () => {
+    const token = await issueToken(freshTokenPayload("metric-dev-1"), TOKEN_SECRET);
+    const resp = await postMetric(
+      metricBody(),
+      { Authorization: `Bearer ${token}` },
+      "10.0.1.18",
+    );
+    expect(resp.status).toBe(201);
+  });
+
+  // /debug/metric is a plain POST — query-string credentials are
+  // rejected by design (isHeaderAuthorized): URLs land in request logs,
+  // and the operator key must never be loggable. Only the WS upgrade
+  // route legitimately uses `?token=`.
+  it("returns 401 when the API key is passed as a query param", async () => {
+    const resp = await SELF.fetch(
+      `https://example.com/debug/metric?apiKey=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "10.0.1.20" },
+        body: metricBody(),
+      },
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  it("returns 401 when a valid Bearer token is passed as a query param", async () => {
+    const token = await issueToken(freshTokenPayload("metric-dev-3"), TOKEN_SECRET);
+    const resp = await SELF.fetch(
+      `https://example.com/debug/metric?token=${encodeURIComponent(token)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "10.0.1.21" },
+        body: metricBody(),
+      },
+    );
+    expect(resp.status).toBe(401);
+  });
+
+  it("returns 401 with an expired Bearer token and no API key", async () => {
+    const token = await issueToken(
+      { deviceId: "metric-dev-2", scope: "default", expires: Math.floor(Date.now() / 1000) - 60 },
+      TOKEN_SECRET,
+    );
+    const resp = await postMetric(
+      metricBody(),
+      { Authorization: `Bearer ${token}` },
+      "10.0.1.19",
+    );
+    expect(resp.status).toBe(401);
   });
 
   it("returns 413 when payload exceeds 4 KB", async () => {
