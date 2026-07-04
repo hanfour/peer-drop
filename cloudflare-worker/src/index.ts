@@ -30,7 +30,7 @@ export interface Env {
   // Secrets
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
-  API_KEY: string; // Shared secret for authenticating iOS clients (legacy — see TOKEN_SECRET)
+  API_KEY: string; // Operator credential (CLI/Debug/Simulator). Rotated 2026-07; no longer ships in store binaries.
   APNS_KEY_P8: string;
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
@@ -144,14 +144,14 @@ export default {
     // Authentication for tier-2 endpoints (room creation, ICE creds,
     // device registration, invite delivery, inbox WebSocket).
     //
-    // During the v5.3 transition window, accept BOTH:
+    // Two permanent lanes (worker-auth redesign §Layer 5, REVISED
+    // 2026-07-05 — do NOT remove the key lane):
     //   - `Authorization: Bearer <token>` issued by /v2/device/attest
-    //     (preferred — per-device, replay-resistant, 15-min TTL)
-    //   - legacy `X-API-Key: <bundled-key>` for v5.0–v5.2 clients
-    //     that still ship the bundled secret in Info.plist
-    //
-    // After the transition window we drop the X-API-Key fallback and
-    // this block becomes a single Bearer check.
+    //     (store clients — per-device, replay-resistant, 15-min TTL)
+    //   - `X-API-Key: <operator key>` for surfaces without App Attest:
+    //     peerdrop-cli relay mode, local Debug builds, Simulator runs.
+    //     Since the 2026-07 rotation the key no longer ships inside
+    //     store binaries; it is an operator credential.
     const requiresAuth = (path === "/room" && request.method === "POST") ||
                           (path.match(/^\/room\/[A-Z0-9]{6}\/ice$/) && request.method === "POST") ||
                           (path === "/v2/device/register" && request.method === "POST") ||
@@ -1127,8 +1127,10 @@ export default {
 /**
  * Combined auth check for the tier-2 endpoint set. Returns true if the
  * request carries either a valid Bearer token signed with `TOKEN_SECRET`
- * or the legacy `X-API-Key`. Bearer is checked first so the cheap path
- * shrinks every release as more clients migrate.
+ * or the operator `X-API-Key`. Both lanes are permanent (§Layer 5
+ * REVISED 2026-07-05): Bearer serves store clients via App Attest; the
+ * key serves operator surfaces that can't attest (peerdrop-cli, Debug
+ * builds, Simulator).
  */
 async function isRequestAuthorized(request: Request, url: URL, env: Env): Promise<boolean> {
   // Bearer first — header for normal requests, `?token=` query string
@@ -1147,9 +1149,9 @@ async function isRequestAuthorized(request: Request, url: URL, env: Env): Promis
       await verifyToken(candidateToken, env.TOKEN_SECRET);
       return true;
     } catch {
-      // Fall through to X-API-Key — a malformed/expired Bearer should
-      // still allow a transition-era client to retry with its bundled
-      // key during the deprecation window.
+      // Fall through to the operator X-API-Key lane — a malformed or
+      // expired Bearer must not lock out a caller that also holds the
+      // operator key (e.g. a Debug build with a stale token cache).
     }
   }
   const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");

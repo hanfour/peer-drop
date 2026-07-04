@@ -2,15 +2,16 @@ import Foundation
 
 /// Centralised auth-header application for outbound Worker requests.
 /// Prefers an App-Attest-issued Bearer token (from `DeviceTokenManager`)
-/// and falls back to the legacy `X-API-Key` bundled in the IPA when:
-///   • App Attest is unsupported (Simulator, devices below iOS 14, dev
-///     builds without the entitlement),
-///   • the worker hasn't been upgraded yet (returns 501 on /attest),
-///   • the token cache is empty and the network leg failed (e.g. boot
-///     before the inbox WS is up).
+/// and falls back to the operator `X-API-Key` lane.
 ///
-/// Once the v5.3 transition window closes and `X-API-Key` is dropped
-/// from the worker, the fallback branch can go away.
+/// Since the 2026-07 key rotation (worker-auth redesign §Layer 5,
+/// REVISED), X-API-Key is a PERMANENT operator/dev credential, not a
+/// deprecation shim: peerdrop-cli (no App Attest entitlement), local
+/// Debug builds, and Simulator runs authenticate with it. Release App
+/// Store builds intentionally ship no key — on devices where App
+/// Attest is unavailable (e.g. iPhone app running on Apple Silicon
+/// Macs) or transiently failing, `applyAuth` attaches NOTHING and the
+/// request 401s; App Attest retries on the next request.
 public enum WorkerAuthHelper {
 
     /// Apply the strongest available credential to `request`. Async so
@@ -28,12 +29,23 @@ public enum WorkerAuthHelper {
         }
     }
 
-    /// Read the bundled or operator-overridden API key. Mirrors the
-    /// resolution order `WorkerSignaling` has always used so callers
-    /// migrating off direct `X-API-Key` reads see no behavior change.
+    /// Resolve the operator API key. Precedence (first non-empty wins):
+    ///   1. `PEERDROP_WORKER_KEY` environment variable — explicit
+    ///      per-invocation supply (peerdrop-cli relay mode); env beats
+    ///      any stale `defaults write` left from before a rotation.
+    ///   2. `peerDropWorkerAPIKey` in UserDefaults — operator
+    ///      set-and-forget override.
+    ///   3. The Info.plist key baked in via Secrets.xcconfig — Debug
+    ///      builds only since the 2026-07 rotation.
+    /// Empty strings are treated as absent at every level so a blank
+    /// setting falls through instead of sending a blank header.
     public static func legacyAPIKey() -> String? {
-        UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey")
-            ?? WorkerSignaling.bundledAPIKey
+        let candidates: [String?] = [
+            ProcessInfo.processInfo.environment["PEERDROP_WORKER_KEY"],
+            UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey"),
+            WorkerSignaling.bundledAPIKey,
+        ]
+        return candidates.compactMap { $0 }.first { !$0.isEmpty }
     }
 
     /// Token + query-param flavor for WebSocket upgrades, where

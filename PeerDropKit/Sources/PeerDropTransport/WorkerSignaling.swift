@@ -55,9 +55,6 @@ public final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
         UserDefaults.standard.string(forKey: "peerDropWorkerURL") ?? defaultWorkerURL
     }
 
-    /// API key for authenticating with the Worker.
-    private let apiKey: String?
-
     /// Read the API key from Info.plist (injected via build settings).
     /// Release builds intentionally embed an EMPTY value (project.yml
     /// overrides `PEERDROP_WORKER_API_KEY` per-config since the 2026-07
@@ -71,9 +68,8 @@ public final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
 
     // MARK: - Init
 
-    public init(baseURL: URL? = nil, apiKey: String? = nil) {
+    public init(baseURL: URL? = nil) {
         self.baseURL = baseURL ?? URL(string: Self.workerURL)!
-        self.apiKey = apiKey ?? UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? Self.bundledAPIKey
         self.session = URLSession(configuration: .default)
         super.init()
     }
