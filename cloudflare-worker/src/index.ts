@@ -38,10 +38,8 @@ export interface Env {
   APNS_BUNDLE_ID_MAC?: string;
   ANALYTICS_KEY: string;
   // Phase B device-token auth. HMAC secret for issuing per-device bearer
-  // tokens after App Attest verification. Set via
-  // `wrangler secret put TOKEN_SECRET` once the App Attest verifier
-  // lands; until then the device-token routes return 501 and clients
-  // stay on the legacy X-API-Key path.
+  // tokens after App Attest verification (live since 2026-05; see
+  // ./appAttest.ts). Set via `wrangler secret put TOKEN_SECRET`.
   TOKEN_SECRET: string;
   // App identifier inputs for App Attest rpIdHash verification.
   APP_BUNDLE_ID?: string;       // "com.hanfour.peerdrop"

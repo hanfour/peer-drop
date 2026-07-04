@@ -52,6 +52,15 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: PeerDrop/App/PeerDrop.entitlements
+      configs:
+        # Release builds ship WITHOUT the worker API key. Since the
+        # 2026-07 rotation, X-API-Key is an operator/dev credential —
+        # shipped binaries authenticate exclusively via App Attest
+        # bearer tokens. Embedding the key in a store IPA is what made
+        # the pre-rotation key extractable in the first place.
+        # (This pbxproj-level setting overrides Secrets.xcconfig.)
+        Release:
+          PEERDROP_WORKER_API_KEY: ""
     configFiles:
       Debug: Secrets.xcconfig
       Release: Secrets.xcconfig
@@ -196,6 +205,11 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
         ENABLE_HARDENED_RUNTIME: "YES"
+      configs:
+        # Mirror the iOS target: no worker API key in Release bundles.
+        # See the iOS target's comment for the rotation rationale.
+        Release:
+          PEERDROP_WORKER_API_KEY: ""
     configFiles:
       # Same Secrets.xcconfig as iOS so $(PEERDROP_WORKER_API_KEY)
       # substitution works in Info.plist. Gitignored; copy from
