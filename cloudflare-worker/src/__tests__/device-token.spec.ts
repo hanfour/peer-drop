@@ -143,7 +143,7 @@ describe("/v2/device/attest (real verifier)", () => {
   });
 });
 
-describe("/v2/device/assert (stub mode)", () => {
+describe("/v2/device/assert (route guards)", () => {
   it("returns 404 when device hasn't been attested", async () => {
     const resp = await SELF.fetch("https://worker.test/v2/device/assert", {
       method: "POST",
