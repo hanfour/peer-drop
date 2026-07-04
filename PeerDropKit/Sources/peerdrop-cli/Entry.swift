@@ -29,6 +29,15 @@ struct PeerDropCLI {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let opts = CLIOptions.parse(CommandLine.arguments, defaultShell: shell)
 
+        // Relay-mode worker credential: the CLI has no App Attest
+        // entitlement, so relay routes authenticate via the operator
+        // X-API-Key. Supply it per-invocation with
+        //   PEERDROP_WORKER_KEY=<key> peerdrop-cli ...
+        // — WorkerAuthHelper.legacyAPIKey() reads that env var at
+        // HIGHEST precedence (above any stale `defaults write`), so
+        // nothing needs registering here and the secret never touches
+        // disk.
+
         // Set up per-instance file-backed persistence BEFORE anything touches
         // IdentityKeyManager or ConnectionManager. This must run first so that
         // the keychain branches in IdentityKeyManager/ChatDataEncryptor redirect

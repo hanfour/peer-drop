@@ -147,6 +147,51 @@ and the install base has rolled over (say, 30 days), drop the
 Already-shipped v5.0–v5.2 clients carry the bundled key and continue to
 work during the window. New installs on v5.3+ use App Attest.
 
+**REVISED 2026-07-05 — rotate instead of remove.** The original "drop
+the fallback" plan predates `peerdrop-cli` (merged 2026-06-22, PR #115),
+which connects to relay routes WITHOUT App Attest (no entitlement on a
+bare executable) and therefore legitimately needs the `X-API-Key` lane.
+The header path is now REDEFINED as an operator/dev credential rather
+than a legacy one, and the extraction hole is closed by rotation:
+
+1. **Stop shipping the key** — `project.yml` overrides
+   `PEERDROP_WORKER_API_KEY` to empty for Release on the **iOS** target
+   (`Secrets.xcconfig` bound to Debug only);
+   `WorkerSignaling.bundledAPIKey` treats empty as nil. Store binaries
+   authenticate exclusively via App Attest bearer tokens.
+   **The Mac target is deliberately NOT stripped** — DCAppAttestService
+   is unavailable there, so a stripped Mac MAS build would have zero
+   credential and every relay route would 401. Resolve before the v6.0
+   Mac ship (verify App Attest on macOS, or accept a Mac-only bundled
+   key with its own rotation story).
+2. **Rotate the secret** — `wrangler secret put API_KEY` with a fresh
+   value. Every copy of the old key sitting inside shipped IPAs (v5.0
+   through v5.5.2, all extractable) dies at that moment. Honest
+   casualty list (2026-07-05 review — the earlier "v5.3+ unaffected"
+   claim was wrong):
+   - v5.0–v5.2: relay dead permanently (accepted in the original plan).
+   - v5.3–v5.5.2 on devices WITHOUT App Attest — notably the iPhone
+     app running on Apple Silicon Macs: relay dead permanently.
+     **Ops checklist: check ASC → PeerDrop → Pricing & Availability →
+     "Make this app available on Macs with Apple silicon" and turn it
+     OFF (native v6.0 is the Mac story), or accept this loss.**
+   - v5.3+ on normal devices: unaffected in steady state; when App
+     Attest transiently fails (worker outage, cold-start network race)
+     the old degrade-to-key path becomes a 401 for that request. App
+     Attest retries on the next request, so the failure is
+     self-healing, but the rotation runbook should watch relay-failure
+     telemetry for a few days post-rotation.
+3. **Operator surfaces** keep working with the new key: local dev
+   builds read it from `Secrets.xcconfig` (Debug config only),
+   `peerdrop-cli` reads `PEERDROP_WORKER_KEY` from the environment
+   (highest precedence in `WorkerAuthHelper.legacyAPIKey()`, above any
+   stale persisted defaults; never written to disk), and `/debug/*`
+   admin endpoints take it as before — header-only on `/debug/metric`,
+   never as a query parameter.
+
+The `isRequestAuthorized` Bearer→key fall-through stays: it is now the
+operator lane, not a deprecation shim.
+
 ---
 
 ## Sub-task breakdown

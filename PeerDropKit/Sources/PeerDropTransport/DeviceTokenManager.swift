@@ -21,8 +21,11 @@ import os.log
 ///
 /// Fallback: if App Attest is unavailable (Simulator, dev builds without
 /// entitlement, attestation rejected by Apple), this actor returns nil
-/// and callers fall through to the legacy `X-API-Key` path the worker
-/// still accepts during the v5.3 transition window.
+/// and callers fall through to the operator `X-API-Key` lane — which,
+/// since the 2026-07 rotation, only carries a key on operator surfaces
+/// (Debug builds, peerdrop-cli via PEERDROP_WORKER_KEY). Release store
+/// builds have no key, so an App-Attest-unavailable device sends no
+/// credential and relay routes 401 until attestation succeeds.
 @available(iOS 14.0, *)
 public actor DeviceTokenManager {
 
@@ -52,8 +55,10 @@ public actor DeviceTokenManager {
     // MARK: - Public surface
 
     /// Returns `Authorization: Bearer <token>` ready for `setValue(_:forHTTPHeaderField:)`.
-    /// Returns nil when App Attest is unavailable or the worker hasn't been
-    /// upgraded yet — callers fall back to `X-API-Key`.
+    /// Returns nil when App Attest is unavailable or the attest/assert
+    /// round-trip failed — callers fall through to the operator
+    /// `X-API-Key` lane (a no-op on Release store builds, which carry
+    /// no key since the 2026-07 rotation).
     public func bearerHeader() async -> String? {
         guard let token = await ensureValidToken() else { return nil }
         return "Bearer \(token)"

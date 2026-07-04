@@ -55,19 +55,21 @@ public final class WorkerSignaling: NSObject, WorkerSignalingProtocol {
         UserDefaults.standard.string(forKey: "peerDropWorkerURL") ?? defaultWorkerURL
     }
 
-    /// API key for authenticating with the Worker.
-    private let apiKey: String?
-
     /// Read the API key from Info.plist (injected via build settings).
+    /// Release builds intentionally embed an EMPTY value (project.yml
+    /// overrides `PEERDROP_WORKER_API_KEY` per-config since the 2026-07
+    /// key rotation) — treat empty as absent so callers fall through to
+    /// the App Attest bearer path instead of sending a blank key.
     static var bundledAPIKey: String? {
-        Bundle.main.object(forInfoDictionaryKey: "PeerDropWorkerAPIKey") as? String
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "PeerDropWorkerAPIKey") as? String,
+              !key.isEmpty else { return nil }
+        return key
     }
 
     // MARK: - Init
 
-    public init(baseURL: URL? = nil, apiKey: String? = nil) {
+    public init(baseURL: URL? = nil) {
         self.baseURL = baseURL ?? URL(string: Self.workerURL)!
-        self.apiKey = apiKey ?? UserDefaults.standard.string(forKey: "peerDropWorkerAPIKey") ?? Self.bundledAPIKey
         self.session = URLSession(configuration: .default)
         super.init()
     }
