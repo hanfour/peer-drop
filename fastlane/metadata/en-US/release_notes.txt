@@ -1,11 +1,9 @@
-PeerDrop 5.3 — Push notifications are working again, and connecting to the relay server is now hardened.
+PeerDrop 5.5.2 — more reliable first-time pairing, plus everything new in the 5.5 series.
 
-Push notifications: v5.0–v5.2 shipped with the iOS push entitlement missing. The app registered for remote notifications and iOS silently rejected it, so background invites from your peers never reached you. Fixed in this release. If you accepted notification permission on a prior version, the next launch will pick up the registration automatically.
+Connection reliability (5.5.2): a set of fixes to pairing and the encrypted-session handshake. The "first time meeting this peer" verification sheet now reliably appears on the very first connection (previously it could stay hidden until you reconnected), the encrypted channel comes up consistently on both local Wi-Fi and relay, and accepting a connection no longer races the transport setup. If pairing ever felt like it needed a second try, this release is for you.
 
-Better relay-server authentication: previously every install of PeerDrop carried the same shared API key inside the app, which would let anyone who unpacked the .ipa hit the relay server on your behalf. v5.3 uses Apple's App Attest framework instead — your device cryptographically proves it's a legitimate iOS install before the server hands out tokens. The proof key lives in the Secure Enclave and never leaves your device. There's nothing to configure; it just works in the background.
+Your pet, everywhere (5.5.0): pets now sync across your devices through iCloud. Hatch an egg on your iPhone and the same companion — same species, same mood, same stats — greets you on your iPad. No setup; it uses the iCloud account you're already signed into.
 
-Polish:
-- The "first time meeting this peer" pairing sheet from v5.2 now handles concurrent connections cleanly instead of queueing one silently behind the other.
-- The sort menu in the "Nearby" tab no longer flickers a stray empty icon on the non-selected options.
+More companions (5.5.0 + 5.5.1): 25 new species families unlocked, bringing the total to 34 — and 40 more pets gained full walk and idle animations instead of a static sprite.
 
-Compatibility: v5.3 still talks to v5.0–v5.2 peers exactly as before. The on-wire protocol version is unchanged.
+Compatibility: 5.5.x talks to earlier v5 peers exactly as before. The on-wire protocol version is unchanged.
