@@ -21,6 +21,10 @@ public actor CryptoMetricsUploader {
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "CryptoMetricsUploader")
     private let appVersion: String
     private let platform: String
+    /// Reentrancy guard: `flush` suspends at the network await, so without
+    /// this a second concurrent flush would snapshot the SAME un-subtracted
+    /// counters and POST them again → server-side double-count.
+    private var isFlushing = false
     /// Sends the encoded body and returns the HTTP status, or nil if the
     /// request could not be made (no credential, network failure). Injected
     /// so tests exercise the subtract-on-success logic without networking.
@@ -66,9 +70,14 @@ public actor CryptoMetricsUploader {
         self.send = send
     }
 
-    /// Snapshot the metrics, POST them, and on success remove exactly the
-    /// delivered counts. No-op when the snapshot is empty.
+    /// Snapshot the metrics, POST them, and clear exactly the delivered
+    /// counts on success. No-op when the snapshot is empty or a flush is
+    /// already in flight (see `isFlushing`).
     public func flush(metrics: CryptoHardeningMetrics, now: Date = Date()) async {
+        guard !isFlushing else { return }
+        isFlushing = true
+        defer { isFlushing = false }
+
         let snapshot = metrics.snapshot()
         guard let payload = CryptoMetricsPayload(
             snapshot: snapshot, platform: platform, appVersion: appVersion, timestamp: now
@@ -80,10 +89,20 @@ public actor CryptoMetricsUploader {
             return
         }
         let status = await send(body)
-        guard let status, (200...299).contains(status) else {
+        switch status {
+        case .some(let code) where (200...299).contains(code):
+            // Delivered — remove exactly what we sent (keeps concurrent events).
+            metrics.subtract(snapshot)
+        case .some(400), .some(413):
+            // Permanent client error: the same body can never succeed, so
+            // retrying forever would wedge this device out of the soak. Drop.
+            logger.error("Crypto metrics rejected (\(status ?? -1, privacy: .public)) — dropping non-retryable batch")
+            metrics.subtract(snapshot)
+        default:
+            // Transient (5xx / 401 / 429 / nil no-credential) — retain the
+            // counts so the next flush retries. Safe bias: never lose an
+            // error-counter signal to a temporary failure.
             logger.debug("Crypto metrics upload not confirmed (status: \(String(describing: status), privacy: .public)); keeping counts for retry")
-            return
         }
-        metrics.subtract(snapshot)
     }
 }

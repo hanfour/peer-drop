@@ -32,3 +32,52 @@ final class CryptoHardeningMetricsSubtractTests: XCTestCase {
         XCTAssertNil(m.snapshot().counters["policy.signature_invalid"])
     }
 }
+
+/// Persistence so undelivered counters survive OS termination — closing
+/// the at-least-once gap (a background POST that fails, then the OS kills
+/// the suspended app, must not silently lose error signals).
+final class CryptoHardeningMetricsPersistenceTests: XCTestCase {
+
+    private func tempURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("crypto-metrics-\(UUID().uuidString).json")
+    }
+
+    func test_persistThenLoadRestoresCounters() {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let m = CryptoHardeningMetrics(persistenceURL: url)
+        m.record(.c2OpkFailedInitiation, peerVersion: .v5_4_plus)
+        m.record(.c2OpkFailedInitiation, peerVersion: .v5_4_plus)
+        m.persist()
+
+        // A fresh instance (models a relaunch) loads the residual.
+        let reloaded = CryptoHardeningMetrics(persistenceURL: url)
+        XCTAssertEqual(reloaded.snapshot().counters["c2.opk_failed_initiation"], 2)
+    }
+
+    func test_persistWritesResidualAfterSubtract() {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let m = CryptoHardeningMetrics(persistenceURL: url)
+        m.record(.c1SpkTimestampValid, peerVersion: .v5_4_plus)
+        m.record(.policySignatureInvalid, peerVersion: .v5_4_plus)
+        let delivered = m.snapshot()
+        m.record(.c1SpkTimestampValid, peerVersion: .v5_4_plus) // concurrent
+        m.subtract(delivered) // upload succeeded for `delivered`
+        m.persist()
+
+        // Only the concurrent (undelivered) event survives to the next launch.
+        let reloaded = CryptoHardeningMetrics(persistenceURL: url)
+        XCTAssertEqual(reloaded.snapshot().counters["c1.spk_timestamp_valid"], 1)
+        XCTAssertNil(reloaded.snapshot().counters["policy.signature_invalid"])
+    }
+
+    func test_nilPersistenceURLIsNoOp() {
+        let m = CryptoHardeningMetrics() // default init, no persistence
+        m.record(.c1SpkTimestampValid, peerVersion: .v5_4_plus)
+        m.persist() // must not crash
+        XCTAssertEqual(m.snapshot().counters["c1.spk_timestamp_valid"], 1)
+    }
+}

@@ -85,10 +85,35 @@ describe("crypto-metric ingest — auth + validation", () => {
     expect((await post("[1,2,3]", { "X-API-Key": API_KEY }, "10.5.0.15")).status).toBe(400);
   });
 
-  it("returns 413 when the payload exceeds the cap", async () => {
+  it("returns 413 only when the payload exceeds the 8 KB cap", async () => {
     const huge: Record<string, number> = {};
-    for (let i = 0; i < 2000; i++) huge[`junk.counter.number.${i}`] = i;
+    for (let i = 0; i < 4000; i++) huge[`junk.counter.number.${i}`] = i;
     expect((await post(cryptoBody(huge), { "X-API-Key": API_KEY }, "10.5.0.16")).status).toBe(413);
+  });
+
+  it("accepts a realistically-large multi-peer snapshot (was 413 under the old 2 KB cap)", async () => {
+    // ~70 keyedCounters (23 kinds × a few peer versions) ≈ 4-5 KB.
+    const keyed = [];
+    const kinds = ["c1.spk_timestamp_valid", "c2.opk_failed_initiation", "policy.signature_invalid"];
+    for (let i = 0; i < 70; i++) {
+      keyed.push({ kind: kinds[i % kinds.length], peerVersion: `v5_4_plus_variant_${i}`, count: i });
+    }
+    const body = JSON.stringify({ counters: { "c1.spk_timestamp_valid": 5 }, keyedCounters: keyed, platform: "ios", appVersion: "5.6.0", timestamp: "2026-07-05T00:00:00Z" });
+    expect(body.length).toBeGreaterThan(2 * 1024); // would have 413'd before
+    expect((await post(body, { "X-API-Key": API_KEY }, "10.5.0.17")).status).toBe(201);
+  });
+
+  it("clamps a hostile negative counter to zero (can't poison the fleet sum)", async () => {
+    await post(cryptoBody({ "policy.signature_invalid": 3 }), { "X-API-Key": API_KEY }, "10.5.0.40");
+    // A single client tries to drive the fleet sum negative.
+    await post(cryptoBody({ "policy.signature_invalid": -1000000 }), { "X-API-Key": API_KEY }, "10.5.0.41");
+
+    const stats = await SELF.fetch("https://example.com/debug/crypto-metrics/stats?range=24h", {
+      headers: { "X-API-Key": ANALYTICS_KEY, "CF-Connecting-IP": "10.5.0.42" },
+    });
+    const b = (await stats.json()) as { soak: { policySignatureInvalid: number } };
+    // The hostile -1000000 was clamped to 0; the honest 3 stands.
+    expect(b.soak.policySignatureInvalid).toBe(3);
   });
 });
 
