@@ -74,7 +74,53 @@ public final class CryptoHardeningMetrics: ObservableObject {
     private let lock = NSLock()
     private var keyedCounters: [Key: Int] = [:]
 
-    public init() {}
+    /// Optional disk backing so undelivered counters survive OS termination.
+    /// nil ⇒ pure in-memory (tests, and any consumer that doesn't need the
+    /// at-least-once soak guarantee).
+    private let persistenceURL: URL?
+
+    public init() {
+        self.persistenceURL = nil
+    }
+
+    /// Persistence-enabled init: loads any residual counters left by a prior
+    /// launch (an undelivered soak batch the OS killed before re-flush).
+    public init(persistenceURL: URL?) {
+        self.persistenceURL = persistenceURL
+        if let url = persistenceURL {
+            loadFromDisk(url)
+        }
+    }
+
+    /// On-disk form: a flat list of (kind, peerVersion, count) rows.
+    private struct DiskRow: Codable {
+        let kind: String
+        let peerVersion: String?
+        let count: Int
+    }
+
+    /// Write the current counters to `persistenceURL`. No-op when persistence
+    /// is disabled. Call AFTER an upload's subtract so only the undelivered
+    /// residual is persisted. Failures are swallowed — telemetry durability
+    /// is best-effort and must never disrupt the app.
+    public func persist() {
+        guard let url = persistenceURL else { return }
+        lock.lock()
+        let rows = keyedCounters.map { DiskRow(kind: $0.key.kind, peerVersion: $0.key.peerVersion, count: $0.value) }
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(rows) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private func loadFromDisk(_ url: URL) {
+        guard let data = try? Data(contentsOf: url),
+              let rows = try? JSONDecoder().decode([DiskRow].self, from: data) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        for row in rows where row.count > 0 {
+            keyedCounters[Key(kind: row.kind, peerVersion: row.peerVersion), default: 0] += row.count
+        }
+    }
 
     public func record(_ kind: EventKind, peerVersion: PeerVersion? = nil) {
         lock.lock()
@@ -97,5 +143,25 @@ public final class CryptoHardeningMetrics: ObservableObject {
         lock.lock()
         defer { lock.unlock() }
         keyedCounters.removeAll()
+    }
+
+    /// Remove exactly the counts captured in `delivered`, clamping at zero
+    /// and dropping keys that reach zero. Used by the metrics uploader for
+    /// at-least-once soak delivery: it snapshots, POSTs, and only on a 2xx
+    /// subtracts the delivered counts — so events recorded during the
+    /// in-flight POST are preserved, and a failed POST's counts are re-sent
+    /// on the next flush rather than silently lost.
+    public func subtract(_ delivered: Snapshot) {
+        lock.lock()
+        defer { lock.unlock() }
+        for (key, count) in delivered.keyedCounters {
+            guard let current = keyedCounters[key] else { continue }
+            let remaining = current - count
+            if remaining > 0 {
+                keyedCounters[key] = remaining
+            } else {
+                keyedCounters[key] = nil
+            }
+        }
     }
 }

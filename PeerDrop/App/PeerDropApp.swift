@@ -16,7 +16,14 @@ struct PeerDropApp: App {
     /// pushes on background, and observes live changes from other devices.
     private let petSync = PetSyncCoordinator()
     @StateObject private var inboxService = InboxService()
-    @StateObject private var cryptoMetrics = CryptoHardeningMetrics()
+    // Persistence-backed so undelivered soak counters survive OS termination
+    // (a background upload that fails, then the OS kills the suspended app,
+    // must not silently lose error signals — spec §8.6). Residual is loaded
+    // on launch and persisted after each background flush.
+    @StateObject private var cryptoMetrics = CryptoHardeningMetrics(
+        persistenceURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("crypto-metrics-residual.json")
+    )
     @StateObject private var policyStore: SecurityPolicyStore = {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Security")
@@ -270,6 +277,15 @@ struct PeerDropApp: App {
                 inboxService.disconnect()
                 connectionManager.tailnetStore.stopPeriodicProbe()
                 Task { await ConnectionMetrics.shared.flush() }
+                // Ship the crypto-hardening counters (spec §8.6 soak) on the
+                // same background transition. Before this, snapshot() had no
+                // consumer and the soak read an empty bucket. Persist the
+                // residual AFTER the flush so an undelivered batch survives
+                // OS termination and re-sends on the next launch.
+                Task {
+                    await CryptoMetricsUploader.shared.flush(metrics: cryptoMetrics)
+                    cryptoMetrics.persist()
+                }
                 // Persist locally + push to iCloud (full state + KVS ping) so
                 // other devices see this session's edits. Replaces the old
                 // save-then-syncFullState pair; push also bumps KVS metadata,
