@@ -81,8 +81,13 @@
          this, SecurityPolicyStore.bundledKeys is empty and worker-served
          policy upgrades cannot be verified (falls back to bundled default
          policy = legacy/warn, which is shipping safe but stuck). -->
+    <!-- Dual-key overlap (2026-07-05): [0] production key (offline private
+         half), [1] committed dev key kept for the strict-policy soak
+         overlap. Dropped in a follow-up once strict is live. See
+         docs/plans/2026-07-05-strict-policy-activation.md §A. -->
     <key>CryptoPolicyPublicKeys</key>
     <array>
+        <string>3aj4GxVAqGSm+alHJHLqNhqE0d9CHu4HPthmYHxJl+Y=</string>
         <string>2Mds2dPO3W7UYqwP32fiee4pIK2BPMzVxBfgAKT1nyk=</string>
     </array>
     <!-- Localizations -->
