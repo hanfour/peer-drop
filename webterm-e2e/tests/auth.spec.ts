@@ -20,15 +20,11 @@ test('wrong password is rejected (401) and never reaches the terminal', async ({
   await expect(page.locator('#picker')).toHaveCount(0);
 });
 
-// KNOWN BUG (reported, not yet fixed) — marked fixme so it is tracked but does not fail CI.
-//
-// POST /logout is auth-gated, so AuthMiddleware runs its password-mode cookie "slide" on
-// the response and RE-ISSUES a valid webterm-session cookie, overriding the clearing
-// cookie (Max-Age=0) the /logout handler set. Net effect: the response carries two
-// Set-Cookie: webterm-session headers and the browser keeps the still-valid token, so
-// the tab remains authenticated after clicking Logout. Verified via curl (two Set-Cookie
-// headers) and this browser test. Remove `.fixme` once the server clears it correctly.
-test.fixme('logging out clears the session and returns to the login form', async ({ page }) => {
+// Regression: POST /logout used to be undone by AuthMiddleware's password-mode
+// cookie "slide" re-issuing a valid webterm-session cookie on the same response,
+// overriding the handler's Max-Age=0 clear — so Logout did nothing. Fixed by
+// skipping the slide on POST /logout; this pins that the cookie is actually cleared.
+test('logging out clears the session and returns to the login form', async ({ page }) => {
   // Log in first.
   await page.goto('/login');
   await page.fill('input[name="password"]', 'changeme');
