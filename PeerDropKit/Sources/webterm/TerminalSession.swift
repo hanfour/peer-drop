@@ -78,5 +78,13 @@ public final class TerminalSession {
     public func resize(cols: UInt16, rows: UInt16) { pty?.resize(cols: cols, rows: rows) }
 
     /// Detach the local PTY from the tmux session. The tmux session itself keeps running.
-    public func detach() { pty?.terminate(); pty = nil }
+    ///
+    /// Resets `isStarted` so a subsequent `start()` (e.g. a browser reload or a WebSocket
+    /// reconnect, which reuses the SessionManager-cached TerminalSession) spawns a fresh
+    /// `tmux attach-session` PTY. Without this reset the guard in `start()` makes every
+    /// post-detach call a no-op, leaving the reattached terminal permanently dead.
+    public func detach() {
+        pty?.terminate(); pty = nil
+        lock.lock(); isStarted = false; lock.unlock()
+    }
 }
