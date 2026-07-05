@@ -1,0 +1,47 @@
+# Scheduled 100K-iteration fuzz run — v5.4.1 BLOCK item
+# (docs/release/v5.4.0-readiness.md §3: "Fuzz CI runs 100K iterations per
+# target with no new crashes", spec §8.5 gate).
+#
+# Deliberately NOT wired into pull_request: 100K iterations per target are
+# too slow for interactive PR CI. PR runs still execute the same suites at
+# the 10K default via ci.yml's crypto-coverage-gate job (swift test).
+#
+# Targets picked up by `--filter 'FuzzTests/'` (the filter regex matches the
+# full "Class/test" identifier, so "FuzzTests/" selects the three fuzz suites
+# without also matching FuzzHarnessTests):
+#   - X3DHFuzzTests    — reads FUZZ_ITERATIONS (100K here)
+#   - RatchetFuzzTests — reads FUZZ_ITERATIONS (100K here)
+#   - PolicyFuzzTests  — pinned at its original 10K (pre-dates the env knob;
+#                        behavior intentionally unchanged)
+#
+# All fuzzing is deterministic (seeded mutation schedules); failure messages
+# include the seed, iteration index, and the exact mutated input (base64)
+# for replay.
+name: Fuzz (scheduled 100K)
+
+on:
+  schedule:
+    # Weekly — Monday 03:17 UTC. Runs against the default branch (main).
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Fuzz iterations per target (FUZZ_ITERATIONS)"
+        required: false
+        default: "100000"
+
+jobs:
+  fuzz-100k:
+    name: Fuzz — X3DH / Ratchet / Policy
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run fuzz suites at 100K iterations
+        working-directory: PeerDropKit
+        env:
+          FUZZ_ITERATIONS: ${{ github.event.inputs.iterations || '100000' }}
+        run: |
+          echo "FUZZ_ITERATIONS=$FUZZ_ITERATIONS"
+          swift test --filter 'FuzzTests/' 2>&1
