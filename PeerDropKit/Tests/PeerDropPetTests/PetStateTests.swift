@@ -108,12 +108,24 @@ final class PetStateTests: XCTestCase {
     }
 
     func testMoodDisplayNames() {
-        XCTAssertEqual(PetMood.happy.displayName, "開心")
-        XCTAssertEqual(PetMood.curious.displayName, "好奇")
-        XCTAssertEqual(PetMood.sleepy.displayName, "想睡")
-        XCTAssertEqual(PetMood.lonely.displayName, "寂寞")
-        XCTAssertEqual(PetMood.excited.displayName, "興奮")
-        XCTAssertEqual(PetMood.startled.displayName, "嚇到")
+        // displayName is now localized via Bundle.module, so the exact string
+        // depends on the test host's language. Assert (locale-independently)
+        // that each mood resolves to one of its shipped translations and never
+        // leaks the raw catalog key. Exact per-language values are pinned in
+        // EnumLocalizationTests.
+        let known: [PetMood: Set<String>] = [
+            .happy:    ["Happy", "開心", "开心", "ごきげん", "행복"],
+            .curious:  ["Curious", "好奇", "きょうみしんしん", "호기심"],
+            .sleepy:   ["Sleepy", "想睡", "ねむい", "졸림"],
+            .lonely:   ["Lonely", "寂寞", "さみしい", "외로움"],
+            .excited:  ["Excited", "興奮", "兴奋", "わくわく", "신남"],
+            .startled: ["Startled", "嚇到", "吓到", "びっくり", "놀람"],
+        ]
+        for mood in PetMood.allCases {
+            let name = mood.displayName
+            XCTAssertFalse(name.hasPrefix("pet."), "\(mood).displayName leaked raw key: \(name)")
+            XCTAssertTrue(known[mood]!.contains(name), "\(mood).displayName unexpected: \(name)")
+        }
     }
 
     // MARK: - EvolutionRequirement

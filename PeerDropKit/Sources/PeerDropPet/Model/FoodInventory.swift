@@ -13,12 +13,11 @@ public enum FoodType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Localized food name, resolved from `Localizable.xcstrings`
+    /// (key `pet.food.<rawValue>`) via `Bundle.module`. Display-only; `rawValue`
+    /// remains the Codable/persistence key.
     public var displayName: String {
-        switch self {
-        case .rice: return "飯糰"
-        case .fish: return "小魚乾"
-        case .apple: return "蘋果"
-        }
+        NSLocalizedString("pet.food.\(rawValue)", bundle: .module, comment: "Food name for FoodType case \(rawValue)")
     }
 
     public var xp: Int {
