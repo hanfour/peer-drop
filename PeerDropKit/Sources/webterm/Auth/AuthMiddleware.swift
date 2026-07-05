@@ -119,7 +119,14 @@ public struct AuthMiddleware<Context: RequestContext>: RouterMiddleware {
             var response = try await next(request, context)
             // In password mode, slide (refresh) the session cookie so active use
             // keeps the session alive within the idle window.
-            if case .password = mode, let rawCookie = cookie {
+            //
+            // EXCEPT /logout, whose whole job is to clear the session cookie:
+            // it runs downstream (it's auth-gated, registered after this
+            // middleware) and sets webterm-session with maxAge=0. Sliding here
+            // would re-issue a valid cookie on the same response, so the browser
+            // kept a live session and Logout did nothing. Skip the slide there.
+            if case .password = mode, let rawCookie = cookie,
+               !(request.method == .post && request.uri.path == "/logout") {
                 if let slid = SessionToken.slide(
                     rawCookie,
                     secret: modeSecret,

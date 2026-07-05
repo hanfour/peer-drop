@@ -1,0 +1,61 @@
+name: webterm E2E
+
+# Browser end-to-end tests for the self-hosted webterm web terminal:
+# real Chromium (Playwright) driving the login form, xterm.js frontend, and the
+# WebSocket-backed tmux terminal. Complements the in-process HummingbirdTesting
+# suite in PeerDropKit/Tests/WebTermTests/, which cannot reach a real browser.
+#
+# Only runs when the webterm server or its E2E harness changes.
+
+on:
+  pull_request:
+    paths:
+      - 'PeerDropKit/Sources/webterm/**'
+      - 'webterm-e2e/**'
+      - '.github/workflows/webterm-e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'PeerDropKit/Sources/webterm/**'
+      - 'webterm-e2e/**'
+      - '.github/workflows/webterm-e2e.yml'
+
+jobs:
+  e2e:
+    name: Playwright (Chromium + mobile viewport)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure tmux is available (webterm sessions are tmux-backed)
+        run: tmux -V || brew install tmux
+
+      - name: swift build --product webterm
+        working-directory: PeerDropKit
+        run: swift build --product webterm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: npm ci
+        working-directory: webterm-e2e
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: webterm-e2e
+        run: npx playwright install chromium
+
+      - name: Run Playwright E2E
+        working-directory: webterm-e2e
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: webterm-e2e/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
