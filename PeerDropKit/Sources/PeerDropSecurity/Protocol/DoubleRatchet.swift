@@ -146,15 +146,18 @@ public class DoubleRatchetSession: Codable {
     // MARK: - Initialization
 
     /// Alice (initiator) initializes after X3DH.
+    /// Throws if `theirRatchetKey` is a low-order point that fails DH key
+    /// agreement — the peer's signed pre-key is attacker-influenceable, so
+    /// this must surface as an error rather than a `try!` abort.
     public static func initializeAsInitiator(
         rootKey: SymmetricKey,
         theirRatchetKey: Curve25519.KeyAgreement.PublicKey
-    ) -> DoubleRatchetSession {
+    ) throws -> DoubleRatchetSession {
         let myRatchetKey = Curve25519.KeyAgreement.PrivateKey()
         let session = DoubleRatchetSession(rootKey: rootKey, myRatchetKey: myRatchetKey)
         session.theirRatchetKey = theirRatchetKey
 
-        let (newRootKey, sendChain) = session.dhRatchetStep(
+        let (newRootKey, sendChain) = try session.dhRatchetStep(
             rootKey: rootKey,
             myKey: myRatchetKey,
             theirKey: theirRatchetKey
@@ -204,7 +207,17 @@ public class DoubleRatchetSession: Codable {
         policy: SecurityPolicy? = nil,
         metrics: CryptoHardeningMetrics? = nil
     ) throws -> Data {
-        // Eviction passes — only when policy is provided (no-op for tests with nil policy).
+        // Skipped-key GC. This is the ONE mutation that runs before the
+        // AEAD gate, and it is intentionally eager: it must precede the
+        // skipped-key lookup below so a TTL-expired key is never used to
+        // decrypt (the C3 security property). It is exempt from the
+        // clone-then-commit contract because it is idempotent maintenance
+        // independent of THIS message's validity — it only removes
+        // expired / over-cap entries and never adds any, so a forged
+        // packet cannot desync the session or fabricate a metric (the
+        // metric fires only when real expired entries existed, and once
+        // evicted there is nothing left for a subsequent packet to
+        // re-evict). Only when policy is provided (no-op for nil-policy tests).
         if let policy = policy {
             let ttlEvicted = evictExpiredSkippedKeys(now: Date(), policy: policy)
             if ttlEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedTTL) }
@@ -212,10 +225,10 @@ public class DoubleRatchetSession: Codable {
             if lruEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedLRU) }
         }
 
-        // Clone-then-commit: every branch below computes the ratchet
-        // advance into LOCALS and defers the write to `self` until the
-        // AES-GCM open succeeds. A forged message (valid ratchet key but
-        // tampered tag) must throw WITHOUT mutating session state —
+        // Clone-then-commit: every branch below computes this message's
+        // ratchet advance into LOCALS and defers the write to `self` until
+        // the AES-GCM open succeeds. A forged message (valid ratchet key
+        // but tampered tag) must throw WITHOUT advancing the ratchet —
         // otherwise a single injected packet permanently desyncs the
         // session (the next genuine message can never decrypt). This is
         // the libsignal decrypt contract.
@@ -260,7 +273,7 @@ public class DoubleRatchetSession: Codable {
 
             // DH Ratchet step: derive new receive chain
             let parsedTheirKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: message.ratchetKey)
-            let (rootKey1, receiveChain) = dhRatchetStep(rootKey: rootKey, myKey: myRatchetKey, theirKey: parsedTheirKey)
+            let (rootKey1, receiveChain) = try dhRatchetStep(rootKey: rootKey, myKey: myRatchetKey, theirKey: parsedTheirKey)
 
             // Generate new ratchet key pair for sending
             newPreviousSendCounter = sendCounter
@@ -268,7 +281,7 @@ public class DoubleRatchetSession: Codable {
             receiveCounterAfterRatchet = 0
 
             let candidateMyRatchetKey = Curve25519.KeyAgreement.PrivateKey()
-            let (rootKey2, sendChain) = dhRatchetStep(rootKey: rootKey1, myKey: candidateMyRatchetKey, theirKey: parsedTheirKey)
+            let (rootKey2, sendChain) = try dhRatchetStep(rootKey: rootKey1, myKey: candidateMyRatchetKey, theirKey: parsedTheirKey)
 
             newTheirKey = parsedTheirKey
             newMyRatchetKey = candidateMyRatchetKey
@@ -321,8 +334,12 @@ public class DoubleRatchetSession: Codable {
         rootKey: SymmetricKey,
         myKey: Curve25519.KeyAgreement.PrivateKey,
         theirKey: Curve25519.KeyAgreement.PublicKey
-    ) -> (newRootKey: SymmetricKey, chainKey: SymmetricKey) {
-        let shared = try! myKey.sharedSecretFromKeyAgreement(with: theirKey)
+    ) throws -> (newRootKey: SymmetricKey, chainKey: SymmetricKey) {
+        // `try` not `try!`: a valid-length but low-order `theirKey`
+        // (e.g. 32 zero bytes) parses as a PublicKey yet throws here.
+        // A forged message must surface that as a thrown error, never a
+        // process abort. CryptoKit rejects the small-subgroup result.
+        let shared = try myKey.sharedSecretFromKeyAgreement(with: theirKey)
         // ⚠️ Same CryptoKit workaround as X3DH — see X3DH.swift comment
         let sharedData: Data = shared.hkdfDerivedSymmetricKey(
             using: SHA256.self, salt: Data(), sharedInfo: Data(), outputByteCount: 32

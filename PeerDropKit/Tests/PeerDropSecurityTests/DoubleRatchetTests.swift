@@ -26,7 +26,7 @@ final class DoubleRatchetTests: XCTestCase {
             theirEphemeralKey: aliceEphemeral.publicKey
         )
 
-        let alice = DoubleRatchetSession.initializeAsInitiator(
+        let alice = try DoubleRatchetSession.initializeAsInitiator(
             rootKey: aliceX3DH.rootKey,
             theirRatchetKey: bobSignedPreKey.publicKey
         )
@@ -78,6 +78,24 @@ final class DoubleRatchetTests: XCTestCase {
         // (which Alice sent first, counter 0) still decrypts cleanly.
         let decrypted = try bob.decrypt(genuine)
         XCTAssertEqual(decrypted, "Hello Bob!".data(using: .utf8)!)
+    }
+
+    /// A forged first message whose ratchet key is a valid-length but
+    /// low-order Curve25519 point (e.g. 32 zero bytes) parses successfully,
+    /// but the DH key agreement throws. The receiver must surface that as a
+    /// thrown error, NOT a `try!` process abort — otherwise one injected
+    /// packet is a remote crash / DoS.
+    func testForgedLowOrderRatchetKeyThrowsNotCrash() throws {
+        let (_, bob) = try createSessionPair()
+
+        let forged = RatchetMessage(
+            ratchetKey: Data(repeating: 0, count: 32), // low-order point
+            counter: 0,
+            previousCounter: 0,
+            ciphertext: Data(repeating: 0x01, count: 60) // arbitrary; never reached
+        )
+
+        XCTAssertThrowsError(try bob.decrypt(forged))
     }
 
     func testMultipleMessagesOneDirection() throws {

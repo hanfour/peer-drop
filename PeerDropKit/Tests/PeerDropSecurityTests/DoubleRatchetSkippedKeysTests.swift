@@ -120,7 +120,7 @@ final class DoubleRatchetSkippedKeysTests: XCTestCase {
         // that would result from fabricating an invalid Curve25519 key).
         let sharedRootKey = SymmetricKey(size: .bits256)
         let bobRatchetKey = Curve25519.KeyAgreement.PrivateKey()
-        let alice = DoubleRatchetSession.initializeAsInitiator(
+        let alice = try DoubleRatchetSession.initializeAsInitiator(
             rootKey: sharedRootKey,
             theirRatchetKey: bobRatchetKey.publicKey
         )

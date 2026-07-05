@@ -21,7 +21,7 @@ final class DoubleRatchetPersistenceTests: XCTestCase {
             theirEphemeralKey: aliceEphemeral.publicKey
         )
 
-        let alice = DoubleRatchetSession.initializeAsInitiator(
+        let alice = try DoubleRatchetSession.initializeAsInitiator(
             rootKey: aliceX3DH.rootKey, theirRatchetKey: bobSignedPreKey.publicKey
         )
         let bob = DoubleRatchetSession.initializeAsResponder(
