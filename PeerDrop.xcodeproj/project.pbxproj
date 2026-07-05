@@ -1900,7 +1900,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 5.5.2;
+				MARKETING_VERSION = 5.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop.widget;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1978,7 +1978,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 5.5.2;
+				MARKETING_VERSION = 5.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop.widget;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2000,7 +2000,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.5.2;
+				MARKETING_VERSION = 5.6.0;
 				PEERDROP_WORKER_API_KEY = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop;
 				SDKROOT = iphoneos;
@@ -2024,7 +2024,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.5.2;
+				MARKETING_VERSION = 5.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hanfour.peerdrop;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
