@@ -36,8 +36,20 @@ final class PetStatsTests: XCTestCase {
     }
 
     func testPetLevelDisplayName() {
-        XCTAssertEqual(PetLevel.baby.displayName, "幼年")
-        XCTAssertEqual(PetLevel.adult.displayName, "成熟")
-        XCTAssertEqual(PetLevel.elder.displayName, "老年")
+        // displayName is now localized via Bundle.module, so the exact string
+        // depends on the test host's language. Assert (locale-independently)
+        // that each stage resolves to one of its shipped translations and never
+        // leaks the raw catalog key. Exact per-language values are pinned in
+        // EnumLocalizationTests.
+        let known: [PetLevel: Set<String>] = [
+            .baby:  ["Baby", "幼年", "ベビー", "아기"],
+            .adult: ["Adult", "成熟", "おとな", "성체"],
+            .elder: ["Elder", "老年", "シニア", "노년"],
+        ]
+        for level in PetLevel.allCases {
+            let name = level.displayName
+            XCTAssertFalse(name.hasPrefix("pet."), "\(level).displayName leaked raw key: \(name)")
+            XCTAssertTrue(known[level]!.contains(name), "\(level).displayName unexpected: \(name)")
+        }
     }
 }

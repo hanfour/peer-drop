@@ -78,45 +78,12 @@ public enum BodyGene: String, Codable, CaseIterable {
 
     /// User-facing species name. The gene-info UI previously surfaced the
     /// raw rawValue ("cat", "slime") which read like debug output (audit
-    /// round 18). Hard-coded zh-Hant台灣用語 to match the module's existing
-    /// displayName pattern (PetLevel / PetMood), which has no string catalog.
+    /// round 18). Was hard-coded zh-Hant; now resolved from the module's
+    /// `Localizable.xcstrings` (key `pet.body.<rawValue>`) via `Bundle.module`
+    /// so en/ja/ko/zh-Hans viewers see their own language. `rawValue` is the
+    /// stable key component and never localized.
     public var displayName: String {
-        switch self {
-        case .cat: return "貓咪"
-        case .dog: return "狗狗"
-        case .rabbit: return "兔子"
-        case .bird: return "小鳥"
-        case .frog: return "青蛙"
-        case .bear: return "熊熊"
-        case .dragon: return "小龍"
-        case .octopus: return "章魚"
-        case .slime: return "史萊姆"
-        case .cow: return "牛牛"
-        case .deer: return "鹿鹿"
-        case .duck: return "鴨鴨"
-        case .fox: return "狐狸"
-        case .hamster: return "倉鼠"
-        case .hedgehog: return "刺蝟"
-        case .horse: return "馬兒"
-        case .lizard: return "蜥蜴"
-        case .otter: return "水獺"
-        case .owl: return "貓頭鷹"
-        case .parrot: return "鸚鵡"
-        case .penguin: return "企鵝"
-        case .phoenix: return "鳳凰"
-        case .pig: return "豬豬"
-        case .pigeon: return "鴿子"
-        case .raccoon: return "浣熊"
-        case .redpanda: return "小熊貓"
-        case .sheep: return "綿羊"
-        case .sloth: return "樹懶"
-        case .snake: return "蛇蛇"
-        case .squirrel: return "松鼠"
-        case .totoro: return "龍貓"
-        case .turtle: return "烏龜"
-        case .unicorn: return "獨角獸"
-        case .wolf: return "狼狼"
-        }
+        NSLocalizedString("pet.body.\(rawValue)", bundle: .module, comment: "Species name for BodyGene case \(rawValue)")
     }
 }
 
@@ -126,13 +93,10 @@ public enum EyeGene: String, Codable, CaseIterable {
     case line
     case dizzy
 
+    /// Localized eye-shape label, resolved from `Localizable.xcstrings`
+    /// (key `pet.eye.<rawValue>`) via `Bundle.module`.
     public var displayName: String {
-        switch self {
-        case .dot: return "豆豆眼"
-        case .round: return "圓滾眼"
-        case .line: return "瞇瞇眼"
-        case .dizzy: return "暈眩眼"
-        }
+        NSLocalizedString("pet.eye.\(rawValue)", bundle: .module, comment: "Eye shape for EyeGene case \(rawValue)")
     }
 }
 
@@ -147,12 +111,10 @@ public enum PatternGene: String, Codable, CaseIterable {
     case stripe
     case spot
 
+    /// Localized coat-pattern label, resolved from `Localizable.xcstrings`
+    /// (key `pet.pattern.<rawValue>`) via `Bundle.module`.
     public var displayName: String {
-        switch self {
-        case .none: return "純色"
-        case .stripe: return "條紋"
-        case .spot: return "斑點"
-        }
+        NSLocalizedString("pet.pattern.\(rawValue)", bundle: .module, comment: "Coat pattern for PatternGene case \(rawValue)")
     }
 }
 

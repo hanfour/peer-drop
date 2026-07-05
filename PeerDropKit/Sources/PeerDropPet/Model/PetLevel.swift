@@ -22,12 +22,12 @@ public enum PetLevel: Int, Codable, Comparable, CaseIterable {
         lhs.rawValue < rhs.rawValue
     }
 
+    /// Localized life-stage label, resolved from `Localizable.xcstrings`
+    /// (key `pet.level.<assetSlug>`) via `Bundle.module`. Keyed on `assetSlug`
+    /// (baby/adult/elder) since the Int rawValue isn't a readable key.
+    /// Display-only; rawValue/assetSlug are unchanged.
     public var displayName: String {
-        switch self {
-        case .baby: return "幼年"
-        case .adult: return "成熟"
-        case .elder: return "老年"
-        }
+        NSLocalizedString("pet.level.\(assetSlug)", bundle: .module, comment: "Life stage label for PetLevel case \(assetSlug)")
     }
 
     public var assetSlug: String {
