@@ -212,60 +212,107 @@ public class DoubleRatchetSession: Codable {
             if lruEvicted > 0 { metrics?.record(.c3SkippedKeyEvictedLRU) }
         }
 
-        // Check skipped keys first (out-of-order message)
+        // Clone-then-commit: every branch below computes the ratchet
+        // advance into LOCALS and defers the write to `self` until the
+        // AES-GCM open succeeds. A forged message (valid ratchet key but
+        // tampered tag) must throw WITHOUT mutating session state —
+        // otherwise a single injected packet permanently desyncs the
+        // session (the next genuine message can never decrypt). This is
+        // the libsignal decrypt contract.
+
+        // Check skipped keys first (out-of-order message). Peek, don't
+        // remove: only drop the entry once the tag verifies, so a forged
+        // out-of-order packet can't consume a still-needed message key.
         let skipIndex = SkippedKeyIndex(ratchetKey: message.ratchetKey, counter: message.counter)
-        if let entry = skippedKeys.removeValue(forKey: skipIndex) {
+        if let entry = skippedKeys[skipIndex] {
+            let plaintext = try decryptWithKey(message.ciphertext, key: entry.key)
+            skippedKeys.removeValue(forKey: skipIndex)
             metrics?.record(.c3SkippedKeyHit)
-            return try decryptWithKey(message.ciphertext, key: entry.key)
+            return plaintext
         }
+
+        // Skipped-key entries accrued while deriving this message's key
+        // (from either chain) — applied to `self` only after AEAD passes.
+        var pendingSkipped: [(SkippedKeyIndex, SkippedKeyEntry)] = []
+
+        // Deferred DH-ratchet advance. nil `newTheirKey` ⇒ no ratchet step.
+        var newTheirKey: Curve25519.KeyAgreement.PublicKey?
+        var newMyRatchetKey = myRatchetKey
+        var newRootKey = rootKey
+        var newSendChainKey = sendChainKey
+        var newPreviousSendCounter = previousSendCounter
+        var newSendCounter = sendCounter
+        var receiveCounterAfterRatchet = receiveCounter
+        var workingReceiveChain = receiveChainKey
 
         // Check if this is a new DH ratchet key
         if theirRatchetKey == nil || message.ratchetKey != theirRatchetKey!.rawRepresentation {
             // Skip any remaining messages from the old chain
             if let oldChain = receiveChainKey, let oldTheirKey = theirRatchetKey {
-                receiveChainKey = try skipMessages(
+                let (_, skipped) = try skipMessages(
                     until: message.previousCounter,
+                    from: receiveCounter,
                     chainKey: oldChain,
                     theirRatchetKey: oldTheirKey.rawRepresentation
                 )
+                pendingSkipped.append(contentsOf: skipped)
             }
 
             // DH Ratchet step: derive new receive chain
-            let newTheirKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: message.ratchetKey)
-            let (rootKey1, receiveChain) = dhRatchetStep(rootKey: rootKey, myKey: myRatchetKey, theirKey: newTheirKey)
+            let parsedTheirKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: message.ratchetKey)
+            let (rootKey1, receiveChain) = dhRatchetStep(rootKey: rootKey, myKey: myRatchetKey, theirKey: parsedTheirKey)
 
             // Generate new ratchet key pair for sending
-            previousSendCounter = sendCounter
-            sendCounter = 0
-            receiveCounter = 0
-            theirRatchetKey = newTheirKey
+            newPreviousSendCounter = sendCounter
+            newSendCounter = 0
+            receiveCounterAfterRatchet = 0
 
-            let newMyRatchetKey = Curve25519.KeyAgreement.PrivateKey()
-            let (rootKey2, sendChain) = dhRatchetStep(rootKey: rootKey1, myKey: newMyRatchetKey, theirKey: newTheirKey)
+            let candidateMyRatchetKey = Curve25519.KeyAgreement.PrivateKey()
+            let (rootKey2, sendChain) = dhRatchetStep(rootKey: rootKey1, myKey: candidateMyRatchetKey, theirKey: parsedTheirKey)
 
-            myRatchetKey = newMyRatchetKey
-            rootKey = rootKey2
-            sendChainKey = sendChain
-            receiveChainKey = receiveChain
+            newTheirKey = parsedTheirKey
+            newMyRatchetKey = candidateMyRatchetKey
+            newRootKey = rootKey2
+            newSendChainKey = sendChain
+            workingReceiveChain = receiveChain
         }
 
-        guard let chainKey = receiveChainKey else {
+        guard let chainKey = workingReceiveChain else {
             throw DoubleRatchetError.noReceiveChain
         }
 
         // Skip ahead if needed
-        let chainAfterSkip = try skipMessages(
+        let (chainAfterSkip, skippedToTarget) = try skipMessages(
             until: message.counter,
+            from: receiveCounterAfterRatchet,
             chainKey: chainKey,
             theirRatchetKey: message.ratchetKey
         )
+        pendingSkipped.append(contentsOf: skippedToTarget)
 
         // Derive message key
         let (messageKey, newChainKey) = symmetricRatchetStep(chainKey: chainAfterSkip)
+
+        // AEAD open — the commit gate. Throws on a tampered tag BEFORE any
+        // `self` mutation below runs.
+        let plaintext = try decryptWithKey(message.ciphertext, key: messageKey)
+
+        // Commit: decryption is proven authentic, so advance the session.
+        if let committedTheirKey = newTheirKey {
+            theirRatchetKey = committedTheirKey
+            myRatchetKey = newMyRatchetKey
+            rootKey = newRootKey
+            sendChainKey = newSendChainKey
+            previousSendCounter = newPreviousSendCounter
+            sendCounter = newSendCounter
+        }
         receiveChainKey = newChainKey
         receiveCounter = message.counter + 1
+        for (index, entry) in pendingSkipped {
+            skippedKeys[index] = entry
+        }
 
-        return try decryptWithKey(message.ciphertext, key: messageKey)
+        return plaintext
     }
 
     // MARK: - Private
@@ -307,21 +354,32 @@ public class DoubleRatchetSession: Codable {
         return (msgKey, newChain)
     }
 
-    /// Skip message keys up to `target` counter, storing them for out-of-order delivery.
-    /// Returns the chain key after skipping.
-    private func skipMessages(until target: UInt32, chainKey: SymmetricKey, theirRatchetKey: Data) throws -> SymmetricKey {
-        guard target > receiveCounter else { return chainKey }
-        guard target - receiveCounter <= Self.maxSkip else {
+    /// Derive message keys for counters `start..<target`, to be cached for
+    /// out-of-order delivery. Side-effect-free: returns the chain key after
+    /// skipping AND the entries to cache, so the caller can defer both writes
+    /// until the current message's AEAD open succeeds (see `decrypt`). The
+    /// old signature read `self.receiveCounter` and mutated `self.skippedKeys`
+    /// in place — that in-place mutation is exactly what let a forged message
+    /// corrupt the session.
+    private func skipMessages(
+        until target: UInt32,
+        from start: UInt32,
+        chainKey: SymmetricKey,
+        theirRatchetKey: Data
+    ) throws -> (chainKey: SymmetricKey, skipped: [(SkippedKeyIndex, SkippedKeyEntry)]) {
+        guard target > start else { return (chainKey, []) }
+        guard target - start <= Self.maxSkip else {
             throw DoubleRatchetError.tooManySkippedMessages
         }
 
         var currentChain = chainKey
-        for i in receiveCounter..<target {
+        var collected: [(SkippedKeyIndex, SkippedKeyEntry)] = []
+        for i in start..<target {
             let (msgKey, newChain) = symmetricRatchetStep(chainKey: currentChain)
-            skippedKeys[SkippedKeyIndex(ratchetKey: theirRatchetKey, counter: i)] = SkippedKeyEntry(key: msgKey, createdAt: Date())
+            collected.append((SkippedKeyIndex(ratchetKey: theirRatchetKey, counter: i), SkippedKeyEntry(key: msgKey, createdAt: Date())))
             currentChain = newChain
         }
-        return currentChain
+        return (currentChain, collected)
     }
 
     /// Exposed for test assertions only — confirms the skipped-keys cache is fully

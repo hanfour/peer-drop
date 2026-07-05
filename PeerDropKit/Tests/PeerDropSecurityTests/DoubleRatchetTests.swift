@@ -47,6 +47,39 @@ final class DoubleRatchetTests: XCTestCase {
         XCTAssertEqual(decrypted, plaintext)
     }
 
+    /// A forged message (valid DH ratchet key, tampered ciphertext) that
+    /// fails AEAD verification must NOT mutate the receiver's ratchet
+    /// state. Otherwise an attacker who can inject one packet permanently
+    /// desyncs the session — the next genuine message can never decrypt.
+    ///
+    /// The forged message triggers the DH-ratchet branch in `decrypt`
+    /// (Bob's `theirRatchetKey` is nil until his first receive), which is
+    /// exactly where state was being committed before the AES-GCM check.
+    func testForgedMessageDoesNotCorruptSessionState() throws {
+        let (alice, bob) = try createSessionPair()
+
+        let genuine = try alice.encrypt("Hello Bob!".data(using: .utf8)!)
+
+        // Forge a message that reaches the AEAD check with a valid ratchet
+        // key but a tampered tag: same header, last ciphertext byte flipped.
+        var tampered = genuine.ciphertext
+        tampered[tampered.count - 1] ^= 0xFF
+        let forged = RatchetMessage(
+            ratchetKey: genuine.ratchetKey,
+            counter: genuine.counter,
+            previousCounter: genuine.previousCounter,
+            ciphertext: tampered
+        )
+
+        // The forged message must be rejected (AEAD failure).
+        XCTAssertThrowsError(try bob.decrypt(forged))
+
+        // ...and Bob's session must be untouched, so the genuine message
+        // (which Alice sent first, counter 0) still decrypts cleanly.
+        let decrypted = try bob.decrypt(genuine)
+        XCTAssertEqual(decrypted, "Hello Bob!".data(using: .utf8)!)
+    }
+
     func testMultipleMessagesOneDirection() throws {
         let (alice, bob) = try createSessionPair()
 
