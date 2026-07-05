@@ -100,7 +100,20 @@ It **aborts** unless the soak is both healthy and populated:
 - `spkInvalidSignature == 0` and `opkFailedInitiation == 0` — real C1/C2
   failures in production; do **not** flip to reject over them.
 
-The strict policy (`cloudflare-worker/strict-policy.json`) differs from
+The script also refuses to sign with the committed dev key or any key whose
+public half isn't in `project.yml`'s `CryptoPolicyPublicKeys` (so a wrong or
+un-swapped key can't silently no-op or "activate" with a forgeable root),
+and aborts if the stats aggregation was `truncated` (a partial sum could
+hide failures in unscanned older buckets).
+
+**Two residual gate limitations (know before you trust the number):**
+- The populate gate counts snapshot *rows*, not distinct *devices*, and has
+  no soak-*duration* floor — `--min-snapshots` is a proxy for "the uploading
+  build has soaked long enough". Confirm the metrics-uploading iOS build has
+  actually been live ≥2 weeks before trusting a passing gate. A future worker
+  enhancement could return the earliest-snapshot age + a device-cardinality
+  estimate to harden this.
+- The strict policy (`cloudflare-worker/strict-policy.json`) differs from
 the bundled default only in `spkExpirationBehavior: reject`. Everything
 else stays at the conservative defaults (C2 `failClosed` is already active
 for v5.4↔v5.4). The cross-field invariant `consumedOPKPruneWindowDays (90)
