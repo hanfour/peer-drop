@@ -473,6 +473,104 @@ export default {
       return jsonResponse({ ok: true, id: metricId }, 201);
     }
 
+    // POST /debug/crypto-metric — ingest a CryptoHardeningMetrics snapshot
+    // for the v5.4 crypto-hardening soak (spec §8.6). Header-only auth
+    // (same rationale as /debug/metric: no `?apiKey=` lane on a plain POST).
+    // The soak-gate counters are copied into KV metadata so the stats
+    // endpoint aggregates from list() without per-key gets.
+    if (path === "/debug/crypto-metric" && request.method === "POST") {
+      if (!(await isHeaderAuthorized(request, env))) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+      const body = await request.text();
+      if (body.length > 2 * 1024) {
+        return jsonResponse({ error: "Payload too large" }, 413);
+      }
+      let parsed: Record<string, unknown>;
+      try {
+        const raw = JSON.parse(body) as unknown;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          return jsonResponse({ error: "Expected JSON object" }, 400);
+        }
+        parsed = raw as Record<string, unknown>;
+      } catch {
+        return jsonResponse({ error: "Invalid JSON" }, 400);
+      }
+      // Require a `counters` object so a leaked key can't flood KV with junk.
+      const counters = parsed["counters"];
+      if (!counters || typeof counters !== "object" || Array.isArray(counters)) {
+        return jsonResponse({ error: "Missing required `counters` object" }, 400);
+      }
+      const c = counters as Record<string, unknown>;
+      const num = (k: string): number => (typeof c[k] === "number" ? (c[k] as number) : 0);
+      // Soak-gate summary (spec §8.6): the three counters that must stay ≈0
+      // before strict C1/C2 policy activation. Kept small for KV metadata.
+      const soakSummary = {
+        isig: num("c1.spk_timestamp_invalid_signature"),
+        ofail: num("c2.opk_failed_initiation"),
+        psig: num("policy.signature_invalid"),
+      };
+      const dateKey = new Date().toISOString().slice(0, 10);
+      const id = `cryptometric:${dateKey}:${crypto.randomUUID()}`;
+      await env.METRICS.put(id, JSON.stringify({ ...parsed, ingestedAt: new Date().toISOString() }),
+        { expirationTtl: 14 * 86400, metadata: soakSummary });
+      return jsonResponse({ ok: true, id }, 201);
+    }
+
+    // GET /debug/crypto-metrics/stats?range=24h|7d|30d — soak aggregation
+    // (ANALYTICS_KEY). Sums the three soak-gate counters + snapshot count
+    // across the window, so strict-policy activation can be gated on real
+    // production numbers instead of the empty bucket the soak read before.
+    if (path === "/debug/crypto-metrics/stats" && request.method === "GET") {
+      const unauth = requireKey(request, env, "ANALYTICS_KEY");
+      if (unauth) return unauth;
+
+      const VALID_RANGES = new Set(["24h", "7d", "30d"]);
+      const range = url.searchParams.get("range") ?? "24h";
+      if (!VALID_RANGES.has(range)) {
+        return jsonResponse({ error: "range must be one of 24h|7d|30d" }, 400);
+      }
+      const daysBack = range === "7d" ? 7 : range === "30d" ? 30 : 1;
+      const SNAPSHOT_CAP = 20000;
+
+      type Soak = { isig: number; ofail: number; psig: number };
+      let snapshots = 0;
+      let spkInvalidSignature = 0, opkFailedInitiation = 0, policySignatureInvalid = 0;
+      let truncated = false;
+
+      try {
+        outer: for (let i = 0; i < daysBack; i++) {
+          const d = new Date(Date.now() - i * 86400_000);
+          const prefix = `cryptometric:${d.toISOString().slice(0, 10)}:`;
+          let cursor: string | undefined;
+          do {
+            const list = await env.METRICS.list({ prefix, limit: 1000, cursor });
+            for (const key of list.keys) {
+              if (!key.name.startsWith(prefix)) continue;
+              if (snapshots >= SNAPSHOT_CAP) { truncated = true; break outer; }
+              const meta = key.metadata as Soak | null | undefined;
+              if (meta) {
+                spkInvalidSignature += meta.isig ?? 0;
+                opkFailedInitiation += meta.ofail ?? 0;
+                policySignatureInvalid += meta.psig ?? 0;
+              }
+              snapshots++;
+            }
+            cursor = list.list_complete ? undefined : list.cursor;
+          } while (cursor);
+        }
+      } catch (e) {
+        return jsonResponse({ error: "aggregation_failed", detail: String(e).slice(0, 200) }, 500);
+      }
+
+      return jsonResponse({
+        range,
+        snapshots,
+        truncated,
+        soak: { spkInvalidSignature, opkFailedInitiation, policySignatureInvalid },
+      });
+    }
+
     // GET /config/metrics — remote circuit breaker (public, no auth).
     // Fail-open: malformed KV JSON falls through to the default so clients
     // keep polling a usable shape even if an operator botches `wrangler kv put`.

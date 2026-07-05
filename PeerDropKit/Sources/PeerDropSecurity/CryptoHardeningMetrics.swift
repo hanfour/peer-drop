@@ -98,4 +98,24 @@ public final class CryptoHardeningMetrics: ObservableObject {
         defer { lock.unlock() }
         keyedCounters.removeAll()
     }
+
+    /// Remove exactly the counts captured in `delivered`, clamping at zero
+    /// and dropping keys that reach zero. Used by the metrics uploader for
+    /// at-least-once soak delivery: it snapshots, POSTs, and only on a 2xx
+    /// subtracts the delivered counts — so events recorded during the
+    /// in-flight POST are preserved, and a failed POST's counts are re-sent
+    /// on the next flush rather than silently lost.
+    public func subtract(_ delivered: Snapshot) {
+        lock.lock()
+        defer { lock.unlock() }
+        for (key, count) in delivered.keyedCounters {
+            guard let current = keyedCounters[key] else { continue }
+            let remaining = current - count
+            if remaining > 0 {
+                keyedCounters[key] = remaining
+            } else {
+                keyedCounters[key] = nil
+            }
+        }
+    }
 }

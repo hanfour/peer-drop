@@ -270,6 +270,10 @@ struct PeerDropApp: App {
                 inboxService.disconnect()
                 connectionManager.tailnetStore.stopPeriodicProbe()
                 Task { await ConnectionMetrics.shared.flush() }
+                // Ship the crypto-hardening counters (spec §8.6 soak) on the
+                // same background transition. Before this, snapshot() had no
+                // consumer and the soak read an empty bucket.
+                Task { await CryptoMetricsUploader.shared.flush(metrics: cryptoMetrics) }
                 // Persist locally + push to iCloud (full state + KVS ping) so
                 // other devices see this session's edits. Replaces the old
                 // save-then-syncFullState pair; push also bumps KVS metadata,
