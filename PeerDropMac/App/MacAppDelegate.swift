@@ -73,6 +73,26 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
                 NSApp.appearance = NSAppearance(named: .aqua)
             }
         }
+
+        // Restart Bonjour/relay discovery when the Mac wakes from sleep.
+        // Unlike Cmd+H (which flips scenePhase → handleScenePhaseChange),
+        // sleep/wake does NOT change scenePhase — the process stays
+        // foregrounded — so the scenePhase path never fires and NWBrowser
+        // sockets that the OS tore down during sleep are never re-armed,
+        // leaving "No peers found" until the user manually toggles. This
+        // observer (on NSWorkspace's OWN notification center, not the
+        // default one) closes that gap.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func systemDidWake() {
+        logger.info("System woke from sleep — restarting discovery")
+        connectionManager?.restartDiscovery()
     }
 
     /// Finder drop / open-with / URL-scheme handler. Two URL classes

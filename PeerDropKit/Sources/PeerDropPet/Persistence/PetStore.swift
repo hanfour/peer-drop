@@ -99,12 +99,7 @@ public class PetStore {
         let data = try Data(contentsOf: petFile)
 
         // Peek for the v3.x egg-level signal before Codable maps it to .baby.
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let level = json["level"] as? Int,
-           level == 1 {
-            defaults.set(true, forKey: "v4MigratedFromEgg")
-            logger.debug("loadAndMigrate: detected v3.x egg pet (level=1), set v4MigratedFromEgg flag")
-        }
+        Self.peekV3EggSignal(in: data, defaults: defaults)
 
         let pet = try decoder.decode(PetState.self, from: data)
         let migrated = PetStore.applyV4Migration(to: pet)
@@ -120,6 +115,22 @@ public class PetStore {
             }
         }
         return migrated
+    }
+
+    /// Peek at the raw pet JSON for the v3.x egg-level signal (`level == 1`)
+    /// BEFORE Codable maps rawValue 1 → `.baby`, and set the
+    /// `v4MigratedFromEgg` flag so the V4UpgradeOnboarding screen can surface
+    /// "your egg has hatched". Shared by both restore paths — local disk
+    /// (`loadAndMigrate`) and iCloud (`PetCloudSync.loadAndMigrateFromCloud`);
+    /// the cloud path used to skip it, so cloud-restored users missed the UX.
+    /// Idempotent and safe on garbage input (non-JSON is a no-op).
+    public static func peekV3EggSignal(in data: Data, defaults: UserDefaults = .standard) {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let level = json["level"] as? Int,
+           level == 1 {
+            defaults.set(true, forKey: "v4MigratedFromEgg")
+            logger.debug("peekV3EggSignal: detected v3.x egg pet (level=1), set v4MigratedFromEgg flag")
+        }
     }
 
     /// Pure migration function. Idempotent: pets that already carry

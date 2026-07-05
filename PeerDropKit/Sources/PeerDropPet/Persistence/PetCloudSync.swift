@@ -68,9 +68,11 @@ public class PetCloudSync {
     /// blindly re-saving a migrated copy could clobber a concurrent peer's
     /// write. The next local save() will persist the migration.
     ///
-    // TODO(v4.1+): If iCloud restore path is wired up, mirror PetStore.loadAndMigrate's
-    // peek-before-decode flag-set so iCloud migrators also see the "egg hatched" UX.
-    // Today this code path has no caller, so the mirror would be dead code.
+    /// This path IS wired up (PetSyncCoordinator.resolvedLaunchPet →
+    /// PeerDropApp/PeerDropMacApp at launch), so it must set the
+    /// `v4MigratedFromEgg` flag just like the local path — otherwise a user
+    /// whose pet arrives from iCloud misses the "your egg has hatched"
+    /// onboarding.
     public func loadAndMigrateFromCloud() throws -> PetState? {
         guard let dir = cloudDirectory else {
             logger.warning("iCloud container not available — cannot load from cloud")
@@ -81,6 +83,8 @@ public class PetCloudSync {
             return nil
         }
         let data = try Data(contentsOf: fileURL)
+        // Peek for the v3.x egg-level signal before Codable maps it to .baby.
+        PetStore.peekV3EggSignal(in: data)
         let pet = try decoder.decode(PetState.self, from: data)
         logger.debug("Loaded pet \(pet.id) from iCloud")
         return PetStore.applyV4Migration(to: pet)
