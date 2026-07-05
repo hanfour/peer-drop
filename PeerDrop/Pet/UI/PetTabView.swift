@@ -8,6 +8,9 @@ struct PetTabView: View {
     @State private var showWelcome = false
     @State private var feedMessage: String?
     private let welcomeFlag = PetWelcomeFlag()
+    #if DEBUG
+    @State private var syncReport = PetSyncDiagnostics.render(PetSyncDiagnostics.gather())
+    #endif
 
     var body: some View {
         List {
@@ -112,6 +115,17 @@ struct PetTabView: View {
                 LabeledContent("遇見寵物", value: "\(engine.pet.stats.petsMet)")
                 LabeledContent("吃過食物", value: "\(engine.pet.stats.foodsEaten)")
             }
+
+            #if DEBUG
+            // Developer-only iCloud sync readout for the 2-device verification
+            // (roadmap §3). Not localized and not shipped in Release.
+            Section("iCloud Sync (debug)") {
+                Text(syncReport)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                Button("Refresh") { syncReport = PetSyncDiagnostics.render(PetSyncDiagnostics.gather()) }
+            }
+            #endif
         }
         .navigationTitle("我的寵物")
         #if os(iOS)
