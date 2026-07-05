@@ -64,4 +64,23 @@ public enum FuzzHarness {
             body(mutated)
         }
     }
+
+    /// Same as `run(target:iterations:seed:operators:body:)` but also passes
+    /// the iteration index, so failure messages can pinpoint the exact
+    /// mutation (same seed + operators ⇒ identical mutation at index `i`).
+    /// Additive API — the closure-arity-1 overload above is untouched.
+    public static func runIndexed(
+        target: Data,
+        iterations: Int,
+        seed: UInt64,
+        operators: [Mutator],
+        body: (_ iteration: Int, _ mutated: Data) -> Void
+    ) {
+        var rng = PropertyTest.SeededRNG(seed: seed)
+        for iteration in 0..<iterations {
+            let op = operators[Int(rng.next() % UInt64(operators.count))]
+            let mutated = mutate(target, operator: op, rng: &rng)
+            body(iteration, mutated)
+        }
+    }
 }

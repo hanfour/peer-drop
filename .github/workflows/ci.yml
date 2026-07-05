@@ -58,3 +58,92 @@ jobs:
           # Exit code propagates: any compile failure (including
           # accidental iOS-only API usage in PeerDropKit/Sources/)
           # fails the job and blocks the PR.
+
+  crypto-coverage-gate:
+    name: Crypto coverage gate (SOFT — reports only, does not block)
+    runs-on: macos-15
+    timeout-minutes: 60
+    # ──────────────────────────────────────────────────────────────────────
+    # SOFT GATE (continue-on-error: true) — v5.4.1 BLOCK item.
+    #
+    # tools/check-coverage.sh enforces ≥95% line coverage per crypto file
+    # (and 100% on SecurityPolicy/SecurityPolicyStore). Measured on the
+    # PeerDropKit macOS security suite (2026-07, after X3DHFuzzTests +
+    # RatchetFuzzTests landed):
+    #   X3DH.swift ≈ 99% ✅   DoubleRatchet.swift ≈ 98% ✅
+    #   SecurityPolicy.swift = 100% ✅
+    #   SecurityPolicyStore.swift ≈ 93% ❌ (< 100%)
+    #   PreKeyStore.swift ≈ 12% ❌ — its keychain-backed paths only run in
+    #     the app-target suite (PeerDropTests/), not in this SPM/macOS run;
+    #     the original readiness baseline (91%) came from the app scheme's
+    #     xccov measurement.
+    # Until every gated file passes IN THIS JOB, it only REPORTS numbers in
+    # the job summary. Once green, flip continue-on-error to false to make
+    # it a hard PR gate (the remaining v5.4.1 BLOCK step for item 4).
+    #
+    # This job also runs the fuzz suites at their default 10K iterations;
+    # the 100K runs live in fuzz-nightly.yml (scheduled) so PR CI stays fast.
+    # ──────────────────────────────────────────────────────────────────────
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swift test with coverage (PeerDropSecurityTests)
+        working-directory: PeerDropKit
+        run: |
+          # Keychain-dependent tests (IdentityKeyManager/TrustedContactStore
+          # persistence) can fail on headless CI hosts. This is a coverage
+          # job — record the suite status for the summary but keep going so
+          # the numbers still get computed. (SwiftPM skips its automatic
+          # profdata merge when tests fail, hence the manual merge below.)
+          set +e
+          swift test --enable-code-coverage --filter PeerDropSecurityTests 2>&1
+          echo "$?" > test-exit-code.txt
+          echo "security suite exit code: $(cat test-exit-code.txt)"
+          exit 0
+
+      - name: Convert llvm-cov data to xccov-shaped JSON
+        working-directory: PeerDropKit
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          PROF_DIR="$BIN_PATH/codecov"
+          # Merge raw profiles ourselves — robust whether or not SwiftPM's
+          # own merge/export ran (it skips both when any test failed).
+          xcrun llvm-profdata merge -sparse "$PROF_DIR"/*.profraw -o "$PROF_DIR/merged.profdata"
+          XCTEST_BUNDLE=$(find "$BIN_PATH" -maxdepth 1 -name '*.xctest' | head -1)
+          BINARY="$XCTEST_BUNDLE/Contents/MacOS/$(basename "$XCTEST_BUNDLE" .xctest)"
+          xcrun llvm-cov export "$BINARY" -instr-profile "$PROF_DIR/merged.profdata" \
+            -summary-only > coverage-llvm.json
+          # tools/check-coverage.sh expects the xccov shape:
+          #   { targets: [ { files: [ { path, lineCoverage } ] } ] }
+          # llvm-cov export gives:
+          #   { data: [ { files: [ { filename, summary.lines.percent } ] } ] }
+          # Drop dependency checkouts (.build/) and test sources: the gate
+          # matches by file-name suffix, and e.g. Hummingbird's
+          # ContentSecurityPolicy.swift would otherwise shadow our
+          # SecurityPolicy.swift row.
+          jq '{targets: [{files: [.data[0].files[]
+                | select(.filename | (contains("/.build/") or contains("/Tests/")) | not)
+                | {path: .filename, lineCoverage: (.summary.lines.percent / 100)}]}]}' \
+            coverage-llvm.json > coverage-xccov.json
+
+      - name: Coverage gate (soft) + job summary
+        working-directory: PeerDropKit
+        run: |
+          set +e
+          ../tools/check-coverage.sh coverage-xccov.json | tee gate-output.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo "### Crypto-layer coverage gate (SOFT)"
+            echo ""
+            echo "Security suite exit code: $(cat test-exit-code.txt) (0 = all tests passed)"
+            echo ""
+            echo '```'
+            cat gate-output.txt
+            echo '```'
+            echo ""
+            echo "> Soft gate: failures do **not** block the PR yet."
+            echo "> Known-below-threshold: PreKeyStore.swift (keychain paths not exercised in the SPM/macOS suite), SecurityPolicyStore.swift (<100%)."
+            echo "> Flip \`continue-on-error\` to \`false\` in ci.yml once all gated files pass here."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
