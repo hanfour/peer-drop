@@ -1,4 +1,4 @@
-PeerDrop comes to Mac.
+PeerDrop 6.0.0 comes to Mac.
 
 - Bidirectional voice with iPhone: tap the phone icon on either device; the other side shows the incoming call within a second.
 - Drag files from Finder onto the Dock icon, the main window, or a peer's row in the menu bar.

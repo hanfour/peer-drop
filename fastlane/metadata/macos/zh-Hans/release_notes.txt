@@ -1,4 +1,4 @@
-PeerDrop 上 Mac 了。
+PeerDrop 6.0.0 上 Mac 了。
 
 - iPhone 双向语音:两边任何一端按电话图标,对方一秒内看到来电。
 - 从 Finder 把文件拖到 Dock 图标、主窗口,或菜单栏里对方那一行。
