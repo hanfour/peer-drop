@@ -108,16 +108,21 @@ targets:
         NSCameraUsageDescription: "PeerDrop needs camera access to capture photos for sharing in chats."
         NSPhotoLibraryUsageDescription: "PeerDrop needs photo library access to share photos and videos in chats."
         PeerDropWorkerAPIKey: "$(PEERDROP_WORKER_API_KEY)"
-        # ⚠️ SWAP BEFORE NEXT RELEASE — this is the committed DEV public key
-        # (cloudflare-worker/dev-signing-key.json, whose private key is in
-        # this PUBLIC repo). It must be replaced with a production public
-        # key held offline before strict crypto policy can be trusted.
-        # Procedure: release-runbook.md §"Swapping crypto-policy keys to
-        # production" + docs/plans/2026-07-05-strict-policy-activation.md.
-        # Residual risk while unswapped is bounded: SecurityPolicy.merged()
-        # is stronger-of-two, so a forged blob can only FORCE-STRICT
+        # Crypto-policy trust roots — DUAL-KEY OVERLAP (2026-07-05).
+        # [0] PRODUCTION key: private half held OFFLINE (1Password), never
+        #     in this repo. This is now the primary signing root.
+        # [1] DEV key (cloudflare-worker/dev-signing-key.json): kept ONLY as
+        #     an overlap so the dev-signed bundled default still verifies
+        #     through the strict-policy soak (the worker keeps serving it
+        #     until activation; a prod-only build would reject it and spike
+        #     policy.signature_invalid across the fleet, poisoning the soak
+        #     gate). Dropped in the follow-up release once strict is live —
+        #     see docs/plans/2026-07-05-strict-policy-activation.md §A.
+        # Residual risk while the dev key remains is bounded: merged() is
+        # stronger-of-two, so a forged blob can only FORCE-STRICT
         # (availability), never weaken (confidentiality).
         CryptoPolicyPublicKeys:
+          - 3aj4GxVAqGSm+alHJHLqNhqE0d9CHu4HPthmYHxJl+Y=
           - 2Mds2dPO3W7UYqwP32fiee4pIK2BPMzVxBfgAKT1nyk=
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

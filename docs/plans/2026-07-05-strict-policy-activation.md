@@ -63,20 +63,31 @@ keys to production". Summary:
    ```
 2. Store the **private** key in 1Password (only copy). Note the **public**
    key base64.
-3. Replace the dev public key in `project.yml`'s `CryptoPolicyPublicKeys`
-   with the production public key (the marked line — see the ⚠️ comment).
-   Optionally keep the dev key for one release as an overlap window so a
-   pre-swap cached blob still verifies; **not recommended here** — the dev
-   key is compromised-by-design, drop it.
-4. Re-sign `cloudflare-worker/bundled-default-policy.signed.json` with the
-   production key (runbook has the exact temp-file dance), then
-   `cd cloudflare-worker && npm run prebuild` to regenerate the inlined TS
-   constant, then `xcodegen generate`.
-5. `xcodebuild test -only-testing:PeerDropTests/SignCryptoPolicyToolTests`.
+3. Set `CryptoPolicyPublicKeys` to a **dual-key overlap** — production key
+   FIRST, dev key SECOND (`[prod, dev]`), in `project.yml` and
+   `PeerDropMac/App/Info.plist`. This is NOT optional and NOT a naive
+   swap-to-prod-only:
+   - The worker keeps serving the **dev-signed** bundled default during the
+     soak (`CRYPTO_POLICY_JSON` is unset until activation).
+   - A prod-**only** build would reject that dev-signed default →
+     `policy.signature_invalid` spikes across the fleet during the soak →
+     poisons the very gate we need (`signature_invalid == 0`).
+   - With `[prod, dev]`, the new build accepts the dev-signed default (dev
+     trusted) so the soak stays clean, AND it can accept the prod-signed
+     STRICT blob at activation (prod trusted). No re-sign of the bundled
+     default is needed now.
+4. **Do NOT re-sign the bundled default now** — it stays dev-signed so both
+   the new (`[prod,dev]`) and old (`[dev]`) builds accept it through the
+   soak. The first prod-signed blob is the STRICT policy, produced by
+   `activate-strict-policy.sh` at activation time.
+5. `xcodegen generate`, then
+   `xcodebuild test -only-testing:PeerDropTests/SignCryptoPolicyToolTests`.
 
-Old apps (dev-key trust root) will reject a production-signed blob and
-fall back to their compiled-in bundled default (legacy/warn) — a safe
-degradation, not a break.
+**Closing the dev-key trust root** is a follow-up release (N+1) that drops
+the dev key from `CryptoPolicyPublicKeys` once strict is live — by then the
+prod-signed policy is what the fleet uses and the overlap window can close.
+Until then the dev-key residual risk stays bounded (force-strict DoS only,
+via MITM/worker-compromise; `merged()` is stronger-of-two).
 
 ## [D]/[E] Activate (post-soak, operator)
 
