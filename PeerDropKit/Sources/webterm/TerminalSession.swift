@@ -57,7 +57,18 @@ public final class TerminalSession {
         guard !isStarted else { lock.unlock(); return }
         isStarted = true
         lock.unlock()
-        let pty = PTYProcess(command: ["/usr/bin/env", "tmux", "attach-session", "-t", id])
+        // Force TERM=xterm-256color for the tmux session. The client is
+        // xterm.js (an xterm emulator), so xterm-256color is always correct —
+        // and it means the server no longer depends on the ambient TERM of
+        // whatever launched it. A launchd/systemd unit (or CI) often runs with
+        // TERM unset, which made tmux abort with "open terminal failed:
+        // terminal does not support clear" and left a dead session.
+        var childEnv = ProcessInfo.processInfo.environment
+        childEnv["TERM"] = "xterm-256color"
+        let pty = PTYProcess(
+            command: ["/usr/bin/env", "tmux", "attach-session", "-t", id],
+            environment: childEnv
+        )
         pty.onBytes = { [weak self] data in
             guard let self else { return }
             self.lock.lock(); let sinks = Array(self.clients.values); self.lock.unlock()
