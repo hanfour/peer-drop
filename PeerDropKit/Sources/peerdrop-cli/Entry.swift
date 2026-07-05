@@ -55,6 +55,18 @@ struct PeerDropCLI {
 
         let cm = ConnectionManager()
         let store = cm.trustedContactStore
+
+        // `--prune`: maintenance mode — drop stale peer records and exit
+        // before starting the peer loop. Uses the same per-instance store
+        // that was scoped above, so it prunes THIS --name's contacts.
+        if opts.prune {
+            let staleIDs = TrustedContactStore.staleContactIDs(in: store.all, olderThanDays: opts.pruneDays)
+            for id in staleIDs { store.remove(id) }
+            store.flushPendingSave()
+            print("Pruned \(staleIDs.count) peer record(s) not seen in \(opts.pruneDays) days (\(store.all.count) remaining).")
+            Foundation.exit(0)
+        }
+
         var bag = Set<AnyCancellable>()
 
         // Pick the backing bridge. Agent mode runs an AI CLI headless (one

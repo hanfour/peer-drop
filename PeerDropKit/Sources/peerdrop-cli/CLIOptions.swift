@@ -17,12 +17,20 @@ struct CLIOptions {
     /// read & return host file contents — `bypassPermissions` additionally lets
     /// it modify files and run commands.
     var agentYolo: Bool
+    /// `--prune`: remove trusted-peer records not seen in `pruneDays` days,
+    /// then exit WITHOUT starting the peer loop. A maintenance command, not
+    /// a run mode.
+    var prune: Bool
+    /// Staleness cutoff for `--prune` (default 30 days). `--prune-days N`.
+    var pruneDays: Int
 
     static func parse(_ argv: [String], defaultShell: String) -> CLIOptions {
         var name: String? = nil
         var restart = false
         var isAgent = false
         var agentYolo = false
+        var prune = false
+        var pruneDays = 30
         var command: [String] = []
 
         var i = 1
@@ -39,6 +47,10 @@ struct CLIOptions {
                 isAgent = true; i += 1; continue
             } else if arg == "--agent-yolo" {
                 isAgent = true; agentYolo = true; i += 1; continue
+            } else if arg == "--prune" {
+                prune = true; i += 1; continue
+            } else if arg == "--prune-days", i + 1 < argv.count, let d = Int(argv[i + 1]), d > 0 {
+                pruneDays = d; i += 2; continue
             }
             i += 1
         }
@@ -51,6 +63,7 @@ struct CLIOptions {
         let isDefaultShell = defaulted && !isAgent
         let resolvedName = name ?? (Host.current().localizedName ?? "peerdrop-cli")
         return CLIOptions(name: resolvedName, restart: restart, command: command,
-                          isDefaultShell: isDefaultShell, isAgent: isAgent, agentYolo: agentYolo)
+                          isDefaultShell: isDefaultShell, isAgent: isAgent, agentYolo: agentYolo,
+                          prune: prune, pruneDays: pruneDays)
     }
 }

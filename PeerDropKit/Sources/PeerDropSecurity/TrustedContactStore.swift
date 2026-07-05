@@ -45,6 +45,21 @@ public final class TrustedContactStore: ObservableObject {
         try? FileManager.default.removeItem(at: url)
     }
 
+    /// Pure selector for the CLI `--prune` command: IDs of contacts whose
+    /// last activity — `lastVerified`, falling back to `firstConnected` for
+    /// contacts never re-verified — is older than `olderThanDays` before
+    /// `now`. Deterministic (no `Date()` inside) so it's unit-testable.
+    public static func staleContactIDs(
+        in contacts: [TrustedContact],
+        olderThanDays days: Int,
+        now: Date = Date()
+    ) -> [UUID] {
+        let cutoff = now.addingTimeInterval(-Double(days) * 86400)
+        return contacts
+            .filter { ($0.lastVerified ?? $0.firstConnected) < cutoff }
+            .map(\.id)
+    }
+
     public func find(byId id: UUID) -> TrustedContact? {
         contacts.first { $0.id == id }
     }
