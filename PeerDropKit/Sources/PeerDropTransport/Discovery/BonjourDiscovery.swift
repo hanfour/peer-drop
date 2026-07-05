@@ -26,6 +26,10 @@ public final class BonjourDiscovery: DiscoveryBackend {
     /// two ID spaces never matched and every `connection(for:)` lookup
     /// from a DiscoveredPeer missed). nil → no TXT, legacy behavior.
     private let localPeerID: String?
+    /// Whether THIS peer is a headless CLI/agent. Published in the TXT
+    /// record's "role" field so browsing peers can tell before connecting.
+    /// Default false → apps advertise "app" and legacy behavior is preserved.
+    private let localIsHeadless: Bool
     private let tlsOptions: NWProtocolTLS.Options?
     private let queue = DispatchQueue(label: "com.peerdrop.bonjour")
     private var isRestartingListener = false
@@ -35,11 +39,13 @@ public final class BonjourDiscovery: DiscoveryBackend {
         port: UInt16 = 0,
         localPeerName: String,
         localPeerID: String? = nil,
+        localIsHeadless: Bool = false,
         tlsOptions: NWProtocolTLS.Options? = nil
     ) {
         self.listenerPort = port == 0 ? .any : NWEndpoint.Port(rawValue: port)!
         self.localPeerName = localPeerName
         self.localPeerID = localPeerID
+        self.localIsHeadless = localIsHeadless
         self.tlsOptions = tlsOptions
     }
 
@@ -58,6 +64,19 @@ public final class BonjourDiscovery: DiscoveryBackend {
             return pid
         }
         return "\(name).\(type).\(domain)"
+    }
+
+    /// Resolve whether a browse result advertises itself as a headless
+    /// CLI/agent peer, from the service TXT record's "role" field. Lets the
+    /// UI distinguish app-vs-headless BEFORE connecting (isHeadless is
+    /// otherwise only known post-handshake via PeerIdentity). Any value
+    /// other than "headless" — including absent, "app", or a pre-role legacy
+    /// peer — is treated as not-headless.
+    static func resolvedIsHeadless(metadata: NWBrowser.Result.Metadata?) -> Bool {
+        if case .bonjour(let txt) = metadata, txt["role"] == "headless" {
+            return true
+        }
+        return false
     }
 
     public var actualPort: UInt16? {
@@ -85,22 +104,18 @@ public final class BonjourDiscovery: DiscoveryBackend {
             params.includePeerToPeer = true
 
             let listener = try NWListener(using: params, on: listenerPort)
+            // Always publish "role"; publish "pid" when we have an identity.
+            var txt = NWTXTRecord()
+            txt["role"] = localIsHeadless ? "headless" : "app"
             if let localPeerID {
-                var txt = NWTXTRecord()
                 txt["pid"] = localPeerID
-                listener.service = NWListener.Service(
-                    name: localPeerName,
-                    type: Self.serviceType,
-                    domain: Self.serviceDomain,
-                    txtRecord: txt.data
-                )
-            } else {
-                listener.service = NWListener.Service(
-                    name: localPeerName,
-                    type: Self.serviceType,
-                    domain: Self.serviceDomain
-                )
             }
+            listener.service = NWListener.Service(
+                name: localPeerName,
+                type: Self.serviceType,
+                domain: Self.serviceDomain,
+                txtRecord: txt.data
+            )
 
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
@@ -239,7 +254,8 @@ public final class BonjourDiscovery: DiscoveryBackend {
                 id: Self.resolvedPeerID(name: name, type: type, domain: domain, metadata: result.metadata),
                 displayName: name,
                 endpoint: .bonjour(name: name, type: type, domain: domain),
-                source: .bonjour
+                source: .bonjour,
+                isHeadless: Self.resolvedIsHeadless(metadata: result.metadata)
             )
         }
         logger.info("Publishing \(peers.count) peers: \(peers.map { $0.displayName })")

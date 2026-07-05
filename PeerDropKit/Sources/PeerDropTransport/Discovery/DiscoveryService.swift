@@ -11,6 +11,10 @@ public struct DiscoveredPeer: Identifiable, Hashable {
     public var rssi: Int?              // BLE signal strength (dBm)
     public var distance: Float?        // Nearby Interaction distance (metres)
     public var direction: SIMD3<Float>? // Nearby Interaction direction vector
+    /// Advertised as a headless CLI/agent peer (from the Bonjour "role" TXT
+    /// field). Lets the UI distinguish app-vs-headless before connecting.
+    /// Defaults false for non-Bonjour sources and pre-role legacy peers.
+    public var isHeadless: Bool = false
 
     public init(
         id: String,
@@ -20,7 +24,8 @@ public struct DiscoveredPeer: Identifiable, Hashable {
         lastSeen: Date = Date(),
         rssi: Int? = nil,
         distance: Float? = nil,
-        direction: SIMD3<Float>? = nil
+        direction: SIMD3<Float>? = nil,
+        isHeadless: Bool = false
     ) {
         self.id = id
         self.displayName = displayName
@@ -30,6 +35,7 @@ public struct DiscoveredPeer: Identifiable, Hashable {
         self.rssi = rssi
         self.distance = distance
         self.direction = direction
+        self.isHeadless = isHeadless
     }
 
     public static func == (lhs: DiscoveredPeer, rhs: DiscoveredPeer) -> Bool {

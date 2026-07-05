@@ -826,6 +826,9 @@ public final class ConnectionManager: ObservableObject {
             // peers key DiscoveredPeer.id to the same namespace as
             // `connections` (audit round 15).
             localPeerID: localIdentity.id,
+            // Publish app-vs-headless in the TXT "role" field so browsing
+            // peers can tell before connecting (headless CLI/agent peers).
+            localIsHeadless: localIdentity.isHeadless,
             tlsOptions: tlsOpts
         )
         bonjour.onIncomingConnection = { [weak self] connection in
