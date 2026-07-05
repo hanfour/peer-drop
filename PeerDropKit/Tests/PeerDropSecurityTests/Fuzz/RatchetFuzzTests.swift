@@ -26,19 +26,19 @@ final class RatchetFuzzTests: XCTestCase {
     /// can cache at most this many keys per chain (old chain + new chain).
     private static let maxSkipPerChain = 200
 
-    private func makeSessionPair(seed: UInt64) -> (alice: DoubleRatchetSession, bob: DoubleRatchetSession) {
+    private func makeSessionPair(seed: UInt64) throws -> (alice: DoubleRatchetSession, bob: DoubleRatchetSession) {
         let seedBytes = FuzzInputs.seedData(seed, salt: 0x5E)
         let rootKey = SymmetricKey(data: SHA256.hash(data: seedBytes))
         let bobRatchetKey = DeterministicCrypto.curve25519AgreementKey(seed: seedBytes)
         let bob = DoubleRatchetSession.initializeAsResponder(rootKey: rootKey, myRatchetKey: bobRatchetKey)
-        let alice = DoubleRatchetSession.initializeAsInitiator(rootKey: rootKey, theirRatchetKey: bobRatchetKey.publicKey)
+        let alice = try DoubleRatchetSession.initializeAsInitiator(rootKey: rootKey, theirRatchetKey: bobRatchetKey.publicKey)
         return (alice, bob)
     }
 
     // MARK: - Target 1: mutated wire message (header + ciphertext)
 
     func test_fuzz_ratchetMessage_wire_neverCrashes_neverReturnsForgedPlaintext() throws {
-        let (alice, bob) = makeSessionPair(seed: 0x0A7C_4E71)
+        let (alice, bob) = try makeSessionPair(seed: 0x0A7C_4E71)
         let plaintext = Data("ratchet-fuzz-canary-v1 0123456789abcdef0123456789abcdef".utf8)
         let message = try alice.encrypt(plaintext)
 
@@ -96,7 +96,7 @@ final class RatchetFuzzTests: XCTestCase {
     // MARK: - Target 2: forged headers must not blow up the skipped-key cache (C3)
 
     func test_fuzz_forgedHeaders_skippedKeyCache_staysBounded() throws {
-        let (alice, bob) = makeSessionPair(seed: 0x0A7C_4E72)
+        let (alice, bob) = try makeSessionPair(seed: 0x0A7C_4E72)
         // Prime Bob with one real message so a receive chain exists.
         let primer = try alice.encrypt(Data("primer".utf8))
         _ = try bob.decrypt(primer, policy: .bundledDefault, metrics: nil)
@@ -154,7 +154,7 @@ final class RatchetFuzzTests: XCTestCase {
     // MARK: - Target 3: mutated persisted session state
 
     func test_fuzz_persistedSession_decode_neverCrashes() throws {
-        let (alice, bob) = makeSessionPair(seed: 0x0A7C_4E73)
+        let (alice, bob) = try makeSessionPair(seed: 0x0A7C_4E73)
         // Build non-trivial state: decrypt an out-of-order message so the
         // snapshot contains chains, counters AND skipped-key entries.
         _ = try alice.encrypt(Data("m0".utf8))

@@ -214,7 +214,7 @@ public final class LocalSecureChannel {
 
         let ratchet: DoubleRatchetSession
         if iAmInitiator {
-            ratchet = DoubleRatchetSession.initializeAsInitiator(
+            ratchet = try DoubleRatchetSession.initializeAsInitiator(
                 rootKey: rootKey,
                 theirRatchetKey: peerRatchetKey
             )

@@ -26,7 +26,7 @@ final class DoubleRatchetTests: XCTestCase {
             theirEphemeralKey: aliceEphemeral.publicKey
         )
 
-        let alice = DoubleRatchetSession.initializeAsInitiator(
+        let alice = try DoubleRatchetSession.initializeAsInitiator(
             rootKey: aliceX3DH.rootKey,
             theirRatchetKey: bobSignedPreKey.publicKey
         )
@@ -45,6 +45,57 @@ final class DoubleRatchetTests: XCTestCase {
         let decrypted = try bob.decrypt(encrypted)
 
         XCTAssertEqual(decrypted, plaintext)
+    }
+
+    /// A forged message (valid DH ratchet key, tampered ciphertext) that
+    /// fails AEAD verification must NOT mutate the receiver's ratchet
+    /// state. Otherwise an attacker who can inject one packet permanently
+    /// desyncs the session — the next genuine message can never decrypt.
+    ///
+    /// The forged message triggers the DH-ratchet branch in `decrypt`
+    /// (Bob's `theirRatchetKey` is nil until his first receive), which is
+    /// exactly where state was being committed before the AES-GCM check.
+    func testForgedMessageDoesNotCorruptSessionState() throws {
+        let (alice, bob) = try createSessionPair()
+
+        let genuine = try alice.encrypt("Hello Bob!".data(using: .utf8)!)
+
+        // Forge a message that reaches the AEAD check with a valid ratchet
+        // key but a tampered tag: same header, last ciphertext byte flipped.
+        var tampered = genuine.ciphertext
+        tampered[tampered.count - 1] ^= 0xFF
+        let forged = RatchetMessage(
+            ratchetKey: genuine.ratchetKey,
+            counter: genuine.counter,
+            previousCounter: genuine.previousCounter,
+            ciphertext: tampered
+        )
+
+        // The forged message must be rejected (AEAD failure).
+        XCTAssertThrowsError(try bob.decrypt(forged))
+
+        // ...and Bob's session must be untouched, so the genuine message
+        // (which Alice sent first, counter 0) still decrypts cleanly.
+        let decrypted = try bob.decrypt(genuine)
+        XCTAssertEqual(decrypted, "Hello Bob!".data(using: .utf8)!)
+    }
+
+    /// A forged first message whose ratchet key is a valid-length but
+    /// low-order Curve25519 point (e.g. 32 zero bytes) parses successfully,
+    /// but the DH key agreement throws. The receiver must surface that as a
+    /// thrown error, NOT a `try!` process abort — otherwise one injected
+    /// packet is a remote crash / DoS.
+    func testForgedLowOrderRatchetKeyThrowsNotCrash() throws {
+        let (_, bob) = try createSessionPair()
+
+        let forged = RatchetMessage(
+            ratchetKey: Data(repeating: 0, count: 32), // low-order point
+            counter: 0,
+            previousCounter: 0,
+            ciphertext: Data(repeating: 0x01, count: 60) // arbitrary; never reached
+        )
+
+        XCTAssertThrowsError(try bob.decrypt(forged))
     }
 
     func testMultipleMessagesOneDirection() throws {

@@ -84,7 +84,7 @@ public final class RemoteSessionManager: ObservableObject {
             metrics: cryptoMetrics
         )
 
-        let session = DoubleRatchetSession.initializeAsInitiator(
+        let session = try DoubleRatchetSession.initializeAsInitiator(
             rootKey: x3dhResult.rootKey,
             theirRatchetKey: theirSignedPreKey
         )
