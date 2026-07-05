@@ -1,9 +1,7 @@
-PeerDrop 5.5.2 — more reliable first-time pairing, plus everything new in the 5.5 series.
+PeerDrop 5.6.0 — your pet, now in your language, plus security & reliability hardening.
 
-Connection reliability (5.5.2): a set of fixes to pairing and the encrypted-session handshake. The "first time meeting this peer" verification sheet now reliably appears on the very first connection (previously it could stay hidden until you reconnected), the encrypted channel comes up consistently on both local Wi-Fi and relay, and accepting a connection no longer races the transport setup. If pairing ever felt like it needed a second try, this release is for you.
+Localized pet labels: your companion's species, food, mood, and life stage now appear in your device language (English, 日本語, 한국어, 简体中文, 繁體中文). Previously these read in Chinese for everyone.
 
-Your pet, everywhere (5.5.0): pets now sync across your devices through iCloud. Hatch an egg on your iPhone and the same companion — same species, same mood, same stats — greets you on your iPad. No setup; it uses the iCloud account you're already signed into.
+Under the hood: hardened how encrypted messages are handled — a malformed packet can no longer disrupt a session — and shipped builds no longer embed a relay-server key. Nothing to configure; it just works.
 
-More companions (5.5.0 + 5.5.1): 25 new species families unlocked, bringing the total to 34 — and 40 more pets gained full walk and idle animations instead of a static sprite.
-
-Compatibility: 5.5.x talks to earlier v5 peers exactly as before. The on-wire protocol version is unchanged.
+Compatibility: 5.6.0 connects to earlier v5 peers exactly as before. The on-wire protocol is unchanged.
