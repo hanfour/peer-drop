@@ -1,6 +1,12 @@
 name = "peerdrop-signal"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+# Account ID is not a secret (it's semi-public and derivable from any
+# dashboard URL). Committing it lets `wrangler deploy` resolve the account
+# in CI without the CLOUDFLARE_ACCOUNT_ID GitHub secret, which was empty
+# and — together with the Node 20 pin (wrangler needs ≥22) — silently
+# broke every auto-deploy since ~#40. Found 2026-07-05.
+account_id = "22d9d417c1d3ab5d72aa9aedc0cc183c"
 
 [vars]
 # Set TURN_KEY_ID via `wrangler secret put TURN_KEY_ID`
