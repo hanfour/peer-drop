@@ -159,7 +159,28 @@ open class Snapshot: NSObject {
                 return
             }
 
-            app.typeKey(XCUIKeyboardKey.secondaryFn.rawValue, modifierFlags: [])
+            // fastlane's stock macOS path presses Fn and relies on the
+            // `capture_mac_screenshots` orchestrator to grab the frame — but
+            // that action does not exist in this fastlane version, so the
+            // keypress goes nowhere and no PNG is ever written. Instead we
+            // capture the app's main window directly and save it to the
+            // directory named by MAC_SNAPSHOT_DIR (set by the test launcher).
+            // app.screenshot() captures the application element directly —
+            // more robust than app.windows.firstMatch, which can fail to match
+            // a SwiftUI window's accessibility element ("No matches found for
+            // type Window").
+            let shot = app.screenshot()
+            if let outDir = ProcessInfo().environment["MAC_SNAPSHOT_DIR"] {
+                let url = URL(fileURLWithPath: outDir).appendingPathComponent("\(name).png")
+                do {
+                    try shot.pngRepresentation.write(to: url, options: .atomic)
+                    NSLog("Saved Mac screenshot: \(url.path)")
+                } catch {
+                    NSLog("Problem writing Mac screenshot \(name): \(error)")
+                }
+            } else {
+                NSLog("MAC_SNAPSHOT_DIR not set — Mac screenshot \(name) not saved")
+            }
         #else
 
             guard self.app != nil else {

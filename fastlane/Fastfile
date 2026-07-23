@@ -427,7 +427,7 @@ platform :ios do
           notes = match[1].gsub(/^#+\s*/, "").strip
           UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
           UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
-          review_info = { notes: notes }
+          review_info = { notes: notes, first_name: "PoHan", last_name: "Huang", phone_number: "+886972995958", email_address: "hanfour.huang@icloud.com" }
         else
           UI.important("Reviewer notes file found but BEGIN_PASTE/END_PASTE markers missing: #{notes_path}")
         end
@@ -568,7 +568,7 @@ platform :ios do
       notes = match[1].gsub(/^#+\s*/, "").strip
       UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
       UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
-      review_info = { notes: notes }
+      review_info = { notes: notes, first_name: "PoHan", last_name: "Huang", phone_number: "+886972995958", email_address: "hanfour.huang@icloud.com" }
     end
 
     upload_to_app_store(
@@ -706,9 +706,15 @@ platform :ios do
 
     # Auto-load reviewer notes from the SAME file iOS uses — both platforms
     # ship the same version v6.0.0 per spec §M4.
-    version_match = File.read(File.expand_path("../project.yml", __dir__)).match(/MARKETING_VERSION:\s*"([^"]+)"/)
-    version = version_match ? version_match[1] : nil
-    UI.message("Detected MARKETING_VERSION: #{version || '(unknown)'}")
+    # Scope version detection to the PeerDropMac target: the iOS PeerDrop
+    # target's MARKETING_VERSION appears first in project.yml, so a plain
+    # first-match regex grabs the iOS version (now 5.6.0, diverged from the
+    # Mac's 6.0.0). Anchor on the Mac bundle id, then take the next
+    # MARKETING_VERSION. `version:` option overrides if ever needed.
+    mac_yaml = File.read(File.expand_path("../project.yml", __dir__))[/com\.hanfour\.peerdrop\.mac.*/m]
+    version_match = mac_yaml&.match(/MARKETING_VERSION:\s*"([^"]+)"/)
+    version = options[:version] || (version_match ? version_match[1] : nil)
+    UI.message("Detected macOS MARKETING_VERSION: #{version || '(unknown)'}")
 
     # Same staleness guard as the iOS release lane, against the Mac
     # metadata tree (fastlane/metadata/macos/). See release lane comment.
@@ -738,7 +744,7 @@ platform :ios do
           notes = match[1].gsub(/^#+\s*/, "").strip
           UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
           UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
-          review_info = { notes: notes }
+          review_info = { notes: notes, first_name: "PoHan", last_name: "Huang", phone_number: "+886972995958", email_address: "hanfour.huang@icloud.com" }
         else
           UI.important("Reviewer notes file found but BEGIN_PASTE/END_PASTE markers missing: #{notes_path}")
         end
@@ -789,6 +795,11 @@ platform :ios do
     should_submit = options.fetch(:submit, true)
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
+      # Mac ships as its OWN ASC app record (bundle com.hanfour.peerdrop.mac,
+      # Apple ID 6793812911) — NOT a Universal Purchase platform under the iOS
+      # app. Without this, upload_to_app_store defaults to the Appfile's
+      # com.hanfour.peerdrop and pushes Mac metadata to the wrong app.
+      app_identifier: "com.hanfour.peerdrop.mac",
       platform: "osx",
       skip_screenshots: false,
       skip_metadata: false,
@@ -842,11 +853,12 @@ platform :ios do
       notes = match[1].gsub(/^#+\s*/, "").strip
       UI.message("Reviewer notes loaded: #{notes.length} chars from #{File.basename(notes_path)}")
       UI.important("ASC notes field limit is ~4000 chars — content may truncate") if notes.length > 4000
-      review_info = { notes: notes }
+      review_info = { notes: notes, first_name: "PoHan", last_name: "Huang", phone_number: "+886972995958", email_address: "hanfour.huang@icloud.com" }
     end
 
     upload_to_app_store(
       api_key_path: "./fastlane/api_key.json",
+      app_identifier: "com.hanfour.peerdrop.mac",  # separate Mac app record, not the iOS app
       platform: "osx",
       app_version: options[:version],
       build_number: options[:build],
