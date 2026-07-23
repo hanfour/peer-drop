@@ -17,7 +17,7 @@ enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
     var localizedName: String {
         switch self {
         case .nearby:  return NSLocalizedString("Nearby", comment: "")
-        case .trusted: return NSLocalizedString("Trusted", comment: "")
+        case .trusted: return NSLocalizedString("Library", comment: "")
         case .relay:   return NSLocalizedString("Relay", comment: "")
         case .pet:     return NSLocalizedString("Pet", comment: "")
         }
