@@ -215,7 +215,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: PeerDropMac/App/PeerDrop-Mac.entitlements
         MARKETING_VERSION: "6.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
