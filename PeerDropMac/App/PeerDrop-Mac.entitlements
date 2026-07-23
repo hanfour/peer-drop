@@ -29,12 +29,19 @@
     <!-- For inbox + history caches -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
-    <!-- BLE peer discovery (matches iOS PeerDrop entitlements) -->
-    <key>com.apple.security.bluetooth</key>
+    <!-- BLE peer discovery. macOS App Sandbox uses com.apple.security.device.bluetooth
+         (the iOS key com.apple.security.bluetooth is rejected by Mac App Store
+         validation: "not supported on macOS"). -->
+    <key>com.apple.security.device.bluetooth</key>
     <true/>
-    <!-- mDNS / Bonjour discovery over local Wi-Fi -->
-    <key>com.apple.developer.networking.multicast</key>
-    <true/>
+    <!-- mDNS / Bonjour discovery over local Wi-Fi. On macOS this is handled by
+         the sandbox network client/server entitlements above + the Info.plist
+         Bonjour service declarations + the macOS 15 runtime local-network
+         permission. The approval-gated com.apple.developer.networking.multicast
+         entitlement is iOS/tvOS-only; including it blocked Mac App Store signing
+         (a provisioning profile can't embed it until Apple fully approves the
+         capability request, and "Assigned" status is not yet profile-ready).
+         Intentionally omitted here — re-add only if a future macOS requires it. -->
     <!-- M3: APNs alert push for voice-call wake. Release xcconfig flips
          this to "production" at archive time. -->
     <key>aps-environment</key>
