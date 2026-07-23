@@ -15,11 +15,27 @@ final class TipJarManager: ObservableObject {
 
     static let shared = TipJarManager()
 
-    static let productIDs: [String] = [
-        "com.hanfour.peerdrop.tip.small",
-        "com.hanfour.peerdrop.tip.medium",
-        "com.hanfour.peerdrop.tip.large",
-    ]
+    /// The Mac app ships as its OWN App Store Connect record
+    /// (`com.hanfour.peerdrop.mac`, App ID 6793812911), NOT a Universal
+    /// Purchase — so it cannot see the iOS app's IAP products, and IAP
+    /// product IDs are unique per account (the iOS IDs can't be reused).
+    /// macOS therefore requests its own `…mac.tip.*` products, registered
+    /// under the Mac app record.
+    static let productIDs: [String] = {
+        #if os(macOS)
+        return [
+            "com.hanfour.peerdrop.mac.tip.small",
+            "com.hanfour.peerdrop.mac.tip.medium",
+            "com.hanfour.peerdrop.mac.tip.large",
+        ]
+        #else
+        return [
+            "com.hanfour.peerdrop.tip.small",
+            "com.hanfour.peerdrop.tip.medium",
+            "com.hanfour.peerdrop.tip.large",
+        ]
+        #endif
+    }()
 
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TipJarManager")
 
