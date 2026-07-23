@@ -68,7 +68,7 @@ struct PeerDropCommands: Commands {
         CommandGroup(after: .windowList) {
             Button("Nearby")  { postJump(.nearby)  }
                 .keyboardShortcut("1", modifiers: [.command, .option])
-            Button("Trusted") { postJump(.trusted) }
+            Button("Library") { postJump(.trusted) }
                 .keyboardShortcut("2", modifiers: [.command, .option])
             Button("Relay")   { postJump(.relay)   }
                 .keyboardShortcut("3", modifiers: [.command, .option])
