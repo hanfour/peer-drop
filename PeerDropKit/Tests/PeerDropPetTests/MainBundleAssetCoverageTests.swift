@@ -298,6 +298,15 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "totoro-large-baby", "totoro-large-elder", "totoro-mini-baby", "totoro-mini-elder",
         "totoro-white-baby", "totoro-white-elder", "unicorn-dark-baby", "unicorn-dark-elder",
         "unicorn-rainbow-baby", "unicorn-rainbow-elder", "unicorn-white-baby",
+        // Final mass-gen batch (2026-07-25): the PixelLab subscription is not being
+        // renewed, so the last ~440 generations went for breadth over depth — one
+        // adult for each family still sitting at 0% v5, picking the most
+        // recognisable variant. Quota ran out 3 families short: lizard, sheep and
+        // pigeon stay rotation-only for good.
+        "wolf-grey-adult", "owl-barn-adult", "penguin-emperor-adult", "turtle-sea-adult",
+        "squirrel-red-adult", "raccoon-standard-adult", "redpanda-standard-adult",
+        "sloth-threetoed-adult", "parrot-macaw-adult", "phoenix-fire-adult",
+        "snake-ball-adult",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.

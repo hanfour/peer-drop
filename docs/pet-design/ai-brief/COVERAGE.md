@@ -1,15 +1,15 @@
 # v5 Multi-Frame Coverage Report
 
-Generated: 2026-07-25T09:01:26Z
+Generated: 2026-07-25T15:34:29Z
 Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 
 ## Summary
 
 - **Total zips:** 324
-- **At v5 (multi-frame walk + idle):** 168 (51.9%)
-- **At v2 (rotation-only, awaiting mass-gen):** 156 (48.1%)
-- **Atlas-converted (size-optimized):** 77 of 168 v5 zips (45.8%)
-- **Total bundled bytes:** 36,647,320 (35788.4 KiB)
+- **At v5 (multi-frame walk + idle):** 179 (55.2%)
+- **At v2 (rotation-only, awaiting mass-gen):** 145 (44.8%)
+- **Atlas-converted (size-optimized):** 88 of 179 v5 zips (49.2%)
+- **Total bundled bytes:** 38,418,198 (37517.8 KiB)
 
 ## Per-family breakdown
 
@@ -31,24 +31,24 @@ Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 | `lizard` | 9 | 0 | 9 | 0% | 0 |
 | `octopus` | 2 | 2 | 0 | 100% | 2 |
 | `otter` | 6 | 4 | 2 | 67% | 4 |
-| `owl` | 9 | 0 | 9 | 0% | 0 |
-| `parrot` | 9 | 0 | 9 | 0% | 0 |
-| `penguin` | 9 | 0 | 9 | 0% | 0 |
-| `phoenix` | 9 | 0 | 9 | 0% | 0 |
+| `owl` | 9 | 1 | 8 | 11% | 1 |
+| `parrot` | 9 | 1 | 8 | 11% | 1 |
+| `penguin` | 9 | 1 | 8 | 11% | 1 |
+| `phoenix` | 9 | 1 | 8 | 11% | 1 |
 | `pig` | 12 | 12 | 0 | 100% | 0 |
 | `pigeon` | 9 | 0 | 9 | 0% | 0 |
 | `rabbit` | 14 | 14 | 0 | 100% | 0 |
-| `raccoon` | 6 | 0 | 6 | 0% | 0 |
-| `redpanda` | 6 | 0 | 6 | 0% | 0 |
+| `raccoon` | 6 | 1 | 5 | 17% | 1 |
+| `redpanda` | 6 | 1 | 5 | 17% | 1 |
 | `sheep` | 9 | 0 | 9 | 0% | 0 |
 | `slime` | 17 | 15 | 2 | 88% | 15 |
-| `sloth` | 6 | 0 | 6 | 0% | 0 |
-| `snake` | 9 | 0 | 9 | 0% | 0 |
-| `squirrel` | 9 | 0 | 9 | 0% | 0 |
+| `sloth` | 6 | 1 | 5 | 17% | 1 |
+| `snake` | 9 | 1 | 8 | 11% | 1 |
+| `squirrel` | 9 | 1 | 8 | 11% | 1 |
 | `totoro` | 14 | 12 | 2 | 86% | 12 |
-| `turtle` | 9 | 0 | 9 | 0% | 0 |
+| `turtle` | 9 | 1 | 8 | 11% | 1 |
 | `unicorn` | 9 | 8 | 1 | 89% | 8 |
-| `wolf` | 9 | 0 | 9 | 0% | 0 |
+| `wolf` | 9 | 1 | 8 | 11% | 1 |
 
 ## v5-ready zips
 
@@ -159,6 +159,10 @@ Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 - `otter-river-baby` (atlas) — 128,894 bytes
 - `otter-sea-adult` (atlas) — 312,112 bytes
 - `otter-sea-baby` (atlas) — 137,340 bytes
+- `owl-barn-adult` (atlas) — 141,796 bytes
+- `parrot-macaw-adult` (atlas) — 135,204 bytes
+- `penguin-emperor-adult` (atlas) — 155,405 bytes
+- `phoenix-fire-adult` (atlas) — 225,242 bytes
 - `pig-black-adult` — 116,230 bytes
 - `pig-black-baby` — 104,645 bytes
 - `pig-black-elder` — 112,805 bytes
@@ -185,6 +189,8 @@ Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 - `rabbit-lop-adult` — 91,531 bytes
 - `rabbit-lop-baby` — 90,359 bytes
 - `rabbit-lop-elder` — 92,176 bytes
+- `raccoon-standard-adult` (atlas) — 131,650 bytes
+- `redpanda-standard-adult` (atlas) — 145,021 bytes
 - `slime-clear-adult` (atlas) — 625,736 bytes
 - `slime-clear-baby` (atlas) — 544,243 bytes
 - `slime-clear-elder` (atlas) — 552,579 bytes
@@ -200,6 +206,9 @@ Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 - `slime-water-adult` (atlas) — 604,076 bytes
 - `slime-water-baby` (atlas) — 556,000 bytes
 - `slime-water-elder` (atlas) — 480,122 bytes
+- `sloth-threetoed-adult` (atlas) — 199,924 bytes
+- `snake-ball-adult` (atlas) — 290,608 bytes
+- `squirrel-red-adult` (atlas) — 151,988 bytes
 - `totoro-grey-adult` (atlas) — 412,157 bytes
 - `totoro-grey-baby` (atlas) — 132,456 bytes
 - `totoro-grey-elder` (atlas) — 242,068 bytes
@@ -212,6 +221,7 @@ Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 - `totoro-white-adult` (atlas) — 314,758 bytes
 - `totoro-white-baby` (atlas) — 171,555 bytes
 - `totoro-white-elder` (atlas) — 205,640 bytes
+- `turtle-sea-adult` (atlas) — 164,209 bytes
 - `unicorn-dark-adult` (atlas) — 407,882 bytes
 - `unicorn-dark-baby` (atlas) — 155,227 bytes
 - `unicorn-dark-elder` (atlas) — 173,999 bytes
@@ -220,6 +230,7 @@ Source: `PeerDropKit/Sources/PeerDropPet/Resources/Pets/`
 - `unicorn-rainbow-elder` (atlas) — 206,801 bytes
 - `unicorn-white-adult` (atlas) — 453,957 bytes
 - `unicorn-white-baby` (atlas) — 132,279 bytes
+- `wolf-grey-adult` (atlas) — 137,616 bytes
 
 ## Suggested next batch
 
@@ -229,18 +240,18 @@ Heuristic ranks species×stages by:
   3. Family size descending (popular family → broader impact).
 
 - 🎯 `horse-zebra-adult`
-- 🎯 `slime-baby`
-- 🎯 `totoro-baby`
-- 🎯 `cow-highland-baby`
-- 🎯 `cow-holstein-baby`
-- 🎯 `cow-yellow-baby`
-- 🎯 `deer-moose-baby`
-- 🎯 `deer-sika-baby`
-- 🎯 `deer-whitetail-baby`
-- 🎯 `duck-mallard-baby`
-- 🎯 `duck-mandarin-baby`
-- 🎯 `duck-yellow-baby`
-- … and 144 more
+- 🎯 `owl-horned-adult`
+- 🎯 `owl-snowy-adult`
+- 🎯 `parrot-budgie-adult`
+- 🎯 `parrot-cockatiel-adult`
+- 🎯 `penguin-crested-adult`
+- 🎯 `penguin-king-adult`
+- 🎯 `phoenix-ice-adult`
+- 🎯 `phoenix-light-adult`
+- 🎯 `snake-corn-adult`
+- 🎯 `snake-milk-adult`
+- 🎯 `squirrel-flying-adult`
+- … and 133 more
 
 🎯 = family already has a v5 sibling
 
