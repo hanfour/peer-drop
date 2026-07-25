@@ -283,6 +283,21 @@ final class MainBundleAssetCoverageTests: XCTestCase {
         "totoro-grey-adult", "totoro-large-adult", "totoro-mini-adult", "totoro-white-adult",
         "unicorn-dark-adult", "unicorn-rainbow-adult", "unicorn-white-adult",
         "otter-river-adult", "otter-sea-adult",
+        // Mass-gen batch 2026-07-24/25 (35 species via run_monthly_batch + PixelLab
+        // API, normalized + atlased): expansion-family adults (cow / deer / duck /
+        // hedgehog / horse) plus baby & elder stages for hamster / totoro / unicorn /
+        // otter. ~14 more of this cycle's ~2000-generation budget were deferred — the
+        // background batch kept getting killed by session context-compaction; run the
+        // rest via `resume_gen.sh` in a fresh session before the Jul 28 quota reset.
+        "cow-highland-adult", "cow-holstein-adult", "cow-yellow-adult", "deer-moose-adult",
+        "deer-sika-adult", "deer-whitetail-adult", "duck-mallard-adult", "duck-mandarin-adult",
+        "duck-yellow-adult", "hamster-golden-elder", "hamster-white-baby", "hamster-white-elder",
+        "hamster-winterwhite-adult", "hamster-winterwhite-baby", "hamster-winterwhite-elder", "hedgehog-brown-adult",
+        "hedgehog-chocolate-adult", "hedgehog-white-adult", "horse-black-adult", "horse-chestnut-adult",
+        "otter-river-baby", "otter-sea-baby", "totoro-grey-baby", "totoro-grey-elder",
+        "totoro-large-baby", "totoro-large-elder", "totoro-mini-baby", "totoro-mini-elder",
+        "totoro-white-baby", "totoro-white-elder", "unicorn-dark-baby", "unicorn-dark-elder",
+        "unicorn-rainbow-baby", "unicorn-rainbow-elder", "unicorn-white-baby",
     ]
 
     /// Asserts the `expectedV5Coverage` whitelist exactly matches reality.
