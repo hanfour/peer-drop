@@ -136,7 +136,7 @@ public struct ChatMessage: Identifiable, Codable {
         groupReadStatus = try container.decodeIfPresent(GroupReadStatus.self, forKey: .groupReadStatus)
     }
 
-    public static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil, id: String? = nil) -> ChatMessage {
+    public static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil, id: String? = nil, timestamp: Date? = nil) -> ChatMessage {
         ChatMessage(
             id: id ?? UUID().uuidString,
             text: text,
@@ -151,7 +151,7 @@ public struct ChatMessage: Identifiable, Codable {
             isOutgoing: isOutgoing,
             peerName: peerName,
             status: isOutgoing ? .sending : .delivered,
-            timestamp: Date(),
+            timestamp: timestamp ?? Date(),
             groupID: groupID,
             senderID: senderID,
             senderName: senderName,

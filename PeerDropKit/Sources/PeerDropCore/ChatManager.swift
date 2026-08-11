@@ -81,7 +81,7 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil, messageID: String? = nil) -> ChatMessage {
+    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil, messageID: String? = nil, timestamp: Date? = nil) -> ChatMessage {
         let msg = ChatMessage(
             id: messageID ?? UUID().uuidString,
             text: text,
@@ -96,7 +96,7 @@ public final class ChatManager: ObservableObject {
             isOutgoing: false,
             peerName: peerName,
             status: .delivered,
-            timestamp: Date(),
+            timestamp: timestamp ?? Date(),
             groupID: groupID,
             senderID: senderID,
             senderName: senderName ?? peerName,
@@ -623,7 +623,7 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String, messageID: String? = nil) -> ChatMessage {
+    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String, messageID: String? = nil, timestamp: Date? = nil) -> ChatMessage {
         let msg = ChatMessage.text(
             text: text,
             isOutgoing: false,
@@ -631,7 +631,8 @@ public final class ChatManager: ObservableObject {
             groupID: groupID,
             senderID: senderID,
             senderName: senderName,
-            id: messageID
+            id: messageID,
+            timestamp: timestamp
         )
         appendGroupMessage(msg, groupID: groupID)
         if activeGroupID != groupID {

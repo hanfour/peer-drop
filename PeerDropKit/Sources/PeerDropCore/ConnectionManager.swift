@@ -2933,7 +2933,8 @@ public final class ConnectionManager: ObservableObject {
                     groupID: groupID,
                     senderID: message.senderID,
                     senderName: payload.senderName ?? peerConnection.peerIdentity.displayName,
-                    messageID: payload.messageID
+                    messageID: payload.messageID,
+                    timestamp: payload.timestamp
                 )
             } else {
                 savedMsg = chatManager.saveIncoming(
@@ -2944,7 +2945,8 @@ public final class ConnectionManager: ObservableObject {
                     replyToMessageID: payload.replyToMessageID,
                     replyToText: payload.replyToText,
                     replyToSenderName: payload.replyToSenderName,
-                    messageID: payload.messageID
+                    messageID: payload.messageID,
+                    timestamp: payload.timestamp
                 )
             }
             NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
@@ -3300,7 +3302,8 @@ public final class ConnectionManager: ObservableObject {
                 replyToMessageID: payload.replyToMessageID,
                 replyToText: payload.replyToText,
                 replyToSenderName: payload.replyToSenderName,
-                messageID: payload.messageID
+                messageID: payload.messageID,
+                timestamp: payload.timestamp
             )
             NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
 
