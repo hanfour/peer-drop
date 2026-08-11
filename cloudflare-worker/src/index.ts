@@ -2071,9 +2071,33 @@ export class SignalingRoom {
 // ---------------------------------------------------------------------------
 // Durable Object: PreKeyStore
 //
-// Provides atomic OTP key consumption. Each mailbox ID maps to one DO instance,
-// ensuring only one request at a time can consume an OTP key.
+// Each mailbox ID maps to one DO instance and owns OTP-key consumption for that
+// mailbox. Two protections live here:
+//
+//   #6b Atomic consumption. The read-modify-write of the OTPK pool touches KV
+//       (get → shift → put). KV awaits are NOT covered by DO input gating, so
+//       two concurrent initiators could each read the same pre-shift snapshot
+//       and be handed the SAME OTPK. The whole critical section now runs inside
+//       state.blockConcurrencyWhile(), which blocks delivery of other events
+//       until it completes — serializing consumers so each gets a distinct key.
+//
+//   #6  OTPK-exhaustion DoS. GET /v2/keys/:mailboxId is unauthed by design
+//       (pre-session X3DH bootstrap). An attacker could hammer it — from any
+//       number of IPs — to drain the pool; under a strict, fail-closed client
+//       policy the victim then becomes unreachable. We cap *consumption* per
+//       mailbox per window (persisted in DO storage, IP-independent). When the
+//       cap is hit OR the pool is exhausted, we return a valid SPK-only bundle
+//       (X3DH explicitly supports an OTPK-less bundle: reduced forward secrecy
+//       for that first message, but the peer stays reachable) instead of an
+//       error, and we do NOT consume further — so the pool survives the burst.
 // ---------------------------------------------------------------------------
+
+// Max fresh OTPKs handed out per mailbox per window. Chosen well above any
+// plausible legitimate pairing rate, so normal low-rate use is unaffected; an
+// attacker is capped to this many drains per window regardless of source IPs.
+const OTPK_CONSUME_WINDOW_MS = 60_000; // 1 minute
+const OTPK_CONSUME_MAX_PER_WINDOW = 10;
+const OTPK_RL_STORAGE_KEY = "otpk-consume-rl";
 
 export class PreKeyStore {
   private state: DurableObjectState;
@@ -2091,31 +2115,48 @@ export class PreKeyStore {
       return jsonResponse({ error: "Missing mailboxId" }, 400);
     }
 
-    // Read bundle from KV
-    const raw = await this.env.V2_STORE.get(`keys:${mailboxId}`);
-    if (!raw) {
-      return jsonResponse({ error: "Key bundle not found" }, 404);
-    }
+    // Serialize the entire read-modify-write so concurrent consumers can't be
+    // handed the same OTPK (#6b) and the rate-limit counter stays consistent.
+    return await this.state.blockConcurrencyWhile(async () => {
+      const raw = await this.env.V2_STORE.get(`keys:${mailboxId}`);
+      if (!raw) {
+        return jsonResponse({ error: "Key bundle not found" }, 404);
+      }
 
-    const bundle = JSON.parse(raw) as {
-      identityKey: string; signingKey: string;
-      signedPreKey: unknown; oneTimePreKeys?: unknown[];
-    };
+      const bundle = JSON.parse(raw) as {
+        identityKey: string; signingKey: string;
+        signedPreKey: unknown; oneTimePreKeys?: unknown[];
+      };
 
-    // Atomically consume one OTP key (DO guarantees single-threaded execution)
-    let consumedOTPK: unknown | undefined;
-    if (bundle.oneTimePreKeys && bundle.oneTimePreKeys.length > 0) {
-      consumedOTPK = bundle.oneTimePreKeys.shift();
-      await this.env.V2_STORE.put(`keys:${mailboxId}`, JSON.stringify(bundle), {
-        expirationTtl: 30 * 86400,
+      // Per-mailbox consumption rate limit (DO storage, serialized) (#6).
+      const now = Date.now();
+      const rl = (await this.state.storage.get<{ windowStart: number; count: number }>(
+        OTPK_RL_STORAGE_KEY,
+      )) ?? { windowStart: now, count: 0 };
+      if (now - rl.windowStart > OTPK_CONSUME_WINDOW_MS) {
+        rl.windowStart = now;
+        rl.count = 0;
+      }
+      const rateLimited = rl.count >= OTPK_CONSUME_MAX_PER_WINDOW;
+
+      // Consume one OTPK only when under the cap AND the pool is non-empty.
+      // Otherwise fall through to an SPK-only bundle (never an error).
+      let consumedOTPK: unknown | undefined;
+      if (!rateLimited && bundle.oneTimePreKeys && bundle.oneTimePreKeys.length > 0) {
+        consumedOTPK = bundle.oneTimePreKeys.shift();
+        await this.env.V2_STORE.put(`keys:${mailboxId}`, JSON.stringify(bundle), {
+          expirationTtl: 30 * 86400,
+        });
+        rl.count += 1;
+        await this.state.storage.put(OTPK_RL_STORAGE_KEY, rl);
+      }
+
+      return jsonResponse({
+        identityKey: bundle.identityKey,
+        signingKey: bundle.signingKey,
+        signedPreKey: bundle.signedPreKey,
+        oneTimePreKey: consumedOTPK ?? null,
       });
-    }
-
-    return jsonResponse({
-      identityKey: bundle.identityKey,
-      signingKey: bundle.signingKey,
-      signedPreKey: bundle.signedPreKey,
-      oneTimePreKey: consumedOTPK ?? null,
     });
   }
 }
