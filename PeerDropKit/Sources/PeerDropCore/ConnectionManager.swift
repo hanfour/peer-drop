@@ -463,7 +463,7 @@ public final class ConnectionManager: ObservableObject {
         )
         let envelopeData = try JSONEncoder().encode(envelope)
         let challenge = UUID().uuidString
-        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
             throw MailboxError.invalidResponse
         }
         try await MailboxClient().sendMessage(
@@ -1428,7 +1428,7 @@ public final class ConnectionManager: ObservableObject {
 
         let envelopeData = try JSONEncoder().encode(envelope)
         let challenge = UUID().uuidString
-        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
             throw MailboxError.invalidResponse
         }
 
@@ -1523,7 +1523,7 @@ public final class ConnectionManager: ObservableObject {
 
         let envelopeData = try JSONEncoder().encode(envelope)
         let challenge = UUID().uuidString
-        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
             throw MailboxError.invalidResponse
         }
 
