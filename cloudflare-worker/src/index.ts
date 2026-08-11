@@ -63,9 +63,12 @@ const ROOM_CODE_LENGTH = 6;
 const ROOM_TTL_SECONDS = 600; // 10 minutes
 const TURN_TTL_SECONDS = 900; // 15 minutes
 
-// Rate limiting: max requests per IP within the window
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30;
+// Rate limiting: max requests per (IP, route class) within the window.
+export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+export const RATE_LIMIT_MAX_REQUESTS = 30;
+// KV min TTL is 60s; give the counter key a little slack past the window so it
+// survives to the window edge, then self-expires (no cleanup job needed).
+const RATE_LIMIT_TTL_SECONDS = 120;
 
 function generateRoomCode(): string {
   const randomBytes = new Uint8Array(ROOM_CODE_LENGTH);
@@ -77,32 +80,58 @@ function generateRoomCode(): string {
   return chars.join("");
 }
 
-// Simple in-memory rate limiter (per worker instance)
-const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(ip, { count: 1, windowStart: now });
-    return false;
-  }
-
-  entry.count++;
-  if (entry.count > RATE_LIMIT_MAX_REQUESTS) {
-    return true;
-  }
-  return false;
+// Coarse route class for rate-limit bucketing. Keeping separate budgets per
+// class (rather than one global counter as the old Map did) means a burst on
+// one surface — e.g. message delivery — can't starve unrelated surfaces like
+// room creation for the same IP.
+export function rateLimitClass(path: string, _method: string): string {
+  if (path.startsWith("/v2/keys")) return "keys";
+  if (path.startsWith("/v2/messages")) return "messages";
+  if (path.startsWith("/v2/device")) return "device";
+  if (path.startsWith("/v2/inbox")) return "inbox";
+  if (path.startsWith("/v2/")) return "v2";
+  if (path.startsWith("/room")) return "room";
+  if (path.startsWith("/debug")) return "debug";
+  return "default";
 }
 
-// Periodically clean up stale rate limit entries
-function cleanupRateLimits() {
-  const now = Date.now();
-  for (const [ip, entry] of rateLimitMap) {
-    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
-      rateLimitMap.delete(ip);
-    }
+// KV key for a rate-limit counter. The IP is already keyed-hashed (never the
+// raw IP, mirroring the wslog redaction). Fixed minute-window buckets keep the
+// per-key write volume bounded and let KV TTL expire them automatically.
+export function rateLimitKey(ipHash: string, routeClass: string, atMs: number): string {
+  const windowIndex = Math.floor(atMs / RATE_LIMIT_WINDOW_MS);
+  return `rl:${routeClass}:${ipHash}:${windowIndex}`;
+}
+
+/**
+ * KV-backed, cross-isolate rate limiter. Returns true if the request should be
+ * rejected. Counters live in KV (shared across every isolate/colo) instead of
+ * a per-isolate in-memory Map, which previously multiplied the effective limit
+ * by the isolate count (i.e. effectively unlimited).
+ *
+ * Notes / trade-offs:
+ *   - The header-absent "unknown" IP is NOT limited: it only occurs off-edge
+ *     or in tests (Cloudflare always sets CF-Connecting-IP), and a shared
+ *     "unknown" bucket would merge unrelated callers.
+ *   - KV read-modify-write is not atomic, so under a same-key burst the count
+ *     can undercount slightly (last-writer-wins). This is acceptable for a
+ *     coarse ~30/min limit and is still a vast improvement over the previous
+ *     per-isolate Map. A DO could make it exactly atomic at the cost of a hop
+ *     on every request.
+ *   - Fail-open on unexpected KV errors: a limiter outage must not take the
+ *     whole relay down.
+ */
+async function isRateLimited(env: Env, ip: string, routeClass: string): Promise<boolean> {
+  if (!ip || ip === "unknown") return false;
+  try {
+    const ipHash = await hashClientIp(ip, env.TOKEN_SECRET);
+    const key = rateLimitKey(ipHash, routeClass, Date.now());
+    const current = parseInt((await env.ROOMS.get(key)) ?? "0", 10) || 0;
+    if (current >= RATE_LIMIT_MAX_REQUESTS) return true;
+    await env.ROOMS.put(key, String(current + 1), { expirationTtl: RATE_LIMIT_TTL_SECONDS });
+    return false;
+  } catch {
+    return false; // fail-open on limiter infrastructure errors
   }
 }
 
@@ -129,17 +158,14 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Rate limiting
+    // Rate limiting (KV-backed, shared across isolates/colos)
     const clientIP = request.headers.get("CF-Connecting-IP") || "unknown";
-    if (isRateLimited(clientIP)) {
+    if (await isRateLimited(env, clientIP, rateLimitClass(path, request.method))) {
       return new Response(
         JSON.stringify({ error: "Too many requests" }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
       );
     }
-
-    // Periodic cleanup
-    if (Math.random() < 0.01) cleanupRateLimits();
 
     // Authentication for tier-2 endpoints (room creation, ICE creds,
     // device registration, invite delivery, inbox WebSocket).
@@ -888,10 +914,9 @@ export default {
         return jsonResponse({ error: "Missing mailboxId or preKeyBundle" }, 400);
       }
 
-      // Rate limit registration using in-memory limiter (no IP persisted to KV)
-      if (isRateLimited(clientIP)) {
-        return jsonResponse({ error: "Too many requests" }, 429);
-      }
+      // Rate limiting is handled globally at the top of fetch() (route class
+      // "keys"), which is KV-backed and shared across isolates — no separate
+      // per-handler limiter needed here.
 
       // Generate mailbox token if first registration
       const existingMeta = await env.V2_STORE.get(`meta:${body.mailboxId}`);
