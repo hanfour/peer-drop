@@ -81,9 +81,9 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
+    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil, messageID: String? = nil) -> ChatMessage {
         let msg = ChatMessage(
-            id: UUID().uuidString,
+            id: messageID ?? UUID().uuidString,
             text: text,
             isMedia: false,
             mediaType: nil,
