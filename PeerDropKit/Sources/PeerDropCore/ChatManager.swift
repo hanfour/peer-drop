@@ -30,18 +30,19 @@ public final class ChatManager: ObservableObject {
     public var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
     private let fileManager = FileManager.default
+    private let rootDirectory: URL
     private let unreadKey = "peerDropUnreadCounts"
     private let groupUnreadKey = "peerDropGroupUnreadCounts"
     private let encryptor = ChatDataEncryptor.shared
 
-    init() {
+    init(rootDirectory: URL? = nil) {
+        self.rootDirectory = rootDirectory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         loadUnreadCounts()
         loadGroupUnreadCounts()
     }
 
     private var chatDirectory: URL {
-        let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent("ChatData", isDirectory: true)
+        rootDirectory.appendingPathComponent("ChatData", isDirectory: true)
     }
 
     private func mediaDirectory(for peerID: String) -> URL {
@@ -524,7 +525,9 @@ public final class ChatManager: ObservableObject {
 
     private func persistMessages(peerID: String) {
         guard let pending = pendingMessages[peerID], !pending.isEmpty else { return }
-        pendingMessages[peerID] = nil
+        // NOTE: do NOT clear pendingMessages here — only after a durable write
+        // succeeds (below). Clearing up-front means any failure on the risky
+        // decrypt/decode/encrypt path silently drops these messages forever.
 
         let file = messagesFile(for: peerID)
         let dir = file.deletingLastPathComponent()
@@ -532,20 +535,36 @@ public final class ChatManager: ObservableObject {
             try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
             logger.error("Failed to create chat directory: \(error.localizedDescription)")
+            return // keep pending queued; the next flush/schedule retries
         }
-        do {
-            // Load existing messages from disk, append pending, write back
-            var existing: [ChatMessage] = []
-            if fileManager.fileExists(atPath: file.path) {
+
+        // Load existing messages. If the file exists but is undecodable (e.g. the
+        // at-rest key was lost after a device migration), quarantine it instead
+        // of wedging every future write against the poison file — otherwise
+        // `pending` and all subsequent messages are dropped forever.
+        var existing: [ChatMessage] = []
+        if fileManager.fileExists(atPath: file.path) {
+            do {
                 let raw = try Data(contentsOf: file)
                 let data = try encryptor.decrypt(raw)
                 existing = try JSONDecoder().decode([ChatMessage].self, from: data)
+            } catch {
+                let quarantine = file.deletingPathExtension()
+                    .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970))")
+                try? fileManager.moveItem(at: file, to: quarantine)
+                logger.error("Quarantined undecodable chat file for peer \(peerID): \(error.localizedDescription)")
+                existing = []
             }
-            existing.append(contentsOf: pending)
+        }
+
+        existing.append(contentsOf: pending)
+        do {
             let encoded = try JSONEncoder().encode(existing)
             try encryptor.encryptAndWrite(encoded, to: file)
+            pendingMessages[peerID] = nil // safe to drop only after a durable write
         } catch {
             logger.error("Failed to persist messages: \(error.localizedDescription)")
+            // Keep `pending` so the next flush/schedule retries instead of losing data.
         }
     }
 
