@@ -213,13 +213,13 @@ export default {
       const code = wsMatch[1];
       const roomData = await env.ROOMS.get(code);
       if (!roomData) {
-        // Diagnostic: log WS upgrade failures (7-day TTL)
+        // Diagnostic: log WS upgrade failures (7-day TTL). PII redacted —
+        // keyed IP hash only, never the raw IP or User-Agent (#10).
         const logKey = `wslog:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
         await env.ROOMS.put(logKey, JSON.stringify({
           reason: "room_not_found",
           code,
-          ip: clientIP,
-          ua: request.headers.get("User-Agent") || "",
+          ipHash: await hashClientIp(clientIP, env.TOKEN_SECRET),
           timestamp: new Date().toISOString(),
         }), { expirationTtl: 7 * 86400 });
         return new Response(JSON.stringify({ error: "Room not found" }), {
@@ -238,8 +238,7 @@ export default {
           code,
           providedToken: providedToken ? `${providedToken.slice(0, 4)}...${providedToken.slice(-4)}` : null,
           expectedTokenHash: roomInfo.token ? `${roomInfo.token.slice(0, 4)}...${roomInfo.token.slice(-4)}` : null,
-          ip: clientIP,
-          ua: request.headers.get("User-Agent") || "",
+          ipHash: await hashClientIp(clientIP, env.TOKEN_SECRET),
           timestamp: new Date().toISOString(),
         }), { expirationTtl: 7 * 86400 });
         return new Response(JSON.stringify({ error: "Invalid room token" }), {
@@ -265,8 +264,7 @@ export default {
           doStatus: doResponse.status,
           doBody: bodyText.slice(0, 500),
           clientId: url.searchParams.get("clientId")?.slice(0, 8) || null,
-          ip: clientIP,
-          ua: request.headers.get("User-Agent") || "",
+          ipHash: await hashClientIp(clientIP, env.TOKEN_SECRET),
           timestamp: new Date().toISOString(),
         }), { expirationTtl: 7 * 86400 });
       }
@@ -1347,6 +1345,33 @@ function arrayBufferToBase64(buf: Uint8Array): string {
   let s = "";
   for (const b of buf) s += String.fromCharCode(b);
   return btoa(s);
+}
+
+/**
+ * Keyed, non-reversible hash of a client IP for diagnostics/rate-limit keys.
+ *
+ * Raw IPs must never land in KV (see /debug/report redaction + the v2
+ * "no logging of IPs" contract). A *plain* SHA-256 of an IP is pointless —
+ * the IPv4 space is only ~4 billion values, trivially brute-forced back to
+ * the original. So we HMAC with a server-only secret (TOKEN_SECRET): the
+ * output is stable (same source ⇒ same hash, preserving correlation value)
+ * but cannot be reversed or rainbow-tabled without the secret.
+ *
+ * Returns "unknown" for the header-absent case (only happens off-edge / in
+ * tests — Cloudflare always populates CF-Connecting-IP) and "unkeyed" if the
+ * secret is somehow unset, so a raw IP is never emitted on any path.
+ */
+async function hashClientIp(ip: string, secret: string | undefined): Promise<string> {
+  if (!ip || ip === "unknown") return "unknown";
+  if (!secret) return "unkeyed";
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(ip)));
+  let hex = "";
+  for (let i = 0; i < 8; i++) hex += sig[i].toString(16).padStart(2, "0"); // 64-bit tag
+  return hex;
 }
 
 /**
