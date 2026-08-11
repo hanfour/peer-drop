@@ -39,10 +39,23 @@ public final class ChatManager: ObservableObject {
         self.rootDirectory = rootDirectory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         loadUnreadCounts()
         loadGroupUnreadCounts()
+        // Wipe any decrypted media left in temp by a previous session so
+        // plaintext copies of private media don't survive across launches.
+        purgeTempMediaCache()
     }
 
     private var chatDirectory: URL {
         rootDirectory.appendingPathComponent("ChatData", isDirectory: true)
+    }
+
+    /// Scratch location where encrypted media is decrypted for playback. Kept in
+    /// its own subdirectory so it can be wiped wholesale on launch.
+    private var tempMediaDirectory: URL {
+        fileManager.temporaryDirectory.appendingPathComponent("PeerDropMediaCache", isDirectory: true)
+    }
+
+    private func purgeTempMediaCache() {
+        try? fileManager.removeItem(at: tempMediaDirectory)
     }
 
     private func mediaDirectory(for peerID: String) -> URL {
@@ -262,7 +275,8 @@ public final class ChatManager: ObservableObject {
     public func writeMediaToTempFile(relativePath: String) -> URL? {
         guard let data = loadMediaData(relativePath: relativePath) else { return nil }
 
-        let tempDir = FileManager.default.temporaryDirectory
+        let tempDir = tempMediaDirectory
+        try? fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let fileName = (relativePath as NSString).lastPathComponent
         let tempURL = tempDir.appendingPathComponent("media_\(UUID().uuidString)_\(fileName)")
 
