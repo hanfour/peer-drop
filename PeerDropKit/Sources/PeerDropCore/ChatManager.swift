@@ -435,6 +435,10 @@ public final class ChatManager: ObservableObject {
     }
 
     private func persistReaction(messageID: String, reactions: [String: Set<String>]?) {
+        // Flush pending writes first: the target message may still be queued in
+        // the debounce buffer, in which case a disk scan would miss it and the
+        // debounce would later overwrite this reaction with the original.
+        flushAllPendingPersists()
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {
@@ -745,6 +749,10 @@ public final class ChatManager: ObservableObject {
     }
 
     private func persistEditOrDelete(messageID: String, peerID: String) {
+        // Flush pending writes first: an edit/delete applied inside the 500ms
+        // debounce window would otherwise miss the not-yet-written message and be
+        // clobbered by the debounce writing the pre-edit original.
+        flushAllPendingPersists()
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {
