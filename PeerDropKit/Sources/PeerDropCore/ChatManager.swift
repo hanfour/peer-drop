@@ -104,6 +104,13 @@ public final class ChatManager: ObservableObject {
             replyToText: replyToText,
             replyToSenderName: replyToSenderName
         )
+        // Dedup: a duplicate delivery (direct + relay, a retry, a reconnect
+        // replay) now carries the same shared id. Skip storing it again, but
+        // still return the message so a delivery receipt fires (the sender
+        // likely retried precisely because it never saw one).
+        if let messageID, isDuplicateIncoming(id: messageID, peerID: peerID) {
+            return msg
+        }
         appendMessage(msg, peerID: peerID)
         if activeChatPeerID != peerID {
             incrementUnread(peerID: peerID)
@@ -518,6 +525,17 @@ public final class ChatManager: ObservableObject {
     }
 
     // MARK: - Private
+
+    /// Has an incoming message with this shared id already been received this
+    /// session? Checks the pending write buffer and (for the open conversation)
+    /// the in-memory list — enough to collapse near-simultaneous duplicate
+    /// deliveries without a per-message disk scan. (Cross-session re-delivery of
+    /// an already-persisted message is a rarer residual, left as a follow-up.)
+    private func isDuplicateIncoming(id: String, peerID: String) -> Bool {
+        if pendingMessages[peerID]?.contains(where: { $0.id == id }) == true { return true }
+        if peerID == currentPeerID, allMessagesForCurrentPeer.contains(where: { $0.id == id }) { return true }
+        return false
+    }
 
     private func appendMessage(_ message: ChatMessage, peerID: String) {
         // Only surface it in the on-screen list if it belongs to the conversation
