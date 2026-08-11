@@ -201,6 +201,13 @@ public final class ChatManager: ObservableObject {
     }
 
     public func deleteMessages(forPeer peerID: String) {
+        // Cancel any in-flight debounced write and drop queued messages first, so
+        // a pending persist can't recreate the file we're about to delete (a
+        // privacy failure — the "deleted" conversation would reappear on disk).
+        persistTasks[peerID]?.cancel()
+        persistTasks[peerID] = nil
+        pendingMessages[peerID] = nil
+
         let file = messagesFile(for: peerID)
         do {
             try fileManager.removeItem(at: file)
@@ -213,8 +220,17 @@ public final class ChatManager: ObservableObject {
         } catch {
             logger.warning("Failed to delete media directory: \(error.localizedDescription)")
         }
-        if !messages.isEmpty {
+        // Clear in-memory caches for this peer so the deleted messages can't be
+        // resurrected via Load-earlier; only touch the visible list if this is
+        // the conversation currently on screen.
+        if currentPeerID == peerID {
             messages = []
+            allMessagesForCurrentPeer = []
+            hasOlderMessagesOnDisk = false
+        }
+        if unreadCounts[peerID] != nil {
+            unreadCounts[peerID] = nil
+            saveUnreadCounts()
         }
     }
 
