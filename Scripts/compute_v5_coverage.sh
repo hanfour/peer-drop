@@ -25,7 +25,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Env-overridable input paths. Default to the bundled locations; the test
 # harness (Scripts/test_compute_v5_coverage.sh) sets these to point at
 # synthetic fixtures.
-COVERAGE_FILE="${COVERAGE_FILE_OVERRIDE:-$REPO_ROOT/PeerDropTests/Pet/MainBundleAssetCoverageTests.swift}"
+COVERAGE_FILE="${COVERAGE_FILE_OVERRIDE:-$REPO_ROOT/PeerDropKit/Tests/PeerDropPetTests/MainBundleAssetCoverageTests.swift}"
 PETS_DIR="${PETS_DIR_OVERRIDE:-$REPO_ROOT/PeerDropKit/Sources/PeerDropPet/Resources/Pets}"
 
 if [[ ! -f "$COVERAGE_FILE" ]]; then
