@@ -2922,20 +2922,31 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode TextMessagePayload")
                 return
             }
-            // Determine the storage key: groupID for group messages, peerID for 1-to-1
-            let storageKey = payload.groupID ?? peerID
-            let savedMsg = chatManager.saveIncoming(
-                text: payload.text,
-                peerID: storageKey,
-                peerName: peerConnection.peerIdentity.displayName,
-                groupID: payload.groupID,
-                senderID: payload.groupID != nil ? message.senderID : nil,
-                senderName: payload.senderName,
-                replyToMessageID: payload.replyToMessageID,
-                replyToText: payload.replyToText,
-                replyToSenderName: payload.replyToSenderName,
-                messageID: payload.messageID
-            )
+            // Route group messages to the group store (which the group UI reads),
+            // 1-to-1 messages to the per-peer store. The old code funnelled group
+            // messages through saveIncoming(peerID: groupID) into the 1-to-1 store,
+            // so other members' group messages never surfaced in the group view.
+            let savedMsg: ChatMessage
+            if let groupID = payload.groupID {
+                savedMsg = chatManager.saveGroupIncoming(
+                    text: payload.text,
+                    groupID: groupID,
+                    senderID: message.senderID,
+                    senderName: payload.senderName ?? peerConnection.peerIdentity.displayName,
+                    messageID: payload.messageID
+                )
+            } else {
+                savedMsg = chatManager.saveIncoming(
+                    text: payload.text,
+                    peerID: peerID,
+                    peerName: peerConnection.peerIdentity.displayName,
+                    senderName: payload.senderName,
+                    replyToMessageID: payload.replyToMessageID,
+                    replyToText: payload.replyToText,
+                    replyToSenderName: payload.replyToSenderName,
+                    messageID: payload.messageID
+                )
+            }
             NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
             sendDeliveryReceipt(for: savedMsg.id, to: peerConnection, groupID: payload.groupID)
 

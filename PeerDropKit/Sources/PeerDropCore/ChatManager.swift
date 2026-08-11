@@ -623,14 +623,15 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String) -> ChatMessage {
+    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String, messageID: String? = nil) -> ChatMessage {
         let msg = ChatMessage.text(
             text: text,
             isOutgoing: false,
             peerName: "Group",
             groupID: groupID,
             senderID: senderID,
-            senderName: senderName
+            senderName: senderName,
+            id: messageID
         )
         appendGroupMessage(msg, groupID: groupID)
         if activeGroupID != groupID {

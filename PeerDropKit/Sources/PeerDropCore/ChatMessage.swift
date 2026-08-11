@@ -136,9 +136,9 @@ public struct ChatMessage: Identifiable, Codable {
         groupReadStatus = try container.decodeIfPresent(GroupReadStatus.self, forKey: .groupReadStatus)
     }
 
-    public static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
+    public static func text(text: String, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil, id: String? = nil) -> ChatMessage {
         ChatMessage(
-            id: UUID().uuidString,
+            id: id ?? UUID().uuidString,
             text: text,
             isMedia: false,
             mediaType: nil,
