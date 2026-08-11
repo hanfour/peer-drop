@@ -27,17 +27,15 @@ if let hexSecret = env["WEBTERM_SECRET"], hexSecret.count == 64 {
     sessionSecret = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
 }
 
+// Resolve auth from the environment. Fail-closed: with no credentials the
+// server refuses to start rather than fall back to a guessable default
+// password. See `resolveAuth(from:)` in AuthConfig.swift.
 let auth: WebTermConfig.Auth
-if let hash = env["WEBTERM_PASSWORD_HASH"] {
-    auth = .password(hash: hash)
-} else if let aud = env["CF_ACCESS_AUD"],
-          let team = env["CF_ACCESS_TEAM"],
-          let email = env["CF_ACCESS_OWNER_EMAIL"] {
-    auth = .cloudflare(team: team, aud: aud, ownerEmail: email)
-} else {
-    // Default: require password "changeme" (warn loudly).
-    print("WARNING: No WEBTERM_PASSWORD_HASH set. Using insecure default password 'changeme'.")
-    auth = .password(hash: PasswordHash.make("changeme"))
+do {
+    auth = try resolveAuth(from: env)
+} catch {
+    fputs("ERROR: \(error)\n", stderr)
+    exit(1)
 }
 
 // Load presets from a JSON file specified by WEBTERM_PRESETS.
