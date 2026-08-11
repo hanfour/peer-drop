@@ -56,5 +56,10 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         }
         self.connectionCount += other.connectionCount
         self.connectionHistory = (self.connectionHistory + other.connectionHistory).sorted()
+        // Preserve the first-seen TOFU pin: keep our own fingerprint / device id
+        // if we have one, otherwise adopt the other record's. Never silently
+        // drop it — a dropped pin reopens a MITM window on the next connection.
+        self.certificateFingerprint = self.certificateFingerprint ?? other.certificateFingerprint
+        self.peerDeviceId = self.peerDeviceId ?? other.peerDeviceId
     }
 }

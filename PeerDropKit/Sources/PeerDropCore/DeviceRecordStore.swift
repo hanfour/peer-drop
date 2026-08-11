@@ -48,7 +48,9 @@ public final class DeviceRecordStore: ObservableObject {
                     port: merged.port,
                     lastConnected: merged.lastConnected,
                     connectionCount: merged.connectionCount,
-                    connectionHistory: merged.connectionHistory
+                    connectionHistory: merged.connectionHistory,
+                    certificateFingerprint: merged.certificateFingerprint,
+                    peerDeviceId: merged.peerDeviceId
                 )
                 records.append(finalRecord)
             } else {
