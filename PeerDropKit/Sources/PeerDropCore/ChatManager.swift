@@ -502,9 +502,13 @@ public final class ChatManager: ObservableObject {
     // MARK: - Private
 
     private func appendMessage(_ message: ChatMessage, peerID: String) {
-        // Update in-memory immediately
-        messages.append(message)
-        allMessagesForCurrentPeer.append(message)
+        // Only surface it in the on-screen list if it belongs to the conversation
+        // currently loaded — otherwise another peer's message leaks into the open
+        // thread, inflates its pagination counts, and gets marked read against it.
+        if peerID == currentPeerID {
+            messages.append(message)
+            allMessagesForCurrentPeer.append(message)
+        }
         // Track pending messages per peer for correct persistence
         pendingMessages[peerID, default: []].append(message)
         // Schedule debounced persist to disk
