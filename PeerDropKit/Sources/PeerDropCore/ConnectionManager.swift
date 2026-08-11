@@ -3702,6 +3702,28 @@ public final class ConnectionManager: ObservableObject {
         chatManager.applyDelete(messageID: messageID, peerID: peerID)
     }
 
+    /// Forget a device completely: delete its chat history and — if it maps to a
+    /// trusted contact — its Double Ratchet session and trust authorization,
+    /// then remove the device record. Deleting only the record (the old
+    /// behavior) left the ratchet session and trust entry on disk, so a deleted
+    /// device that reconnected was still treated as trusted and could resume its
+    /// old session — residual key material is a real security risk.
+    public func forgetDevice(id: String) {
+        // Map the device (a discovery/connection-view record) to its crypto
+        // identity if one exists. find(byDeviceId:) is an exact match — it
+        // returns the single matching contact or nil, so this can never revoke
+        // the wrong contact. Try both id fields since the two identity spaces
+        // don't share a single canonical key.
+        let record = deviceStore.records.first { $0.id == id }
+        let deviceIdCandidates = [record?.peerDeviceId, id].compactMap { $0 }
+        if let contact = deviceIdCandidates.lazy.compactMap({ self.trustedContactStore.find(byDeviceId: $0) }).first {
+            remoteSessionManager.deleteSession(for: contact.id.uuidString)
+            trustedContactStore.remove(contact.id)
+        }
+        chatManager.deleteMessages(forPeer: id)
+        deviceStore.remove(id: id)
+    }
+
     // MARK: - Chat
 
     public func sendTextMessage(_ text: String, replyTo: ChatMessage? = nil) {

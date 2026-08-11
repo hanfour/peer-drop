@@ -114,7 +114,7 @@ struct LibraryTab: View {
                     .onDelete { indexSet in
                         let records = filteredRecords
                         for index in indexSet {
-                            connectionManager.deviceStore.remove(id: records[index].id)
+                            connectionManager.forgetDevice(id: records[index].id)
                         }
                     }
                 } header: {
