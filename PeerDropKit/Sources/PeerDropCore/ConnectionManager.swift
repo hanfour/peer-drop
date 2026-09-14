@@ -467,7 +467,7 @@ public final class ConnectionManager: ObservableObject {
         )
         let envelopeData = try JSONEncoder().encode(envelope)
         let challenge = UUID().uuidString
-        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
             throw MailboxError.invalidResponse
         }
         try await MailboxClient().sendMessage(
@@ -1432,7 +1432,7 @@ public final class ConnectionManager: ObservableObject {
 
         let envelopeData = try JSONEncoder().encode(envelope)
         let challenge = UUID().uuidString
-        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
             throw MailboxError.invalidResponse
         }
 
@@ -1527,7 +1527,7 @@ public final class ConnectionManager: ObservableObject {
 
         let envelopeData = try JSONEncoder().encode(envelope)
         let challenge = UUID().uuidString
-        guard let pow = ProofOfWork.generate(challenge: challenge) else {
+        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
             throw MailboxError.invalidResponse
         }
 
@@ -2926,19 +2926,33 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode TextMessagePayload")
                 return
             }
-            // Determine the storage key: groupID for group messages, peerID for 1-to-1
-            let storageKey = payload.groupID ?? peerID
-            let savedMsg = chatManager.saveIncoming(
-                text: payload.text,
-                peerID: storageKey,
-                peerName: peerConnection.peerIdentity.displayName,
-                groupID: payload.groupID,
-                senderID: payload.groupID != nil ? message.senderID : nil,
-                senderName: payload.senderName,
-                replyToMessageID: payload.replyToMessageID,
-                replyToText: payload.replyToText,
-                replyToSenderName: payload.replyToSenderName
-            )
+            // Route group messages to the group store (which the group UI reads),
+            // 1-to-1 messages to the per-peer store. The old code funnelled group
+            // messages through saveIncoming(peerID: groupID) into the 1-to-1 store,
+            // so other members' group messages never surfaced in the group view.
+            let savedMsg: ChatMessage
+            if let groupID = payload.groupID {
+                savedMsg = chatManager.saveGroupIncoming(
+                    text: payload.text,
+                    groupID: groupID,
+                    senderID: message.senderID,
+                    senderName: payload.senderName ?? peerConnection.peerIdentity.displayName,
+                    messageID: payload.messageID,
+                    timestamp: payload.timestamp
+                )
+            } else {
+                savedMsg = chatManager.saveIncoming(
+                    text: payload.text,
+                    peerID: peerID,
+                    peerName: peerConnection.peerIdentity.displayName,
+                    senderName: payload.senderName,
+                    replyToMessageID: payload.replyToMessageID,
+                    replyToText: payload.replyToText,
+                    replyToSenderName: payload.replyToSenderName,
+                    messageID: payload.messageID,
+                    timestamp: payload.timestamp
+                )
+            }
             NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
             sendDeliveryReceipt(for: savedMsg.id, to: peerConnection, groupID: payload.groupID)
 
@@ -3291,7 +3305,9 @@ public final class ConnectionManager: ObservableObject {
                 peerName: connectedPeer?.displayName ?? "Unknown",
                 replyToMessageID: payload.replyToMessageID,
                 replyToText: payload.replyToText,
-                replyToSenderName: payload.replyToSenderName
+                replyToSenderName: payload.replyToSenderName,
+                messageID: payload.messageID,
+                timestamp: payload.timestamp
             )
             NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
 
@@ -3690,6 +3706,28 @@ public final class ConnectionManager: ObservableObject {
         chatManager.applyDelete(messageID: messageID, peerID: peerID)
     }
 
+    /// Forget a device completely: delete its chat history and — if it maps to a
+    /// trusted contact — its Double Ratchet session and trust authorization,
+    /// then remove the device record. Deleting only the record (the old
+    /// behavior) left the ratchet session and trust entry on disk, so a deleted
+    /// device that reconnected was still treated as trusted and could resume its
+    /// old session — residual key material is a real security risk.
+    public func forgetDevice(id: String) {
+        // Map the device (a discovery/connection-view record) to its crypto
+        // identity if one exists. find(byDeviceId:) is an exact match — it
+        // returns the single matching contact or nil, so this can never revoke
+        // the wrong contact. Try both id fields since the two identity spaces
+        // don't share a single canonical key.
+        let record = deviceStore.records.first { $0.id == id }
+        let deviceIdCandidates = [record?.peerDeviceId, id].compactMap { $0 }
+        if let contact = deviceIdCandidates.lazy.compactMap({ self.trustedContactStore.find(byDeviceId: $0) }).first {
+            remoteSessionManager.deleteSession(for: contact.id.uuidString)
+            trustedContactStore.remove(contact.id)
+        }
+        chatManager.deleteMessages(forPeer: id)
+        deviceStore.remove(id: id)
+    }
+
     // MARK: - Chat
 
     public func sendTextMessage(_ text: String, replyTo: ChatMessage? = nil) {
@@ -3698,17 +3736,19 @@ public final class ConnectionManager: ObservableObject {
         guard let peerConn = connections[peerID] else { return }
         let peer = peerConn.peerIdentity
 
+        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         let payload = TextMessagePayload(
             text: text,
             replyToMessageID: replyTo?.id,
             replyToText: replyTo?.text ?? replyTo?.fileName,
-            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
+            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName),
+            messageID: saved.id
         )
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for textMessage")
+            chatManager.updateStatus(messageID: saved.id, status: .failed)
             return
         }
-        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         Task {
             do {
                 try await peerConn.sendMessage(msg)
@@ -3727,17 +3767,19 @@ public final class ConnectionManager: ObservableObject {
         guard let peerConn = connection(for: peerID) else { return }
         let peer = peerConn.peerIdentity
 
+        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
         let payload = TextMessagePayload(
             text: text,
             replyToMessageID: replyTo?.id,
             replyToText: replyTo?.text ?? replyTo?.fileName,
-            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName)
+            replyToSenderName: replyTo?.isOutgoing == true ? nil : (replyTo?.senderName ?? replyTo?.peerName),
+            messageID: saved.id
         )
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for textMessage")
+            chatManager.updateStatus(messageID: saved.id, status: .failed)
             return
         }
-        let saved = chatManager.saveOutgoing(text: text, peerID: peer.id, peerName: peer.displayName, replyTo: replyTo)
 
         // audit-#14 Stage 3: gate user-initiated chat sends on user-approved
         // trust. The message is persisted (so the user can see what they
@@ -3767,9 +3809,12 @@ public final class ConnectionManager: ObservableObject {
             throw ConnectionError.notConnected
         }
         // reply/threading fields omitted — CLI callers send standalone messages.
+        // Mint a shared id so the receiver stores under it (enables dedup even
+        // though the headless CLI keeps no local chat history to reconcile).
         let payload = TextMessagePayload(
             text: text,
-            senderName: localIdentity.displayName
+            senderName: localIdentity.displayName,
+            messageID: UUID().uuidString
         )
         let message = try PeerMessage.textMessage(payload, senderID: localIdentity.id)
         try await connection.sendMessage(message)
@@ -3877,11 +3922,13 @@ public final class ConnectionManager: ObservableObject {
             localName: localIdentity.displayName
         )
 
-        // Include groupID and senderName in the payload
+        // Include groupID, senderName and the shared message id in the payload
+        // so every group member stores the message under the same id.
         let payload = TextMessagePayload(
             text: text,
             groupID: groupID,
-            senderName: localIdentity.displayName
+            senderName: localIdentity.displayName,
+            messageID: saved.id
         )
         guard let msg = try? PeerMessage.textMessage(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for textMessage")

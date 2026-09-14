@@ -22,6 +22,11 @@ public final class SecurityPolicyStore: ObservableObject {
     private let baseURL: URL?
     private let urlSession: URLSession
     private var refreshTask: Task<Void, Never>?
+    /// `issuedAt` of the currently-applied signed policy (0 = bundled default).
+    /// Downgrade guard: a fetched/cached policy issued earlier than this is
+    /// refused, so a replayed older (validly-signed) blob can't roll the client
+    /// back off a newer, stricter policy.
+    private var appliedIssuedAt: UInt64 = 0
 
     public init(
         storageDirectory: URL,
@@ -37,11 +42,13 @@ public final class SecurityPolicyStore: ObservableObject {
         self.baseURL = baseURL
         self.urlSession = urlSession
         // Synchronous boot load — read + verify cache, or fall back to bundled default.
-        self.current = SecurityPolicyStore.loadFromCacheOrBundled(
+        let booted = SecurityPolicyStore.loadFromCacheOrBundled(
             directory: storageDirectory,
             publicKeys: publicKeys,
             metrics: metrics
         )
+        self.current = booted.policy
+        self.appliedIssuedAt = booted.issuedAt
         // Schedule the async fetch + adaptive refresh loop if a baseURL is
         // configured. Tests that don't want the network leg leave baseURL nil,
         // or pass autoStartRefresh: false to construct the store with a baseURL
@@ -128,6 +135,16 @@ extension SecurityPolicyStore {
             return false
         }
 
+        // Anti-downgrade: never replace the active policy with an older one.
+        // Blocks replay of a captured, validly-signed older blob (e.g. a warn
+        // policy, or a stale CDN edge copy) to roll the client back off a newer,
+        // stricter policy. (Note: expiresAt is NOT yet enforced here — doing so
+        // requires the served bundled default to carry a rolling future expiry;
+        // the committed one is already past-dated. Tracked as a follow-up.)
+        guard parsed.issuedAt >= appliedIssuedAt else {
+            return false
+        }
+
         // Apply local bounds clamping. Telemetry for any out-of-range field.
         let violations = SecurityPolicyBounds.violations(parsed.policy)
         if !violations.isEmpty {
@@ -144,6 +161,7 @@ extension SecurityPolicyStore {
 
         // Already on @MainActor — update current directly.
         self.current = merged
+        self.appliedIssuedAt = parsed.issuedAt
         metrics?.record(.policyFetchSuccess)
         return true
     }
@@ -161,11 +179,11 @@ extension SecurityPolicyStore {
         directory: URL,
         publicKeys: [Data],
         metrics: CryptoHardeningMetrics?
-    ) -> SecurityPolicy {
+    ) -> (policy: SecurityPolicy, issuedAt: UInt64) {
         let cacheURL = directory.appendingPathComponent("crypto-policy.json")
         guard let cached = try? Data(contentsOf: cacheURL) else {
             // No cache — fall back to bundled default (no cache-hit recorded).
-            return .bundledDefault
+            return (.bundledDefault, 0)
         }
         do {
             let parsed = try parseSignedPolicy(cached, publicKeys: publicKeys)
@@ -175,10 +193,12 @@ extension SecurityPolicyStore {
                 metrics?.record(.policyExpiredInUse)
             }
             let clamped = SecurityPolicyBounds.clamp(parsed.policy)
-            return SecurityPolicy.merged(local: .bundledDefault, remote: clamped)
+            // Seed the downgrade floor from the cached blob's issuedAt so a
+            // post-boot fetch of an older blob is refused.
+            return (SecurityPolicy.merged(local: .bundledDefault, remote: clamped), parsed.issuedAt)
         } catch {
             // Cache is corrupt / signature invalid / etc. — bundled default.
-            return .bundledDefault
+            return (.bundledDefault, 0)
         }
     }
 }

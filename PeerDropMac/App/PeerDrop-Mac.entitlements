@@ -39,9 +39,19 @@
          (a provisioning profile can't embed it until Apple fully approves the
          capability request, and "Assigned" status is not yet profile-ready).
          Intentionally omitted here — re-add only if a future macOS requires it. -->
-    <!-- M3: APNs alert push for voice-call wake. Release xcconfig flips
-         this to "production" at archive time. -->
-    <key>aps-environment</key>
+    <!-- M3: APNs push for voice-call wake. macOS App Sandbox REQUIRES the
+         com.apple.developer.aps-environment key. The bare iOS "aps-environment"
+         key is unknown on macOS: the signer silently strips it, so the shipped
+         build ends up with NO push entitlement and can't register for remote
+         notifications at all (didFailToRegisterForRemoteNotifications fires).
+         Value mirrors iOS (development in source); the Mac App Store
+         distribution profile promotes it to production at export, exactly as
+         iOS does — there is no xcconfig "flip" mechanism (that earlier comment
+         was wrong). REQUIRES the Push Notifications capability enabled on the
+         Mac App ID (6793812911) plus a regenerated Mac provisioning profile,
+         otherwise this entitlement is stripped again at signing. See
+         docs/release/release-runbook.md §Mac. -->
+    <key>com.apple.developer.aps-environment</key>
     <string>development</string>
     <!-- M3: microphone access for WebRTC voice capture.
          NSMicrophoneUsageDescription lives in Info.plist; sandboxed apps

@@ -231,8 +231,7 @@ struct ConnectedTab: View {
     // MARK: - Actions
 
     private func deleteRecord(_ record: DeviceRecord) {
-        connectionManager.deviceStore.remove(id: record.id)
-        connectionManager.chatManager.deleteMessages(forPeer: record.id)
+        connectionManager.forgetDevice(id: record.id)
     }
 
     private func reconnect(record: DeviceRecord) {
