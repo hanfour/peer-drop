@@ -53,4 +53,15 @@ public final class HashVerifier {
         let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()
     }
+
+    /// Async variant that streams + hashes on a background task rather than the
+    /// calling actor's thread. The synchronous overload reads and hashes the
+    /// whole file inline; on the main actor (FileTransferSession is @MainActor)
+    /// that freezes the UI for the entire file before the first byte is sent.
+    /// Output is identical to `sha256(fileAt:)`; only where it runs differs.
+    public static func sha256Async(fileAt url: URL, chunkSize: Int = 65536) async throws -> String {
+        try await Task.detached(priority: .userInitiated) {
+            try sha256(fileAt: url, chunkSize: chunkSize)
+        }.value
+    }
 }

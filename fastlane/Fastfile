@@ -392,7 +392,15 @@ platform :ios do
     # Auto-load reviewer notes from docs/release/v<version>-reviewer-notes.md.
     # Derived from project's MARKETING_VERSION so hotfix releases pick up
     # their own notes file (e.g. v4.0.1-reviewer-notes.md).
-    version_match = File.read(File.expand_path("../project.yml", __dir__)).match(/MARKETING_VERSION:\s*"([^"]+)"/)
+    # Scope version detection to the PeerDrop (iOS) target block. A plain
+    # first-match regex grabs whichever MARKETING_VERSION appears first in
+    # project.yml -- the iOS target's today, but reordering the targets (e.g.
+    # moving PeerDropMac's 6.0.0 above) would silently ship the wrong version.
+    # Anchor on the `PeerDrop:` target header, then take the next
+    # MARKETING_VERSION -- guaranteed to be this target's own. Mirrors the
+    # macOS release lane's scoped lookup (see :release_mac).
+    ios_yaml = File.read(File.expand_path("../project.yml", __dir__))[/^  PeerDrop:$.*/m]
+    version_match = ios_yaml&.match(/MARKETING_VERSION:\s*"([^"]+)"/)
     version = version_match ? version_match[1] : nil
     UI.message("Detected MARKETING_VERSION: #{version || '(unknown)'}")
 

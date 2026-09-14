@@ -30,18 +30,32 @@ public final class ChatManager: ObservableObject {
     public var totalUnread: Int { unreadCounts.values.reduce(0, +) + groupUnreadCounts.values.reduce(0, +) }
 
     private let fileManager = FileManager.default
+    private let rootDirectory: URL
     private let unreadKey = "peerDropUnreadCounts"
     private let groupUnreadKey = "peerDropGroupUnreadCounts"
     private let encryptor = ChatDataEncryptor.shared
 
-    init() {
+    init(rootDirectory: URL? = nil) {
+        self.rootDirectory = rootDirectory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         loadUnreadCounts()
         loadGroupUnreadCounts()
+        // Wipe any decrypted media left in temp by a previous session so
+        // plaintext copies of private media don't survive across launches.
+        purgeTempMediaCache()
     }
 
     private var chatDirectory: URL {
-        let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent("ChatData", isDirectory: true)
+        rootDirectory.appendingPathComponent("ChatData", isDirectory: true)
+    }
+
+    /// Scratch location where encrypted media is decrypted for playback. Kept in
+    /// its own subdirectory so it can be wiped wholesale on launch.
+    private var tempMediaDirectory: URL {
+        fileManager.temporaryDirectory.appendingPathComponent("PeerDropMediaCache", isDirectory: true)
+    }
+
+    private func purgeTempMediaCache() {
+        try? fileManager.removeItem(at: tempMediaDirectory)
     }
 
     private func mediaDirectory(for peerID: String) -> URL {
@@ -67,9 +81,9 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil) -> ChatMessage {
+    public func saveIncoming(text: String, peerID: String, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyToMessageID: String? = nil, replyToText: String? = nil, replyToSenderName: String? = nil, messageID: String? = nil, timestamp: Date? = nil) -> ChatMessage {
         let msg = ChatMessage(
-            id: UUID().uuidString,
+            id: messageID ?? UUID().uuidString,
             text: text,
             isMedia: false,
             mediaType: nil,
@@ -82,7 +96,7 @@ public final class ChatManager: ObservableObject {
             isOutgoing: false,
             peerName: peerName,
             status: .delivered,
-            timestamp: Date(),
+            timestamp: timestamp ?? Date(),
             groupID: groupID,
             senderID: senderID,
             senderName: senderName ?? peerName,
@@ -90,6 +104,13 @@ public final class ChatManager: ObservableObject {
             replyToText: replyToText,
             replyToSenderName: replyToSenderName
         )
+        // Dedup: a duplicate delivery (direct + relay, a retry, a reconnect
+        // replay) now carries the same shared id. Skip storing it again, but
+        // still return the message so a delivery receipt fires (the sender
+        // likely retried precisely because it never saw one).
+        if let messageID, isDuplicateIncoming(id: messageID, peerID: peerID) {
+            return msg
+        }
         appendMessage(msg, peerID: peerID)
         if activeChatPeerID != peerID {
             incrementUnread(peerID: peerID)
@@ -200,6 +221,13 @@ public final class ChatManager: ObservableObject {
     }
 
     public func deleteMessages(forPeer peerID: String) {
+        // Cancel any in-flight debounced write and drop queued messages first, so
+        // a pending persist can't recreate the file we're about to delete (a
+        // privacy failure — the "deleted" conversation would reappear on disk).
+        persistTasks[peerID]?.cancel()
+        persistTasks[peerID] = nil
+        pendingMessages[peerID] = nil
+
         let file = messagesFile(for: peerID)
         do {
             try fileManager.removeItem(at: file)
@@ -212,8 +240,17 @@ public final class ChatManager: ObservableObject {
         } catch {
             logger.warning("Failed to delete media directory: \(error.localizedDescription)")
         }
-        if !messages.isEmpty {
+        // Clear in-memory caches for this peer so the deleted messages can't be
+        // resurrected via Load-earlier; only touch the visible list if this is
+        // the conversation currently on screen.
+        if currentPeerID == peerID {
             messages = []
+            allMessagesForCurrentPeer = []
+            hasOlderMessagesOnDisk = false
+        }
+        if unreadCounts[peerID] != nil {
+            unreadCounts[peerID] = nil
+            saveUnreadCounts()
         }
     }
 
@@ -245,7 +282,8 @@ public final class ChatManager: ObservableObject {
     public func writeMediaToTempFile(relativePath: String) -> URL? {
         guard let data = loadMediaData(relativePath: relativePath) else { return nil }
 
-        let tempDir = FileManager.default.temporaryDirectory
+        let tempDir = tempMediaDirectory
+        try? fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let fileName = (relativePath as NSString).lastPathComponent
         let tempURL = tempDir.appendingPathComponent("media_\(UUID().uuidString)_\(fileName)")
 
@@ -418,6 +456,10 @@ public final class ChatManager: ObservableObject {
     }
 
     private func persistReaction(messageID: String, reactions: [String: Set<String>]?) {
+        // Flush pending writes first: the target message may still be queued in
+        // the debounce buffer, in which case a disk scan would miss it and the
+        // debounce would later overwrite this reaction with the original.
+        flushAllPendingPersists()
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {
@@ -484,10 +526,25 @@ public final class ChatManager: ObservableObject {
 
     // MARK: - Private
 
+    /// Has an incoming message with this shared id already been received this
+    /// session? Checks the pending write buffer and (for the open conversation)
+    /// the in-memory list — enough to collapse near-simultaneous duplicate
+    /// deliveries without a per-message disk scan. (Cross-session re-delivery of
+    /// an already-persisted message is a rarer residual, left as a follow-up.)
+    private func isDuplicateIncoming(id: String, peerID: String) -> Bool {
+        if pendingMessages[peerID]?.contains(where: { $0.id == id }) == true { return true }
+        if peerID == currentPeerID, allMessagesForCurrentPeer.contains(where: { $0.id == id }) { return true }
+        return false
+    }
+
     private func appendMessage(_ message: ChatMessage, peerID: String) {
-        // Update in-memory immediately
-        messages.append(message)
-        allMessagesForCurrentPeer.append(message)
+        // Only surface it in the on-screen list if it belongs to the conversation
+        // currently loaded — otherwise another peer's message leaks into the open
+        // thread, inflates its pagination counts, and gets marked read against it.
+        if peerID == currentPeerID {
+            messages.append(message)
+            allMessagesForCurrentPeer.append(message)
+        }
         // Track pending messages per peer for correct persistence
         pendingMessages[peerID, default: []].append(message)
         // Schedule debounced persist to disk
@@ -524,7 +581,9 @@ public final class ChatManager: ObservableObject {
 
     private func persistMessages(peerID: String) {
         guard let pending = pendingMessages[peerID], !pending.isEmpty else { return }
-        pendingMessages[peerID] = nil
+        // NOTE: do NOT clear pendingMessages here — only after a durable write
+        // succeeds (below). Clearing up-front means any failure on the risky
+        // decrypt/decode/encrypt path silently drops these messages forever.
 
         let file = messagesFile(for: peerID)
         let dir = file.deletingLastPathComponent()
@@ -532,20 +591,36 @@ public final class ChatManager: ObservableObject {
             try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
             logger.error("Failed to create chat directory: \(error.localizedDescription)")
+            return // keep pending queued; the next flush/schedule retries
         }
-        do {
-            // Load existing messages from disk, append pending, write back
-            var existing: [ChatMessage] = []
-            if fileManager.fileExists(atPath: file.path) {
+
+        // Load existing messages. If the file exists but is undecodable (e.g. the
+        // at-rest key was lost after a device migration), quarantine it instead
+        // of wedging every future write against the poison file — otherwise
+        // `pending` and all subsequent messages are dropped forever.
+        var existing: [ChatMessage] = []
+        if fileManager.fileExists(atPath: file.path) {
+            do {
                 let raw = try Data(contentsOf: file)
                 let data = try encryptor.decrypt(raw)
                 existing = try JSONDecoder().decode([ChatMessage].self, from: data)
+            } catch {
+                let quarantine = file.deletingPathExtension()
+                    .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970))")
+                try? fileManager.moveItem(at: file, to: quarantine)
+                logger.error("Quarantined undecodable chat file for peer \(peerID): \(error.localizedDescription)")
+                existing = []
             }
-            existing.append(contentsOf: pending)
+        }
+
+        existing.append(contentsOf: pending)
+        do {
             let encoded = try JSONEncoder().encode(existing)
             try encryptor.encryptAndWrite(encoded, to: file)
+            pendingMessages[peerID] = nil // safe to drop only after a durable write
         } catch {
             logger.error("Failed to persist messages: \(error.localizedDescription)")
+            // Keep `pending` so the next flush/schedule retries instead of losing data.
         }
     }
 
@@ -566,14 +641,16 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String) -> ChatMessage {
+    public func saveGroupIncoming(text: String, groupID: String, senderID: String, senderName: String, messageID: String? = nil, timestamp: Date? = nil) -> ChatMessage {
         let msg = ChatMessage.text(
             text: text,
             isOutgoing: false,
             peerName: "Group",
             groupID: groupID,
             senderID: senderID,
-            senderName: senderName
+            senderName: senderName,
+            id: messageID,
+            timestamp: timestamp
         )
         appendGroupMessage(msg, groupID: groupID)
         if activeGroupID != groupID {
@@ -706,6 +783,10 @@ public final class ChatManager: ObservableObject {
     }
 
     private func persistEditOrDelete(messageID: String, peerID: String) {
+        // Flush pending writes first: an edit/delete applied inside the 500ms
+        // debounce window would otherwise miss the not-yet-written message and be
+        // clobbered by the debounce writing the pre-edit original.
+        flushAllPendingPersists()
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {

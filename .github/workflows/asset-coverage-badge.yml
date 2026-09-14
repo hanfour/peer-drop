@@ -10,8 +10,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'PeerDrop/Resources/Pets/**'
-      - 'PeerDropTests/Pet/MainBundleAssetCoverageTests.swift'
+      - 'PeerDropKit/Sources/PeerDropPet/Resources/Pets/**'
+      - 'PeerDropKit/Tests/PeerDropPetTests/MainBundleAssetCoverageTests.swift'
       - 'Scripts/compute_v5_coverage.sh'
       - '.github/workflows/asset-coverage-badge.yml'
   workflow_dispatch:  # manual re-run for verification

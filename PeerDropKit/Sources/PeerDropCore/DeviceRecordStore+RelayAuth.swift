@@ -15,6 +15,9 @@ extension DeviceRecordStore: RelayAuthDeviceStore {
     public func setFingerprint(_ fingerprint: String, for peerID: String) {
         guard let index = records.firstIndex(where: { $0.id == peerID }) else { return }
         records[index].certificateFingerprint = fingerprint
+        // Security-critical TOFU pin: persist now, not on the 500ms debounce a
+        // crash in the window would drop.
+        saveImmediately()
     }
 
     public func addNewDevice(_ device: RelayAuthNewDevice) {
@@ -30,5 +33,8 @@ extension DeviceRecordStore: RelayAuthDeviceStore {
         )
         record.certificateFingerprint = device.certificateFingerprint
         records.append(record)
+        // Security-critical TOFU pin: persist now, not on the 500ms debounce a
+        // crash in the window would drop.
+        saveImmediately()
     }
 }

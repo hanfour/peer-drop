@@ -20,6 +20,18 @@ public enum ProofOfWork {
         return nil
     }
 
+    /// Async variant that runs the CPU-bound search off the calling actor's
+    /// thread. The synchronous `generate` blocks whoever calls it — on the main
+    /// actor that freezes the UI for the whole search (~50-100ms typical, up to
+    /// seconds on a hard challenge). Actor-isolated callers should prefer this.
+    /// Output is identical to the synchronous overload; only where it runs
+    /// differs.
+    public static func generate(challenge: String, difficulty: Int = 16, maxIterations: Int = 10_000_000) async -> UInt64? {
+        await Task.detached(priority: .userInitiated) {
+            generate(challenge: challenge, difficulty: difficulty, maxIterations: maxIterations)
+        }.value
+    }
+
     /// Verify a proof of work.
     public static func verify(challenge: String, proof: UInt64, difficulty: Int = 16) -> Bool {
         var data = Data(challenge.utf8)
