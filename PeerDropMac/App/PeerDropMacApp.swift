@@ -165,11 +165,14 @@ struct PeerDropMacApp: App {
                     // Pivot 2026-09: purge legacy pet residue once per install.
                     LegacyPetDataCleanup.runInBackgroundIfNeeded()
 
-                    // M3: kick APNs registration. Matches iOS
-                    // PeerDropApp.swift pattern. UN permission dialog
-                    // shows once; subsequent launches re-register silently.
-                    Task {
-                        await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                    // Skipped in screenshot mode so the permission dialog never lands over a capture.
+                    if !ScreenshotModeProvider.shared.isActive {
+                        // M3: kick APNs registration. Matches iOS
+                        // PeerDropApp.swift pattern. UN permission dialog
+                        // shows once; subsequent launches re-register silently.
+                        Task {
+                            await PushNotificationManager.shared.requestAuthorizationAndRegister()
+                        }
                     }
                     // M4 audit fix: observe StoreKit transactions so
                     // refunded / replayed / family-shared Mac tip-jar

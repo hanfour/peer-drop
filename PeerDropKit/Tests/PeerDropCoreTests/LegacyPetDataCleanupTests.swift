@@ -96,6 +96,7 @@ final class LegacyPetDataCleanupTests: XCTestCase {
 
         XCTAssertTrue(cleanup.runIfNeeded(), "first call must run")
         XCTAssertTrue(defaults.bool(forKey: LegacyPetDataCleanup.markerKey))
+        XCTAssertTrue(defaults.bool(forKey: LegacyPetDataCleanup.cloudMarkerKey))
 
         // Re-seed a file; second call must NOT touch it.
         let petData = docs.appendingPathComponent("PetData")
@@ -119,5 +120,45 @@ final class LegacyPetDataCleanupTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: docs.appendingPathComponent("PetData").path))
         // Group container untouched because none was supplied.
         XCTAssertTrue(FileManager.default.fileExists(atPath: group.appendingPathComponent("pet-snapshot.json").path))
+        XCTAssertTrue(defaults.bool(forKey: LegacyPetDataCleanup.markerKey))
+        XCTAssertFalse(defaults.bool(forKey: LegacyPetDataCleanup.cloudMarkerKey))
+    }
+
+    func testCloudPassRetriesUntilContainerAvailable() throws {
+        try seedLegacyData()
+
+        // First launch: not signed into iCloud / offline — no ubiquity container, no KVS.
+        let offlineCleanup = LegacyPetDataCleanup(
+            documentsDirectory: docs,
+            appGroupContainer: group,
+            ubiquityContainer: nil,
+            defaults: defaults,
+            appGroupDefaults: groupDefaults,
+            kvStore: nil
+        )
+        XCTAssertTrue(offlineCleanup.runIfNeeded(), "local pass should still run")
+        XCTAssertTrue(defaults.bool(forKey: LegacyPetDataCleanup.markerKey))
+        XCTAssertFalse(defaults.bool(forKey: LegacyPetDataCleanup.cloudMarkerKey))
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: cloud.appendingPathComponent("Documents/PetData").path),
+            "cloud data must be untouched while the container is unreachable"
+        )
+
+        // Later launch: the user signed into iCloud / came back online.
+        let kv = FakeKVStore()
+        let onlineCleanup = LegacyPetDataCleanup(
+            documentsDirectory: docs,
+            appGroupContainer: group,
+            ubiquityContainer: cloud,
+            defaults: defaults,
+            appGroupDefaults: groupDefaults,
+            kvStore: kv
+        )
+        XCTAssertTrue(onlineCleanup.runIfNeeded(), "cloud pass should run now that the container is available")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cloud.appendingPathComponent("Documents/PetData").path))
+        XCTAssertEqual(Set(kv.removed), Set(LegacyPetDataCleanup.kvStoreKeys))
+        XCTAssertTrue(defaults.bool(forKey: LegacyPetDataCleanup.cloudMarkerKey))
+
+        XCTAssertFalse(onlineCleanup.runIfNeeded(), "third call is a full no-op")
     }
 }

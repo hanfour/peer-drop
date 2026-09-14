@@ -20,6 +20,12 @@ public struct LegacyPetDataCleanup {
     /// Set to `true` in `defaults` after the first successful pass.
     public static let markerKey = "legacyPetDataCleanupDone_v6"
 
+    /// Set to `true` in `defaults` only after the iCloud pass actually ran
+    /// against a reachable ubiquity container. Left `false` — and retried on
+    /// a later launch — when the container was unavailable (not signed into
+    /// iCloud, offline) at the time of the attempt.
+    public static let cloudMarkerKey = "legacyPetDataCloudCleanupDone_v6"
+
     /// `UserDefaults.standard` keys written by the pet UI / migrations.
     public static let standardDefaultsKeys = [
         "renderedImageVersion",
@@ -66,18 +72,43 @@ public struct LegacyPetDataCleanup {
         self.fileManager = fileManager
     }
 
-    /// Runs `run()` unless the marker is already set. Returns `true` when the
-    /// cleanup executed in this call.
+    /// Runs the local pass and, when the ubiquity container is reachable,
+    /// the cloud pass — each gated by its own one-shot marker. Returns
+    /// `true` when either pass executed in this call.
+    ///
+    /// The cloud marker is only set once the cloud pass actually ran against
+    /// a reachable container; if the container is unavailable (not signed
+    /// into iCloud, offline) the cloud pass is retried on a later launch
+    /// instead of being silently skipped forever.
     @discardableResult
     public func runIfNeeded() -> Bool {
-        guard !defaults.bool(forKey: Self.markerKey) else { return false }
-        run()
-        defaults.set(true, forKey: Self.markerKey)
-        return true
+        var ran = false
+        if !defaults.bool(forKey: Self.markerKey) {
+            runLocalPass()
+            defaults.set(true, forKey: Self.markerKey)
+            ran = true
+        }
+        if !defaults.bool(forKey: Self.cloudMarkerKey) {
+            // Only claim the cloud pass done when the container was actually reachable;
+            // otherwise retry on a later launch (user signs into iCloud, comes online).
+            if ubiquityContainer != nil || kvStore != nil {
+                runCloudPass()
+                if ubiquityContainer != nil { defaults.set(true, forKey: Self.cloudMarkerKey) }
+                ran = true
+            }
+        }
+        return ran
     }
 
     /// Unconditional cleanup of every known location.
     public func run() {
+        runLocalPass()
+        runCloudPass()
+    }
+
+    /// Local-only cleanup: the app's own Documents, the app-group container
+    /// and standard `UserDefaults` keys. Never touches iCloud.
+    public func runLocalPass() {
         removeItem(documentsDirectory.appendingPathComponent("PetData"))
 
         if let group = appGroupContainer {
@@ -87,12 +118,17 @@ public struct LegacyPetDataCleanup {
         }
         appGroupDefaults?.removeObject(forKey: Self.appGroupDefaultsKey)
 
-        if let cloud = ubiquityContainer {
-            removeItem(cloud.appendingPathComponent("Documents/PetData"))
-        }
-
         for key in Self.standardDefaultsKeys {
             defaults.removeObject(forKey: key)
+        }
+        Self.logger.info("Legacy pet data cleanup completed")
+    }
+
+    /// iCloud-only cleanup: the ubiquity container's `Documents/PetData` and
+    /// the key-value store keys.
+    public func runCloudPass() {
+        if let cloud = ubiquityContainer {
+            removeItem(cloud.appendingPathComponent("Documents/PetData"))
         }
 
         if let kv = kvStore {
@@ -101,7 +137,7 @@ public struct LegacyPetDataCleanup {
             }
             kv.synchronize()
         }
-        Self.logger.info("Legacy pet data cleanup completed")
+        Self.logger.info("Legacy pet iCloud cleanup completed")
     }
 
     private func removeItem(_ url: URL) {
@@ -117,7 +153,7 @@ public struct LegacyPetDataCleanup {
     /// whole pass runs on a detached background task.
     public static func runInBackgroundIfNeeded(appGroupSuite: String = "group.com.hanfour.peerdrop") {
         let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: markerKey) else { return }
+        guard !(defaults.bool(forKey: markerKey) && defaults.bool(forKey: cloudMarkerKey)) else { return }
         Task.detached(priority: .utility) {
             let fm = FileManager.default
             let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
