@@ -206,8 +206,12 @@ public final class ConnectionManager: ObservableObject {
 
     public let tailnetStore = TailnetPeerStore()
 
-    public var onPeerConnectedForPet: ((String) -> Void)?
-    public var onPeerDisconnectedForPet: ((String) -> Void)?
+    /// Fires on the main actor once a peer's data channel is up and the
+    /// receive loop has started. Consumer today: peerdrop-cli (replays
+    /// buffered process output to a reconnecting peer).
+    public var onPeerConnected: ((String) -> Void)?
+    /// Fires on the main actor after a peer has been fully torn down.
+    public var onPeerDisconnected: ((String) -> Void)?
 
     /// Headless/CLI hook: fires with (peerID, text) when a `.textMessage` is
     /// decoded from a peer. The app UI path is unaffected (app passes nil).
@@ -591,7 +595,7 @@ public final class ConnectionManager: ObservableObject {
         peerConnection.startReceiving()
 
         objectWillChange.send()
-        onPeerConnectedForPet?(peerID)
+        onPeerConnected?(peerID)
     }
 
     /// Remove a peer connection.
@@ -624,7 +628,7 @@ public final class ConnectionManager: ObservableObject {
 
         removeConnection(peerID: peerID)
         updateGlobalState()
-        onPeerDisconnectedForPet?(peerID)
+        onPeerDisconnected?(peerID)
     }
 
     /// Update the global ConnectionState based on all peer connections.
