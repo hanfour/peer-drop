@@ -1,8 +1,6 @@
 # PeerDrop
 
-[![v5 asset coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hanfour/peer-drop/badges/v5-coverage.json)](docs/plans/v5.1+-deferred.md)
-
-A peer-to-peer file transfer and communication app for iOS, enabling direct device-to-device connections without requiring internet access.
+A peer-to-peer file transfer and communication app for iOS and macOS. Direct device-to-device connections on the local network, plus an end-to-end-encrypted relay for reaching friends anywhere. Passing notes and exchange diaries are the next major features (see `docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md`).
 
 ## Features
 
