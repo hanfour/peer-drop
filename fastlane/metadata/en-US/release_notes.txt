@@ -1,4 +1,4 @@
-PeerDrop 6.0 — a fresh start.
+PeerDrop 6.0.0 — a fresh start.
 
 The pet companion has been retired. This update removes it entirely, along with the home-screen widget and Live Activity, and cleans up the pet data it stored on your device and in iCloud. Your devices, chats, transfer history and trusted contacts are untouched.
 
