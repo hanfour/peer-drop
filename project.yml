@@ -8,10 +8,9 @@ options:
   generateEmptyDirectories: true
 
 packages:
-  # WebRTC + ZIPFoundation are no longer declared at the project level —
-  # both reach the app target transitively via PeerDropKit (WebRTC via
-  # PeerDropTransport, ZIPFoundation via PeerDropPet). Pinned versions
-  # live in PeerDropKit/Package.swift.
+  # WebRTC is not declared at the project level — it reaches the app
+  # target transitively via PeerDropKit (PeerDropTransport). The pinned
+  # version lives in PeerDropKit/Package.swift.
   PeerDropKit:
     path: PeerDropKit
 

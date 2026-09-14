@@ -3,13 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "PeerDropKit",
-    // Required because PeerDropPet now ships a localized resource
-    // (Localizable.xcstrings). SwiftPM refuses to build a package with
-    // localized resources unless a default localization is declared; it also
-    // becomes the development-region fallback when the running device's
-    // language matches none of the catalog's translations. "en" matches the
-    // app target's Localizable.xcstrings sourceLanguage.
-    defaultLocalization: "en",
     platforms: [
         .iOS(.v16),
         .macOS(.v14),
@@ -20,7 +13,6 @@ let package = Package(
         .library(name: "PeerDropTransport", targets: ["PeerDropTransport"]),
         .library(name: "PeerDropSecurity", targets: ["PeerDropSecurity"]),
         .library(name: "PeerDropProtocol", targets: ["PeerDropProtocol"]),
-        .library(name: "PeerDropPet", targets: ["PeerDropPet"]),
         .library(name: "PeerDropPTY", targets: ["PeerDropPTY"]),
     ],
     dependencies: [
@@ -30,7 +22,6 @@ let package = Package(
         // but each declaration is independent — Xcode resolves to the same
         // pinned versions.
         .package(url: "https://github.com/stasel/WebRTC", exact: "125.0.0"),
-        .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.19"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.0.0"),
         // Pinned below 5.3.0: JWTKit 5.3+ added ML-DSA (post-quantum) types that
@@ -80,42 +71,6 @@ let package = Package(
             ]
         ),
         .target(name: "PeerDropProtocol"),
-        .target(
-            name: "PeerDropPet",
-            dependencies: [
-                "PeerDropPlatform",
-                "PeerDropProtocol",
-                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-            ],
-            // `Localizable.xcstrings` is the human-editable translation master
-            // (open it in Xcode's String Catalog editor). It is NOT compiled by
-            // the open-source SwiftPM toolchain (Swift 6.2 copies it verbatim, so
-            // NSLocalizedString would return the raw key under `swift test`), and
-            // shipping it alongside the .strings below would make Xcode emit two
-            // "Localizable" tables. So it's excluded from the build; the runtime
-            // resource is the per-language .lproj/Localizable.strings generated
-            // from it (both SwiftPM and Xcode compile .strings natively).
-            exclude: ["Resources/Localizable.xcstrings"],
-            resources: [
-                // Task 7 moved 324 species×stage zips into Resources/Pets/.
-                // `.copy("Resources/Pets")` preserves the Pets/ subdirectory
-                // in the module bundle so SpriteAssetResolver can use
-                // `bundle.url(forResource:withExtension:subdirectory: "Pets")`.
-                // `.process` would flatten the tree to the bundle root, making
-                // the subdirectory: lookup return nil for every zip.
-                .copy("Resources/Pets"),
-                // Localized enum displayName labels (BodyGene / EyeGene /
-                // PatternGene / FoodType / PetMood / PetLevel). `.process` on a
-                // file inside a *.lproj directory registers it as a localized
-                // resource, so `NSLocalizedString(key, bundle: .module)` resolves
-                // the viewer's language instead of the old hard-coded zh-Hant.
-                .process("Resources/en.lproj/Localizable.strings"),
-                .process("Resources/zh-Hant.lproj/Localizable.strings"),
-                .process("Resources/zh-Hans.lproj/Localizable.strings"),
-                .process("Resources/ja.lproj/Localizable.strings"),
-                .process("Resources/ko.lproj/Localizable.strings"),
-            ]
-        ),
         // Test targets — one per product module. Each tests its corresponding
         // module via `@testable import`. Empty in M1d-1; real tests migrate
         // here in M1d-2 onwards alongside production source files.
@@ -132,17 +87,6 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PeerDropProtocolTests", dependencies: ["PeerDropProtocol"]),
-        .testTarget(
-            name: "PeerDropPetTests",
-            dependencies: [
-                "PeerDropPet",
-                "PeerDropPlatform",
-                "PeerDropProtocol",
-            ],
-            resources: [
-                .copy("Resources"),
-            ]
-        ),
         .target(name: "PeerDropPTY"),
         .testTarget(name: "PeerDropPTYTests", dependencies: ["PeerDropPTY"]),
         .executableTarget(
