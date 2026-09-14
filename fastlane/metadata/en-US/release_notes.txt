@@ -1,7 +1,7 @@
-PeerDrop 5.6.0 — your pet, now in your language, plus security & reliability hardening.
+PeerDrop 6.0 — a fresh start.
 
-Localized pet labels: your companion's species, food, mood, and life stage now appear in your device language (English, 日本語, 한국어, 简体中文, 繁體中文). Previously these read in Chinese for everyone.
+The pet companion has been retired. This update removes it entirely, along with the home-screen widget and Live Activity, and cleans up the pet data it stored on your device and in iCloud. Your devices, chats, transfer history and trusted contacts are untouched.
 
-Under the hood: hardened how encrypted messages are handled — a malformed packet can no longer disrupt a session — and shipped builds no longer embed a relay-server key. Nothing to configure; it just works.
+Why: we're rebuilding PeerDrop around two new ways to connect — passing notes and exchange diaries — arriving in the next updates.
 
-Compatibility: 5.6.0 connects to earlier v5 peers exactly as before. The on-wire protocol is unchanged.
+Everything else works as before: nearby discovery, file transfer, chat and voice calls, on the same protocol as 5.x.
