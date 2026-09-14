@@ -38,8 +38,6 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
-      - package: PeerDropKit
-        product: PeerDropPet
       - target: PeerDropWidget
     settings:
       base:
@@ -126,7 +124,6 @@ targets:
           - 2Mds2dPO3W7UYqwP32fiee4pIK2BPMzVxBfgAKT1nyk=
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
-        NSSupportsLiveActivities: true
         UIBackgroundModes:
           - voip
           - bluetooth-central
@@ -166,14 +163,16 @@ targets:
       - path: PeerDrop/Purchase
       # Reuse cross-platform views from the iOS UI tree.
       # iOS-only files excluded per M2 Task 1 audit.
-      # Pet/UI reuse — needed by ChatView for the chat-side Pet overlay
-      # (ChatPetOverlay). FloatingPetView is iOS-only (UIScreen +
-      # UIPanGestureRecognizer); PetTabView relies on iOS-only
-      # fullScreenCover sheet semantics for the welcome flow.
-      - path: PeerDrop/Pet/UI
-        excludes:
-          - "FloatingPetView.swift"
-          - "PetTabView.swift"
+      # NOTE (Task 4, iOS pivot): the `PeerDrop/Pet/UI` source path that used
+      # to live here was removed along with PeerDrop/Pet/ itself — xcodegen
+      # hard-fails ("missing source directory") if a target still lists a
+      # path that no longer exists on disk, so this couldn't be left for
+      # Task 6 without breaking `xcodegen generate` for every target,
+      # including PeerDrop (iOS). PeerDropMac's own pet-coupled files
+      # (PeerDropMacApp.swift, MacAppDelegate.swift, MacChatWindow.swift,
+      # PetSectionView.swift, MenuBarContent.swift) and its `PeerDropPet`
+      # product dependency are untouched here — that decoupling is still
+      # Task 6's job; this target will not build until Task 6 runs.
       - path: PeerDrop/UI
         excludes:
           # M3 un-excluded: Voice/** (gated via MacFeatureFlags) +

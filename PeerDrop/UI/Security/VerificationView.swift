@@ -34,7 +34,7 @@ struct VerificationView: View {
                     Image(systemName: "heart")
                         .font(.title)
                         .foregroundStyle(.pink)
-                    Text(String(localized: "Your Pet"))
+                    Text(String(localized: "You"))
                         .font(.caption)
                 }
                 Image(systemName: "arrow.left.arrow.right")
