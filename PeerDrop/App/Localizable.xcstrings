@@ -1,12 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Your pet" : {
+    "Pick Nearby, Library, or Relay from the sidebar." : {
       "localizations" : {
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "あなたのペット" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "내 펫" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的宠物" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的寵物" } }
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドバーから「近くのデバイス」「ライブラリ」「リレー」を選んでください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사이드바에서 근처, 라이브러리 또는 릴레이를 선택하세요." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从侧边栏选择附近、资料库或中继。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "從側邊欄選擇附近、資料庫或 Relay。" } }
       }
     },
     "%lld 天" : {
@@ -229,28 +229,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入寵物的名字" } }
       }
     },
-    "Tap a treat to feed your pet" : {
-      "localizations" : {
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "おやつをタップしてペットに与えよう" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "간식을 탭하여 먹이 주기" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "点一下点心餵食寵物" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "點一下點心餵食寵物" } }
-      }
-    },
     "Yum! 🍽️" : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "おいしい！🍽️" } },
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "냠냠! 🍽️" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "好吃！🍽️" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "好吃！🍽️" } }
-      }
-    },
-    "Your pet isn't hungry yet" : {
-      "localizations" : {
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ペットはまだお腹が空いていません" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아직 배고프지 않아요" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "寵物還不餓" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "寵物還不餓" } }
       }
     },
     "You're out of that treat" : {
@@ -10212,111 +10196,6 @@
         }
       }
     },
-    "pet_widget_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "See your pet at a glance."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "一覽你的寵物狀態"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "一览你的宠物状态"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ペットの様子を一目で"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "반려동물을 한눈에"
-          }
-        }
-      }
-    },
-    "pet_widget_name": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pet"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "寵物"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "宠物"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ペット"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "펫"
-          }
-        }
-      }
-    },
-    "pet_widget_no_pet": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No Pet Yet"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "還沒有寵物"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有宠物"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ペットがいません"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "아직 펫이 없어요"
-          }
-        }
-      }
-    },
     "wants to connect": {
       "extractionState": "manual",
       "localizations": {
@@ -11760,34 +11639,6 @@
         }
       }
     },
-    "Pet": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ペット"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "펫"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "宠物"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "寵物"
-          }
-        }
-      }
-    },
     "Previous": {
       "localizations": {
         "ja": {
@@ -12288,69 +12139,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "本裝置"
-          }
-        }
-      }
-    },
-    "Your Pet": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "あなたのペット"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "내 펫"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "你的宠物"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "你的寵物"
-          }
-        }
-      }
-    },
-    "v4_upgrade_egg_hatched": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your egg has hatched!"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "卵が孵りました！"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "알이 부화했습니다!"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "你的蛋孵化了！"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "你的蛋孵化了！"
           }
         }
       }
@@ -13261,34 +13049,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "沒有進行中的傳輸"
-          }
-        }
-      }
-    },
-    "Pick Nearby, Trusted, Relay, or Pet from the sidebar.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "サイドバーから「近く」「信頼済み」「Relay」「ペット」を選択してください。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사이드바에서 '근처', '신뢰됨', 'Relay', '펫' 중에서 선택하세요."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请从侧边栏选择「附近」、「信任的设备」、「Relay」或「宠物」。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "請從側邊欄選擇「附近」、「信任的裝置」、「Relay」或「寵物」。"
           }
         }
       }
