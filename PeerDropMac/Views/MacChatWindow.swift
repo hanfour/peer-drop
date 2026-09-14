@@ -1,7 +1,6 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport  // for DiscoveredPeer
-import PeerDropPet        // for PetEngine
 
 /// Per-peer chat window hosted by the macOS app's
 /// `WindowGroup(id: "chat", for: String.self)` scene.
@@ -13,7 +12,6 @@ import PeerDropPet        // for PetEngine
 struct MacChatWindow: View {
     let peerID: String
     @EnvironmentObject var connectionManager: ConnectionManager
-    @EnvironmentObject var petEngine: PetEngine
 
     var body: some View {
         // ChatView reads chatManager + peer metadata directly; we look
@@ -26,7 +24,6 @@ struct MacChatWindow: View {
             peerName: peerDisplayName
         )
         .environmentObject(connectionManager)
-        .environmentObject(petEngine)
         .frame(minWidth: 480, minHeight: 480)
         .navigationTitle(peerDisplayName)
     }

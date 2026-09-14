@@ -64,7 +64,7 @@ struct PeerDropCommands: Commands {
             .keyboardShortcut("1")
         }
 
-        // Sidebar section jumps (⌘⌥{1-4}).
+        // Sidebar section jumps (⌘⌥{1-3}).
         CommandGroup(after: .windowList) {
             Button("Nearby")  { postJump(.nearby)  }
                 .keyboardShortcut("1", modifiers: [.command, .option])
@@ -72,8 +72,6 @@ struct PeerDropCommands: Commands {
                 .keyboardShortcut("2", modifiers: [.command, .option])
             Button("Relay")   { postJump(.relay)   }
                 .keyboardShortcut("3", modifiers: [.command, .option])
-            Button("Pet")     { postJump(.pet)     }
-                .keyboardShortcut("4", modifiers: [.command, .option])
         }
 
         // Help menu.

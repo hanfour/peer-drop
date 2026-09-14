@@ -1,12 +1,11 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
-import PeerDropPet
 
 /// Contents of the MenuBarExtra popover (~360×500).
 ///
 /// Spec §4 menu bar layout: status header, peers list, in-flight
-/// transfers, Pet mini-sprite slot, and Open / Quit row.
+/// transfers, and Open / Quit row.
 ///
 /// Deviation notes (vs. plan):
 ///   * The plan referenced `connectionManager.aggregateState`. The actual
@@ -14,14 +13,8 @@ import PeerDropPet
 ///   * `connectionManager.activeTransfers` does not exist; only
 ///     `transferProgress: Double`. We render a static "No active
 ///     transfers" placeholder. A real transfers list is a post-M2 pass.
-///   * Task 9 wires the Pet sprite: PetEngine is a separate
-///     @StateObject in PeerDropMacApp (the plan's
-///     `connectionManager.currentPetSprite` doesn't exist). The
-///     mini-sprite consumes `petEngine.renderedImage` via the shared
-///     `PetSpriteView(size:)` component.
 struct MenuBarContent: View {
     @EnvironmentObject var connectionManager: ConnectionManager
-    @EnvironmentObject var petEngine: PetEngine
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,10 +31,6 @@ struct MenuBarContent: View {
             Divider()
 
             transfersPlaceholder
-
-            Divider()
-
-            petSpriteSlot
 
             Divider()
 
@@ -118,29 +107,6 @@ struct MenuBarContent: View {
             Text("No active transfers")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
-    }
-
-    // MARK: - Pet sprite slot (Task 9: live PetEngine sprite at 60pt)
-
-    private var petSpriteSlot: some View {
-        HStack(spacing: 12) {
-            PetSpriteView(size: 60)
-            VStack(alignment: .leading, spacing: 2) {
-                if let name = petEngine.pet.name, !name.isEmpty {
-                    Text(name)
-                        .font(.caption)
-                        .lineLimit(1)
-                }
-                // PetState exposes `level: PetLevel` (plan called it
-                // `stage`). `displayName` gives the localised stage label.
-                Text(petEngine.pet.level.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
             Spacer()
         }
         .padding(.horizontal)

@@ -61,15 +61,6 @@ final class MacSnapshotTestsDark: XCTestCase {
         snapshot("03_Relay_Dark")
     }
 
-    func test04_Pet_Dark() {
-        let pet = app.outlines.staticTexts["Pet"]
-        if pet.waitForExistence(timeout: 3) {
-            pet.click()
-        }
-        sleep(1)
-        snapshot("04_Pet_Dark")
-    }
-
     func test05_Settings_Dark() {
         app.typeKey(",", modifierFlags: .command)
         sleep(2)

@@ -8,7 +8,7 @@
 //  Mirrors the iOS PeerDropUITests/Snapshots/SnapshotTests pattern but
 //  targets the macOS NavigationSplitView sidebar layout. SCREENSHOT_MODE
 //  is the same launch argument iOS uses — PeerDropMacApp.onAppear wires
-//  it to populate mock peers + Pet state via ScreenshotModeProvider.
+//  it to populate mock peers via ScreenshotModeProvider.
 
 import XCTest
 
@@ -24,16 +24,13 @@ final class MacSnapshotTests: XCTestCase {
         setupSnapshot(app)
 
         // SCREENSHOT_MODE: routes ConnectionManager.startDiscovery to
-        // mock data and seeds petEngine.pet from
-        // ScreenshotModeProvider.mockPetState.
+        // mock data via ScreenshotModeProvider.
         app.launchArguments += ["-SCREENSHOT_MODE", "1"]
 
         app.launch()
 
-        // Allow scene + sidebar + Pet sprite + mock peer injection to
-        // settle. Mac NavigationSplitView is fast (no waiting for
-        // remote data), but the sprite engine has a ~50-200ms first
-        // render that we'd rather catch in the screenshot.
+        // Allow scene + sidebar + mock peer injection to settle.
+        // Mac NavigationSplitView is fast (no waiting for remote data).
         sleep(2)
     }
 
@@ -69,18 +66,6 @@ final class MacSnapshotTests: XCTestCase {
         }
         sleep(1)
         snapshot("03_Relay")
-    }
-
-    /// 04: Pet sidebar section — 256pt sprite rendered live
-    func test04_Pet() {
-        let pet = app.outlines.staticTexts["Pet"]
-        if pet.waitForExistence(timeout: 3) {
-            pet.click()
-        }
-        // Pet first-render race: wait extra ~200ms beyond the setUp
-        // delay so the CGImage is published before the snapshot fires.
-        sleep(1)
-        snapshot("04_Pet")
     }
 
     /// 05: Settings (Preferences) scene
