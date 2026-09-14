@@ -22,7 +22,7 @@ languages([
 ])
 
 # Same SCREENSHOT_MODE arg the iOS UI tests use. PeerDropMacApp.onAppear
-# wires it to populate mock peers + Pet state via ScreenshotModeProvider.
+# wires it to populate mock peers via ScreenshotModeProvider.
 launch_arguments(["-SCREENSHOT_MODE 1"])
 
 clear_previous_screenshots(true)

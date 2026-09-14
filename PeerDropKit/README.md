@@ -1,8 +1,7 @@
 # PeerDropKit
 
 Local Swift Package containing the cross-platform core of the PeerDrop app.
-Consumed by both the iOS app target (`PeerDropApp-iOS`, eventual `PeerDropApp-macOS`)
-and the `PeerDropWidget` extension.
+Consumed by the iOS app target (`PeerDropApp-iOS`, eventual `PeerDropApp-macOS`).
 
 ## Modules
 
@@ -12,12 +11,10 @@ and the `PeerDropWidget` extension.
 | `PeerDropTransport` | Network/transport layer: Bonjour, PeerConnection, RelaySession, WebRTC, voice transport pieces | WebRTC |
 | `PeerDropSecurity` | Cryptography: PeerIdentity, ChatDataEncryptor, Double Ratchet, SAS, relay crypto | CryptoKit (Apple) |
 | `PeerDropProtocol` | Wire format + envelope + version negotiation | none |
-| `PeerDropPet` | Pet system: PetGenome, SpeciesCatalog, PetRendererV3, sprite atlas decoding | ZIPFoundation |
 
 ## Dependency graph
 
 ```
-PeerDropPet ────┐
 PeerDropSecurity ─┐
 PeerDropProtocol ─┼──> PeerDropCore ──> (app targets)
 PeerDropTransport ┘

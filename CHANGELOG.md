@@ -2,6 +2,20 @@
 
 All notable changes to PeerDrop will be documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] — Unreleased
+
+### Removed — Pet companion (Neo-Egg)
+
+- The pet system (hatching, feeding, evolution, sprites, widget, Live Activity, iCloud pet sync) is removed from iOS and macOS. On first launch after upgrading, the app deletes its local pet files, the widget bridge files in the app group, the `PetData` folder in iCloud Drive and the three iCloud key-value entries (`LegacyPetDataCleanup`). Nothing else is touched.
+- The `PeerDropWidget` extension target, the `PeerDropPet` Swift package module (66 files, 36 MB of sprite atlases) and the ZIPFoundation dependency are gone. App download size drops by roughly 36 MB.
+- Motivation and what comes next: `docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md` (passing notes + exchange diaries).
+
+### Changed
+
+- `ConnectionManager.onPeerConnectedForPet` / `onPeerDisconnectedForPet` renamed to `onPeerConnected` / `onPeerDisconnected` (used by `peerdrop-cli`). `ChatManager.onMessageReceivedForPet` removed.
+- `TrustedContact.petSnapshot` removed; records written by earlier versions still decode.
+- CI now builds the iOS and macOS app targets with `xcodebuild` on every PR.
+
 ## [5.4.0] — 2026-05-23
 
 ### Added — Relay crypto hardening (8-PR series, #37–#44)

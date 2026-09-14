@@ -7,13 +7,13 @@ on:
 
 jobs:
   lint-imports:
-    name: Lint — no UIKit in Core/ or Pet/ (non-UI)
+    name: Lint — no unguarded UIKit/AppKit in PeerDropKit/Sources
     runs-on: macos-15
     continue-on-error: false  # enforced from M1a onward
     steps:
       - uses: actions/checkout@v4
 
-      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in Core/, Pet/ (non-UI), and Voice/ (excl. CallKitManager)
+      - name: Scan for unguarded UIKit/AppKit/WidgetKit imports in PeerDropKit/Sources (excl. Platform/iOS)
         run: |
           set -e
           violations=""
@@ -35,15 +35,14 @@ jobs:
                 fi
               done < <(grep -n -E "^import (UIKit|AppKit|WidgetKit)" "$file" | cut -d: -f1)
             fi
-          done < <(find PeerDrop/Pet PeerDropKit/Sources -name "*.swift" \
-            -not -path "*/Platform/iOS/*" \
-            -not -path "*/Pet/UI/*")
+          done < <(find PeerDropKit/Sources -name "*.swift" \
+            -not -path "*/Platform/iOS/*")
           if [ -n "$violations" ]; then
-            echo "::error::Unguarded UI-framework imports in Pet/ (non-UI) or PeerDropKit/Sources/:"
+            echo "::error::Unguarded UI-framework imports in PeerDropKit/Sources/:"
             printf "%b" "$violations"
             exit 1
           else
-            echo "Clean: PeerDrop/Pet/ (non-UI) and PeerDropKit/Sources/ have no unguarded UI-framework imports."
+            echo "Clean: PeerDropKit/Sources/ has no unguarded UI-framework imports."
           fi
 
   swift-build-macos:
@@ -58,6 +57,36 @@ jobs:
           # Exit code propagates: any compile failure (including
           # accidental iOS-only API usage in PeerDropKit/Sources/)
           # fails the job and blocks the PR.
+
+  xcodebuild-apps:
+    name: Xcode build — iOS app + macOS app (unsigned)
+    # Pivot 2026-09 / arch-review 2026-08: the shipped binaries are built
+    # by xcodebuild from project.yml, not by `swift build`. Without this job
+    # an app-target-only breakage (a deleted view, a stale project.yml path)
+    # only surfaces at release time.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Provide placeholder Secrets.xcconfig
+        run: cp Secrets.xcconfig.example Secrets.xcconfig
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build iOS app (simulator, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build -scheme PeerDrop \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            -quiet
+      - name: Build macOS app (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build -scheme PeerDropMac \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            -quiet
 
   crypto-coverage-gate:
     name: Crypto coverage gate (SOFT — reports only, does not block)

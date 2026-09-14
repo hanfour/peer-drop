@@ -1,11 +1,16 @@
-PeerDrop 6.0.0 comes to Mac.
+PeerDrop for Mac 6.1.0 — the pet companion has been retired.
 
-- Bidirectional voice with iPhone: tap the phone icon on either device; the other side shows the incoming call within a second.
+This update removes the pet sprite from the menu bar and the Pet section from the sidebar, and cleans up the pet data the app stored on this Mac and in iCloud. Your peers, chats, transfer history and trusted contacts are untouched.
+
+Why: we're rebuilding PeerDrop around two new ways to connect — passing notes and exchange diaries — arriving in the next updates on Mac and iPhone together.
+
+Everything else works as before:
+- Bidirectional voice with iPhone: tap the phone icon on either device.
 - Drag files from Finder onto the Dock icon, the main window, or a peer's row in the menu bar.
 - Multi-window chat — one window per peer; ⌘1 jumps to the latest.
-- Menu bar item with status, peer list, and Pet sprite.
-- Settings live in the standard System Settings location (⌘,) — General, Profile, Relay.
+- Menu bar item with status, peer list and active transfers.
+- Settings in the standard location (⌘,) — General, Profile, Relay.
 
 macOS 14 (Sonoma) or later. Sandboxed; no full disk access, no analytics, no accounts.
 
-Compatibility: the Mac app talks to iPhone/iPad v5.0+ peers unchanged.
+Compatibility: talks to iPhone/iPad v5.0+ peers unchanged.

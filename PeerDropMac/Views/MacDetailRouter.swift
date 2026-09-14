@@ -3,8 +3,8 @@ import PeerDropCore
 
 /// Routes the selected sidebar section to its detail content.
 ///
-/// M4 Task 1b wired the four real section views (NearbyTab,
-/// LibraryTab, RelayConnectView, PetSectionView) after their iOS
+/// M4 Task 1b wired the three real section views (NearbyTab,
+/// LibraryTab, RelayConnectView) after their iOS
 /// dependencies were cross-platformed via `PlatformImage` +
 /// `Image(platformImage:)` + cross-platform pasteboard / file
 /// pickers / QR rendering.
@@ -29,13 +29,11 @@ struct MacDetailRouter: View {
             case .relay:
                 RelayConnectView()
                     .environmentObject(connectionManager)
-            case .pet:
-                PetSectionView()
             case .none:
                 ContentUnavailableView(
                     "Choose a section",
                     systemImage: "sidebar.left",
-                    description: Text("Pick Nearby, Trusted, Relay, or Pet from the sidebar.")
+                    description: Text("Pick Nearby, Library, or Relay from the sidebar.")
                 )
             }
         }

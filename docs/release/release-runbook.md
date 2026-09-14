@@ -10,7 +10,7 @@ Before running `fastlane release`, confirm in order:
 
 - [ ] **`git checkout main && git pull --ff-only`** — release must always ship from `main` HEAD, never a feature branch or stale checkout.
 - [ ] **`git status` is clean** — uncommitted changes will be silently baked into the IPA. The auto-generated `fastlane/README.md` churn can be discarded with `git checkout -- fastlane/README.md`.
-- [ ] **`MARKETING_VERSION` in `project.yml` matches the version you intend to ship** — `grep MARKETING_VERSION project.yml`. Both app and widget target lines must agree.
+- [ ] **`MARKETING_VERSION` in `project.yml` matches the version you intend to ship** — `grep MARKETING_VERSION project.yml`. The iOS (`PeerDrop`) and macOS (`PeerDropMac`) targets carry independent versions — check the one you are shipping.
 - [ ] **`xcodegen generate` AFTER bumping `MARKETING_VERSION`.** This regenerates `PeerDrop.xcodeproj/project.pbxproj` from `project.yml`. Skipping this step is the #1 way to ship a version mismatch: project.yml says X.Y.Z, pbxproj retains X.Y.(Z-1), gym builds an IPA at X.Y.(Z-1), `upload_to_app_store` rejects with *"versionString has already been used"* because X.Y.(Z-1) is live. **Verify:** `grep MARKETING_VERSION PeerDrop.xcodeproj/project.pbxproj` shows the new version.
 - [ ] **Reviewer notes exist** at `docs/release/v<MAJOR.MINOR.PATCH>-reviewer-notes.md` with `<!-- BEGIN_PASTE -->` / `<!-- END_PASTE -->` markers. The lane auto-discovers this file via the `MARKETING_VERSION` regex in `fastlane/Fastfile`.
 - [ ] **5-lang release notes UPDATED for THIS version** at `fastlane/metadata/{en-US,zh-Hant,zh-Hans,ja,ko}/release_notes.txt`. Each file is committed plain text — fastlane uploads them as the version's localized notes. **Every file must contain the `MARKETING_VERSION` string** (e.g. "5.5.2"); the `release` / `release_mac` lanes hard-abort if any language's notes don't mention it. This guard exists because v5.4.0 → v5.5.2 all reached the App Store showing v5.3's What's New — the files were never refreshed and nothing caught it (found 2026-07-03). Note: a live version's What's New can NOT be edited in ASC after release; wrong notes stay wrong until the next submission.
@@ -69,10 +69,6 @@ fastlane run get_provisioning_profile \
   app_identifier:"com.hanfour.peerdrop" \
   provisioning_name:"com.hanfour.peerdrop AppStore" \
   force:true api_key_path:"./fastlane/api_key.json"
-fastlane run get_provisioning_profile \
-  app_identifier:"com.hanfour.peerdrop.widget" \
-  provisioning_name:"com.hanfour.peerdrop.widget AppStore" \
-  force:true api_key_path:"./fastlane/api_key.json"
 # Then retry: fastlane release
 ```
 
@@ -106,10 +102,9 @@ If WAITING_FOR_REVIEW: go to ASC → My Apps → PeerDrop → version → "Remov
 
 1. **Verify in ASC:** `fastlane check_status` should show the new version as `WAITING_FOR_REVIEW` in the In-Flight section.
 2. **Update memory:** edit `MEMORY.md` App Store Status section with submission timestamp + build number.
-3. **Update STATUS.md:** mark the new version in `docs/pet-design/ai-brief/STATUS.md` if pet-system relevant.
-4. **Wait for review:** Apple typically reviews within 24-48 hours. First-major versions sometimes faster.
-5. **On approval:** auto-release fires; new version becomes live within hours.
-6. **(Optional smoke test):** install the TestFlight build on a real device before review approval. Step list in `docs/plans/v5.1+-deferred.md` item #10.
+3. **Wait for review:** Apple typically reviews within 24-48 hours. First-major versions sometimes faster.
+4. **On approval:** auto-release fires; new version becomes live within hours.
+5. **(Optional smoke test):** install the TestFlight build on a real device before review approval. Step list in `docs/plans/v5.1+-deferred.md` item #10.
 
 ---
 
@@ -141,7 +136,6 @@ A release that introduces a new entitlement (`aps-environment`, `com.apple.devel
 3. **Capabilities** section → check the capability you're adding
 4. **Save** at the top right → confirm in the modal
 5. **Don't touch other capabilities** — disabling something already enabled (iCloud, App Groups, Keychain Sharing) breaks every shipped version that depended on it.
-6. If the app uses a widget extension and the capability needs to apply there too, repeat for `com.hanfour.peerdrop.widget`.
 
 ### Step 2 — Regenerate the provisioning profile(s)
 
@@ -149,12 +143,6 @@ A release that introduces a new entitlement (`aps-environment`, `com.apple.devel
 fastlane run get_provisioning_profile \
   app_identifier:"com.hanfour.peerdrop" \
   provisioning_name:"com.hanfour.peerdrop AppStore" \
-  force:true \
-  api_key_path:"./fastlane/api_key.json"
-
-fastlane run get_provisioning_profile \
-  app_identifier:"com.hanfour.peerdrop.widget" \
-  provisioning_name:"com.hanfour.peerdrop.widget AppStore" \
   force:true \
   api_key_path:"./fastlane/api_key.json"
 ```
@@ -330,12 +318,10 @@ The Mac bundle `com.hanfour.peerdrop.mac` needs the same App ID capability set a
 
 1. https://developer.apple.com/account → Identifiers → click `com.hanfour.peerdrop.mac` (create if absent: macOS App ID, description "PeerDrop for Mac")
 2. Enable: App Sandbox, Push Notifications, Bluetooth, Microphone, Networking (multicast), **iCloud**
-3. For **iCloud**: enable **Key-Value storage** + **iCloud Documents**, then bind the existing container **`iCloud.com.hanfour.peerdrop`** (the SAME container the iOS app uses — do NOT create a new `.mac` container, or the Mac and iPhone would sync to different stores and never show the same pet)
+3. For **iCloud**: enable **Key-Value storage** + **iCloud Documents**, then bind the existing container **`iCloud.com.hanfour.peerdrop`** (the SAME container the iOS app uses — do NOT create a new .mac container)
 4. Save
 
-> **Why iCloud on Mac:** cross-device pet sync (the Mac shows the pet raised on iPhone/iPad). `PetSyncCoordinator` reads + merges the iCloud copy at launch via `PetConflictResolver`. Until this capability + the regenerated profile are in place, `PetCloudSync` no-ops and the Mac falls back to local-only pets — the app still builds and runs, it just won't share pets. The matching entitlement keys are already in `PeerDropMac/App/PeerDrop-Mac.entitlements` (`com.apple.developer.icloud-container-identifiers` + `ubiquity-kvstore-identifier`); the local Mac Debug build will fail to sign with `Automatic` style until step 2/3 are saved on the portal. Verify Mac compilation meanwhile with `xcodebuild build -scheme PeerDropMac -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`.
-
-**Conflict-resolution behaviour to know before enabling sync:** the model is single-pet (`pet.json`), so when two devices hold *different* pets that have never synced, turning sync on converges them to **one** — `PetConflictResolver` keeps the more-invested pet (higher level → XP → interactions → older birthDate) and the other is discarded. The same pet edited on two devices resolves to the most-recently-written copy. This is inherent to single-pet sync; surface it in the v6.x reviewer/release notes if the audience has multiple devices with separate pets.
+> **Why iCloud on Mac (2026-09):** retained for ONE release so `LegacyPetDataCleanup` can purge the pet data earlier versions stored in the container and in Key-Value storage. Sub-project 1 of the notes/diary pivot removes these entitlements (and the cleanup's iCloud branch) together — see docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md §6.
 
 Then regenerate the provisioning profile via fastlane:
 

@@ -6,9 +6,9 @@ import CoreGraphics
 /// per Apple's docs); macOS uses an `NSGraphicsContext`-backed
 /// `NSBitmapImageRep` with matching settings.
 ///
-/// The output must be deterministic — the M4.3 caching contract in
-/// PetRendererV3 (`docs/plans/2026-04-XX-pet-v4-impl.md`) depends on
-/// byte-identical PNG bytes for identical drawing input.
+/// The output must be deterministic — callers that composite CGImages
+/// manually y-flip them and rely on byte-identical PNG bytes for
+/// identical drawing input.
 public struct PlatformGraphicsRenderer {
     public let size: CGSize
 
@@ -51,9 +51,10 @@ enum AppKitGraphicsRenderer {
         )!
         // Match UIGraphicsImageRenderer's coordinate system: top-left origin,
         // y increasing downward. `NSGraphicsContext(bitmapImageRep:)` is
-        // bottom-left / y-up, the OPPOSITE of UIKit, so the shared drawing
-        // code in PetRendererV3.composite (which manually y-flips for a
-        // UIKit-style top-left context) ended up double-flipped on macOS.
+        // bottom-left / y-up, the OPPOSITE of UIKit, so callers that
+        // composite CGImages manually y-flip for a UIKit-style top-left
+        // context — without this, that composited output ends up
+        // double-flipped on macOS.
         //
         // Two consumers read orientation DIFFERENTLY, so both must be made
         // top-left (audit rounds 22 + 23):

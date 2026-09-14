@@ -92,7 +92,7 @@ struct PeerDropCLI {
         // guards on shouldReplayOnConnect. The callback fires on the main actor;
         // wrap in Task{@MainActor} to satisfy the compiler since the closure type
         // is not itself @MainActor.
-        cm.onPeerConnectedForPet = { [weak session] peerID in
+        cm.onPeerConnected = { [weak session] peerID in
             Task { @MainActor in session?.handlePeerConnected(peerID) }
         }
 

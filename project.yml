@@ -8,10 +8,9 @@ options:
   generateEmptyDirectories: true
 
 packages:
-  # WebRTC + ZIPFoundation are no longer declared at the project level —
-  # both reach the app target transitively via PeerDropKit (WebRTC via
-  # PeerDropTransport, ZIPFoundation via PeerDropPet). Pinned versions
-  # live in PeerDropKit/Package.swift.
+  # WebRTC is not declared at the project level — it reaches the app
+  # target transitively via PeerDropKit (PeerDropTransport). The pinned
+  # version lives in PeerDropKit/Package.swift.
   PeerDropKit:
     path: PeerDropKit
 
@@ -38,16 +37,13 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
-      - package: PeerDropKit
-        product: PeerDropPet
-      - target: PeerDropWidget
     settings:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "5.6.0"
+        MARKETING_VERSION: "6.0.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -74,6 +70,9 @@ targets:
         # Without this key iOS calls didFailToRegisterForRemoteNotifications
         # and the app never gets a device token.
         aps-environment: development
+        # Pivot 2026-09: app-group + iCloud entitlements are kept for ONE
+        # release so LegacyPetDataCleanup can purge pet residue. Remove in
+        # sub-project 1 (see docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md).
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.hanfour.peerdrop
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.hanfour.peerdrop
@@ -126,7 +125,6 @@ targets:
           - 2Mds2dPO3W7UYqwP32fiee4pIK2BPMzVxBfgAKT1nyk=
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
-        NSSupportsLiveActivities: true
         UIBackgroundModes:
           - voip
           - bluetooth-central
@@ -166,14 +164,6 @@ targets:
       - path: PeerDrop/Purchase
       # Reuse cross-platform views from the iOS UI tree.
       # iOS-only files excluded per M2 Task 1 audit.
-      # Pet/UI reuse — needed by ChatView for the chat-side Pet overlay
-      # (ChatPetOverlay). FloatingPetView is iOS-only (UIScreen +
-      # UIPanGestureRecognizer); PetTabView relies on iOS-only
-      # fullScreenCover sheet semantics for the welcome flow.
-      - path: PeerDrop/Pet/UI
-        excludes:
-          - "FloatingPetView.swift"
-          - "PetTabView.swift"
       - path: PeerDrop/UI
         excludes:
           # M3 un-excluded: Voice/** (gated via MacFeatureFlags) +
@@ -205,8 +195,6 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
-      - package: PeerDropKit
-        product: PeerDropPet
     settings:
       base:
         INFOPLIST_FILE: PeerDropMac/App/Info.plist
@@ -214,7 +202,7 @@ targets:
         DEVELOPMENT_TEAM: UK48R5KWLV
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: PeerDropMac/App/PeerDrop-Mac.entitlements
-        MARKETING_VERSION: "6.0.0"
+        MARKETING_VERSION: "6.1.0"
         CURRENT_PROJECT_VERSION: "2"
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
@@ -239,10 +227,6 @@ targets:
     platform: iOS
     sources:
       - path: PeerDropTests
-        # Pet test files and their fixture zips moved to PeerDropPetTests (M1d-3b Task 6).
-        # PeerDropTests/Pet/ directory removed; PeerDropTests/Resources/Pets/ removed.
-        excludes:
-          - "Pet/Fixtures/**"
     dependencies:
       - target: PeerDrop
       - package: PeerDropKit
@@ -255,8 +239,6 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
-      - package: PeerDropKit
-        product: PeerDropPet
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.tests
@@ -288,38 +270,6 @@ targets:
         DEVELOPMENT_TEAM: UK48R5KWLV
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
-
-  PeerDropWidget:
-    type: app-extension
-    platform: iOS
-    sources:
-      - PeerDropWidget
-    dependencies:
-      - package: PeerDropKit
-        product: PeerDropPet
-      - package: PeerDropKit
-        product: PeerDropPlatform
-    info:
-      path: PeerDropWidget/Info.plist
-      properties:
-        CFBundleDisplayName: PeerDrop Widget
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop.widget
-        DEVELOPMENT_TEAM: UK48R5KWLV
-        CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "5.6.0"
-        CURRENT_PROJECT_VERSION: "1"
-        CODE_SIGN_ENTITLEMENTS: PeerDropWidget/PeerDropWidget.entitlements
-    entitlements:
-      path: PeerDropWidget/PeerDropWidget.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.hanfour.peerdrop
 
 schemes:
   PeerDrop:

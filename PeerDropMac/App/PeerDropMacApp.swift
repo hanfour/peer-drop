@@ -1,8 +1,6 @@
 import SwiftUI
-import Combine
 import PeerDropCore
 import PeerDropPlatform
-import PeerDropPet
 import PeerDropTransport
 import PeerDropSecurity
 
@@ -18,30 +16,6 @@ struct PeerDropMacApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var connectionManager = ConnectionManager()
-    /// PetEngine is a separate @StateObject (mirrors iOS
-    /// PeerDropApp.swift). The sprite source is
-    /// `petEngine.renderedImage: CGImage?` injected as an
-    /// `@EnvironmentObject` into every scene that may show the pet.
-    @StateObject private var petEngine = PetEngine()
-    /// Animation clock for the pet sprite. On iOS, FloatingPetView's
-    /// CADisplayLink feeds PetAnimationController.advance(dt:); the Mac
-    /// app has no floating pet, so without this driver the animator never
-    /// ticks and the sidebar/menu-bar sprite freezes on frame 0. Created
-    /// in onAppear (needs petEngine.animator) and kept alive app-wide so
-    /// the MenuBarExtra sprite stays animated with the main window closed.
-    @State private var petTickDriver: PetTickDriver?
-    /// Debounced auto-save of the pet (audit round 21). macOS scenePhase
-    /// `.background` and applicationWillTerminate don't fire reliably for a
-    /// menu-bar-agent app (verified: neither Cmd+H nor Quit triggered a
-    /// save), so persistence is driven off pet MUTATIONS instead — the same
-    /// robust pattern ChatManager uses. Held for the app's lifetime.
-    @State private var petSaveCancellable: AnyCancellable?
-    /// Cross-device pet sync (local ⇄ iCloud), now wired on Mac too (was
-    /// iOS-only). Merges local + cloud at launch, pushes on every debounced
-    /// mutation + on background, and observes live changes from iPhone/iPad.
-    /// No-ops gracefully on a Mac without the iCloud container provisioned.
-    private let petSync = PetSyncCoordinator()
-    @State private var didStartPetSyncObserver = false
     /// Round 11 audit fix: NearbyTab + GuidanceCard read this object
     /// via `@EnvironmentObject` to drive the discovery-help heuristics.
     /// Without it, the SwiftUI environment lookup fatals at first
@@ -87,27 +61,13 @@ struct PeerDropMacApp: App {
         WindowGroup("PeerDrop", id: "PeerDropMain") {
             MacContentView()
                 .environmentObject(connectionManager)
-                .environmentObject(petEngine)
                 .environmentObject(connectionContext)
                 .environmentObject(voicePlayer)
                 .environmentObject(appDelegate)
                 .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
-                    // Wire AppDelegate's weak refs so lifecycle hooks
-                    // (terminate flush) can reach ConnectionManager + persist
-                    // the pet on quit (audit round 21).
+                    // Wire AppDelegate's weak refs so lifecycle hooks (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
-                    appDelegate.petEngine = petEngine
-
-                    // Start the pet animation clock (see petTickDriver doc).
-                    // onAppear can re-fire when the main window reopens;
-                    // PetTickDriver.start() is idempotent but the nil check
-                    // also keeps us from allocating a second driver.
-                    if petTickDriver == nil {
-                        let driver = PetTickDriver(animator: petEngine.animator)
-                        driver.start()
-                        petTickDriver = driver
-                    }
 
                     // Round 11 audit fix: wire ConnectionContext to the
                     // live data sources NearbyTab + GuidanceCard read.
@@ -202,65 +162,26 @@ struct PeerDropMacApp: App {
                     // initial start.
                     connectionManager.startDiscovery()
 
-                    // M4 screenshot mode (Task 6): when the
-                    // -SCREENSHOT_MODE launch arg is set (fastlane
-                    // snapshot), populate the Pet with mock state so
-                    // MAS screenshots capture a populated UI.
-                    if ScreenshotModeProvider.shared.isActive {
-                        petEngine.pet = ScreenshotModeProvider.shared.mockPetState
-                    } else {
-                        // Audit round 21: the Mac app never loaded a persisted
-                        // pet — it ran on the throwaway `.newEgg()` from
-                        // PetEngine(), so the Mac pet was always a fresh baby
-                        // that never aged or survived a relaunch. Load + (on
-                        // background) save the local pet, mirroring iOS
-                        // (PeerDropApp.onAppear / scenePhase). The didSet
-                        // passive-aging hook (round 18) then evolves an overdue
-                        // pet on load.
-                        //
-                        // Cross-device sync: resolvedLaunchPet merges the local
-                        // pet against the iCloud copy so the Mac shows the same
-                        // pet the user raised on iPhone/iPad. Degrades to plain
-                        // local load on a Mac without the iCloud container.
-                        if let saved = petSync.resolvedLaunchPet() {
-                            petEngine.pet = saved
-                        }
-                        // Observe live iCloud changes from other devices (register
-                        // once — onAppear re-fires when the main window reopens).
-                        if !didStartPetSyncObserver {
-                            didStartPetSyncObserver = true
-                            petSync.observe(
-                                currentLocal: { petEngine.pet },
-                                onResolved: { merged in petEngine.pet = merged }
-                            )
-                        }
-                        // Auto-save + cloud-push on every pet mutation, debounced
-                        // 1s, so age/evolution/feeding survive a relaunch AND
-                        // propagate to the user's other devices even when no
-                        // lifecycle save fires (macOS scenePhase is unreliable for
-                        // a menu-bar agent — see petSaveCancellable). No dropFirst:
-                        // the first emission persists the just-loaded pet too —
-                        // re-pushing identical bytes is harmless.
-                        if petSaveCancellable == nil {
-                            petSaveCancellable = petEngine.$pet
-                                .debounce(for: .seconds(1), scheduler: RunLoop.main)
-                                .sink { pet in petSync.push(pet) }
-                        }
+                    // Pivot 2026-09: purge legacy pet residue once per install.
+                    LegacyPetDataCleanup.runInBackgroundIfNeeded()
+
+                    // Skipped in screenshot mode so the permission dialog never lands over a capture.
+                    if !ScreenshotModeProvider.shared.isActive {
                         // M3: kick APNs registration. Matches iOS
                         // PeerDropApp.swift pattern. UN permission dialog
                         // shows once; subsequent launches re-register silently.
                         Task {
                             await PushNotificationManager.shared.requestAuthorizationAndRegister()
                         }
-                        // M4 audit fix: observe StoreKit transactions so
-                        // refunded / replayed / family-shared Mac tip-jar
-                        // IAPs are completed correctly. Without this, the
-                        // Mac App Store can charge the user but the app
-                        // never marks the transaction finished — receipt
-                        // queue grows, future buys re-fire old transactions.
-                        // Mirrors iOS PeerDropApp.swift:92.
-                        TipJarManager.shared.startObservingTransactions()
                     }
+                    // M4 audit fix: observe StoreKit transactions so
+                    // refunded / replayed / family-shared Mac tip-jar
+                    // IAPs are completed correctly. Without this, the
+                    // Mac App Store can charge the user but the app
+                    // never marks the transaction finished — receipt
+                    // queue grows, future buys re-fire old transactions.
+                    // Mirrors iOS PeerDropApp.swift:92.
+                    TipJarManager.shared.startObservingTransactions()
                 }
                 .onChange(of: scenePhase) { newPhase in
                     // Round 14 audit fix: mirrors iOS PeerDropApp.swift:253-276.
@@ -275,14 +196,6 @@ struct PeerDropMacApp: App {
                     switch newPhase {
                     case .background:
                         inboxService.disconnect()
-                        // Persist + push the pet so age/evolution/feeding survive
-                        // a relaunch (audit round 21) AND reach the user's other
-                        // devices. Skip in screenshot mode so the mock pet never
-                        // overwrites a real save.
-                        if !ScreenshotModeProvider.shared.isActive {
-                            petSync.push(petEngine.pet)
-                            petEngine.syncSharedState()
-                        }
                     case .active:
                         inboxService.connect()
                     default:
@@ -330,7 +243,6 @@ struct PeerDropMacApp: App {
             if let peerID {
                 MacChatWindow(peerID: peerID)
                     .environmentObject(connectionManager)
-                    .environmentObject(petEngine)
                     .environmentObject(connectionContext)
                     .environmentObject(voicePlayer)
             } else {
@@ -343,7 +255,6 @@ struct PeerDropMacApp: App {
         Settings {
             MacSettingsView()
                 .environmentObject(connectionManager)
-                .environmentObject(petEngine)
                 .environmentObject(connectionContext)
                 .environmentObject(voicePlayer)
                 .frame(width: 520, height: 420)
@@ -360,7 +271,6 @@ struct PeerDropMacApp: App {
         ) {
             MenuBarContent()
                 .environmentObject(connectionManager)
-                .environmentObject(petEngine)
                 .environmentObject(connectionContext)
                 .environmentObject(voicePlayer)
                 .frame(width: 360, height: 500)

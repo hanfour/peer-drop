@@ -3,7 +3,6 @@ import PeerDropCore
 import PeerDropTransport
 import PeerDropSecurity
 import PeerDropPlatform
-import PeerDropPet
 
 @main
 struct PeerDropApp: App {
@@ -11,10 +10,6 @@ struct PeerDropApp: App {
     @StateObject private var connectionManager = ConnectionManager()
     @StateObject private var connectionContext = ConnectionContext()
     @StateObject private var voicePlayer = VoicePlayer()
-    @StateObject private var petEngine = PetEngine()
-    /// Cross-device pet sync (local ⇄ iCloud). Merges local + cloud at launch,
-    /// pushes on background, and observes live changes from other devices.
-    private let petSync = PetSyncCoordinator()
     @StateObject private var inboxService = InboxService()
     // Persistence-backed so undelivered soak counters survive OS termination
     // (a background upload that fails, then the OS kills the suspended app,
@@ -49,10 +44,6 @@ struct PeerDropApp: App {
     @State private var showLaunch = true
     @State private var pendingInvite: InvitePayload?
     @State private var showInviteAccept = false
-    @State private var showV4UpgradeOnboarding = false
-    @State private var showV5UpgradeOnboarding = false
-    @State private var didStartPetSyncObserver = false
-    @AppStorage("renderedImageVersion") private var renderedImageVersion: String = ""
 
     init() {
         // Explicit wiring of platform dependencies. The struct defaults already
@@ -70,11 +61,9 @@ struct PeerDropApp: App {
                     .environmentObject(connectionManager)
                     .environmentObject(connectionContext)
                     .environmentObject(voicePlayer)
-                    .environmentObject(petEngine)
                     .environmentObject(inboxService)
                     .environmentObject(cryptoMetrics)
                     .environmentObject(policyStore)
-                    .overlay(FloatingPetView(engine: petEngine).allowsHitTesting(true).ignoresSafeArea())
                     .opacity(showLaunch ? 0 : 1)
 
                 if showLaunch {
@@ -170,66 +159,9 @@ struct PeerDropApp: App {
                     UserDefaults.standard.set(true, forKey: "peerDropWorkerURLMigrated")
                 }
 
-                // Load pet (mock for screenshots, merged local⇄cloud for normal).
-                // resolvedLaunchPet calls loadAndMigrate under the hood so v3.x →
-                // v4.0 upgrades still fill in subVariety / seed / migrationDoneAt,
-                // then merges against the iCloud copy (PetConflictResolver) so the
-                // same pet shows across devices. Idempotent migration.
-                if ScreenshotModeProvider.shared.isActive {
-                    petEngine.pet = ScreenshotModeProvider.shared.mockPetState
-                } else if let saved = petSync.resolvedLaunchPet() {
-                    petEngine.pet = saved
-                    // Observe live iCloud changes from other devices (register
-                    // once — onAppear can re-fire when the scene re-mounts).
-                    if !didStartPetSyncObserver {
-                        didStartPetSyncObserver = true
-                        petSync.observe(
-                            currentLocal: { petEngine.pet },
-                            onResolved: { merged in petEngine.pet = merged }
-                        )
-                    }
-                    // M10 — show the v4.0 upgrade screen once for users
-                    // whose pet just got migrated from v3.x. Brand-new v4.0
-                    // installs (no migrationDoneAt) skip this.
-                    if V4UpgradeOnboarding.shouldPresent(for: petEngine.pet) {
-                        showV4UpgradeOnboarding = true
-                    } else if V5UpgradeOnboarding.shouldPresent(pet: petEngine.pet) {
-                        // v5 upgrade is mutually exclusive with v4 upgrade in
-                        // a single launch — if both fire, v4 gets priority
-                        // (it's the older, less-recently-seen one and chains
-                        // naturally; the v5 sheet will surface on the next
-                        // launch via the AppStorage gate).
-                        showV5UpgradeOnboarding = true
-                    }
-                    // Widget bridge invalidation gate, also doubles as the
-                    // host for one-shot per-version migrations:
-                    //   - v5: aging gate change (90d + activity), widget
-                    //         re-render after sprite pipeline swap.
-                    //   - v5.0.1: ghost-body migration. The BodyGene decoder
-                    //         silently maps "ghost" → .cat at load time; this
-                    //         gate forces a persist so the corrected body
-                    //         lands on disk immediately rather than waiting
-                    //         for the next backgrounding event.
-                    // Bumping the gate string re-fires the migration block
-                    // for users who already crossed the previous gate.
-                    if renderedImageVersion != "v5.0.1" {
-                        petEngine.migrateAgingForV5()
-                        petEngine.migrateGhostBodyForV501()
-                        petEngine.updateRenderedImage()
-                        renderedImageVersion = "v5.0.1"
-                    }
-                }
-
-                // Wire pet callbacks
-                connectionManager.onPeerConnectedForPet = { _ in
-                    petEngine.handleInteraction(.peerConnected)
-                }
-                connectionManager.onPeerDisconnectedForPet = { _ in
-                    petEngine.pet.mood = .lonely
-                }
-                connectionManager.chatManager.onMessageReceivedForPet = {
-                    petEngine.handleChatMessage()
-                }
+                // Pivot 2026-09: the pet system is gone. Purge whatever the
+                // old versions left on disk / in iCloud, once per install.
+                LegacyPetDataCleanup.runInBackgroundIfNeeded()
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     showLaunch = false
@@ -249,26 +181,6 @@ struct PeerDropApp: App {
                     }
                 }
             }
-            .sheet(isPresented: $showV4UpgradeOnboarding) {
-                V4UpgradeOnboarding(
-                    petImage: petEngine.renderedImage,
-                    petName: petEngine.pet.name
-                ) {
-                    showV4UpgradeOnboarding = false
-                }
-            }
-            .sheet(isPresented: $showV5UpgradeOnboarding) {
-                // Host wraps V5UpgradeOnboarding so it observes petEngine
-                // and re-renders when renderedImage updates. Without the
-                // host, sheet construction captures `petEngine.renderedImage`
-                // at presentation time — which is often nil because the
-                // first updateRenderedImage() Task hasn't completed yet.
-                // Result: user sees pawprint placeholder instead of their
-                // actual pet on the upgrade screen.
-                V5UpgradeOnboardingHost(petEngine: petEngine) {
-                    showV5UpgradeOnboarding = false
-                }
-            }
         }
         .onChange(of: scenePhase) { newPhase in
             connectionManager.handleScenePhaseChange(newPhase)
@@ -286,22 +198,9 @@ struct PeerDropApp: App {
                     await CryptoMetricsUploader.shared.flush(metrics: cryptoMetrics)
                     cryptoMetrics.persist()
                 }
-                // Persist locally + push to iCloud (full state + KVS ping) so
-                // other devices see this session's edits. Replaces the old
-                // save-then-syncFullState pair; push also bumps KVS metadata,
-                // which is what fires the other device's change observer.
-                petSync.push(petEngine.pet)
-                petEngine.syncSharedState()
-                petEngine.startLiveActivity()
-                // Pause the 6 FPS animation timer to avoid burning CPU/battery
-                // while the app is suspended. Resumed on .active.
-                petEngine.animator.stopAnimation()
             case .active:
                 inboxService.connect()
                 connectionManager.tailnetStore.startPeriodicProbe()
-                petEngine.endLiveActivity()
-                // Resume animation timer (no-op if already running).
-                petEngine.animator.startAnimation()
             default:
                 break
             }
