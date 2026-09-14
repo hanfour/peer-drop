@@ -11,7 +11,6 @@ public struct TrustedContact: Codable, Identifiable {
     public var lastVerified: Date?
     public var mailboxId: String?                   // Future: remote mailbox ID
     public var userId: String?                      // Future: account user ID
-    public var petSnapshot: Data?                   // Future: peer's pet snapshot
     public var isBlocked: Bool
     /// Audit trail of identity-key rotations observed on this contact.
     /// Bounded to a small number of entries by `TrustedContactStore`.
@@ -38,7 +37,6 @@ public struct TrustedContact: Codable, Identifiable {
         lastVerified: Date? = nil,
         mailboxId: String? = nil,
         userId: String? = nil,
-        petSnapshot: Data? = nil,
         isBlocked: Bool = false,
         keyHistory: [KeyChangeRecord] = [],
         peerProtocolVersion: PeerVersion? = nil
@@ -52,7 +50,6 @@ public struct TrustedContact: Codable, Identifiable {
         self.lastVerified = lastVerified
         self.mailboxId = mailboxId
         self.userId = userId
-        self.petSnapshot = petSnapshot
         self.isBlocked = isBlocked
         self.keyHistory = keyHistory
         self.peerProtocolVersion = peerProtocolVersion
@@ -71,7 +68,6 @@ public struct TrustedContact: Codable, Identifiable {
         self.lastVerified = try c.decodeIfPresent(Date.self, forKey: .lastVerified)
         self.mailboxId = try c.decodeIfPresent(String.self, forKey: .mailboxId)
         self.userId = try c.decodeIfPresent(String.self, forKey: .userId)
-        self.petSnapshot = try c.decodeIfPresent(Data.self, forKey: .petSnapshot)
         self.isBlocked = try c.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
         self.keyHistory = try c.decodeIfPresent([KeyChangeRecord].self, forKey: .keyHistory) ?? []
         self.peerProtocolVersion = try c.decodeIfPresent(PeerVersion.self, forKey: .peerProtocolVersion)

@@ -46,9 +46,8 @@ let package = Package(
             dependencies: []  // pure leaf — Foundation/UIKit/AppKit/AVFoundation/CoreGraphics only
         ),
         .testTarget(name: "PeerDropPlatformTests", dependencies: ["PeerDropPlatform"]),
-        // PeerDropCore is the keystone — depends on all 4 leaf modules.
-        // Per spec §1: "Core consumes Transport/Security/Protocol/Pet";
-        // strict single-direction (no cycles).
+        // PeerDropCore is the keystone — depends on the 4 leaf modules
+        // (Platform/Transport/Security/Protocol); strict single-direction.
         .target(
             name: "PeerDropCore",
             dependencies: [
@@ -56,7 +55,6 @@ let package = Package(
                 "PeerDropTransport",
                 "PeerDropSecurity",
                 "PeerDropProtocol",
-                "PeerDropPet",
             ]
         ),
         .target(
