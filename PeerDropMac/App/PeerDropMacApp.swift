@@ -66,9 +66,7 @@ struct PeerDropMacApp: App {
                 .environmentObject(appDelegate)
                 .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
-                    // Wire AppDelegate's weak refs so lifecycle hooks
-                    // (terminate flush) can reach ConnectionManager + persist
-                    // the pet on quit (audit round 21).
+                    // Wire AppDelegate's weak refs so lifecycle hooks (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
 
                     // Round 11 audit fix: wire ConnectionContext to the
