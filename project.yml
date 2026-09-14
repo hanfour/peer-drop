@@ -38,7 +38,6 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
-      - target: PeerDropWidget
     settings:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
@@ -72,6 +71,9 @@ targets:
         # Without this key iOS calls didFailToRegisterForRemoteNotifications
         # and the app never gets a device token.
         aps-environment: development
+        # Pivot 2026-09: app-group + iCloud entitlements are kept for ONE
+        # release so LegacyPetDataCleanup can purge pet residue. Remove in
+        # sub-project 1 (see docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md).
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.hanfour.peerdrop
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.hanfour.peerdrop
@@ -238,10 +240,6 @@ targets:
     platform: iOS
     sources:
       - path: PeerDropTests
-        # Pet test files and their fixture zips moved to PeerDropPetTests (M1d-3b Task 6).
-        # PeerDropTests/Pet/ directory removed; PeerDropTests/Resources/Pets/ removed.
-        excludes:
-          - "Pet/Fixtures/**"
     dependencies:
       - target: PeerDrop
       - package: PeerDropKit
@@ -254,8 +252,6 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
-      - package: PeerDropKit
-        product: PeerDropPet
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peerdrop.tests
@@ -287,38 +283,6 @@ targets:
         DEVELOPMENT_TEAM: UK48R5KWLV
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
-
-  PeerDropWidget:
-    type: app-extension
-    platform: iOS
-    sources:
-      - PeerDropWidget
-    dependencies:
-      - package: PeerDropKit
-        product: PeerDropPet
-      - package: PeerDropKit
-        product: PeerDropPlatform
-    info:
-      path: PeerDropWidget/Info.plist
-      properties:
-        CFBundleDisplayName: PeerDrop Widget
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.hanfour.peerdrop.widget
-        DEVELOPMENT_TEAM: UK48R5KWLV
-        CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "5.6.0"
-        CURRENT_PROJECT_VERSION: "1"
-        CODE_SIGN_ENTITLEMENTS: PeerDropWidget/PeerDropWidget.entitlements
-    entitlements:
-      path: PeerDropWidget/PeerDropWidget.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.hanfour.peerdrop
 
 schemes:
   PeerDrop:

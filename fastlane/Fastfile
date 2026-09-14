@@ -355,8 +355,7 @@ platform :ios do
         signingStyle: "manual",
         teamID: "UK48R5KWLV",
         provisioningProfiles: {
-          "com.hanfour.peerdrop" => "com.hanfour.peerdrop AppStore",
-          "com.hanfour.peerdrop.widget" => "com.hanfour.peerdrop.widget AppStore"
+          "com.hanfour.peerdrop" => "com.hanfour.peerdrop AppStore"
         }
       }
     )
@@ -463,8 +462,7 @@ platform :ios do
         method: "app-store",
         signingStyle: "manual",
         provisioningProfiles: {
-          "com.hanfour.peerdrop" => "com.hanfour.peerdrop AppStore",
-          "com.hanfour.peerdrop.widget" => "com.hanfour.peerdrop.widget AppStore"
+          "com.hanfour.peerdrop" => "com.hanfour.peerdrop AppStore"
         }
       }
     )
