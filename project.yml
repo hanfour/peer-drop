@@ -37,6 +37,8 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropAccount
     settings:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
@@ -195,6 +197,8 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropAccount
     settings:
       base:
         INFOPLIST_FILE: PeerDropMac/App/Info.plist
