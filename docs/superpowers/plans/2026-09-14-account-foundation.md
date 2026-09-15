@@ -23,7 +23,7 @@
 - 本機已知的 `swift test` 失敗：`IdentityKeyManagerTests.testKeyPersistsAcrossInstances`（keychain 在 `swift test` 沙盒不可用），非回歸。
 - 帳號 ID 字母表（Crockford base32，32 字元，逐字）：`0123456789ABCDEFGHJKMNPQRSTVWXYZ`。ID 長度 8。顯示 `XXXX-XXXX`。正規化：去除 `-` 與空白、大寫、`I`/`L`→`1`、`O`→`0`。
 - 暱稱：NFC 後 3–20 個 Unicode scalar，僅 `\p{L}`、`\p{N}`、`_`；保留字（不分大小寫）：`admin`、`peerdrop`、`support`、`system`、`null`、`me`。
-- 簽章訊息：`utf8("peerdrop-account-v1") ‖ nonce(32 B) ‖ utf8(deviceId)`，Ed25519。
+- 簽章訊息：~~`utf8("peerdrop-account-v1") ‖ nonce(32 B) ‖ utf8(deviceId)`~~ → **最終修正波（2026-09-15）改為 v2：`utf8("peerdrop-account-v2") ‖ nonce(32 B) ‖ utf8(deviceId) ‖ sha256(identityKey(32 B) ‖ utf8(mailboxId))`**，Ed25519。v1 沒把 identityKey 與 mailboxId 納入簽章，兩者都可被替換。
 - Token TTL 維持 15 分鐘；`account:` scope 字串格式 `account:<accountId>`。
 - 錯誤回應 `{error: "<code>"}`；`/v3` 不接受 X-API-Key、不接受 `?token=`。
 - 五語系（en、zh-Hant、zh-Hans、ja、ko）；字串以文字方式插入 `PeerDrop/App/Localizable.xcstrings`（格式見 T10）。
@@ -884,6 +884,11 @@ git commit -m "feat(worker): /v3 directory lookup with optional pre-key bundle a
 ---
 
 ### Task 6: 客戶端傳輸層：Mac App Attest、移除 Mac API key、統一 worker URL 鍵
+
+> **已被最終修正波取代（2026-09-15，見規格 §7「2026-09-15 spike 結果」）**：原生 macOS 的
+> `DCAppAttestService.isSupported == false`，所以「Mac 走 App Attest、移除內嵌金鑰」這一半沒有成立。
+> Mac target 重新綁回 `Secrets.xcconfig`（Debug + Release），Info.plist 的 `PeerDropWorkerAPIKey`
+> 改讀專屬的 `$(PEERDROP_MAC_CLIENT_KEY)`，並在 worker 端限制該通道。worker URL 鍵統一那一半仍然有效。
 
 **Files:**
 - Modify: `PeerDropKit/Sources/PeerDropTransport/DeviceTokenManager.swift:29`、`WorkerAuthHelper.swift:22,52`、`MailboxClient.swift:14-17`
@@ -1998,6 +2003,10 @@ git commit -m "feat(mac): account section in Profile settings; screenshot-mode m
 
 ### Task 12: 本機端到端驗證與 PR
 
+> **已被最終修正波取代（2026-09-15，見規格 §7「2026-09-15 spike 結果」）**：本任務當時 BLOCKED
+> （Mac 無 App Attest，且 `wrangler dev` 因 `src/index.ts` 的 `export const` 常數無法啟動）。兩個阻礙
+> 都已在最終修正波處理，端到端驗證已於 2026-09-15 通過。
+
 **Files:** 無新增；驗證。
 
 - [ ] **Step 1: 本機 worker**
@@ -2030,7 +2039,7 @@ git push -u origin feat/account-foundation
 gh pr create --base main --title "feat: account foundation (sub-project 1 of the notes/diary pivot)" --body "$(cat <<'EOF'
 ## Summary
 - Worker: D1 `ACCOUNTS_DB` + migrations tooling; `/v3/account/{challenge,register,me,nickname}` + `DELETE /v3/account`; `/v3/directory/:handle` (optional pre-key bundle, 30/min); account-scoped device tokens issued by attest/assert based on device binding; App Attest accepts iOS + Mac bundle IDs; `/v2/inbox/:deviceId` now bound to the token's device.
-- Client: new `PeerDropAccount` module (AccountID / Nickname / Account / AccountStore / AccountClient / AccountManager); `ConnectionManager.accountManager` bootstraps on `.active`; `DeviceTokenManager` on macOS 11+; Mac embedded `PeerDropWorkerAPIKey` removed; worker URL key unified.
+- Client: new `PeerDropAccount` module (AccountID / Nickname / Account / AccountStore / AccountClient / AccountManager); `ConnectionManager.accountManager` bootstraps on `.active`; `DeviceTokenManager` on macOS 11+; Mac uses a dedicated client key + X-Device-Id (App Attest unsupported on native macOS); worker URL key unified.
 - UI: onboarding "Your PeerDrop ID" page, Settings account section (iOS) and Profile tab (Mac) with nickname editor and account deletion; 22 strings × 5 languages.
 
 Spec: `docs/superpowers/specs/2026-09-14-account-foundation-design.md`. Plan: `docs/superpowers/plans/2026-09-14-account-foundation.md`.
@@ -2060,4 +2069,8 @@ EOF
 1. 若 `database_id` 仍為佔位值：`wrangler d1 create peerdrop-accounts` → 填入 → 併入前 commit。
 2. ASC 隱私標籤（iOS 6759594513、Mac 6793812911）：新增「使用者 ID」與「名稱」，連結使用者、用途 App 功能；`PrivacyInfo.xcprivacy` 同步（`NSPrivacyCollectedDataTypes`）。
 3. Mac 版 release notes（子專案 2 出貨時）說明無 Secure Enclave 的 Mac 無法建帳號。
-4. 舊 Mac 使用者升級後第一次啟動會做 App Attest；若 Apple 回 attest 失敗率異常，檢視 worker `/debug/crypto-metrics/stats`。
+4. **Mac 金鑰通道（2026-09-15 取代原本的「Mac 走 App Attest」）**：`wrangler secret put MAC_CLIENT_KEY`
+   設一把跟 `API_KEY` 不同的新值，並把同一個值填進 `Secrets.xcconfig` 的 `PEERDROP_MAC_CLIENT_KEY`
+   後再出 Mac 版（兩邊不一致 = Mac 每條 relay 路由都 401）。未設定時 worker 會退回 `API_KEY`，
+   所以先出 Mac 版再設 secret 不會斷線，但在設好之前 Mac 拿的是 operator 等級的金鑰——別這樣做。
+   iOS 端不受影響（照舊 App Attest，Release 不帶金鑰）。

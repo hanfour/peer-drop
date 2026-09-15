@@ -164,6 +164,16 @@ than a legacy one, and the extraction hole is closed by rotation:
    credential and every relay route would 401. Resolve before the v6.0
    Mac ship (verify App Attest on macOS, or accept a Mac-only bundled
    key with its own rotation story).
+   **Amendment 2026-09-15:** verified on an M4 / macOS 15.7 dev build —
+   `DCAppAttestService.shared.isSupported` really is `false` on native
+   macOS, so the second option was taken. The "Debug ONLY" binding above
+   holds for the **iOS** target only; the Mac target binds
+   `Secrets.xcconfig` for Debug AND Release, carrying a SEPARATE
+   `PEERDROP_MAC_CLIENT_KEY` (worker secret `MAC_CLIENT_KEY`) — not this
+   `API_KEY` — whose reach the worker restricts (relay routes plus the
+   read/registration half of `/v3`; never the account-mutating routes).
+   Rotating it requires a Mac release. See
+   `docs/superpowers/specs/2026-09-14-account-foundation-design.md` §7.
 2. **Rotate the secret** — `wrangler secret put API_KEY` with a fresh
    value. Every copy of the old key sitting inside shipped IPAs (v5.0
    through v5.5.2, all extractable) dies at that moment. Honest

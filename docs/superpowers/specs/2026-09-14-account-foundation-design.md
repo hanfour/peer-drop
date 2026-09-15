@@ -13,7 +13,7 @@
 
 **本子專案交付**
 1. Worker：D1 資料庫與 migration 工具鏈、`/v3/account/*` 與 `/v3/directory/*` 路由、帳號範圍 token、擁有權綁定、App Attest 同時接受 iOS 與 Mac bundle ID。
-2. 客戶端：新模組 `PeerDropAccount`（註冊、續期、暱稱、目錄查詢、加密落盤）、Mac 改走 App Attest 並移除內嵌 X-API-Key、引導頁與設定頁的帳號 UI（iOS + Mac）。
+2. 客戶端：新模組 `PeerDropAccount`（註冊、續期、暱稱、目錄查詢、加密落盤）、~~Mac 改走 App Attest 並移除內嵌 X-API-Key~~ → **2026-09-15：Mac 改用專屬 `MAC_CLIENT_KEY` + `X-Device-Id` 的受限金鑰通道**、引導頁與設定頁的帳號 UI（iOS + Mac）。
 3. 順手修正：`/v2/inbox/:deviceId` 擁有權綁定；worker URL 的 UserDefaults 鍵統一。
 
 **非目標（明列於 UI 與文件）**
@@ -24,7 +24,8 @@
 
 **已定決策（使用者 2026-09-14）**
 - 混合身分：匿名帳號自動建立，暱稱可選。
-- **Mac 也走 App Attest**：worker 接受 `com.hanfour.peerdrop` 與 `com.hanfour.peerdrop.mac`；Mac build 移除內嵌 X-API-Key。無 Secure Enclave 的 Intel Mac 無法建帳號，只能用 P2P 功能，UI 要說明。
+- ~~**Mac 也走 App Attest**：worker 接受 `com.hanfour.peerdrop` 與 `com.hanfour.peerdrop.mac`；Mac build 移除內嵌 X-API-Key。無 Secure Enclave 的 Intel Mac 無法建帳號，只能用 P2P 功能，UI 要說明。~~
+  **2026-09-15 修訂（見 §7「2026-09-15 spike 結果」）**：原生 macOS 沒有 App Attest，此決策失效。worker 仍接受兩個 bundle ID（iOS 用得到），但 Mac build **保留**金鑰通道，改用專屬的 `MAC_CLIENT_KEY` + `X-Device-Id`，並在 worker 端限制該通道可達的路由。
 
 ---
 
@@ -33,10 +34,10 @@
 | 項目 | 現況 | 本子專案的處置 |
 |---|---|---|
 | Token | `deviceToken.ts` 的 `TokenPayload {deviceId, scope, expires}`，`scope` 恆為 `"default"`，TTL 15 分鐘 | 新增 `account:<id>` scope；`/v2/device/assert` 續期時依裝置綁定自動帶出 |
-| 授權閘 | `isRequestAuthorized` 只驗簽章、丟棄 payload；`requiresAuth` 是手寫路由清單 | 新增 `authorizeV3()` 回傳 `{accountId, deviceId}`；`/v2/inbox/:deviceId` 補綁定 |
+| 授權閘 | `isRequestAuthorized` 只驗簽章、丟棄 payload；`requiresAuth` 是手寫路由清單 | 新增 `authorizeV3()` 回傳 `{accountId, deviceId, lane}`；`/v2/inbox/:deviceId` 補綁定 |
 | App Attest | 4 個呼叫點硬寫 `env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop"`；`appAttest.ts` 以單一 rpIdHash 比對 | 改為集合比對，新 env `APP_BUNDLE_IDS` |
 | 儲存 | 無 D1、無 SQL migration、`worker-deploy.yml` 不套用 migration | 新增 `ACCOUNTS_DB` binding、`migrations/`、npm script、deploy 步驟 |
-| 客戶端驗證 | `DeviceTokenManager` 標 `@available(iOS 14.0, *)`；Mac 走 `WorkerAuthHelper.legacyAPIKey()` 讀 Info.plist 的 `PeerDropWorkerAPIKey` | 改 `@available(iOS 14.0, macOS 11.0, *)`；Mac Info.plist 移除該鍵 |
+| 客戶端驗證 | `DeviceTokenManager` 標 `@available(iOS 14.0, *)`；Mac 走 `WorkerAuthHelper.legacyAPIKey()` 讀 Info.plist 的 `PeerDropWorkerAPIKey` | 改 `@available(iOS 14.0, macOS 11.0, *)`；~~Mac Info.plist 移除該鍵~~ → **2026-09-15：該鍵保留，但值改綁 `$(PEERDROP_MAC_CLIENT_KEY)`（Debug + Release），非 operator 金鑰** |
 | Worker URL | 兩個 UserDefaults 鍵並存：`peerDropWorkerURL`（Settings、DeviceTokenManager）與 `workerBaseURL`（MailboxClient） | 統一為 `peerDropWorkerURL`，一次性搬移舊值 |
 | 引導頁 | `OnboardingView` 五頁硬寫 `.tag(0…4)`，頁數魔數 4 出現四處 | 重構為頁面陣列，加帳號頁 |
 | `TrustedContact.userId` | 從未寫入的佔位欄位 | 改名 `accountId`，由目錄查詢結果填入 |
@@ -83,7 +84,7 @@ CREATE UNIQUE INDEX account_devices_device ON account_devices(device_id);  -- �
 
 ### 3.2 帳號範圍 token
 - `freshTokenPayload(deviceId, scope)` 已支援 scope；`/v2/device/attest` 與 `/v2/device/assert` 成功後查 `account_devices`：有綁定 → `scope = "account:<accountId>"`，否則 `"default"`。**客戶端不需感知**，`DeviceTokenManager` 照舊存 token。
-- 新增 `authorizeV3(request, env): Promise<{deviceId, accountId} | null>`：解析 Bearer（僅 header，不接受 `?token=`）、`verifyToken`、要求 `scope` 以 `account:` 開頭；回傳兩個 ID。**不接受 X-API-Key**。
+- 新增 `authorizeV3(request, env): Promise<{deviceId, accountId, lane} | null>`：解析 Bearer（僅 header，不接受 `?token=`）、`verifyToken`、要求 `scope` 以 `account:` 開頭；回傳兩個 ID 與所用通道。~~**不接受 X-API-Key**~~ → **2026-09-15 修訂**：Bearer 失敗時接受「金鑰通道」= `X-API-Key`（`API_KEY` 或 `MAC_CLIENT_KEY`，`isKeyLane()` 以定時比較分類）**加上** `X-Device-Id`（scope 由 `scopeForDevice` 查裝置綁定得出）。金鑰通道**只能**到 `POST /v3/account/challenge`、`POST /v3/account/register`、`GET /v3/account/me`、`GET /v3/directory/:handle`；`PUT /v3/account/nickname` 與 `DELETE /v3/account` 一律要 Bearer（金鑰通道回 401 `bearer_required`），因為金鑰通道的 device id 是自稱的。查詢字串永不接受（`?apiKey=` 在 /v3 無效）。
 - `/v3/*` 路由自成閘門（不加入 `requiresAuth` 清單），每條先呼叫 `authorizeV3`，路徑含 `:accountId` 者再比對相等，否則 403 `{error:"forbidden"}`。
 - 修既有漏洞：`/v2/inbox/:deviceId` WS 升級改為 `verifyToken` 後比對 `payload.deviceId === :deviceId`（X-API-Key 操作者金鑰仍放行，供 CLI）。新增 `auth.spec.ts` 案例：A 裝置 token 開 B 的 inbox 回 403。
 
@@ -92,11 +93,11 @@ CREATE UNIQUE INDEX account_devices_device ON account_devices(device_id);  -- �
 | 路由 | 授權 | 說明 |
 |---|---|---|
 | `POST /v3/account/challenge` | 裝置 token（任一 scope） | body `{deviceId}`；回 `201 {nonce}`（32 B base64；KV `acct-challenge:<deviceId>`，5 分鐘，單次） |
-| `POST /v3/account/register` | 裝置 token（任一 scope），`payload.deviceId === body.deviceId` | body `{deviceId, platform, identityKey, signingKey, mailboxId, nonce, signature}`（金鑰與 nonce 皆 base64）。驗 nonce 存在並刪除；驗 `signature` = Ed25519 對 `"peerdrop-account-v1" ‖ nonce(32 B) ‖ utf8(deviceId)` 的簽章；`signing_key` 已存在 → 綁定新裝置（若該 device 已綁其他帳號 → 409 `device_bound`），否則建帳號。回 `201 {accountId, nickname, token, expiresInSeconds}`，`token` 為 `account:` scope。 |
-| `GET /v3/account/me` | 帳號 token | 回 `{accountId, nickname, mailboxId, devices:[{deviceId, platform, boundAt}]}` |
-| `PUT /v3/account/nickname` | 帳號 token | body `{nickname}` 或 `{nickname:null}` 清除；驗規則 → 400 `invalid_nickname`；保留字 → 400 `reserved`；重複 → 409 `nickname_taken`；每帳號每日 5 次（KV 計數）→ 429。回 `{nickname}` |
-| `GET /v3/directory/:handle?bundle=0|1` | 帳號 token | `handle` 正規化後先當帳號 ID 查，再當暱稱查；回 `{accountId, nickname, identityKey, signingKey, mailboxId, preKeyBundle?}`；`bundle=1` 時經 `PREKEY_STORE` DO 取 bundle 並消耗一把 OPK（子專案 2 送出時才用，避免瀏覽就耗 OPK）；找不到 404。每帳號每分鐘 30 次（KV 計數）→ 429 |
-| `DELETE /v3/account` | 帳號 token | 刪帳號與裝置綁定（D1 CASCADE）；不動 pre-key 信箱（由既有 `DELETE /v2/keys` 處理）。供設定頁「刪除帳號」與 App Store 帳號刪除規範 |
+| `POST /v3/account/register` | 裝置 token（任一 scope）或金鑰通道，`payload.deviceId === body.deviceId` | body `{deviceId, platform, identityKey, signingKey, mailboxId, mailboxToken, nonce, signature}`（金鑰與 nonce 皆 base64）。JSON 解析失敗 → 400 `invalid_json`；base64 解碼失敗 → 400 `invalid_encoding`。驗 nonce 存在並刪除；驗 `signature` = Ed25519 對 `"peerdrop-account-v2" ‖ nonce(32 B) ‖ utf8(deviceId) ‖ sha256(identityKey(32 B) ‖ utf8(mailboxId))` 的簽章（v2：把 identityKey 與 mailboxId 納入簽章，v1 兩者皆未簽 → 可被替換）；驗 `mailboxToken` 對得上 KV `meta:<mailboxId>.token`，否則 403 `mailbox_not_owned`；`signing_key` 已存在 → 更新 `identity_key` + `mailbox_id` 並綁定新裝置（若該 device 已綁其他帳號 → 409 `device_bound`；新 identity_key 已屬他帳號 → 409 `identity_bound`），否則建帳號。回 `201 {accountId, nickname, token, expiresInSeconds}`，`token` 為 `account:` scope。 |
+| `GET /v3/account/me` | 帳號 token（Bearer 或金鑰通道） | 回 `{accountId, nickname, mailboxId, devices:[{deviceId, platform, boundAt}]}` |
+| `PUT /v3/account/nickname` | 帳號 token（**僅 Bearer**） | body `{nickname}` 或 `{nickname:null}` 清除；驗規則 → 400 `invalid_nickname`；保留字 → 400 `reserved`；重複 → 409 `nickname_taken`；每帳號每日 5 次（KV 計數）→ 429。回 `{nickname}` |
+| `GET /v3/directory/:handle?bundle=0|1` | 帳號 token（Bearer 或金鑰通道） | `handle` 正規化後先當帳號 ID 查，再當暱稱查；回 `{accountId, nickname, identityKey, signingKey, mailboxId, preKeyBundle?}`；`bundle=1` 時經 `PREKEY_STORE` DO 取 bundle 並消耗一把 OPK（子專案 2 送出時才用，避免瀏覽就耗 OPK）；找不到 404。每帳號每分鐘 30 次（KV 計數）→ 429 |
+| `DELETE /v3/account` | 帳號 token（**僅 Bearer**） | 刪帳號與裝置綁定（D1 CASCADE）；不動 pre-key 信箱（由既有 `DELETE /v2/keys` 處理）。供設定頁「刪除帳號」與 App Store 帳號刪除規範 |
 
 所有回應走既有 `jsonResponse`；錯誤格式 `{error: "<code>"}`。body 上限 4 KB。
 
@@ -145,12 +146,12 @@ AccountManager.swift   @MainActor final class AccountManager: ObservableObject {
                          func deleteAccount() async throws }
 ```
 
-- 簽章訊息組裝與伺服器一致：`Data("peerdrop-account-v1".utf8) + nonce + Data(deviceId.utf8)`，用 `IdentityKeyManager.shared.sign(_:)`。
-- `DeviceTokenManager`：`@available(iOS 14.0, macOS 11.0, *)`；`WorkerAuthHelper` 同步放寬。`DCAppAttestService.isSupported == false` → `AccountManager.state = .unavailable(.attestUnsupported)`。
-- **Mac 移除 X-API-Key**：`PeerDropMac/App/Info.plist` 刪 `PeerDropWorkerAPIKey`；`project.yml` 的 Mac target 不再綁 `Secrets.xcconfig`（Release 也不綁）。`WorkerAuthHelper.legacyAPIKey()` 保留（CLI 用 env `PEERDROP_WORKER_KEY`）。
+- 簽章訊息組裝與伺服器一致（v2）：`Data("peerdrop-account-v2".utf8) + nonce + Data(deviceId.utf8) + SHA256(identityKey + Data(mailboxId.utf8))`，用 `IdentityKeyManager.shared.sign(_:)`。
+- `DeviceTokenManager`：`@available(iOS 14.0, macOS 11.0, *)`；`WorkerAuthHelper` 同步放寬，金鑰通道另帶 `X-Device-Id`。閘門改為 `registrationSupported`（App Attest **或** 內建金鑰）；兩者皆無才 → `AccountManager.state = .unavailable(.attestUnsupported)`。另有較窄的 `attestSupported`：為 false 時，帳號 token 是本機唯一的 Bearer，`ensureFreshTokenIfNeeded()` 會在 `setNickname`/`deleteAccount`/`lookup` 前重跑註冊重新取得。
+- ~~**Mac 移除 X-API-Key**~~ → **2026-09-15**：`PeerDropMac/App/Info.plist` 的 `PeerDropWorkerAPIKey` 保留，值為 `$(PEERDROP_MAC_CLIENT_KEY)`；`project.yml` 的 Mac target 綁 `Secrets.xcconfig`（Debug + Release 都綁——出貨 Mac 沒憑證會每條 relay 路由都 401）。`WorkerAuthHelper.legacyAPIKey()` 保留（CLI 用 env `PEERDROP_WORKER_KEY`）。
 - Worker URL 統一：`MailboxClient` 改讀 `peerDropWorkerURL`；`ConnectionManager` 啟動時若 `workerBaseURL` 有值且 `peerDropWorkerURL` 無值則搬移後刪除舊鍵。
 - `PeerDropCore`：`ConnectionManager` 持有 `let accountManager: AccountManager`（與 `chatManager` 同模式），在 `handleScenePhaseChange(.active)` 呼叫 `bootstrap()`（首次）；`TrustedContact.userId` → `accountId`（Codable key 沿用 `userId` 以相容舊檔，屬性改名）；`approveFirstContact` 之後若對方 envelope 帶 `senderAccountId`（子專案 2 才會有）再填。
-- `ScreenshotModeProvider.mockAccount: Account`（ID `PDRP-DEMO`，暱稱依語系：`mochi` / `麻糬` / `麻薯` / `もち` / `모찌`）。
+- `ScreenshotModeProvider.mockAccount: Account`（ID `PDRPDEM0`——8 碼、全在字母表內，顯示為 `PDRP-DEM0`；暱稱依語系：`mochi` / `麻糬醬` / `麻薯酱` / `もちもち` / `모찌모찌`，每個都 ≥ 3 個 scalar 才過 `Nickname.validate`）。
 
 ### 4.2 UI
 
@@ -181,7 +182,7 @@ AccountManager.swift   @MainActor final class AccountManager: ObservableObject {
 
 - 隱私標籤：iOS 與 Mac 兩個 ASC 記錄從「不收集資料」改為收集「使用者 ID」（帳號 ID、裝置 ID）與「名稱」（暱稱），連結到使用者、用於 App 功能；`PrivacyInfo.xcprivacy` 同步。
 - App Store 帳號刪除規範（Guideline 5.1.1(v)）：設定頁提供「刪除帳號」，呼叫 `DELETE /v3/account`。
-- Mac 版移除內嵌 X-API-Key 後，無 Secure Enclave 的 Mac 失去帳號功能；release notes 說明。
+- ~~Mac 版移除內嵌 X-API-Key 後，無 Secure Enclave 的 Mac 失去帳號功能；release notes 說明。~~ **2026-09-15**：Mac 版內嵌的是專屬的 `MAC_CLIENT_KEY`（非 operator 金鑰），所有 Mac 都能建帳號。代價是該金鑰可從 Mac binary 取出——因此 worker 端限制它只能到讀取／註冊路由，輪替它需要發一版 Mac。
 
 ---
 
@@ -190,7 +191,37 @@ AccountManager.swift   @MainActor final class AccountManager: ObservableObject {
 | 風險 | 處置 |
 |---|---|
 | D1 database_id 未填即部署 | 計畫首任務加 `wrangler.toml` 檢查；deploy 步驟在 migration 失敗時中止 |
-| App Attest 在 Mac 上的 `isSupported` 行為未實測 | 計畫含一個 spike：在此 Mac 上以 dev build 跑一次 attest 全流程；失敗則回退決策（沿用 X-API-Key）並記錄 |
+| ~~App Attest 在 Mac 上的 `isSupported` 行為未實測~~ **已實測，見下方 2026-09-15 spike 結果** | 回退決策已採用：沿用金鑰通道，但換成專屬的 `MAC_CLIENT_KEY` 並在 worker 端限制可達路由 |
+| Mac binary 內嵌的 `MAC_CLIENT_KEY` 可被取出 | worker 端限制該通道只到 challenge/register/me/directory；改暱稱與刪帳號一律要 Bearer。輪替它要發一版 Mac（輪替 `API_KEY` 不必）。後續以 DeviceCheck-based Mac attestation 取代 |
 | 舊客戶端持 `default` scope token 呼叫 `/v3` | 401，客戶端以 `/v2/device/assert` 續期後即帶 `account:` scope（伺服器依綁定決定） |
 | 暱稱大小寫規則對非 ASCII 不一致 | 文件明示：NOCASE 只對 ASCII；後續可改為 `LOWER()` 儲存正規化欄位 |
 | `MailboxClient` 換 UserDefaults 鍵 | 一次性搬移；CLI 沒有 `--worker-url` 參數、同樣經 `MailboxClient()` 預設值讀 UserDefaults，搬移後行為一致 |
+
+---
+
+## 2026-09-15 spike 結果（原生 macOS 沒有 App Attest）
+
+在 Mac mini（Mac16,10 / Apple M4 / macOS 15.7.4）上，以 Apple Development 憑證簽章的
+`PeerDropMac` dev build 實測：**`DCAppAttestService.shared.isSupported == false`**。
+帳號 UI 直接落在 `.unavailable(.attestUnsupported)` 分支，連一次網路請求都沒發出
+（`AccountManager.registerIfNeeded()` 的閘門在網路之前）；`DeviceTokenManager` 也在
+自己的 relay-auth 路徑印出同一句 `App Attest unsupported on this device`。
+完整記錄見 `.superpowers/sdd/2026-09-14-account-foundation/task-12-report.md`。
+
+因此 §7 的回退方案生效，但比原先寫的「沿用 X-API-Key」更收斂：
+
+1. Mac **不共用** operator 的 `API_KEY`，而是自己的 `MAC_CLIENT_KEY`（worker secret；
+   未設定時 dev/測試環境退回 `API_KEY`）。兩把金鑰在 `/v2` 的可達範圍相同——出貨的 Mac
+   需要 relay 才能運作——但在 `/v3` 只能到讀取與註冊路由。
+2. 金鑰通道必須同時帶 `X-Device-Id`（自稱的），worker 以 `scopeForDevice` 查出帳號。
+   正因為是自稱的，會改動帳號的路由（改暱稱、刪帳號）一律要 Bearer；Mac 的 Bearer 來自
+   `/v3/account/register` 回傳的帳號 token（15 分鐘），過期後由
+   `AccountManager.ensureFreshTokenIfNeeded()` 重跑註冊流程重新取得。
+3. 本機端到端（2026-09-15，wrangler dev + dev-signed Mac build）已驗證：Mac 以金鑰通道
+   註冊成功、D1 有 `platform = 'macos'` 的列、Profile 顯示 8 碼 ID、暱稱 `e2e_mac`
+   經設定頁 sheet 來回成功（PUT 之前確實看到一次 challenge+register 重新取 Bearer）。
+
+**後續（不在本子專案）**：改用 DeviceCheck-based 的 Mac attestation，之後就能把
+`MAC_CLIENT_KEY` 從 Mac binary 拿掉。也值得再取一個資料點——用 Developer-ID 或
+TestFlight 簽章的 build 再測一次 `isSupported`，以確認這不是 dev-signed／automatic
+provisioning 特有的行為。
