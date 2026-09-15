@@ -6,7 +6,10 @@ import { TEST_TOKEN_SECRET } from "./testSecrets";
 import { scopeForDevice, accountIdFromScope } from "../account";
 import { buildSyntheticAssertion, toBase64 } from "./attestHelpers";
 import { generateAccountId, normalizeAccountId, validateNickname, ACCOUNT_ID_ALPHABET, classifyRegisterError } from "../account";
-import { registerDevice, ed25519Pair, b64, deviceToken, challengeAndSign } from "./accountHelpers";
+import { registerDevice, ed25519Pair, b64, deviceToken, challengeAndSign, seedMailbox, identityKeyForDevice, mailboxIdForDevice } from "./accountHelpers";
+import { isKeyLane } from "../index";
+import type { Env } from "../index";
+import { TEST_API_KEY, TEST_MAC_CLIENT_KEY } from "./testSecrets";
 
 beforeAll(async () => { await applyMigrations(env.ACCOUNTS_DB); });
 
@@ -135,15 +138,101 @@ describe("/v3/account", () => {
   });
   it("register rejects a reused nonce and a bad signature", async () => {
     const tok = await deviceToken("dev-reg-000002");
+    const mailboxToken = await seedMailbox("m");
     const ch = await SELF.fetch("https://example.com/v3/account/challenge", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002" }) });
     const { nonce } = await ch.json() as { nonce: string };
     const { raw } = await ed25519Pair();
-    const bad = await SELF.fetch("https://example.com/v3/account/register", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002", platform: "ios", identityKey: b64(new Uint8Array(32)), signingKey: b64(raw), mailboxId: "m", nonce, signature: b64(new Uint8Array(64)) }) });
+    const bad = await SELF.fetch("https://example.com/v3/account/register", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002", platform: "ios", identityKey: b64(new Uint8Array(32)), signingKey: b64(raw), mailboxId: "m", mailboxToken, nonce, signature: b64(new Uint8Array(64)) }) });
     expect(bad.status).toBe(400);
     expect((await bad.json() as { error: string }).error).toBe("bad_signature");
-    const again = await SELF.fetch("https://example.com/v3/account/register", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002", platform: "ios", identityKey: b64(new Uint8Array(32)), signingKey: b64(raw), mailboxId: "m", nonce, signature: b64(new Uint8Array(64)) }) });
+    const again = await SELF.fetch("https://example.com/v3/account/register", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002", platform: "ios", identityKey: b64(new Uint8Array(32)), signingKey: b64(raw), mailboxId: "m", mailboxToken, nonce, signature: b64(new Uint8Array(64)) }) });
     expect(again.status).toBe(400);
     expect((await again.json() as { error: string }).error).toBe("nonce_invalid");
+  });
+  it("register rejects malformed JSON and non-base64 key material", async () => {
+    const deviceId = "dev-reg-000003";
+    const tok = await deviceToken(deviceId);
+    const badJson = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: "{not json",
+    });
+    expect(badJson.status).toBe(400);
+    expect((await badJson.json() as { error: string }).error).toBe("invalid_json");
+
+    // Every other field is well-formed, so the request reaches the decode
+    // step and fails there rather than in the missing-fields guard.
+    const mailboxId = mailboxIdForDevice(deviceId);
+    const mailboxToken = await seedMailbox(mailboxId);
+    const ch = await SELF.fetch("https://example.com/v3/account/challenge", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId }) });
+    const { nonce } = await ch.json() as { nonce: string };
+    const badB64 = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, platform: "ios", identityKey: "not base64!!", signingKey: "also not base64!!", mailboxId, mailboxToken, nonce, signature: "###" }),
+    });
+    expect(badB64.status).toBe(400);
+    expect((await badB64.json() as { error: string }).error).toBe("invalid_encoding");
+  });
+  it("register refuses a mailbox the caller cannot prove it owns", async () => {
+    const deviceId = "dev-mbx-0000001";
+    const pair = await ed25519Pair();
+    const tok = await deviceToken(deviceId);
+    const identityKey = await identityKeyForDevice(deviceId);
+
+    // (a) mailbox that was never registered → no meta in KV at all.
+    const ghost = "mbxghostmailbox";
+    const sigGhost = await challengeAndSign(deviceId, tok, pair.kp.privateKey, identityKey, ghost);
+    const respGhost = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, platform: "ios", identityKey: b64(identityKey), signingKey: b64(pair.raw), mailboxId: ghost, mailboxToken: "whatever", nonce: sigGhost.nonce, signature: sigGhost.signature }),
+    });
+    expect(respGhost.status).toBe(403);
+    expect((await respGhost.json() as { error: string }).error).toBe("mailbox_not_owned");
+
+    // (b) somebody ELSE's mailbox, with the wrong token.
+    const victim = "mbxvictimmailbox";
+    await seedMailbox(victim);
+    const sigVictim = await challengeAndSign(deviceId, tok, pair.kp.privateKey, identityKey, victim);
+    const respVictim = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, platform: "ios", identityKey: b64(identityKey), signingKey: b64(pair.raw), mailboxId: victim, mailboxToken: "0".repeat(64), nonce: sigVictim.nonce, signature: sigVictim.signature }),
+    });
+    expect(respVictim.status).toBe(403);
+    expect((await respVictim.json() as { error: string }).error).toBe("mailbox_not_owned");
+  });
+  it("a signature made for one mailbox does not authorize another", async () => {
+    const deviceId = "dev-mbx-0000002";
+    const pair = await ed25519Pair();
+    const tok = await deviceToken(deviceId);
+    const identityKey = await identityKeyForDevice(deviceId);
+    const mine = mailboxIdForDevice(deviceId);
+    await seedMailbox(mine);
+    const other = "mbxotherowned01";
+    const otherToken = await seedMailbox(other);
+    // Signed over `mine`, submitted for `other` (whose token the caller
+    // does hold) — the v2 message binds the mailbox id, so this is a
+    // signature failure, not a successful mailbox swap.
+    const { nonce, signature } = await challengeAndSign(deviceId, tok, pair.kp.privateKey, identityKey, mine);
+    const resp = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, platform: "ios", identityKey: b64(identityKey), signingKey: b64(pair.raw), mailboxId: other, mailboxToken: otherToken, nonce, signature }),
+    });
+    expect(resp.status).toBe(400);
+    expect((await resp.json() as { error: string }).error).toBe("bad_signature");
+  });
+  it("re-registering the same signing key with a new identity key updates the directory", async () => {
+    const first = await registerDevice("dev-idrot-00001");
+    expect(first.reg.status).toBe(201);
+    const { accountId, token } = await first.reg.json() as { accountId: string; token: string };
+
+    // Same device, same signing key (survives a reinstall in Keychain),
+    // but a regenerated X25519 identity key.
+    const freshIdentity = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("identity:dev-idrot-00001:v2")));
+    const second = await registerDevice("dev-idrot-00001", "ios", first.pair, { identityKey: freshIdentity });
+    expect(second.reg.status).toBe(201);
+    expect((await second.reg.json() as { accountId: string }).accountId).toBe(accountId);
+
+    const dir = await SELF.fetch(`https://example.com/v3/directory/${accountId}`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(dir.status).toBe(200);
+    expect((await dir.json() as { identityKey: string }).identityKey).toBe(b64(freshIdentity));
   });
   it("same signing key from a second device binds to the existing account", async () => {
     const first = await registerDevice("dev-multi-00001", "ios");
@@ -167,26 +256,12 @@ describe("/v3/account", () => {
     const sharedIdentityKey = new Uint8Array(32);
     sharedIdentityKey.set([1, 2, 3, 4, 5], 0);
 
-    const deviceA = "dev-ident-a-0001";
-    const pairA = await ed25519Pair();
-    const tokA = await deviceToken(deviceA);
-    const { nonce: nonceA, signature: sigA } = await challengeAndSign(deviceA, tokA, pairA.kp.privateKey);
-    const regA = await SELF.fetch("https://example.com/v3/account/register", {
-      method: "POST", headers: { Authorization: `Bearer ${tokA}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId: deviceA, platform: "ios", identityKey: b64(sharedIdentityKey), signingKey: b64(pairA.raw), mailboxId: `mbx${deviceA.replace(/-/g, "")}`, nonce: nonceA, signature: sigA }),
-    });
-    expect(regA.status).toBe(201);
+    const regA = await registerDevice("dev-ident-a-0001", "ios", undefined, { identityKey: sharedIdentityKey });
+    expect(regA.reg.status).toBe(201);
 
-    const deviceB = "dev-ident-b-0002";
-    const pairB = await ed25519Pair();
-    const tokB = await deviceToken(deviceB);
-    const { nonce: nonceB, signature: sigB } = await challengeAndSign(deviceB, tokB, pairB.kp.privateKey);
-    const regB = await SELF.fetch("https://example.com/v3/account/register", {
-      method: "POST", headers: { Authorization: `Bearer ${tokB}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId: deviceB, platform: "ios", identityKey: b64(sharedIdentityKey), signingKey: b64(pairB.raw), mailboxId: `mbx${deviceB.replace(/-/g, "")}`, nonce: nonceB, signature: sigB }),
-    });
-    expect(regB.status).toBe(409);
-    expect((await regB.json() as { error: string }).error).toBe("identity_bound");
+    const regB = await registerDevice("dev-ident-b-0002", "ios", undefined, { identityKey: sharedIdentityKey });
+    expect(regB.reg.status).toBe(409);
+    expect((await regB.reg.json() as { error: string }).error).toBe("identity_bound");
   });
   it("register requires the token deviceId to match the body", async () => {
     const tok = await deviceToken("dev-mismatch-001");
@@ -215,6 +290,159 @@ describe("/v3/account", () => {
     expect((await SELF.fetch("https://example.com/v3/account", { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })).status).toBe(204);
     const row = await env.ACCOUNTS_DB.prepare("SELECT COUNT(*) AS n FROM account_devices WHERE device_id = 'dev-del-0000001'").first<{ n: number }>();
     expect(row?.n).toBe(0);
+  });
+});
+
+// --------------------------------------------------------------------------
+// POST /v2/keys/register — re-registering an existing mailbox requires the
+// mailbox token. Before 2026-09-15 an omitted `token` skipped the check
+// entirely, so anyone who knew a mailbox id could overwrite its pre-key
+// bundle (a silent key-substitution attack on every future sender).
+// --------------------------------------------------------------------------
+
+describe("/v2/keys/register ownership", () => {
+  const bundle = { identityKey: "AA==", signingKey: "AA==", signedPreKey: { id: 1, publicKey: "AA==", signature: "AA==" }, oneTimePreKeys: [] };
+  const post = (body: unknown) => SELF.fetch("https://example.com/v2/keys/register", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+
+  it("creates a brand-new mailbox without a token and returns one", async () => {
+    const resp = await post({ mailboxId: "mbxfirstwriter01", preKeyBundle: bundle });
+    expect(resp.status).toBe(201);
+    expect((await resp.json() as { token: string }).token).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("rejects re-registration with no token (403) and with a wrong token (403)", async () => {
+    const first = await post({ mailboxId: "mbxownedmailbox1", preKeyBundle: bundle });
+    expect(first.status).toBe(201);
+    const token = (await first.json() as { token: string }).token;
+
+    const noToken = await post({ mailboxId: "mbxownedmailbox1", preKeyBundle: { ...bundle, identityKey: "Ag==" } });
+    expect(noToken.status).toBe(403);
+    expect((await noToken.json() as { error: string }).error).toBe("forbidden");
+
+    const wrongToken = await post({ mailboxId: "mbxownedmailbox1", preKeyBundle: { ...bundle, identityKey: "Ag==" }, token: "0".repeat(64) });
+    expect(wrongToken.status).toBe(403);
+
+    // The bundle is untouched by the two rejected writes.
+    expect(JSON.parse((await env.V2_STORE.get("keys:mbxownedmailbox1"))!).identityKey).toBe("AA==");
+
+    const ok = await post({ mailboxId: "mbxownedmailbox1", preKeyBundle: { ...bundle, identityKey: "Ag==" }, token });
+    expect(ok.status).toBe(201);
+    expect(JSON.parse((await env.V2_STORE.get("keys:mbxownedmailbox1"))!).identityKey).toBe("Ag==");
+  });
+});
+
+// --------------------------------------------------------------------------
+// The /v3 key lane: `X-API-Key` + `X-Device-Id` for surfaces without App
+// Attest (peerdrop-cli, native macOS — DCAppAttestService.isSupported is
+// false there, verified 2026-09-15). Read/registration routes only.
+// --------------------------------------------------------------------------
+
+describe("/v3 key lane", () => {
+  const keyHeaders = (deviceId: string) => ({ "X-API-Key": TEST_API_KEY, "X-Device-Id": deviceId, "Content-Type": "application/json" });
+
+  it("isKeyLane classifies both keys and falls back to API_KEY when MAC_CLIENT_KEY is unset", () => {
+    const withBoth = { API_KEY: "op-key", MAC_CLIENT_KEY: "mac-key" } as unknown as Env;
+    expect(isKeyLane("op-key", withBoth)).toBe("operator");
+    expect(isKeyLane("mac-key", withBoth)).toBe("client");
+    expect(isKeyLane("nope", withBoth)).toBeNull();
+    expect(isKeyLane(null, withBoth)).toBeNull();
+    const withoutMac = { API_KEY: "op-key" } as unknown as Env;
+    expect(isKeyLane("op-key", withoutMac)).toBe("operator");
+    expect(isKeyLane("mac-key", withoutMac)).toBeNull();
+    // An unset API_KEY must never make the empty string a valid credential.
+    expect(isKeyLane("", { API_KEY: "" } as unknown as Env)).toBeNull();
+  });
+
+  it("registers a Mac through the key lane and serves /v3/account/me for it", async () => {
+    const deviceId = "dev-keylane-mac1";
+    const pair = await ed25519Pair();
+    const identityKey = await identityKeyForDevice(deviceId);
+    const mailboxId = mailboxIdForDevice(deviceId);
+    const mailboxToken = await seedMailbox(mailboxId);
+
+    const ch = await SELF.fetch("https://example.com/v3/account/challenge", {
+      method: "POST", headers: keyHeaders(deviceId), body: JSON.stringify({ deviceId }),
+    });
+    expect(ch.status).toBe(201);
+    const { nonce } = await ch.json() as { nonce: string };
+    const nonceBytes = Uint8Array.from(atob(nonce), (c) => c.charCodeAt(0));
+    const bound = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array([...identityKey, ...new TextEncoder().encode(mailboxId)])));
+    const msg = new Uint8Array([...new TextEncoder().encode("peerdrop-account-v2"), ...nonceBytes, ...new TextEncoder().encode(deviceId), ...bound]);
+    const signature = b64(new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, pair.kp.privateKey, msg)));
+
+    const reg = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: keyHeaders(deviceId),
+      body: JSON.stringify({ deviceId, platform: "macos", identityKey: b64(identityKey), signingKey: b64(pair.raw), mailboxId, mailboxToken, nonce, signature }),
+    });
+    expect(reg.status).toBe(201);
+    const { accountId, token } = await reg.json() as { accountId: string; token: string };
+
+    const row = await env.ACCOUNTS_DB.prepare("SELECT account_id, platform FROM account_devices WHERE device_id = ?1").bind(deviceId).first<{ account_id: string; platform: string }>();
+    expect(row).toEqual({ account_id: accountId, platform: "macos" });
+
+    // /v3/account/me over the key lane resolves the scope from the device
+    // binding (scopeForDevice), so it returns that same account.
+    const me = await SELF.fetch("https://example.com/v3/account/me", { headers: keyHeaders(deviceId) });
+    expect(me.status).toBe(200);
+    expect((await me.json() as { accountId: string }).accountId).toBe(accountId);
+
+    // Directory lookups are allowed on the key lane too.
+    const dir = await SELF.fetch(`https://example.com/v3/directory/${accountId}`, { headers: keyHeaders(deviceId) });
+    expect(dir.status).toBe(200);
+
+    // …but the mutating routes are Bearer-only.
+    const nick = await SELF.fetch("https://example.com/v3/account/nickname", { method: "PUT", headers: keyHeaders(deviceId), body: JSON.stringify({ nickname: "keylane" }) });
+    expect(nick.status).toBe(401);
+    expect((await nick.json() as { error: string }).error).toBe("bearer_required");
+    const del = await SELF.fetch("https://example.com/v3/account", { method: "DELETE", headers: keyHeaders(deviceId) });
+    expect(del.status).toBe(401);
+    expect((await del.json() as { error: string }).error).toBe("bearer_required");
+
+    // The Bearer minted by register still works for both.
+    const nickOk = await SELF.fetch("https://example.com/v3/account/nickname", { method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ nickname: "keylane" }) });
+    expect(nickOk.status).toBe(200);
+  });
+
+  it("refuses a key with no X-Device-Id, a key in the query string, and an unbound device id", async () => {
+    const noDevice = await SELF.fetch("https://example.com/v3/account/me", { headers: { "X-API-Key": TEST_API_KEY } });
+    expect(noDevice.status).toBe(401);
+
+    const viaQuery = await SELF.fetch(`https://example.com/v3/account/me?apiKey=${TEST_API_KEY}`, { headers: { "X-Device-Id": "dev-keylane-mac1" } });
+    expect(viaQuery.status).toBe(401);
+
+    // Authenticated by the key, but the device is bound to no account →
+    // "default" scope → authorizeV3 rejects it.
+    const unbound = await SELF.fetch("https://example.com/v3/account/me", { headers: keyHeaders("dev-keylane-unbound") });
+    expect(unbound.status).toBe(401);
+
+    // A wrong key is rejected even with a bound device id.
+    const wrongKey = await SELF.fetch("https://example.com/v3/account/me", { headers: { "X-API-Key": "definitely-wrong-key", "X-Device-Id": "dev-keylane-mac1" } });
+    expect(wrongKey.status).toBe(401);
+
+    // As is a malformed device id.
+    const badDevice = await SELF.fetch("https://example.com/v3/account/me", { headers: { "X-API-Key": TEST_API_KEY, "X-Device-Id": "bad id!" } });
+    expect(badDevice.status).toBe(401);
+  });
+
+  it("the Mac client key reaches the /v2 relay surfaces and the /v3 read lane, but not the mutating routes", async () => {
+    // /v2: the shipped Mac has no App Attest, so its own key must open the
+    // relay routes the operator key opens.
+    const room = await SELF.fetch("https://example.com/room", { method: "POST", headers: { "X-API-Key": TEST_MAC_CLIENT_KEY } });
+    expect(room.status).toBe(201);
+    const ws = await SELF.fetch(`https://example.com/v2/inbox/device-macclient-1?apiKey=${TEST_MAC_CLIENT_KEY}`, { headers: { Upgrade: "websocket" } });
+    expect(ws.status).toBe(101);
+    ws.webSocket!.accept(); ws.webSocket!.close();
+
+    // /v3: same restricted lane as the operator key (dev-keylane-mac1 was
+    // registered by the test above).
+    const clientHeaders = { "X-API-Key": TEST_MAC_CLIENT_KEY, "X-Device-Id": "dev-keylane-mac1", "Content-Type": "application/json" };
+    const me = await SELF.fetch("https://example.com/v3/account/me", { headers: clientHeaders });
+    expect(me.status).toBe(200);
+    const nick = await SELF.fetch("https://example.com/v3/account/nickname", { method: "PUT", headers: clientHeaders, body: JSON.stringify({ nickname: "macclient" }) });
+    expect(nick.status).toBe(401);
+    expect((await nick.json() as { error: string }).error).toBe("bearer_required");
   });
 });
 

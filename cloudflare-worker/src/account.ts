@@ -71,21 +71,39 @@ export function validateNickname(raw: string): NicknameCheck {
 
 /**
  * Verify an Ed25519 registration signature over
- * utf8("peerdrop-account-v1") ‖ nonce(32) ‖ utf8(deviceId), proving the
- * caller controls the private key matching `signingKeyRaw` (the account's
- * durable identity — separate from the device's App Attest keypair).
+ * utf8("peerdrop-account-v2") ‖ nonce(32) ‖ utf8(deviceId)
+ *   ‖ sha256(identityKey(32) ‖ utf8(mailboxId)),
+ * proving the caller controls the private key matching `signingKeyRaw`
+ * (the account's durable identity — separate from the device's App Attest
+ * keypair).
+ *
+ * The v1 message covered only the nonce and the device id, so the two
+ * payload fields the signature was supposed to authenticate — the identity
+ * key and the mailbox id — were in fact unsigned: anyone who could replay
+ * a (nonce, signature) pair could bind ANY identity key or mailbox to that
+ * account. v2 folds both into the signed bytes via a SHA-256 of their
+ * concatenation (hashed rather than appended raw so the variable-length
+ * mailbox id can't be shifted against the fixed-length key). Both sides
+ * were changed together in the same wave — no v1 verifier remains, and no
+ * shipped client has ever spoken this route.
  */
 export async function verifyRegistrationSignature(
   signingKeyRaw: Uint8Array,
   nonce: Uint8Array,
   deviceId: string,
+  identityKey: Uint8Array,
+  mailboxId: string,
   signature: Uint8Array,
 ): Promise<boolean> {
   if (signingKeyRaw.length !== 32 || nonce.length !== 32 || signature.length !== 64) return false;
   try {
     const key = await crypto.subtle.importKey("raw", signingKeyRaw, { name: "Ed25519" }, false, ["verify"]);
     const enc = new TextEncoder();
-    const msg = new Uint8Array([...enc.encode("peerdrop-account-v1"), ...nonce, ...enc.encode(deviceId)]);
+    const bound = new Uint8Array(await crypto.subtle.digest(
+      "SHA-256",
+      new Uint8Array([...identityKey, ...enc.encode(mailboxId)]),
+    ));
+    const msg = new Uint8Array([...enc.encode("peerdrop-account-v2"), ...nonce, ...enc.encode(deviceId), ...bound]);
     return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, msg);
   } catch {
     return false;

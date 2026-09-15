@@ -1,3 +1,10 @@
+/// <reference types="vite/client" />
+//
+// The triple-slash reference above pulls in Vite's ambient `ImportMeta`
+// augmentation so `import.meta.glob` type-checks under `tsc --noEmit`
+// (without it: "Property 'glob' does not exist on type 'ImportMeta'",
+// plus three implicit-any parameters downstream of the untyped result).
+//
 // Deviation from the task brief's original `node:fs`-based draft: this file
 // runs inside the miniflare/workerd test sandbox (not host Node.js), whose
 // `node:fs` (via the `nodejs_compat` shim) only exposes a synthetic

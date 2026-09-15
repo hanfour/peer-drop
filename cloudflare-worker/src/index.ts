@@ -35,6 +35,17 @@ export interface Env {
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;
   API_KEY: string; // Operator credential (CLI/Debug/Simulator). Rotated 2026-07; no longer ships in store binaries.
+  // Client credential for shipped surfaces that cannot do App Attest —
+  // today only the native macOS app (DCAppAttestService.isSupported ==
+  // false there; verified 2026-09-15 on an M4 / macOS 15.7 dev build).
+  // Deliberately SEPARATE from API_KEY so a key extracted from a shipped
+  // Mac binary is not the operator credential: it reaches the same /v2
+  // relay surfaces the Mac needs, but on /v3 it is restricted to the
+  // read/registration routes (see isKeyLane + handleV3). Rotating it
+  // requires a Mac release; rotating API_KEY does not.
+  // When unset (local dev, vitest) the lane falls back to API_KEY so no
+  // extra binding is needed to exercise it.
+  MAC_CLIENT_KEY?: string;
   APNS_KEY_P8: string;
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
@@ -69,8 +80,16 @@ const ROOM_TTL_SECONDS = 600; // 10 minutes
 const TURN_TTL_SECONDS = 900; // 15 minutes
 
 // Rate limiting: max requests per (IP, route class) within the window.
-export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-export const RATE_LIMIT_MAX_REQUESTS = 30;
+//
+// NOT exported (2026-09-15): `wrangler dev` builds a local service registry
+// from every non-default export of the entry module and requires each entry
+// to be a function, a class, or an ExportedHandler — a plain numeric export
+// crashes the whole local runtime before it binds a port
+// ("Incorrect type for map entry 'RATE_LIMIT_MAX_REQUESTS'"), which blocked
+// every local E2E run. Nothing imports these from here (rate-limit.spec.ts
+// declares its own copy of the limit it asserts against).
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 30;
 // KV min TTL is 60s; give the counter key a little slack past the window so it
 // survives to the window edge, then self-expires (no cleanup job needed).
 const RATE_LIMIT_TTL_SECONDS = 120;
@@ -208,14 +227,22 @@ export default {
 
     // /v2/inbox/:deviceId ownership binding — a device's Bearer token may
     // only open ITS OWN inbox. Runs only after the requiresAuth gate above
-    // has already accepted some credential (Bearer or operator key), so a
-    // missing/invalid credential still surfaces as 401 there. The operator
-    // `X-API-Key` lane (CLI/Debug/Simulator) is intentionally exempt — it
-    // keeps opening any inbox, matching existing behaviour.
+    // has already accepted some credential (Bearer or a key), so a
+    // missing/invalid credential still surfaces as 401 there. The
+    // `X-API-Key` lane (operator CLI/Debug/Simulator, and the Mac client
+    // key) is intentionally exempt — it keeps opening any inbox, matching
+    // existing behaviour.
+    //
+    // NOTE: unlike the /v3 key lane, this exemption does NOT require an
+    // `X-Device-Id`, and cannot: this is a WebSocket upgrade, and
+    // URLSession's `webSocketTask(with:)` drops custom headers on the
+    // upgrade request — the credential itself only reaches us via
+    // `?apiKey=`. The inbox path segment is the device id anyway, so a
+    // header would be redundant with what the key lane already asserts.
     const inboxOwnershipMatch = path.match(/^\/v2\/inbox\/([a-zA-Z0-9-]{8,64})$/);
     if (inboxOwnershipMatch && request.headers.get("Upgrade") === "websocket") {
       const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
-      if (providedKey !== env.API_KEY) {
+      if (isKeyLane(providedKey, env) === null) {
         const candidate = (request.headers.get("Authorization")?.startsWith("Bearer ")
           ? request.headers.get("Authorization")!.slice(7).trim() : null) ?? url.searchParams.get("token");
         try {
@@ -956,14 +983,23 @@ export default {
       // "keys"), which is KV-backed and shared across isolates — no separate
       // per-handler limiter needed here.
 
-      // Generate mailbox token if first registration
+      // Generate mailbox token if first registration.
+      //
+      // Re-registration REQUIRES the mailbox token (2026-09-15): the check
+      // used to be `if (body.token && body.token !== meta.token)`, so a
+      // caller that simply OMITTED `token` sailed past it and could
+      // overwrite any known mailbox's pre-key bundle — an unauthenticated
+      // key-substitution attack on every future sender to that mailbox.
+      // Missing and wrong are now both 403. Shipped clients are unaffected:
+      // `MailboxManager.uploadPreKeysIfNeeded()` always passes the stored
+      // token, and `registerIfNeeded()` only ever writes a brand-new,
+      // randomly-generated mailbox id (the first-writer path below).
       const existingMeta = await env.V2_STORE.get(`meta:${body.mailboxId}`);
       let token: string;
       if (existingMeta) {
         const meta = JSON.parse(existingMeta) as { token: string };
-        // Verify token if re-registering
-        if (body.token && body.token !== meta.token) {
-          return jsonResponse({ error: "Invalid token" }, 403);
+        if (!body.token || body.token !== meta.token) {
+          return jsonResponse({ error: "forbidden" }, 403);
         }
         token = meta.token;
       } else {
@@ -1119,8 +1155,14 @@ export default {
       try {
         const acct = await authorizeV3(request, env);
         if (acct) {
-          await env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3")
-            .bind(newMailboxId, Date.now(), acct.accountId).run();
+          // Only overwrite the account's mailbox when it still points at
+          // the mailbox being rotated. Without the `mailbox_id = ?4`
+          // guard, rotating a STALE mailbox (an old id whose meta is still
+          // in KV — e.g. a second device, or a retry after the account
+          // already moved on) would clobber the account's current, live
+          // mailbox with the rotation of an abandoned one.
+          await env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3 AND mailbox_id = ?4")
+            .bind(newMailboxId, Date.now(), acct.accountId, oldMailboxId).run();
         }
       } catch (err) {
         console.error("mailbox/rotate: failed to sync accounts.mailbox_id", String(err));
@@ -1347,18 +1389,47 @@ export default {
       if (!payload) return jsonResponse({ error: "Unauthorized" }, 401);
       const raw = await request.text();
       if (raw.length > 4096) return jsonResponse({ error: "too_large" }, 413);
-      const body = JSON.parse(raw || "null") as { deviceId?: string; platform?: string; identityKey?: string; signingKey?: string; mailboxId?: string; nonce?: string; signature?: string } | null;
-      if (!body?.deviceId || !body.platform || !body.identityKey || !body.signingKey || !body.mailboxId || !body.nonce || !body.signature) return jsonResponse({ error: "missing_fields" }, 400);
+      // A malformed body must be a 400, not an uncaught SyntaxError that
+      // escapes as a 500 (the /challenge route above already guards its
+      // own parse the same way).
+      let body: { deviceId?: string; platform?: string; identityKey?: string; signingKey?: string; mailboxId?: string; mailboxToken?: string; nonce?: string; signature?: string } | null;
+      try { body = JSON.parse(raw || "null"); } catch { return jsonResponse({ error: "invalid_json" }, 400); }
+      if (!body?.deviceId || !body.platform || !body.identityKey || !body.signingKey || !body.mailboxId || !body.mailboxToken || !body.nonce || !body.signature) return jsonResponse({ error: "missing_fields" }, 400);
       if (body.deviceId !== payload.deviceId) return jsonResponse({ error: "forbidden" }, 403);
       if (!["ios", "macos"].includes(body.platform)) return jsonResponse({ error: "invalid_platform" }, 400);
       if (!/^[a-z0-9]{1,64}$/.test(body.mailboxId)) return jsonResponse({ error: "invalid_mailbox" }, 400);
       const stored = await env.V2_STORE.get(`acct-challenge:${body.deviceId}`);
       if (!stored || stored !== body.nonce) return jsonResponse({ error: "nonce_invalid" }, 400);
       await env.V2_STORE.delete(`acct-challenge:${body.deviceId}`);
-      const signingKey = base64Decode(body.signingKey), identityKey = base64Decode(body.identityKey);
-      const ok = await verifyRegistrationSignature(signingKey, base64Decode(body.nonce), body.deviceId, base64Decode(body.signature));
-      if (!ok) return jsonResponse({ error: "bad_signature" }, 400);
+      // `atob` throws InvalidCharacterError on a non-base64 string — same
+      // reasoning as the JSON guard above: a client typo is a 400, never a
+      // 500. (The nonce is decoded here too even though it already matched
+      // the stored value byte-for-byte above, so all four decodes share one
+      // guard rather than relying on that invariant holding forever.)
+      let signingKey: Uint8Array, identityKey: Uint8Array, nonceBytes: Uint8Array, signatureBytes: Uint8Array;
+      try {
+        signingKey = base64Decode(body.signingKey);
+        identityKey = base64Decode(body.identityKey);
+        nonceBytes = base64Decode(body.nonce);
+        signatureBytes = base64Decode(body.signature);
+      } catch { return jsonResponse({ error: "invalid_encoding" }, 400); }
       if (identityKey.length !== 32) return jsonResponse({ error: "invalid_identity_key" }, 400);
+      // The signature covers the identity key and the mailbox id (v2
+      // message — see verifyRegistrationSignature), so neither can be
+      // swapped for another device's by an attacker holding only a
+      // replayed nonce + signature.
+      const ok = await verifyRegistrationSignature(signingKey, nonceBytes, body.deviceId, identityKey, body.mailboxId, signatureBytes);
+      if (!ok) return jsonResponse({ error: "bad_signature" }, 400);
+      // Prove the caller actually owns the mailbox it is binding to the
+      // account: without this, any device could point its account row at
+      // someone else's mailbox id and make the directory hand that
+      // mailbox's pre-key bundle out under the attacker's account/nickname.
+      // The mailbox token is the same secret `/v2/keys/register` minted.
+      const mailboxMeta = await env.V2_STORE.get(`meta:${body.mailboxId}`);
+      if (!mailboxMeta) return jsonResponse({ error: "mailbox_not_owned" }, 403);
+      let mailboxMetaToken: string | undefined;
+      try { mailboxMetaToken = (JSON.parse(mailboxMeta) as { token?: string }).token; } catch { mailboxMetaToken = undefined; }
+      if (!mailboxMetaToken || mailboxMetaToken !== body.mailboxToken) return jsonResponse({ error: "mailbox_not_owned" }, 403);
       const now = Date.now();
       const bound = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM account_devices WHERE device_id = ?1").bind(body.deviceId).first<{ account_id: string }>();
       let existing = await env.ACCOUNTS_DB.prepare("SELECT account_id, nickname FROM accounts WHERE signing_key = ?1").bind(signingKey).first<{ account_id: string; nickname: string | null }>();
@@ -1387,9 +1458,17 @@ export default {
         if (existing) {
           accountId = existing.account_id;
           nickname = existing.nickname;
+          // The identity key is refreshed too, not just the mailbox: a
+          // reinstall regenerates IdentityKeyManager's X25519 keypair while
+          // the (Keychain-persisted) Ed25519 signing key survives, so an
+          // update that only touched mailbox_id left the directory serving
+          // a dead identity key forever — every sender would encrypt to a
+          // key the owner no longer holds. A UNIQUE violation here means
+          // the new identity key already belongs to a DIFFERENT account →
+          // 409 identity_bound via classifyRegisterError.
           statements.push(
-            env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3")
-              .bind(body.mailboxId, now, accountId),
+            env.ACCOUNTS_DB.prepare("UPDATE accounts SET identity_key = ?1, mailbox_id = ?2, updated_at = ?3 WHERE account_id = ?4")
+              .bind(identityKey, body.mailboxId, now, accountId),
           );
           if (!bound) {
             statements.push(
@@ -1432,8 +1511,10 @@ export default {
       return jsonResponse({ accountId, nickname, token, expiresInSeconds: 900 }, 201);
     }
 
-    // /v3/* — account-scoped routes (T4+ fill in the actual handlers).
-    // Bearer-only, account-scoped: never accepts X-API-Key or ?token=.
+    // /v3/* — account-scoped routes. Bearer device token, or the key lane
+    // (`X-API-Key` + `X-Device-Id`) for surfaces without App Attest; never
+    // `?token=` or `?apiKey=`. The key lane reaches only the read/
+    // registration routes — handleV3 refuses it on the mutating ones.
     if (path.startsWith("/v3/")) {
       const auth = await authorizeV3(request, env);
       if (!auth) return jsonResponse({ error: "Unauthorized" }, 401);
@@ -1444,24 +1525,105 @@ export default {
   },
 };
 
-export interface V3Auth { deviceId: string; accountId: string }
+export interface V3Auth { deviceId: string; accountId: string; lane: AuthLane }
 
-/** Bearer-only device token (any scope). Never reads the query string. */
-export async function authorizeDevice(request: Request, env: Env): Promise<TokenPayload | null> {
-  const header = request.headers.get("Authorization");
-  if (!header?.startsWith("Bearer ") || !env.TOKEN_SECRET) return null;
-  try {
-    const { verifyToken } = await import("./deviceToken");
-    return await verifyToken(header.slice(7).trim(), env.TOKEN_SECRET);
-  } catch { return null; }
+/** Which credential got the caller in — see `isKeyLane`. */
+export type AuthLane = "bearer" | "key";
+
+/**
+ * Constant-time comparison of two credential strings. Length is compared
+ * first (and leaks, as it does in every practical implementation), but the
+ * bytes themselves are compared without an early exit so a remote caller
+ * can't binary-search a key one character at a time off response timing.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ea = enc.encode(a), eb = enc.encode(b);
+  if (ea.length !== eb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
+  return diff === 0;
 }
 
-/** Bearer-only, account-scoped. Returns null for default scope / API key / ?token=. */
+/**
+ * Classify an `X-API-Key` value.
+ *
+ *   "operator" — `API_KEY`: the operator/dev credential (peerdrop-cli,
+ *                Debug builds, Simulator, `/debug/*`). Full reach.
+ *   "client"   — `MAC_CLIENT_KEY`: the credential embedded in the shipped
+ *                native macOS app, which has no App Attest. Same /v2 relay
+ *                reach (the Mac needs it), but a restricted /v3 lane.
+ *   null       — not a recognized key.
+ *
+ * `MAC_CLIENT_KEY` unset (local dev / vitest) falls back to `API_KEY`, so
+ * the operator branch simply wins there and the lane stays exercisable
+ * without a second binding.
+ */
+export function isKeyLane(key: string | null, env: Env): "operator" | "client" | null {
+  if (!key) return null;
+  if (env.API_KEY && constantTimeEqual(key, env.API_KEY)) return "operator";
+  const clientKey = env.MAC_CLIENT_KEY || env.API_KEY;
+  if (clientKey && constantTimeEqual(key, clientKey)) return "client";
+  return null;
+}
+
+/**
+ * Device authentication for the account routes.
+ *
+ * Preferred lane: an App-Attest-issued Bearer device token (any scope),
+ * header only — never `?token=`.
+ *
+ * Fallback lane ("key lane"): `X-API-Key` (operator OR Mac client key)
+ * PLUS an `X-Device-Id` header. This is the operator/client credential for
+ * surfaces without App Attest — peerdrop-cli and, since the 2026-09-15
+ * spike, the native macOS app (`DCAppAttestService.isSupported == false`
+ * on macOS). **The device id is self-asserted**: the key proves "a holder
+ * of this credential", not "this device". That is why the key lane is
+ * confined in `handleV3` to challenge/register/me/directory, and why
+ * anything that MUTATES an account (nickname, delete) demands a Bearer —
+ * those the device has to have earned by registering. Header only: a key
+ * in `?apiKey=` would leak into request logs.
+ *
+ * Returns a synthetic payload with `expires: 0` — nothing downstream reads
+ * `expires` (the token's own verification already enforced it on the
+ * Bearer lane), and 0 makes a key-lane payload obviously not a real token
+ * if it ever gets logged.
+ */
+async function authorizeDeviceWithLane(request: Request, env: Env): Promise<{ payload: TokenPayload; lane: AuthLane } | null> {
+  const header = request.headers.get("Authorization");
+  if (header?.startsWith("Bearer ") && env.TOKEN_SECRET) {
+    try {
+      const { verifyToken } = await import("./deviceToken");
+      return { payload: await verifyToken(header.slice(7).trim(), env.TOKEN_SECRET), lane: "bearer" };
+    } catch {
+      // Fall through to the key lane — a stale Bearer must not lock out a
+      // caller that also holds a key (mirrors isRequestAuthorized).
+    }
+  }
+  const key = request.headers.get("X-API-Key");
+  const deviceId = request.headers.get("X-Device-Id");
+  if (isKeyLane(key, env) && deviceId && /^[a-zA-Z0-9-]{8,64}$/.test(deviceId)) {
+    return { payload: { deviceId, scope: await scopeForDevice(env.ACCOUNTS_DB, deviceId), expires: 0 }, lane: "key" };
+  }
+  return null;
+}
+
+/** Bearer device token (any scope), or the key lane + `X-Device-Id`. */
+export async function authorizeDevice(request: Request, env: Env): Promise<TokenPayload | null> {
+  return (await authorizeDeviceWithLane(request, env))?.payload ?? null;
+}
+
+/**
+ * Account-scoped authentication. The scope comes from the verified token on
+ * the Bearer lane and from `scopeForDevice` on the key lane, so a device
+ * that has never registered gets the "default" scope and is rejected here
+ * either way. Never reads `?token=`.
+ */
 export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | null> {
-  const payload = await authorizeDevice(request, env);
-  if (!payload) return null;
-  const accountId = accountIdFromScope(payload.scope);
-  return accountId ? { deviceId: payload.deviceId, accountId } : null;
+  const authed = await authorizeDeviceWithLane(request, env);
+  if (!authed) return null;
+  const accountId = accountIdFromScope(authed.payload.scope);
+  return accountId ? { deviceId: authed.payload.deviceId, accountId, lane: authed.lane } : null;
 }
 
 /**
@@ -1494,6 +1656,13 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     return jsonResponse({ accountId: acct.account_id, nickname: acct.nickname, mailboxId: acct.mailbox_id, devices });
   }
   if (path === "/v3/account/nickname" && request.method === "PUT") {
+    // Bearer-only. The key lane's device id is self-asserted, so allowing
+    // it here would let any holder of the key rename (or, below, delete)
+    // an account it merely knows a device id for. A registered Mac always
+    // has a Bearer: /v3/account/register hands one back and the client
+    // adopts it (AccountManager.ensureFreshTokenIfNeeded re-runs the flow
+    // when it has expired).
+    if (auth.lane === "key") return jsonResponse({ error: "bearer_required" }, 401);
     const nicknameRaw = await request.text();
     if (nicknameRaw.length > 4096) return jsonResponse({ error: "too_large" }, 413);
     let body: { nickname?: string | null } | null;
@@ -1519,6 +1688,9 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     return jsonResponse({ nickname: value });
   }
   if (path === "/v3/account" && request.method === "DELETE") {
+    // Bearer-only — same reasoning as PUT /v3/account/nickname above, with
+    // a destructive, irreversible outcome.
+    if (auth.lane === "key") return jsonResponse({ error: "bearer_required" }, 401);
     // D1 doesn't guarantee foreign_keys=ON (so ON DELETE CASCADE in the
     // schema isn't reliable) — delete devices explicitly first, as one
     // batch (one transaction) so the two deletes can't land half-done.
@@ -1570,10 +1742,10 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
 /**
  * Combined auth check for the tier-2 endpoint set. Returns true if the
  * request carries either a valid Bearer token signed with `TOKEN_SECRET`
- * or the operator `X-API-Key`. Both lanes are permanent (§Layer 5
- * REVISED 2026-07-05): Bearer serves store clients via App Attest; the
- * key serves operator surfaces that can't attest (peerdrop-cli, Debug
- * builds, Simulator).
+ * or a recognized `X-API-Key` (operator or Mac client — see isKeyLane).
+ * Both lanes are permanent (§Layer 5 REVISED 2026-07-05): Bearer serves
+ * store clients via App Attest; the keys serve surfaces that can't attest
+ * (peerdrop-cli, Debug builds, Simulator, native macOS).
  */
 async function isRequestAuthorized(request: Request, url: URL, env: Env): Promise<boolean> {
   // Bearer first — header for normal requests, `?token=` query string
@@ -1597,16 +1769,20 @@ async function isRequestAuthorized(request: Request, url: URL, env: Env): Promis
       // operator key (e.g. a Debug build with a stale token cache).
     }
   }
+  // Both the operator key and the Mac client key are accepted here: the
+  // shipped macOS app has no App Attest, so the /v2 relay surfaces it uses
+  // (rooms, ICE, device register, invites, calls, inbox) must stay reachable
+  // with its own credential.
   const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
-  return providedKey === env.API_KEY;
+  return isKeyLane(providedKey, env) !== null;
 }
 
 /**
  * Header-only variant of isRequestAuthorized for plain HTTP routes
- * (currently /debug/metric). Same credentials — Bearer or X-API-Key —
- * but never reads the query string: only the WebSocket upgrade has a
- * legitimate need for `?token=`, and credentials in URLs leak into
- * request logs where they can be captured and replayed.
+ * (currently /debug/metric). Same credentials — Bearer or a recognized
+ * X-API-Key — but never reads the query string: only the WebSocket
+ * upgrade has a legitimate need for `?token=`, and credentials in URLs
+ * leak into request logs where they can be captured and replayed.
  */
 async function isHeaderAuthorized(request: Request, env: Env): Promise<boolean> {
   const headerBearer = request.headers.get("Authorization");
@@ -1622,8 +1798,7 @@ async function isHeaderAuthorized(request: Request, env: Env): Promise<boolean> 
       // Fall through to the operator X-API-Key header.
     }
   }
-  const providedKey = request.headers.get("X-API-Key");
-  return providedKey != null && providedKey === env.API_KEY;
+  return isKeyLane(request.headers.get("X-API-Key"), env) !== null;
 }
 
 /**
