@@ -17,6 +17,8 @@ import {
   verifyAppAttestation,
   verifyAppAttestAssertion,
 } from "./deviceToken";
+import type { TokenPayload } from "./deviceToken";
+import { scopeForDevice, accountIdFromScope } from "./account";
 
 export interface Env {
   // KV
@@ -88,6 +90,7 @@ function generateRoomCode(): string {
 // one surface — e.g. message delivery — can't starve unrelated surfaces like
 // room creation for the same IP.
 export function rateLimitClass(path: string, _method: string): string {
+  if (path.startsWith("/v3/")) return "v3";
   if (path.startsWith("/v2/keys")) return "keys";
   if (path.startsWith("/v2/messages")) return "messages";
   if (path.startsWith("/v2/device")) return "device";
@@ -200,6 +203,26 @@ export default {
           JSON.stringify({ error: "Unauthorized" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+    }
+
+    // /v2/inbox/:deviceId ownership binding — a device's Bearer token may
+    // only open ITS OWN inbox. Runs only after the requiresAuth gate above
+    // has already accepted some credential (Bearer or operator key), so a
+    // missing/invalid credential still surfaces as 401 there. The operator
+    // `X-API-Key` lane (CLI/Debug/Simulator) is intentionally exempt — it
+    // keeps opening any inbox, matching existing behaviour.
+    const inboxOwnershipMatch = path.match(/^\/v2\/inbox\/([a-zA-Z0-9-]{8,64})$/);
+    if (inboxOwnershipMatch && request.headers.get("Upgrade") === "websocket") {
+      const providedKey = request.headers.get("X-API-Key") || url.searchParams.get("apiKey");
+      if (providedKey !== env.API_KEY) {
+        const candidate = (request.headers.get("Authorization")?.startsWith("Bearer ")
+          ? request.headers.get("Authorization")!.slice(7).trim() : null) ?? url.searchParams.get("token");
+        try {
+          const { verifyToken } = await import("./deviceToken");
+          const payload = await verifyToken(candidate ?? "", env.TOKEN_SECRET);
+          if (payload.deviceId !== inboxOwnershipMatch[1]) return jsonResponse({ error: "forbidden" }, 403);
+        } catch { return jsonResponse({ error: "Unauthorized" }, 401); }
       }
     }
 
@@ -861,7 +884,7 @@ export default {
           }),
           { expirationTtl: 90 * 86400 },
         );
-        const token = await issueToken(freshTokenPayload(body.deviceId), env.TOKEN_SECRET);
+        const token = await issueToken(freshTokenPayload(body.deviceId, await scopeForDevice(env.ACCOUNTS_DB, body.deviceId)), env.TOKEN_SECRET);
         return jsonResponse({ token, expiresInSeconds: 15 * 60 }, 201);
       } catch (err) {
         return jsonResponse({ error: String((err as Error).message) }, 400);
@@ -910,7 +933,7 @@ export default {
           JSON.stringify({ ...JSON.parse(cached), counter: result.newCounter }),
           { expirationTtl: 90 * 86400 },
         );
-        const token = await issueToken(freshTokenPayload(body.deviceId), env.TOKEN_SECRET);
+        const token = await issueToken(freshTokenPayload(body.deviceId, await scopeForDevice(env.ACCOUNTS_DB, body.deviceId)), env.TOKEN_SECRET);
         return jsonResponse({ token, expiresInSeconds: 15 * 60 }, 200);
       } catch (err) {
         return jsonResponse({ error: String((err as Error).message) }, 400);
@@ -1280,9 +1303,43 @@ export default {
       return handleCryptoPolicy(env);
     }
 
+    // /v3/* — account-scoped routes (T4+ fill in the actual handlers).
+    // Bearer-only, account-scoped: never accepts X-API-Key or ?token=.
+    if (path.startsWith("/v3/")) {
+      const auth = await authorizeV3(request, env);
+      if (!auth) return jsonResponse({ error: "Unauthorized" }, 401);
+      return await handleV3(request, url, path, env, auth);
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
+
+export interface V3Auth { deviceId: string; accountId: string }
+
+/** Bearer-only device token (any scope). Never reads the query string. */
+export async function authorizeDevice(request: Request, env: Env): Promise<TokenPayload | null> {
+  const header = request.headers.get("Authorization");
+  if (!header?.startsWith("Bearer ") || !env.TOKEN_SECRET) return null;
+  try {
+    const { verifyToken } = await import("./deviceToken");
+    return await verifyToken(header.slice(7).trim(), env.TOKEN_SECRET);
+  } catch { return null; }
+}
+
+/** Bearer-only, account-scoped. Returns null for default scope / API key / ?token=. */
+export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | null> {
+  const payload = await authorizeDevice(request, env);
+  if (!payload) return null;
+  const accountId = accountIdFromScope(payload.scope);
+  return accountId ? { deviceId: payload.deviceId, accountId } : null;
+}
+
+// Placeholder for the /v3 route table — T4 fills in the real dispatch
+// (account registration/challenge, /v3/account/me, etc).
+async function handleV3(request: Request, url: URL, path: string, env: Env, auth: V3Auth): Promise<Response> {
+  return jsonResponse({ error: "not_found" }, 404);
+}
 
 /**
  * Combined auth check for the tier-2 endpoint set. Returns true if the
