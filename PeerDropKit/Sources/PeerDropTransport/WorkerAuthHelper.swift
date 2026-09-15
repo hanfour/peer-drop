@@ -18,7 +18,7 @@ public enum WorkerAuthHelper {
     /// the token-refresh path can run an HTTP round-trip without
     /// blocking the caller's actor.
     public static func applyAuth(to request: inout URLRequest) async {
-        if #available(iOS 14.0, *) {
+        if #available(iOS 14.0, macOS 11.0, *) {
             if let bearer = await DeviceTokenManager.shared.bearerHeader() {
                 request.setValue(bearer, forHTTPHeaderField: "Authorization")
                 return
@@ -52,7 +52,7 @@ public enum WorkerAuthHelper {
     /// URLSession can't attach `Authorization` headers. Returns
     /// `(name, value)` to splat into `URLComponents.queryItems`.
     public static func authQueryItem() async -> URLQueryItem? {
-        if #available(iOS 14.0, *) {
+        if #available(iOS 14.0, macOS 11.0, *) {
             if let token = await DeviceTokenManager.shared.currentRawToken() {
                 return URLQueryItem(name: "token", value: token)
             }

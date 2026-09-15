@@ -26,7 +26,7 @@ import os.log
 /// (Debug builds, peerdrop-cli via PEERDROP_WORKER_KEY). Release store
 /// builds have no key, so an App-Attest-unavailable device sends no
 /// credential and relay routes 401 until attestation succeeds.
-@available(iOS 14.0, *)
+@available(iOS 14.0, macOS 11.0, *)
 public actor DeviceTokenManager {
 
     public static let shared = DeviceTokenManager()
@@ -240,8 +240,7 @@ public actor DeviceTokenManager {
     }
 
     private var workerBaseURL: URL {
-        URL(string: UserDefaults.standard.string(forKey: "peerDropWorkerURL")
-            ?? "https://peerdrop-signal.hanfourhuang.workers.dev")!
+        WorkerURL.current()
     }
 
     // MARK: - Persistence

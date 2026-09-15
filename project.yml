@@ -215,13 +215,6 @@ targets:
       # before the v6.0 Mac ship: either verify App Attest works on
       # macOS for this target, or keep the key Mac-only and accept that
       # a Mac IPA leaks it (rotate again if the Mac key ever burns).
-    configFiles:
-      # Same Secrets.xcconfig as iOS so $(PEERDROP_WORKER_API_KEY)
-      # substitution works in Info.plist. Gitignored; copy from
-      # Secrets.xcconfig.example for new dev setup.
-      Debug: Secrets.xcconfig
-      Release: Secrets.xcconfig
-
   PeerDropTests:
     type: bundle.unit-test
     platform: iOS

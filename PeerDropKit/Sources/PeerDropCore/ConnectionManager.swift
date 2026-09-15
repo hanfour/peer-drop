@@ -488,6 +488,11 @@ public final class ConnectionManager: ObservableObject {
         policyStore: SecurityPolicyStore? = nil,
         cryptoMetrics: CryptoHardeningMetrics? = nil
     ) {
+        // One-time migration off the pre-6.1 MailboxClient-only UserDefaults
+        // key onto the canonical `WorkerURL.defaultsKey`, before anything
+        // below reads the worker base URL.
+        WorkerURL.migrateLegacyKey()
+
         self.policyStore = policyStore
         self.cryptoMetrics = cryptoMetrics
 

@@ -73,10 +73,6 @@
          no custom crypto outside the Apple/OpenSSL toolchain. -->
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
-    <!-- Cloudflare Worker auth fallback key. Reused from iOS
-         project.yml xcconfig variable. -->
-    <key>PeerDropWorkerAPIKey</key>
-    <string>$(PEERDROP_WORKER_API_KEY)</string>
     <!-- Public keys that sign the relay's crypto-policy blob. Without
          this, SecurityPolicyStore.bundledKeys is empty and worker-served
          policy upgrades cannot be verified (falls back to bundled default
