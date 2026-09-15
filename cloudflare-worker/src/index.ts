@@ -18,7 +18,7 @@ import {
   verifyAppAttestAssertion,
 } from "./deviceToken";
 import type { TokenPayload } from "./deviceToken";
-import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError } from "./account";
+import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
 
 export interface Env {
   // KV
@@ -986,13 +986,9 @@ export default {
     const keysMatch = path.match(/^\/v2\/keys\/([a-z0-9]+)$/);
     if (keysMatch && request.method === "GET") {
       const mailboxId = keysMatch[1];
-
-      // Delegate to PreKeyStore Durable Object for atomic OTP key consumption
-      const doId = env.PREKEY_STORE.idFromName(mailboxId);
-      const stub = env.PREKEY_STORE.get(doId);
-      return stub.fetch(new Request(`https://internal/consume?mailboxId=${mailboxId}`, {
-        headers: request.headers,
-      }));
+      const bundle = await fetchAndConsumePreKeyBundle(env, mailboxId);
+      if (!bundle) return jsonResponse({ error: "Key bundle not found" }, 404);
+      return jsonResponse(bundle);
     }
 
     // POST /v2/messages/:mailboxId — Deliver encrypted message to target
@@ -1114,6 +1110,23 @@ export default {
       // Clean up old mailbox
       await env.V2_STORE.delete(`keys:${oldMailboxId}`);
       await env.V2_STORE.delete(`meta:${oldMailboxId}`);
+
+      // If the caller also holds an account-scoped Bearer token, keep
+      // accounts.mailbox_id in sync so /v3/directory and /v3/account/me
+      // reflect the rotated mailbox. Best-effort and behind a try/catch:
+      // pre-account (or account-less) clients never touch D1 here at all
+      // (authorizeV3 returns null for a missing/default-scope Bearer), and
+      // an accounts-DB hiccup must never fail the rotate itself — the V2
+      // mailbox rotation above has already fully succeeded by this point.
+      try {
+        const acct = await authorizeV3(request, env);
+        if (acct) {
+          await env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3")
+            .bind(newMailboxId, Date.now(), acct.accountId).run();
+        }
+      } catch (err) {
+        console.error("mailbox/rotate: failed to sync accounts.mailbox_id", String(err));
+      }
 
       return jsonResponse({ newMailboxId, newToken });
     }
@@ -1453,6 +1466,25 @@ export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | 
   return accountId ? { deviceId: payload.deviceId, accountId } : null;
 }
 
+/**
+ * Fetch a mailbox's pre-key bundle from the PreKeyStore Durable Object,
+ * consuming one one-time pre-key atomically as a side effect (see
+ * `class PreKeyStore` below for the exact KV shape under `keys:<mailboxId>`
+ * and the consumed-bundle response shape). Returns null when the mailbox
+ * has no bundle (DO responds 404) — the caller decides how to surface
+ * that (a 404 for the /v2 route, an omitted `preKeyBundle` field for the
+ * /v3 directory lookup). Extracted from the original
+ * `GET /v2/keys/:mailboxId` handler so /v3/directory?bundle=1 can reuse
+ * the exact same atomic-consume behavior.
+ */
+async function fetchAndConsumePreKeyBundle(env: Env, mailboxId: string): Promise<unknown | null> {
+  const doId = env.PREKEY_STORE.idFromName(mailboxId);
+  const stub = env.PREKEY_STORE.get(doId);
+  const resp = await stub.fetch(new Request(`https://internal/consume?mailboxId=${mailboxId}`));
+  if (!resp.ok) return null;
+  return await resp.json();
+}
+
 // /v3 route table for account-token-scoped routes (challenge/register run
 // before authorizeV3 above — they only need a device token of any scope).
 async function handleV3(request: Request, url: URL, path: string, env: Env, auth: V3Auth): Promise<Response> {
@@ -1498,6 +1530,32 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
       db.prepare("DELETE FROM accounts WHERE account_id = ?1").bind(auth.accountId),
     ]);
     return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  // GET /v3/directory/:handle[?bundle=1] — resolve a normalized account id
+  // or nickname to its public directory entry. Rate limited per calling
+  // account (not per target) at 30 lookups/min via KV
+  // `dir-quota:<accountId>:<minuteWindow>`, incremented before the lookup
+  // so even 404s count against the caller's quota.
+  const dirMatch = path.match(/^\/v3\/directory\/([^/]{1,64})$/);
+  if (dirMatch && request.method === "GET") {
+    const minute = Math.floor(Date.now() / 60_000);
+    const quotaKey = `dir-quota:${auth.accountId}:${minute}`;
+    const used = parseInt((await env.V2_STORE.get(quotaKey)) ?? "0", 10) || 0;
+    if (used >= 30) return jsonResponse({ error: "rate_limited" }, 429);
+    await env.V2_STORE.put(quotaKey, String(used + 1), { expirationTtl: 120 });
+    const row = await findAccountByHandle(db, decodeURIComponent(dirMatch[1]));
+    if (!row) return jsonResponse({ error: "not_found" }, 404);
+    const out: Record<string, unknown> = {
+      accountId: row.account_id, nickname: row.nickname,
+      identityKey: arrayBufferToBase64(new Uint8Array(row.identity_key)),
+      signingKey: arrayBufferToBase64(new Uint8Array(row.signing_key)),
+      mailboxId: row.mailbox_id,
+    };
+    if (url.searchParams.get("bundle") === "1") {
+      const bundle = await fetchAndConsumePreKeyBundle(env, row.mailbox_id);
+      if (bundle) out.preKeyBundle = bundle;
+    }
+    return jsonResponse(out);
   }
   return jsonResponse({ error: "not_found" }, 404);
 }
