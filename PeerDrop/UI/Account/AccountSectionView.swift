@@ -12,6 +12,7 @@ struct AccountSectionView: View {
     @State private var copied = false
     @State private var showDeleteConfirm = false
     @State private var deleteError: String?
+    @State private var showNicknameEditor = false
 
     var body: some View {
         Section {
@@ -23,9 +24,21 @@ struct AccountSectionView: View {
                         Button(copied ? "Copied" : "Copy ID") { copy(account.accountId.display) }.buttonStyle(.borderless)
                     }
                 }
+                // NavigationLink only navigates when there's an enclosing
+                // NavigationStack to push onto. iOS's Settings tree provides
+                // one; the Mac Settings scene (Settings { MacSettingsView() }
+                // → TabView → Form) does not, so a NavigationLink there
+                // renders but is inert — present a sheet instead.
+                #if os(iOS)
                 NavigationLink { NicknameEditorView(accountManager: accountManager) } label: {
                     LabeledContent("Nickname", value: account.nickname ?? "—")
                 }
+                #else
+                Button { showNicknameEditor = true } label: {
+                    LabeledContent("Nickname", value: account.nickname ?? "—")
+                }
+                .buttonStyle(.plain)
+                #endif
                 Button(role: .destructive) { showDeleteConfirm = true } label: { Text("Delete Account") }
             case .registering, .idle:
                 HStack { ProgressView(); Text("Setting up your account…") }
@@ -47,6 +60,12 @@ struct AccountSectionView: View {
         .alert("Delete Account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("OK") { deleteError = nil }
         } message: { Text(deleteError ?? "") }
+        #if os(macOS)
+        .sheet(isPresented: $showNicknameEditor) {
+            NavigationStack { NicknameEditorView(accountManager: accountManager) }
+                .frame(minWidth: 420, minHeight: 240)
+        }
+        #endif
     }
 
     private func message(for reason: AccountManager.Unavailable) -> LocalizedStringKey {

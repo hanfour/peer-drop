@@ -156,4 +156,20 @@ final class AccountManagerTests: XCTestCase {
         XCTAssertEqual(m.state, .unavailable(.attestUnsupported))
         XCTAssertTrue(TestURLProtocol.requests.isEmpty)
     }
+
+    /// `AccountManager(mock:)` (used by `ConnectionManager.accountManager` in
+    /// screenshot mode) must start `.ready` and never touch the network:
+    /// `bootstrap()`/`registerIfNeeded()` should both be no-ops on it, since
+    /// `didBootstrap = true` and the `.ready` early-return guards in
+    /// `registerIfNeeded()` short-circuit before the (dummy) deps or client
+    /// are ever exercised.
+    func testMockInitIsReadyAndNoop() async {
+        let account = Account(accountId: AccountID(raw: "PDRPDEM0")!, nickname: "mochi", mailboxId: "screenshotmailbox", createdAt: Date())
+        let m = AccountManager(mock: account)
+        XCTAssertEqual(m.state, .ready(account))
+        await m.bootstrap()
+        await m.registerIfNeeded()
+        XCTAssertEqual(m.state, .ready(account))
+        XCTAssertTrue(TestURLProtocol.requests.isEmpty)
+    }
 }

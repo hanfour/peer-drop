@@ -17,7 +17,12 @@ struct NicknameEditorView: View {
             } footer: { Text("Optional. 3–20 letters, numbers or underscores.") }
         }
         .navigationTitle("Nickname")
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { Task { await save() } }.disabled(saving || error != nil) } }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) { Button("Done") { Task { await save() } }.disabled(saving || error != nil) }
+            // Lets the Mac sheet presentation (no NavigationStack back
+            // button there) be dismissed without saving.
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+        }
         .onAppear { text = accountManager.account?.nickname ?? "" }
     }
     private func localError() -> LocalizedStringKey? {
