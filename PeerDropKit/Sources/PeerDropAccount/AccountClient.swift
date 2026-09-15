@@ -114,7 +114,20 @@ public actor AccountClient {
     }
 
     public func setNickname(_ nickname: String?) async throws -> String? {
-        struct NicknameBody: Encodable { let nickname: String? }
+        // Swift's synthesized `Encodable` uses `encodeIfPresent` for
+        // Optional stored properties, which OMITS the key entirely when
+        // nil — the worker requires the `nickname` key to be present
+        // (400 `missing_fields` otherwise), even when clearing it to
+        // `null`. An explicit `encode(to:)` using the generic
+        // `encode(_:forKey:)` overload writes a real JSON `null` instead.
+        struct NicknameBody: Encodable {
+            let nickname: String?
+            enum CodingKeys: String, CodingKey { case nickname }
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(nickname, forKey: .nickname)
+            }
+        }
         struct R: Decodable { let nickname: String? }
         let r: R = try await send("PUT", "v3/account/nickname", body: NicknameBody(nickname: nickname))
         return r.nickname

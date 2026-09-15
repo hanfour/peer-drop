@@ -81,6 +81,10 @@ public actor DeviceTokenManager {
     }
 
     /// Drop the cached bearer so the next request re-asserts (used after a 401).
+    /// Deliberately does not cancel `inFlightRefresh`: any refresh already
+    /// in flight still re-asserts against the server and yields a genuinely
+    /// fresh token, so letting it run to completion is correct rather than
+    /// wasted work.
     public func invalidate() {
         cachedToken = nil
         tokenExpiresAt = nil

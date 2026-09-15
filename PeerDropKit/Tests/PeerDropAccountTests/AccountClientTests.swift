@@ -60,6 +60,14 @@ final class AccountClientTests: XCTestCase {
         let sent = try JSONSerialization.jsonObject(with: TestURLProtocol.requests[0].httpBody ?? Data()) as? [String: Any]
         XCTAssertEqual(sent?["signingKey"] as? String, Data(repeating: 2, count: 32).base64EncodedString())
     }
+    func testSetNicknameNilSendsJsonNull() async throws {
+        TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"nickname":null}"#.utf8))]
+        let result = try await client.setNickname(nil)
+        XCTAssertNil(result)
+        let sent = try JSONSerialization.jsonObject(with: TestURLProtocol.requests[0].httpBody ?? Data()) as? [String: Any]
+        XCTAssertNotNil(sent?["nickname"])
+        XCTAssertTrue(sent?["nickname"] is NSNull)
+    }
 }
 
 func XCTAssertThrowsErrorAsync<T>(_ expr: @autoclosure () async throws -> T, _ handler: (Error) -> Void) async {
