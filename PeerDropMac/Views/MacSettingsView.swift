@@ -92,6 +92,8 @@ private struct ProfileSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            AccountSectionView(accountManager: connectionManager.accountManager)
         }
         .formStyle(.grouped)
         .padding()

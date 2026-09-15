@@ -328,15 +328,23 @@ public final class ConnectionManager: ObservableObject {
 
     // MARK: - Account (Task 9)
 
-    public private(set) lazy var accountManager = AccountManager(
-        client: AccountClient(),
-        store: AccountStore(storageKey: PeerDropPersistence.scopedKey("account")),
-        deps: LiveAccountDependencies(mailboxManager: mailboxManager),
-        tokenAdopter: { token, ttl in
-            if #available(iOS 14.0, macOS 11.0, *) {
-                await DeviceTokenManager.shared.adopt(token: token, expiresInSeconds: ttl)
-            }
-        })
+    public private(set) lazy var accountManager: AccountManager = {
+        if ScreenshotModeProvider.shared.isActive {
+            // Skip real registration entirely in screenshot mode — no
+            // network/keychain access, and the Profile/Account UI has a
+            // stable, already-`.ready` mock account to render.
+            return AccountManager(mock: ScreenshotModeProvider.shared.mockAccount)
+        }
+        return AccountManager(
+            client: AccountClient(),
+            store: AccountStore(storageKey: PeerDropPersistence.scopedKey("account")),
+            deps: LiveAccountDependencies(mailboxManager: mailboxManager),
+            tokenAdopter: { token, ttl in
+                if #available(iOS 14.0, macOS 11.0, *) {
+                    await DeviceTokenManager.shared.adopt(token: token, expiresInSeconds: ttl)
+                }
+            })
+    }()
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 

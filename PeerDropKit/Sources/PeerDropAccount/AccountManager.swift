@@ -36,6 +36,37 @@ public final class AccountManager: ObservableObject {
         self.client = client; self.store = store; self.deps = deps; self.tokenAdopter = tokenAdopter
     }
 
+    /// Dependencies that are never actually invoked: the mock init below
+    /// jumps straight to `.ready`/`didBootstrap = true`, so nothing ever
+    /// calls back into `registerIfNeeded()`'s network/keychain path.
+    private struct NoopRegistrationDependencies: AccountRegistrationDependencies {
+        var deviceId: String { "" }
+        var platform: String { "" }
+        var attestSupported: Bool { true }
+        func identityKeys() throws -> (identity: Data, signing: Data) { (Data(), Data()) }
+        func sign(_ data: Data) throws -> Data { Data() }
+        func currentMailboxId() async throws -> String { "" }
+    }
+
+    /// Screenshot-mode convenience: seeds a manager that is already
+    /// `.ready(account)` with `didBootstrap = true`, so `ConnectionManager`'s
+    /// `handleScenePhaseChange(.active)` → `bootstrap()` call is a no-op and
+    /// no real network/keychain access ever happens. The client points at an
+    /// unroutable host and the store lives in a scratch temp directory as
+    /// defensive belt-and-braces — neither is ever exercised.
+    public convenience init(mock account: Account) {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AccountManager-mock-\(UUID().uuidString)", isDirectory: true)
+        self.init(
+            client: AccountClient(baseURL: URL(string: "https://screenshot.invalid")!),
+            store: AccountStore(storageKey: "mock-account", directory: tempDir),
+            deps: NoopRegistrationDependencies(),
+            tokenAdopter: { _, _ in }
+        )
+        state = .ready(account)
+        didBootstrap = true
+    }
+
     public var account: Account? { if case .ready(let a) = state { return a } else { return nil } }
 
     /// Loads a persisted account if present; otherwise attempts registration.
