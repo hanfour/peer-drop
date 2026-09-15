@@ -36,6 +36,12 @@ export async function applyMigrations(db: D1Database): Promise<void> {
   const files = Object.keys(migrationModules).sort();
   for (const f of files) {
     const sql = migrationModules[f];
+    // Only handles full-line `--` comments (a line whose trimmed text
+    // starts with `--`). It does NOT strip inline trailing `--` comments
+    // (`col INTEGER, -- note`) and does NOT understand `;` inside string
+    // literals — a statement containing either will be mis-split. Keep
+    // future migrations to full-line comments and no embedded semicolons
+    // in string/text literals, or extend this splitter first.
     const withoutComments = sql
       .split("\n")
       .filter((line) => !line.trim().startsWith("--"))
