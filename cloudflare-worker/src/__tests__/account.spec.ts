@@ -5,6 +5,36 @@ import { issueToken, freshTokenPayload } from "../deviceToken";
 import { TEST_TOKEN_SECRET } from "./testSecrets";
 import { scopeForDevice, accountIdFromScope } from "../account";
 import { buildSyntheticAssertion, toBase64 } from "./attestHelpers";
+import { generateAccountId, normalizeAccountId, validateNickname, ACCOUNT_ID_ALPHABET } from "../account";
+
+function b64(u8: Uint8Array): string { return btoa(String.fromCharCode(...u8)); }
+async function ed25519Pair() {
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+  return { kp, raw };
+}
+async function deviceToken(deviceId: string, scope = "default") {
+  return issueToken(freshTokenPayload(deviceId, scope), TEST_TOKEN_SECRET);
+}
+async function registerDevice(deviceId: string, platform = "ios", pair?: { kp: CryptoKeyPair; raw: Uint8Array }) {
+  const p = pair ?? await ed25519Pair();
+  const tok = await deviceToken(deviceId);
+  const ch = await SELF.fetch("https://example.com/v3/account/challenge", {
+    method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ deviceId }),
+  });
+  expect(ch.status).toBe(201);
+  const { nonce } = await ch.json() as { nonce: string };
+  const nonceBytes = Uint8Array.from(atob(nonce), (c) => c.charCodeAt(0));
+  const msg = new Uint8Array([...new TextEncoder().encode("peerdrop-account-v1"), ...nonceBytes, ...new TextEncoder().encode(deviceId)]);
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, p.kp.privateKey, msg));
+  const identityKey = new Uint8Array(32); identityKey[0] = deviceId.charCodeAt(0); identityKey[1] = deviceId.charCodeAt(deviceId.length - 1);
+  const reg = await SELF.fetch("https://example.com/v3/account/register", {
+    method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ deviceId, platform, identityKey: b64(identityKey), signingKey: b64(p.raw), mailboxId: `mbx-${deviceId}`, nonce, signature: b64(sig) }),
+  });
+  return { reg, pair: p };
+}
 
 beforeAll(async () => { await applyMigrations(env.ACCOUNTS_DB); });
 
@@ -90,5 +120,99 @@ describe("scopeForDevice fails open on D1 errors", () => {
     } finally {
       await applyMigrations(env.ACCOUNTS_DB);
     }
+  });
+});
+
+describe("account id + nickname helpers", () => {
+  it("generateAccountId yields 8 chars from the alphabet", () => {
+    for (let i = 0; i < 50; i++) {
+      const id = generateAccountId();
+      expect(id).toHaveLength(8);
+      for (const c of id) expect(ACCOUNT_ID_ALPHABET).toContain(c);
+    }
+  });
+  it("normalizeAccountId strips, uppercases and maps confusables", () => {
+    expect(normalizeAccountId("abcd-efgh")).toBe("ABCDEFGH");
+    expect(normalizeAccountId(" 0o1i-lL2z ")).toBe("00111122".replace("22", "2Z"));
+    expect(normalizeAccountId("ABCDEFG")).toBeNull();
+    expect(normalizeAccountId("ABCDEFGU")).toBeNull();
+  });
+  it("validateNickname enforces length, charset, reserved words and NFC", () => {
+    expect(validateNickname("mo")).toEqual({ ok: false, code: "invalid_nickname" });
+    expect(validateNickname("a".repeat(21))).toEqual({ ok: false, code: "invalid_nickname" });
+    expect(validateNickname("mo chi")).toEqual({ ok: false, code: "invalid_nickname" });
+    expect(validateNickname("Admin")).toEqual({ ok: false, code: "reserved" });
+    expect(validateNickname("麻糬_01")).toEqual({ ok: true, value: "麻糬_01" });
+    expect(validateNickname("éclair")).toEqual({ ok: true, value: "éclair" });
+  });
+});
+
+describe("/v3/account", () => {
+  it("register creates an account and returns an account-scoped token", async () => {
+    const { reg } = await registerDevice("dev-reg-000001");
+    expect(reg.status).toBe(201);
+    const body = await reg.json() as { accountId: string; nickname: string | null; token: string; expiresInSeconds: number };
+    expect(body.accountId).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
+    expect(body.nickname).toBeNull();
+    expect(body.expiresInSeconds).toBe(900);
+    const me = await SELF.fetch("https://example.com/v3/account/me", { headers: { Authorization: `Bearer ${body.token}` } });
+    expect(me.status).toBe(200);
+    const meBody = await me.json() as { accountId: string; devices: { deviceId: string; platform: string }[] };
+    expect(meBody.accountId).toBe(body.accountId);
+    expect(meBody.devices).toEqual([{ deviceId: "dev-reg-000001", platform: "ios", boundAt: expect.any(Number) }]);
+  });
+  it("register rejects a reused nonce and a bad signature", async () => {
+    const tok = await deviceToken("dev-reg-000002");
+    const ch = await SELF.fetch("https://example.com/v3/account/challenge", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002" }) });
+    const { nonce } = await ch.json() as { nonce: string };
+    const { raw } = await ed25519Pair();
+    const bad = await SELF.fetch("https://example.com/v3/account/register", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002", platform: "ios", identityKey: b64(new Uint8Array(32)), signingKey: b64(raw), mailboxId: "m", nonce, signature: b64(new Uint8Array(64)) }) });
+    expect(bad.status).toBe(400);
+    expect((await bad.json() as { error: string }).error).toBe("bad_signature");
+    const again = await SELF.fetch("https://example.com/v3/account/register", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-reg-000002", platform: "ios", identityKey: b64(new Uint8Array(32)), signingKey: b64(raw), mailboxId: "m", nonce, signature: b64(new Uint8Array(64)) }) });
+    expect(again.status).toBe(400);
+    expect((await again.json() as { error: string }).error).toBe("nonce_invalid");
+  });
+  it("same signing key from a second device binds to the existing account", async () => {
+    const first = await registerDevice("dev-multi-00001", "ios");
+    const a = (await first.reg.json() as { accountId: string }).accountId;
+    const second = await registerDevice("dev-multi-00002", "macos", first.pair);
+    expect(second.reg.status).toBe(201);
+    expect((await second.reg.json() as { accountId: string }).accountId).toBe(a);
+  });
+  it("a device already bound to another account gets 409 device_bound", async () => {
+    const first = await registerDevice("dev-bound-00001");
+    expect(first.reg.status).toBe(201);
+    const other = await registerDevice("dev-bound-00001");  // fresh key pair, same device
+    expect(other.reg.status).toBe(409);
+    expect((await other.reg.json() as { error: string }).error).toBe("device_bound");
+  });
+  it("register requires the token deviceId to match the body", async () => {
+    const tok = await deviceToken("dev-mismatch-001");
+    const resp = await SELF.fetch("https://example.com/v3/account/challenge", { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: "dev-mismatch-002" }) });
+    expect(resp.status).toBe(403);
+  });
+  it("nickname set / conflict / clear / rate limit", async () => {
+    const a = await registerDevice("dev-nick-000001");
+    const b = await registerDevice("dev-nick-000002");
+    const ta = (await a.reg.json() as { token: string }).token;
+    const tb = (await b.reg.json() as { token: string }).token;
+    const put = (t: string, nickname: string | null) => SELF.fetch("https://example.com/v3/account/nickname", { method: "PUT", headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, body: JSON.stringify({ nickname }) });
+    expect((await put(ta, "Mochi")).status).toBe(200);
+    const taken = await put(tb, "mochi");
+    expect(taken.status).toBe(409);
+    expect((await taken.json() as { error: string }).error).toBe("nickname_taken");
+    expect((await put(tb, "admin")).status).toBe(400);
+    expect((await put(ta, null)).status).toBe(200);
+    expect((await put(tb, "mochi")).status).toBe(200);  // released
+    for (let i = 0; i < 3; i++) expect((await put(ta, `n${i}abc`)).status).toBe(200);  // ta: 2 used + 3 = 5
+    expect((await put(ta, "over_limit")).status).toBe(429);
+  });
+  it("DELETE /v3/account removes the account and its devices", async () => {
+    const a = await registerDevice("dev-del-0000001");
+    const t = (await a.reg.json() as { token: string }).token;
+    expect((await SELF.fetch("https://example.com/v3/account", { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })).status).toBe(204);
+    const row = await env.ACCOUNTS_DB.prepare("SELECT COUNT(*) AS n FROM account_devices WHERE device_id = 'dev-del-0000001'").first<{ n: number }>();
+    expect(row?.n).toBe(0);
   });
 });

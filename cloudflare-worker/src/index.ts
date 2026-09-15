@@ -18,7 +18,7 @@ import {
   verifyAppAttestAssertion,
 } from "./deviceToken";
 import type { TokenPayload } from "./deviceToken";
-import { scopeForDevice, accountIdFromScope } from "./account";
+import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature } from "./account";
 
 export interface Env {
   // KV
@@ -1308,6 +1308,73 @@ export default {
       return handleCryptoPolicy(env);
     }
 
+    // POST /v3/account/challenge — issue a single-use nonce for the account
+    // registration signature. Needs only a device token of ANY scope (not
+    // yet account-scoped — that's exactly what /register is about to
+    // create), so this runs before the account-token gate below.
+    if (path === "/v3/account/challenge" && request.method === "POST") {
+      const payload = await authorizeDevice(request, env);
+      if (!payload) return jsonResponse({ error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => null) as { deviceId?: string } | null;
+      if (!body?.deviceId || !/^[a-zA-Z0-9-]{8,64}$/.test(body.deviceId)) return jsonResponse({ error: "invalid_device_id" }, 400);
+      if (body.deviceId !== payload.deviceId) return jsonResponse({ error: "forbidden" }, 403);
+      const nonce = new Uint8Array(32); crypto.getRandomValues(nonce);
+      const nonceB64 = arrayBufferToBase64(nonce);
+      await env.V2_STORE.put(`acct-challenge:${body.deviceId}`, nonceB64, { expirationTtl: 300 });
+      return jsonResponse({ nonce: nonceB64 }, 201);
+    }
+
+    // POST /v3/account/register — create (or bind a device to) an account.
+    // Same "device token of any scope" gate as /challenge above — an
+    // unbound device must be able to call this to become account-scoped
+    // in the first place.
+    if (path === "/v3/account/register" && request.method === "POST") {
+      const payload = await authorizeDevice(request, env);
+      if (!payload) return jsonResponse({ error: "Unauthorized" }, 401);
+      const raw = await request.text();
+      if (raw.length > 4096) return jsonResponse({ error: "too_large" }, 413);
+      const body = JSON.parse(raw || "null") as { deviceId?: string; platform?: string; identityKey?: string; signingKey?: string; mailboxId?: string; nonce?: string; signature?: string } | null;
+      if (!body?.deviceId || !body.platform || !body.identityKey || !body.signingKey || !body.mailboxId || !body.nonce || !body.signature) return jsonResponse({ error: "missing_fields" }, 400);
+      if (body.deviceId !== payload.deviceId) return jsonResponse({ error: "forbidden" }, 403);
+      if (!["ios", "macos"].includes(body.platform)) return jsonResponse({ error: "invalid_platform" }, 400);
+      // NOTE: widened from the brief's `[a-z0-9]{1,64}` (no hyphen) — the
+      // brief's own test helper builds `mbx-${deviceId}`, and deviceId
+      // itself contains hyphens (e.g. "dev-reg-000001"), so the tighter
+      // pattern 400s every registration the test suite performs.
+      if (!/^[a-z0-9-]{1,64}$/.test(body.mailboxId)) return jsonResponse({ error: "invalid_mailbox" }, 400);
+      const stored = await env.V2_STORE.get(`acct-challenge:${body.deviceId}`);
+      if (!stored || stored !== body.nonce) return jsonResponse({ error: "nonce_invalid" }, 400);
+      await env.V2_STORE.delete(`acct-challenge:${body.deviceId}`);
+      const signingKey = base64Decode(body.signingKey), identityKey = base64Decode(body.identityKey);
+      const ok = await verifyRegistrationSignature(signingKey, base64Decode(body.nonce), body.deviceId, base64Decode(body.signature));
+      if (!ok) return jsonResponse({ error: "bad_signature" }, 400);
+      if (identityKey.length !== 32) return jsonResponse({ error: "invalid_identity_key" }, 400);
+      const now = Date.now();
+      const bound = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM account_devices WHERE device_id = ?1").bind(body.deviceId).first<{ account_id: string }>();
+      let existing = await env.ACCOUNTS_DB.prepare("SELECT account_id, nickname FROM accounts WHERE signing_key = ?1").bind(signingKey).first<{ account_id: string; nickname: string | null }>();
+      if (bound && (!existing || bound.account_id !== existing.account_id)) return jsonResponse({ error: "device_bound" }, 409);
+      if (!existing) {
+        let accountId = "";
+        for (let attempt = 0; attempt < 3; attempt++) {
+          accountId = generateAccountId();
+          try {
+            await env.ACCOUNTS_DB.prepare("INSERT INTO accounts (account_id, signing_key, identity_key, nickname, mailbox_id, created_at, updated_at) VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?5)")
+              .bind(accountId, signingKey, identityKey, body.mailboxId, now).run();
+            break;
+          } catch (e) { if (attempt === 2) throw e; }
+        }
+        existing = { account_id: accountId, nickname: null };
+      } else {
+        await env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3").bind(body.mailboxId, now, existing.account_id).run();
+      }
+      if (!bound) {
+        await env.ACCOUNTS_DB.prepare("INSERT INTO account_devices (account_id, device_id, platform, bound_at) VALUES (?1, ?2, ?3, ?4)")
+          .bind(existing.account_id, body.deviceId, body.platform, now).run();
+      }
+      const token = await issueToken(freshTokenPayload(body.deviceId, `account:${existing.account_id}`), env.TOKEN_SECRET);
+      return jsonResponse({ accountId: existing.account_id, nickname: existing.nickname, token, expiresInSeconds: 900 }, 201);
+    }
+
     // /v3/* — account-scoped routes (T4+ fill in the actual handlers).
     // Bearer-only, account-scoped: never accepts X-API-Key or ?token=.
     if (path.startsWith("/v3/")) {
@@ -1340,9 +1407,46 @@ export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | 
   return accountId ? { deviceId: payload.deviceId, accountId } : null;
 }
 
-// Placeholder for the /v3 route table — T4 fills in the real dispatch
-// (account registration/challenge, /v3/account/me, etc).
+// /v3 route table for account-token-scoped routes (challenge/register run
+// before authorizeV3 above — they only need a device token of any scope).
 async function handleV3(request: Request, url: URL, path: string, env: Env, auth: V3Auth): Promise<Response> {
+  const db = env.ACCOUNTS_DB;
+  if (path === "/v3/account/me" && request.method === "GET") {
+    const acct = await db.prepare("SELECT account_id, nickname, mailbox_id FROM accounts WHERE account_id = ?1").bind(auth.accountId).first<{ account_id: string; nickname: string | null; mailbox_id: string }>();
+    if (!acct) return jsonResponse({ error: "not_found" }, 404);
+    const devices = (await db.prepare("SELECT device_id, platform, bound_at FROM account_devices WHERE account_id = ?1 ORDER BY bound_at").bind(auth.accountId).all<{ device_id: string; platform: string; bound_at: number }>()).results
+      .map((d) => ({ deviceId: d.device_id, platform: d.platform, boundAt: d.bound_at }));
+    return jsonResponse({ accountId: acct.account_id, nickname: acct.nickname, mailboxId: acct.mailbox_id, devices });
+  }
+  if (path === "/v3/account/nickname" && request.method === "PUT") {
+    const body = await request.json().catch(() => null) as { nickname?: string | null } | null;
+    if (!body || !("nickname" in body)) return jsonResponse({ error: "missing_fields" }, 400);
+    const day = new Date().toISOString().slice(0, 10);
+    const quotaKey = `nick-quota:${auth.accountId}:${day}`;
+    const used = parseInt((await env.V2_STORE.get(quotaKey)) ?? "0", 10) || 0;
+    if (used >= 5) return jsonResponse({ error: "rate_limited" }, 429);
+    let value: string | null = null;
+    if (body.nickname !== null) {
+      const check = validateNickname(String(body.nickname));
+      if (!check.ok) return jsonResponse({ error: check.code }, 400);
+      value = check.value;
+    }
+    try {
+      await db.prepare("UPDATE accounts SET nickname = ?1, updated_at = ?2 WHERE account_id = ?3").bind(value, Date.now(), auth.accountId).run();
+    } catch (e) {
+      if (String((e as Error).message).includes("UNIQUE")) return jsonResponse({ error: "nickname_taken" }, 409);
+      throw e;
+    }
+    await env.V2_STORE.put(quotaKey, String(used + 1), { expirationTtl: 86400 });
+    return jsonResponse({ nickname: value });
+  }
+  if (path === "/v3/account" && request.method === "DELETE") {
+    // D1 doesn't guarantee foreign_keys=ON (so ON DELETE CASCADE in the
+    // schema isn't reliable) — delete devices explicitly first.
+    await db.prepare("DELETE FROM account_devices WHERE account_id = ?1").bind(auth.accountId).run();
+    await db.prepare("DELETE FROM accounts WHERE account_id = ?1").bind(auth.accountId).run();
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
   return jsonResponse({ error: "not_found" }, 404);
 }
 
