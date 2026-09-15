@@ -1367,10 +1367,13 @@ export function selectApnsTopic(
  * var keep working unchanged.
  */
 export function configuredBundleIds(env: Pick<Env, "APP_BUNDLE_ID" | "APP_BUNDLE_IDS">): string[] {
-  const list = (env.APP_BUNDLE_IDS ?? "com.hanfour.peerdrop,com.hanfour.peerdrop.mac")
-    .split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  // `||` (not `??`) so an empty or whitespace-only APP_BUNDLE_IDS ("" from
+  // an unset wrangler var, or a stray "  ") falls back to the default
+  // rather than resolving to an empty bundle-id list.
+  const raw = (env.APP_BUNDLE_IDS && env.APP_BUNDLE_IDS.trim()) || "com.hanfour.peerdrop,com.hanfour.peerdrop.mac";
+  const list = raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
   if (env.APP_BUNDLE_ID && !list.includes(env.APP_BUNDLE_ID)) list.push(env.APP_BUNDLE_ID);
-  return list;
+  return Array.from(new Set(list));
 }
 
 // Helper: JSON response with CORS
