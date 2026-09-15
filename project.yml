@@ -208,13 +208,9 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
         ENABLE_HARDENED_RUNTIME: "YES"
-      # NOTE deliberately NOT mirroring the iOS Release key-strip here:
-      # DCAppAttestService is unavailable to this Mac target, so without
-      # the bundled key a MAS build would have ZERO worker credential —
-      # every relay route 401s (2026-07-05 review finding). Revisit
-      # before the v6.0 Mac ship: either verify App Attest works on
-      # macOS for this target, or keep the key Mac-only and accept that
-      # a Mac IPA leaks it (rotate again if the Mac key ever burns).
+      # Pivot 2026-09 (sub-project 1): the Mac target no longer binds Secrets.xcconfig —
+      # it authenticates to the worker via App Attest (DeviceTokenManager is available on
+      # macOS 11+). No embedded PeerDropWorkerAPIKey ships in the Mac binary.
   PeerDropTests:
     type: bundle.unit-test
     platform: iOS

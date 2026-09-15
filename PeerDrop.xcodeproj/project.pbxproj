@@ -409,6 +409,7 @@
 		6B34AD557F41611401810878 /* DeviceIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityTests.swift; sourceTree = "<group>"; };
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
+		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
@@ -465,7 +466,6 @@
 		A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PeerDropUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A8034F4F86233093A4E36905 /* FilePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerView.swift; sourceTree = "<group>"; };
 		A979FF3DD437916760AAC312 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
-		AC4306E0AF9AA832ABA25C2F /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		AFC7F344C93ACB56C79EE3AE /* DocumentPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerView.swift; sourceTree = "<group>"; };
 		B07C0E24C95366B78FAFC44E /* CertificateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CertificateManagerTests.swift; sourceTree = "<group>"; };
 		B07D6C5BF9EB43DCB151AB72 /* MacSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSnapshotTests.swift; sourceTree = "<group>"; };
@@ -584,8 +584,8 @@
 		013E4227A0A5D1D75404C655 = {
 			isa = PBXGroup;
 			children = (
-				12AF128A2FE50352F3EE9076 /* account-spec */,
 				A8062E16F091E8B75C5ED172 /* Packages */,
+				9EC0E908E1A38EE0458CEC1B /* peer-drop */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
 				27C871958EB5E8E427248037 /* PeerDropMacUITests */,
@@ -606,15 +606,6 @@
 				01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */,
 			);
 			path = Library;
-			sourceTree = "<group>";
-		};
-		12AF128A2FE50352F3EE9076 /* account-spec */ = {
-			isa = PBXGroup;
-			children = (
-				AC4306E0AF9AA832ABA25C2F /* Secrets.xcconfig */,
-			);
-			name = "account-spec";
-			path = .;
 			sourceTree = "<group>";
 		};
 		12D923E9AEBB7B4CB54DE632 /* Platform */ = {
@@ -942,6 +933,15 @@
 				FB09411CC81953144963CB18 /* PeerRowView.swift */,
 			);
 			path = Discovery;
+			sourceTree = "<group>";
+		};
+		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
+			isa = PBXGroup;
+			children = (
+				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop";
+			path = .;
 			sourceTree = "<group>";
 		};
 		A1A520854D812BF198400449 /* Purchase */ = {
@@ -1726,7 +1726,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = AC4306E0AF9AA832ABA25C2F /* Secrets.xcconfig */;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
