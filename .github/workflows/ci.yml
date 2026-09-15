@@ -57,6 +57,14 @@ jobs:
           # Exit code propagates: any compile failure (including
           # accidental iOS-only API usage in PeerDropKit/Sources/)
           # fails the job and blocks the PR.
+      # The account layer's own tests never ran in CI: xcodebuild-apps only
+      # compiles the app targets, and this job only compiled the package.
+      # Filtered rather than a bare `swift test` because several other
+      # suites depend on Keychain access the unsigned test binary doesn't
+      # have on a CI runner (see IdentityKeyManagerTests).
+      - name: swift test — account + transport suites
+        working-directory: PeerDropKit
+        run: swift test --filter "PeerDropAccountTests|PeerDropTransportTests"
 
   xcodebuild-apps:
     name: Xcode build — iOS app + macOS app (unsigned)

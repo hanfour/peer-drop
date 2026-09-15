@@ -26,6 +26,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: cloudflare-worker/package-lock.json
       - run: npm ci
+      # Type errors never failed CI before — vitest transpiles without
+      # checking types, so the spec helpers drifted into five real tsc
+      # errors unnoticed.
+      - name: Type-check
+        run: npx tsc --noEmit
       - name: Run tests
         run: npx vitest run
 
