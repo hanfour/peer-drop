@@ -44,7 +44,8 @@ export interface Env {
   // ./appAttest.ts). Set via `wrangler secret put TOKEN_SECRET`.
   TOKEN_SECRET: string;
   // App identifier inputs for App Attest rpIdHash verification.
-  APP_BUNDLE_ID?: string;       // "com.hanfour.peerdrop"
+  APP_BUNDLE_ID?: string;       // "com.hanfour.peerdrop" (legacy single-value input; merged into the list below)
+  APP_BUNDLE_IDS?: string;      // comma-separated; default "com.hanfour.peerdrop,com.hanfour.peerdrop.mac"
   APP_TEAM_ID?: string;         // "UK48R5KWLV"
   // Set to "true" to also accept App Attest attestations issued by the
   // development environment (AAGUID = "appattestdevelop"). Production
@@ -841,11 +842,13 @@ export default {
           attestation: base64Decode(body.attestation),
           challenge: clientDataHash,
           keyId: base64Decode(body.keyId),
-          bundleIdentifier: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
+          bundleIdentifiers: configuredBundleIds(env),
           teamIdentifier: env.APP_TEAM_ID ?? "UK48R5KWLV",
           allowDevelopmentEnvironment: env.APP_ATTEST_ALLOW_DEV === "true",
         });
-        // Cache device-pubkey + counter for later assert calls.
+        // Cache device-pubkey + counter for later assert calls. Pin the
+        // bundle id that matched so a later /assert verifies against the
+        // same app (rather than re-widening to the whole configured set).
         await env.V2_STORE.put(
           `attest:${body.deviceId}`,
           JSON.stringify({
@@ -854,6 +857,7 @@ export default {
             receipt: arrayBufferToBase64(result.receipt),
             counter: 0,
             attestedAt: Date.now(),
+            bundleId: result.bundleIdentifier,
           }),
           { expirationTtl: 90 * 86400 },
         );
@@ -887,6 +891,7 @@ export default {
       const meta = JSON.parse(cached) as {
         publicKeyDer: string;
         counter: number;
+        bundleId?: string;
       };
       try {
         const result = await verifyAppAttestAssertion({
@@ -894,7 +899,10 @@ export default {
           clientData: base64Decode(body.clientData),
           publicKeyDer: base64Decode(meta.publicKeyDer),
           previousCounter: meta.counter,
-          bundleIdentifier: env.APP_BUNDLE_ID ?? "com.hanfour.peerdrop",
+          // Pre-existing records (attested before this field was added)
+          // have no `bundleId` — fall back to the full configured set so
+          // those devices aren't locked out.
+          bundleIdentifiers: meta.bundleId ? [meta.bundleId] : configuredBundleIds(env),
           teamIdentifier: env.APP_TEAM_ID ?? "UK48R5KWLV",
         });
         await env.V2_STORE.put(
@@ -1349,6 +1357,20 @@ export function selectApnsTopic(
     return env.APNS_BUNDLE_ID_MAC || "com.hanfour.peerdrop.mac";
   }
   return env.APNS_BUNDLE_ID || "com.hanfour.peerdrop";
+}
+
+/**
+ * Bundle ids the worker accepts for App Attest rpIdHash verification —
+ * iOS and Mac by default, overridable via `APP_BUNDLE_IDS` (comma-
+ * separated). The legacy single-value `APP_BUNDLE_ID` is merged in too
+ * (if not already present) so existing deployments that only set that
+ * var keep working unchanged.
+ */
+export function configuredBundleIds(env: Pick<Env, "APP_BUNDLE_ID" | "APP_BUNDLE_IDS">): string[] {
+  const list = (env.APP_BUNDLE_IDS ?? "com.hanfour.peerdrop,com.hanfour.peerdrop.mac")
+    .split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  if (env.APP_BUNDLE_ID && !list.includes(env.APP_BUNDLE_ID)) list.push(env.APP_BUNDLE_ID);
+  return list;
 }
 
 // Helper: JSON response with CORS

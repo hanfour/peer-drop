@@ -27,6 +27,7 @@ export default defineConfig({
           APNS_BUNDLE_ID: "",
           TOKEN_SECRET: "test-token-secret-deterministic",
           APP_BUNDLE_ID: "com.hanfour.peerdrop",
+          APP_BUNDLE_IDS: "com.hanfour.peerdrop,com.hanfour.peerdrop.mac",
           APP_TEAM_ID: "UK48R5KWLV",
         },
       },

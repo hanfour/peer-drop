@@ -257,7 +257,7 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
       clientData,
       publicKeyDer: pubDer,
       previousCounter: 0,
-      bundleIdentifier: BUNDLE_ID,
+      bundleIdentifiers: [BUNDLE_ID],
       teamIdentifier: TEAM_ID,
     });
     expect(result.newCounter).toBe(42);
@@ -279,7 +279,7 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
 
     await expect(verifyAssertion({
       assertion, clientData, publicKeyDer: pubDer, previousCounter: 5,
-      bundleIdentifier: BUNDLE_ID, teamIdentifier: TEAM_ID,
+      bundleIdentifiers: [BUNDLE_ID], teamIdentifier: TEAM_ID,
     })).rejects.toThrow(/counter/i);
   });
 
@@ -301,7 +301,7 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
     ]));
     await expect(verifyAssertion({
       assertion, clientData, publicKeyDer: truePubDer, previousCounter: 0,
-      bundleIdentifier: BUNDLE_ID, teamIdentifier: TEAM_ID,
+      bundleIdentifiers: [BUNDLE_ID], teamIdentifier: TEAM_ID,
     })).rejects.toThrow(/signature/i);
   });
 
@@ -322,7 +322,7 @@ describe("verifyAssertion (full round-trip with synthetic keypair)", () => {
     ]));
     await expect(verifyAssertion({
       assertion, clientData, publicKeyDer: pubDer, previousCounter: 0,
-      bundleIdentifier: BUNDLE_ID, teamIdentifier: TEAM_ID,
+      bundleIdentifiers: [BUNDLE_ID], teamIdentifier: TEAM_ID,
     })).rejects.toThrow(/rpIdHash/);
   });
 });

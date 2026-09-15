@@ -70,7 +70,7 @@ export interface AttestationInput {
   attestation: Uint8Array;     // CBOR attestation object
   challenge: Uint8Array;       // clientDataHash (32 bytes; usually SHA-256 of a server nonce)
   keyId: Uint8Array;           // base64-decoded keyId from DCAppAttestService
-  bundleIdentifier: string;    // e.g. "com.hanfour.peerdrop"
+  bundleIdentifiers: string[]; // e.g. ["com.hanfour.peerdrop", "com.hanfour.peerdrop.mac"]
   teamIdentifier: string;      // e.g. "UK48R5KWLV"
   allowDevelopmentEnvironment?: boolean;
 }
@@ -79,6 +79,7 @@ export interface AttestationResult {
   publicKeyDer: Uint8Array;    // Cache this for later assertions
   receipt: Uint8Array;         // Apple receipt — used by the renew flow we don't ship yet
   counter: number;             // Always 0 for attestation
+  bundleIdentifier: string;    // Whichever configured bundle id matched rpIdHash
 }
 
 export interface AssertionInput {
@@ -86,12 +87,28 @@ export interface AssertionInput {
   clientData: Uint8Array;        // Raw client data; we hash it ourselves
   publicKeyDer: Uint8Array;      // From a prior verifyAttestation()
   previousCounter: number;
-  bundleIdentifier: string;
+  bundleIdentifiers: string[];
   teamIdentifier: string;
 }
 
 export interface AssertionResult {
   newCounter: number;
+}
+
+// =====================================================================
+// rpIdHash ⇄ bundle id matching
+// =====================================================================
+
+/// The App Attest rpIdHash is SHA-256(`${teamId}.${bundleId}`). We now
+/// accept attestations/assertions from any bundle id the worker is
+/// configured for (iOS + Mac), so this checks each candidate in turn
+/// and returns whichever one matches (or null if none do).
+export async function matchRpIdHash(rpIdHash: Uint8Array, teamId: string, bundleIds: string[]): Promise<string | null> {
+  for (const bundleId of bundleIds) {
+    const expected = await sha256(utf8Bytes(`${teamId}.${bundleId}`));
+    if (constantTimeEq(rpIdHash, expected)) return bundleId;
+  }
+  return null;
 }
 
 // =====================================================================
@@ -158,10 +175,8 @@ export async function verifyAttestation(input: AttestationInput): Promise<Attest
   // ─── Step 4: Parse authData and validate fields ──────────────────────
   const parsed = parseAuthData(authData);
 
-  const expectedRpIdHash = await sha256(utf8Bytes(`${input.teamIdentifier}.${input.bundleIdentifier}`));
-  if (!constantTimeEq(parsed.rpIdHash, expectedRpIdHash)) {
-    throw new Error("rpIdHash mismatch");
-  }
+  const matchedBundle = await matchRpIdHash(parsed.rpIdHash, input.teamIdentifier, input.bundleIdentifiers);
+  if (!matchedBundle) throw new Error("rpIdHash mismatch");
   if (parsed.counter !== 0) {
     throw new Error(`Attestation counter must be 0, got ${parsed.counter}`);
   }
@@ -189,6 +204,7 @@ export async function verifyAttestation(input: AttestationInput): Promise<Attest
     publicKeyDer: cosePubKeyDer,
     receipt,
     counter: 0,
+    bundleIdentifier: matchedBundle,
   };
 }
 
@@ -220,10 +236,8 @@ export async function verifyAssertion(input: AssertionInput): Promise<AssertionR
   const rpIdHash = authenticatorData.subarray(0, 32);
   const counter = readUint32BE(authenticatorData, 33);
 
-  const expectedRpIdHash = await sha256(utf8Bytes(`${input.teamIdentifier}.${input.bundleIdentifier}`));
-  if (!constantTimeEq(rpIdHash, expectedRpIdHash)) {
-    throw new Error("rpIdHash mismatch");
-  }
+  const matchedBundle = await matchRpIdHash(rpIdHash, input.teamIdentifier, input.bundleIdentifiers);
+  if (!matchedBundle) throw new Error("rpIdHash mismatch");
   if (counter <= input.previousCounter) {
     throw new Error(`Counter not strictly increasing: ${counter} <= ${input.previousCounter}`);
   }
