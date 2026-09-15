@@ -1,9 +1,8 @@
 import { SELF, env } from "cloudflare:test";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { matchRpIdHash } from "../appAttest";
 import { configuredBundleIds } from "../index";
 import { buildSyntheticAssertion, toBase64 } from "./attestHelpers";
-import { applyMigrations } from "./d1";
 
 async function sha256(s: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
@@ -40,13 +39,14 @@ describe("/v2/device/assert bundle pinning", () => {
   const IOS_BUNDLE = "com.hanfour.peerdrop";
   const MAC_BUNDLE = "com.hanfour.peerdrop.mac";
 
-  // /v2/device/assert now calls scopeForDevice(env.ACCOUNTS_DB, ...) when
-  // issuing the refreshed token (account-foundation work) — the
-  // account_devices table must exist even though this suite never binds a
-  // device to an account (an unbound lookup is expected to no-op to
-  // "default", not throw "no such table").
-  beforeAll(async () => { await applyMigrations(env.ACCOUNTS_DB); });
-
+  // /v2/device/assert calls scopeForDevice(env.ACCOUNTS_DB, ...) when
+  // issuing the refreshed token (account-foundation work). This suite
+  // deliberately does NOT apply migrations first — account_devices doesn't
+  // exist in this file's D1 binding — to double as coverage that
+  // scopeForDevice fails open to "default" (not a thrown "no such table")
+  // when the accounts DB is unusable. See account.ts's doc comment and
+  // account.spec.ts's "fails open on D1 errors" suite for the focused
+  // version of this property.
   async function seedAttestedDevice(deviceId: string, publicKeyDer: Uint8Array, bundleId?: string): Promise<void> {
     const record: Record<string, unknown> = {
       keyId: "test-key-id",

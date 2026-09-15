@@ -222,7 +222,12 @@ export default {
           const { verifyToken } = await import("./deviceToken");
           const payload = await verifyToken(candidate ?? "", env.TOKEN_SECRET);
           if (payload.deviceId !== inboxOwnershipMatch[1]) return jsonResponse({ error: "forbidden" }, 403);
-        } catch { return jsonResponse({ error: "Unauthorized" }, 401); }
+        } catch {
+          // Defense-in-depth: unreachable via the public route today, since
+          // the requiresAuth gate above already rejected any request with
+          // neither a valid Bearer/`?token=` nor a valid X-API-Key with 401.
+          return jsonResponse({ error: "Unauthorized" }, 401);
+        }
       }
     }
 
