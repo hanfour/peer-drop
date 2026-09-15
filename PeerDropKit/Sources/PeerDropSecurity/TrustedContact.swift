@@ -10,7 +10,7 @@ public struct TrustedContact: Codable, Identifiable {
     public let firstConnected: Date
     public var lastVerified: Date?
     public var mailboxId: String?                   // Future: remote mailbox ID
-    public var userId: String?                      // Future: account user ID
+    public var accountId: String?                   // PeerDropAccount.AccountID.raw of the linked account, if any
     public var isBlocked: Bool
     /// Audit trail of identity-key rotations observed on this contact.
     /// Bounded to a small number of entries by `TrustedContactStore`.
@@ -36,7 +36,7 @@ public struct TrustedContact: Codable, Identifiable {
         firstConnected: Date = Date(),
         lastVerified: Date? = nil,
         mailboxId: String? = nil,
-        userId: String? = nil,
+        accountId: String? = nil,
         isBlocked: Bool = false,
         keyHistory: [KeyChangeRecord] = [],
         peerProtocolVersion: PeerVersion? = nil
@@ -49,14 +49,27 @@ public struct TrustedContact: Codable, Identifiable {
         self.firstConnected = firstConnected
         self.lastVerified = lastVerified
         self.mailboxId = mailboxId
-        self.userId = userId
+        self.accountId = accountId
         self.isBlocked = isBlocked
         self.keyHistory = keyHistory
         self.peerProtocolVersion = peerProtocolVersion
     }
 
-    // Custom decode so legacy on-disk records (no `keyHistory`, no `isBlocked`)
-    // continue to load without error after upgrading to v3.4+.
+    // Explicit (rather than synthesized) `CodingKeys` so the on-disk key
+    // stays `userId` while the Swift-facing property is `accountId` — the
+    // rename tracks that this is PeerDropAccount's `AccountID.raw`, not the
+    // old ad-hoc identifier, without a data migration. Every other key name
+    // is unchanged from the synthesized default. `encode(to:)` stays
+    // synthesized (it uses this same `CodingKeys` enum), so only `init(from:)`
+    // needs to be written out here — kept custom so legacy on-disk records
+    // (no `keyHistory`, no `isBlocked`) continue to load without error after
+    // upgrading to v3.4+.
+    enum CodingKeys: String, CodingKey {
+        case id, deviceId, displayName, identityPublicKey, trustLevel, firstConnected, lastVerified, mailboxId
+        case accountId = "userId"
+        case isBlocked, keyHistory, peerProtocolVersion
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(UUID.self, forKey: .id)
@@ -67,7 +80,7 @@ public struct TrustedContact: Codable, Identifiable {
         self.firstConnected = try c.decode(Date.self, forKey: .firstConnected)
         self.lastVerified = try c.decodeIfPresent(Date.self, forKey: .lastVerified)
         self.mailboxId = try c.decodeIfPresent(String.self, forKey: .mailboxId)
-        self.userId = try c.decodeIfPresent(String.self, forKey: .userId)
+        self.accountId = try c.decodeIfPresent(String.self, forKey: .accountId)
         self.isBlocked = try c.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
         self.keyHistory = try c.decodeIfPresent([KeyChangeRecord].self, forKey: .keyHistory) ?? []
         self.peerProtocolVersion = try c.decodeIfPresent(PeerVersion.self, forKey: .peerProtocolVersion)

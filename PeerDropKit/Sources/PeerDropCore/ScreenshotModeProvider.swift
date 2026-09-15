@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropAccount
 import PeerDropTransport
 import PeerDropSecurity
 import Network
@@ -301,6 +302,19 @@ public final class ScreenshotModeProvider {
                 success: true
             )
         }
+    }
+
+    // MARK: - Mock Account (Task 9)
+
+    /// Stable mock `Account` for screenshot mode, so the account/identity UI
+    /// has something to render without a real registration round-trip.
+    public var mockAccount: Account {
+        Account(
+            accountId: AccountID(raw: "PDRPDEM0")!,
+            nickname: localizedName(("mochi", "麻糬", "麻薯", "もち", "모찌")),
+            mailboxId: "screenshotmailbox",
+            createdAt: Date().addingTimeInterval(-86400 * 30)
+        )
     }
 
     // MARK: - Check if a peer ID is mock

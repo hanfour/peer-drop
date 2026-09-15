@@ -3,6 +3,7 @@ import PeerDropTransport
 import PeerDropProtocol
 import PeerDropSecurity
 import PeerDropPlatform
+import PeerDropAccount
 import Network
 import Combine
 import CryptoKit
@@ -324,6 +325,18 @@ public final class ConnectionManager: ObservableObject {
         preKeyStore: preKeyStore,
         mailboxClient: MailboxClient()
     )
+
+    // MARK: - Account (Task 9)
+
+    public private(set) lazy var accountManager = AccountManager(
+        client: AccountClient(),
+        store: AccountStore(storageKey: PeerDropPersistence.scopedKey("account")),
+        deps: LiveAccountDependencies(mailboxManager: mailboxManager),
+        tokenAdopter: { token, ttl in
+            if #available(iOS 14.0, macOS 11.0, *) {
+                await DeviceTokenManager.shared.adopt(token: token, expiresInSeconds: ttl)
+            }
+        })
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 
@@ -1566,6 +1579,13 @@ public final class ConnectionManager: ObservableObject {
             discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
             mailboxManager.startPolling()
             Task { await mailboxManager.uploadPreKeysIfNeeded() }
+            // Screenshot mode has no worker to register against and the UI
+            // reads `ScreenshotModeProvider.mockAccount` instead — don't
+            // spend a real registration attempt (and its network/App Attest
+            // side effects) in that mode.
+            if !ScreenshotModeProvider.shared.isActive {
+                Task { await accountManager.bootstrap() }
+            }
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
