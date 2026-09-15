@@ -18,7 +18,7 @@ import {
   verifyAppAttestAssertion,
 } from "./deviceToken";
 import type { TokenPayload } from "./deviceToken";
-import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature } from "./account";
+import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError } from "./account";
 
 export interface Env {
   // KV
@@ -1315,7 +1315,10 @@ export default {
     if (path === "/v3/account/challenge" && request.method === "POST") {
       const payload = await authorizeDevice(request, env);
       if (!payload) return jsonResponse({ error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => null) as { deviceId?: string } | null;
+      const challengeRaw = await request.text();
+      if (challengeRaw.length > 4096) return jsonResponse({ error: "too_large" }, 413);
+      let body: { deviceId?: string } | null;
+      try { body = JSON.parse(challengeRaw || "null"); } catch { body = null; }
       if (!body?.deviceId || !/^[a-zA-Z0-9-]{8,64}$/.test(body.deviceId)) return jsonResponse({ error: "invalid_device_id" }, 400);
       if (body.deviceId !== payload.deviceId) return jsonResponse({ error: "forbidden" }, 403);
       const nonce = new Uint8Array(32); crypto.getRandomValues(nonce);
@@ -1337,11 +1340,7 @@ export default {
       if (!body?.deviceId || !body.platform || !body.identityKey || !body.signingKey || !body.mailboxId || !body.nonce || !body.signature) return jsonResponse({ error: "missing_fields" }, 400);
       if (body.deviceId !== payload.deviceId) return jsonResponse({ error: "forbidden" }, 403);
       if (!["ios", "macos"].includes(body.platform)) return jsonResponse({ error: "invalid_platform" }, 400);
-      // NOTE: widened from the brief's `[a-z0-9]{1,64}` (no hyphen) — the
-      // brief's own test helper builds `mbx-${deviceId}`, and deviceId
-      // itself contains hyphens (e.g. "dev-reg-000001"), so the tighter
-      // pattern 400s every registration the test suite performs.
-      if (!/^[a-z0-9-]{1,64}$/.test(body.mailboxId)) return jsonResponse({ error: "invalid_mailbox" }, 400);
+      if (!/^[a-z0-9]{1,64}$/.test(body.mailboxId)) return jsonResponse({ error: "invalid_mailbox" }, 400);
       const stored = await env.V2_STORE.get(`acct-challenge:${body.deviceId}`);
       if (!stored || stored !== body.nonce) return jsonResponse({ error: "nonce_invalid" }, 400);
       await env.V2_STORE.delete(`acct-challenge:${body.deviceId}`);
@@ -1353,26 +1352,73 @@ export default {
       const bound = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM account_devices WHERE device_id = ?1").bind(body.deviceId).first<{ account_id: string }>();
       let existing = await env.ACCOUNTS_DB.prepare("SELECT account_id, nickname FROM accounts WHERE signing_key = ?1").bind(signingKey).first<{ account_id: string; nickname: string | null }>();
       if (bound && (!existing || bound.account_id !== existing.account_id)) return jsonResponse({ error: "device_bound" }, 409);
-      if (!existing) {
-        let accountId = "";
-        for (let attempt = 0; attempt < 3; attempt++) {
+
+      // Registration is written as a single D1 batch (one transaction — a
+      // failure rolls everything back) so a new account and its first
+      // device binding, or an existing account's mailbox update and a new
+      // device binding, never land half-written. Failures are classified
+      // by which UNIQUE constraint they tripped (classifyRegisterError):
+      // an account_id collision just needs a fresh id (retried up to 3
+      // times total); an identity_key collision is a real conflict (409);
+      // a signing_key collision means a concurrent registration for the
+      // same signing key won the race between our SELECT above and this
+      // batch — re-read once and fall into the existing-account path; a
+      // device_devices collision means a concurrent registration for the
+      // same device won that race — 409 device_bound, matching the
+      // pre-check above.
+      const MAX_ACCOUNT_ID_ATTEMPTS = 3;
+      let accountIdAttempts = 0;
+      let signingKeyRetried = false;
+      let accountId = "";
+      let nickname: string | null = null;
+      for (;;) {
+        const statements: D1PreparedStatement[] = [];
+        if (existing) {
+          accountId = existing.account_id;
+          nickname = existing.nickname;
+          statements.push(
+            env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3")
+              .bind(body.mailboxId, now, accountId),
+          );
+          if (!bound) {
+            statements.push(
+              env.ACCOUNTS_DB.prepare("INSERT INTO account_devices (account_id, device_id, platform, bound_at) VALUES (?1, ?2, ?3, ?4)")
+                .bind(accountId, body.deviceId, body.platform, now),
+            );
+          }
+        } else {
+          accountIdAttempts++;
           accountId = generateAccountId();
-          try {
-            await env.ACCOUNTS_DB.prepare("INSERT INTO accounts (account_id, signing_key, identity_key, nickname, mailbox_id, created_at, updated_at) VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?5)")
-              .bind(accountId, signingKey, identityKey, body.mailboxId, now).run();
-            break;
-          } catch (e) { if (attempt === 2) throw e; }
+          nickname = null;
+          statements.push(
+            env.ACCOUNTS_DB.prepare("INSERT INTO accounts (account_id, signing_key, identity_key, nickname, mailbox_id, created_at, updated_at) VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?5)")
+              .bind(accountId, signingKey, identityKey, body.mailboxId, now),
+          );
+          statements.push(
+            env.ACCOUNTS_DB.prepare("INSERT INTO account_devices (account_id, device_id, platform, bound_at) VALUES (?1, ?2, ?3, ?4)")
+              .bind(accountId, body.deviceId, body.platform, now),
+          );
         }
-        existing = { account_id: accountId, nickname: null };
-      } else {
-        await env.ACCOUNTS_DB.prepare("UPDATE accounts SET mailbox_id = ?1, updated_at = ?2 WHERE account_id = ?3").bind(body.mailboxId, now, existing.account_id).run();
+
+        try {
+          await env.ACCOUNTS_DB.batch(statements);
+          break;
+        } catch (e) {
+          const kind = classifyRegisterError(e);
+          if (kind === "account_id" && !existing && accountIdAttempts < MAX_ACCOUNT_ID_ATTEMPTS) continue;
+          if (kind === "identity_bound") return jsonResponse({ error: "identity_bound" }, 409);
+          if (kind === "signing_key" && !signingKeyRetried) {
+            signingKeyRetried = true;
+            existing = await env.ACCOUNTS_DB.prepare("SELECT account_id, nickname FROM accounts WHERE signing_key = ?1")
+              .bind(signingKey).first<{ account_id: string; nickname: string | null }>();
+            if (existing) continue;
+          }
+          if (kind === "device_bound") return jsonResponse({ error: "device_bound" }, 409);
+          throw e;
+        }
       }
-      if (!bound) {
-        await env.ACCOUNTS_DB.prepare("INSERT INTO account_devices (account_id, device_id, platform, bound_at) VALUES (?1, ?2, ?3, ?4)")
-          .bind(existing.account_id, body.deviceId, body.platform, now).run();
-      }
-      const token = await issueToken(freshTokenPayload(body.deviceId, `account:${existing.account_id}`), env.TOKEN_SECRET);
-      return jsonResponse({ accountId: existing.account_id, nickname: existing.nickname, token, expiresInSeconds: 900 }, 201);
+      const token = await issueToken(freshTokenPayload(body.deviceId, `account:${accountId}`), env.TOKEN_SECRET);
+      return jsonResponse({ accountId, nickname, token, expiresInSeconds: 900 }, 201);
     }
 
     // /v3/* — account-scoped routes (T4+ fill in the actual handlers).
@@ -1419,7 +1465,10 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     return jsonResponse({ accountId: acct.account_id, nickname: acct.nickname, mailboxId: acct.mailbox_id, devices });
   }
   if (path === "/v3/account/nickname" && request.method === "PUT") {
-    const body = await request.json().catch(() => null) as { nickname?: string | null } | null;
+    const nicknameRaw = await request.text();
+    if (nicknameRaw.length > 4096) return jsonResponse({ error: "too_large" }, 413);
+    let body: { nickname?: string | null } | null;
+    try { body = JSON.parse(nicknameRaw || "null"); } catch { body = null; }
     if (!body || !("nickname" in body)) return jsonResponse({ error: "missing_fields" }, 400);
     const day = new Date().toISOString().slice(0, 10);
     const quotaKey = `nick-quota:${auth.accountId}:${day}`;
@@ -1442,9 +1491,12 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
   }
   if (path === "/v3/account" && request.method === "DELETE") {
     // D1 doesn't guarantee foreign_keys=ON (so ON DELETE CASCADE in the
-    // schema isn't reliable) — delete devices explicitly first.
-    await db.prepare("DELETE FROM account_devices WHERE account_id = ?1").bind(auth.accountId).run();
-    await db.prepare("DELETE FROM accounts WHERE account_id = ?1").bind(auth.accountId).run();
+    // schema isn't reliable) — delete devices explicitly first, as one
+    // batch (one transaction) so the two deletes can't land half-done.
+    await db.batch([
+      db.prepare("DELETE FROM account_devices WHERE account_id = ?1").bind(auth.accountId),
+      db.prepare("DELETE FROM accounts WHERE account_id = ?1").bind(auth.accountId),
+    ]);
     return new Response(null, { status: 204, headers: corsHeaders });
   }
   return jsonResponse({ error: "not_found" }, 404);

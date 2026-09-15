@@ -92,6 +92,30 @@ export async function verifyRegistrationSignature(
   }
 }
 
+/**
+ * Classify a D1 write error from the atomic register batch (see
+ * `/v3/account/register` in index.ts) by which UNIQUE constraint it
+ * tripped, so the route can turn each into the right outcome — retry with
+ * a fresh id, a specific 409, or "someone else just won a race, proceed
+ * down the existing-account path" — instead of one generic 500. D1/SQLite
+ * error messages take the form
+ * `D1_ERROR: UNIQUE constraint failed: <table>.<column>: SQLITE_CONSTRAINT...`;
+ * matching is done by substring rather than a strict parse so message
+ * formatting drift across D1/workerd versions doesn't silently stop
+ * classifying (worst case: falls through to "other", which the caller
+ * rethrows — a clear failure rather than a silently wrong outcome).
+ */
+export function classifyRegisterError(
+  err: unknown,
+): "account_id" | "identity_bound" | "signing_key" | "device_bound" | "other" {
+  const msg = String((err as { message?: unknown })?.message ?? err);
+  if (msg.includes("accounts.identity_key")) return "identity_bound";
+  if (msg.includes("accounts.account_id")) return "account_id";
+  if (msg.includes("accounts.signing_key")) return "signing_key";
+  if (msg.includes("account_devices")) return "device_bound";
+  return "other";
+}
+
 export interface AccountRow {
   account_id: string;
   signing_key: ArrayBuffer;

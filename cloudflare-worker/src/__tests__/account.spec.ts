@@ -5,7 +5,7 @@ import { issueToken, freshTokenPayload } from "../deviceToken";
 import { TEST_TOKEN_SECRET } from "./testSecrets";
 import { scopeForDevice, accountIdFromScope } from "../account";
 import { buildSyntheticAssertion, toBase64 } from "./attestHelpers";
-import { generateAccountId, normalizeAccountId, validateNickname, ACCOUNT_ID_ALPHABET } from "../account";
+import { generateAccountId, normalizeAccountId, validateNickname, ACCOUNT_ID_ALPHABET, classifyRegisterError } from "../account";
 
 function b64(u8: Uint8Array): string { return btoa(String.fromCharCode(...u8)); }
 async function ed25519Pair() {
@@ -16,9 +16,12 @@ async function ed25519Pair() {
 async function deviceToken(deviceId: string, scope = "default") {
   return issueToken(freshTokenPayload(deviceId, scope), TEST_TOKEN_SECRET);
 }
-async function registerDevice(deviceId: string, platform = "ios", pair?: { kp: CryptoKeyPair; raw: Uint8Array }) {
-  const p = pair ?? await ed25519Pair();
-  const tok = await deviceToken(deviceId);
+// Fetches a challenge nonce for `deviceId` and signs it, returning the
+// base64 nonce + signature the register route expects. Factored out of
+// registerDevice so the identity_bound conflict test below (which needs
+// two independent devices/keys sharing a forced identityKey) can drive
+// the same challenge→sign flow without duplicating it.
+async function challengeAndSign(deviceId: string, tok: string, privateKey: CryptoKey): Promise<{ nonce: string; signature: string }> {
   const ch = await SELF.fetch("https://example.com/v3/account/challenge", {
     method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
     body: JSON.stringify({ deviceId }),
@@ -27,11 +30,23 @@ async function registerDevice(deviceId: string, platform = "ios", pair?: { kp: C
   const { nonce } = await ch.json() as { nonce: string };
   const nonceBytes = Uint8Array.from(atob(nonce), (c) => c.charCodeAt(0));
   const msg = new Uint8Array([...new TextEncoder().encode("peerdrop-account-v1"), ...nonceBytes, ...new TextEncoder().encode(deviceId)]);
-  const sig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, p.kp.privateKey, msg));
-  const identityKey = new Uint8Array(32); identityKey[0] = deviceId.charCodeAt(0); identityKey[1] = deviceId.charCodeAt(deviceId.length - 1);
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, privateKey, msg));
+  return { nonce, signature: b64(sig) };
+}
+// 32 bytes derived from the WHOLE deviceId (not just first/last char) so
+// distinct device ids never collide under the accounts.identity_key
+// UNIQUE constraint by coincidence.
+async function identityKeyForDevice(deviceId: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("identity:" + deviceId)));
+}
+async function registerDevice(deviceId: string, platform = "ios", pair?: { kp: CryptoKeyPair; raw: Uint8Array }) {
+  const p = pair ?? await ed25519Pair();
+  const tok = await deviceToken(deviceId);
+  const { nonce, signature } = await challengeAndSign(deviceId, tok, p.kp.privateKey);
+  const identityKey = await identityKeyForDevice(deviceId);
   const reg = await SELF.fetch("https://example.com/v3/account/register", {
     method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ deviceId, platform, identityKey: b64(identityKey), signingKey: b64(p.raw), mailboxId: `mbx-${deviceId}`, nonce, signature: b64(sig) }),
+    body: JSON.stringify({ deviceId, platform, identityKey: b64(identityKey), signingKey: b64(p.raw), mailboxId: `mbx${deviceId.replace(/-/g, "")}`, nonce, signature }),
   });
   return { reg, pair: p };
 }
@@ -180,12 +195,41 @@ describe("/v3/account", () => {
     expect(second.reg.status).toBe(201);
     expect((await second.reg.json() as { accountId: string }).accountId).toBe(a);
   });
-  it("a device already bound to another account gets 409 device_bound", async () => {
+  it("a device already bound to another account gets 409 device_bound, with no orphan account row for the losing signing key", async () => {
     const first = await registerDevice("dev-bound-00001");
     expect(first.reg.status).toBe(201);
     const other = await registerDevice("dev-bound-00001");  // fresh key pair, same device
     expect(other.reg.status).toBe(409);
     expect((await other.reg.json() as { error: string }).error).toBe("device_bound");
+    // The rejected attempt's fresh signing key must not have left behind a
+    // partially-created account row (atomic batch — see index.ts register route).
+    const row = await env.ACCOUNTS_DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE signing_key = ?1").bind(other.pair.raw).first<{ n: number }>();
+    expect(row?.n).toBe(0);
+  });
+  it("registering a different device+key with an already-used identity key gets 409 identity_bound", async () => {
+    const sharedIdentityKey = new Uint8Array(32);
+    sharedIdentityKey.set([1, 2, 3, 4, 5], 0);
+
+    const deviceA = "dev-ident-a-0001";
+    const pairA = await ed25519Pair();
+    const tokA = await deviceToken(deviceA);
+    const { nonce: nonceA, signature: sigA } = await challengeAndSign(deviceA, tokA, pairA.kp.privateKey);
+    const regA = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tokA}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: deviceA, platform: "ios", identityKey: b64(sharedIdentityKey), signingKey: b64(pairA.raw), mailboxId: `mbx${deviceA.replace(/-/g, "")}`, nonce: nonceA, signature: sigA }),
+    });
+    expect(regA.status).toBe(201);
+
+    const deviceB = "dev-ident-b-0002";
+    const pairB = await ed25519Pair();
+    const tokB = await deviceToken(deviceB);
+    const { nonce: nonceB, signature: sigB } = await challengeAndSign(deviceB, tokB, pairB.kp.privateKey);
+    const regB = await SELF.fetch("https://example.com/v3/account/register", {
+      method: "POST", headers: { Authorization: `Bearer ${tokB}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: deviceB, platform: "ios", identityKey: b64(sharedIdentityKey), signingKey: b64(pairB.raw), mailboxId: `mbx${deviceB.replace(/-/g, "")}`, nonce: nonceB, signature: sigB }),
+    });
+    expect(regB.status).toBe(409);
+    expect((await regB.json() as { error: string }).error).toBe("identity_bound");
   });
   it("register requires the token deviceId to match the body", async () => {
     const tok = await deviceToken("dev-mismatch-001");
@@ -214,5 +258,18 @@ describe("/v3/account", () => {
     expect((await SELF.fetch("https://example.com/v3/account", { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })).status).toBe(204);
     const row = await env.ACCOUNTS_DB.prepare("SELECT COUNT(*) AS n FROM account_devices WHERE device_id = 'dev-del-0000001'").first<{ n: number }>();
     expect(row?.n).toBe(0);
+  });
+});
+
+describe("classifyRegisterError", () => {
+  it("classifies D1 UNIQUE constraint errors by which column tripped, and falls through to \"other\"", () => {
+    expect(classifyRegisterError(new Error("D1_ERROR: UNIQUE constraint failed: accounts.account_id: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)"))).toBe("account_id");
+    expect(classifyRegisterError(new Error("D1_ERROR: UNIQUE constraint failed: accounts.identity_key: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)"))).toBe("identity_bound");
+    expect(classifyRegisterError(new Error("D1_ERROR: UNIQUE constraint failed: accounts.signing_key: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)"))).toBe("signing_key");
+    expect(classifyRegisterError(new Error("D1_ERROR: UNIQUE constraint failed: account_devices.device_id: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)"))).toBe("device_bound");
+    expect(classifyRegisterError(new Error("D1_ERROR: UNIQUE constraint failed: account_devices.account_id, account_devices.device_id: SQLITE_CONSTRAINT"))).toBe("device_bound");
+    expect(classifyRegisterError(new Error("some unrelated D1 error"))).toBe("other");
+    expect(classifyRegisterError("boom")).toBe("other");
+    expect(classifyRegisterError({})).toBe("other");
   });
 });
