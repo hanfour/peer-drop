@@ -80,6 +80,19 @@ public actor DeviceTokenManager {
         return exp > Date()
     }
 
+    /// Drop the cached bearer so the next request re-asserts (used after a 401).
+    public func invalidate() {
+        cachedToken = nil
+        tokenExpiresAt = nil
+        Self.deleteKeychainToken()
+        UserDefaults.standard.removeObject(forKey: Self.expiryKey)
+    }
+
+    /// Adopt a token minted by another route (e.g. `/v3/account/register`).
+    public func adopt(token: String, expiresInSeconds: Int) {
+        storeToken(token, expiresInSeconds: expiresInSeconds)
+    }
+
     // MARK: - Core flow
 
     /// Returns a valid (non-expired) token, refreshing or attesting as
@@ -304,5 +317,13 @@ public actor DeviceTokenManager {
             addQuery[kSecValueData as String] = data
             SecItemAdd(addQuery as CFDictionary, nil)
         }
+    }
+
+    private static func deleteKeychainToken() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrLabel as String: keychainTokenLabel,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }
