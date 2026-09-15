@@ -1,7 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, it, expect, beforeAll } from "vitest";
 import { applyMigrations } from "./d1";
-import { registerDevice } from "./accountHelpers";
+import { registerDevice, waitForFreshMinute } from "./accountHelpers";
 
 beforeAll(async () => { await applyMigrations(env.ACCOUNTS_DB); });
 
@@ -28,6 +28,17 @@ describe("/v3/directory", () => {
     expect((await SELF.fetch("https://example.com/v3/directory/nobody_here", { headers: { Authorization: `Bearer ${tb}` } })).status).toBe(404);
   });
 
+  it("a malformed percent-escape in the handle segment resolves to 404, not a thrown error", async () => {
+    const a = await registerDevice("dev-dir-0000006");
+    const t = (await a.reg.json() as { token: string }).token;
+    // "%zz" is not a valid percent-escape — decodeURIComponent throws
+    // URIError on it. The route must catch that and treat it as "no such
+    // handle" rather than letting an uncaught error escape as a 500.
+    const r = await SELF.fetch("https://example.com/v3/directory/%zz", { headers: { Authorization: `Bearer ${t}` } });
+    expect(r.status).toBe(404);
+    expect((await r.json()) as { error: string }).toEqual({ error: "not_found" });
+  });
+
   it("bundle=1 returns the pre-key bundle when the mailbox has keys", async () => {
     const a = await registerDevice("dev-dir-0000003");
     const { accountId } = await a.reg.json() as { accountId: string };
@@ -47,6 +58,21 @@ describe("/v3/directory", () => {
   });
 
   it("rate limits at 30 lookups per minute per account", async () => {
+    // 31 sequential real-time requests against a Math.floor(Date.now()/60000)
+    // KV bucket can straddle a minute boundary if the run happens to start
+    // right before one ticks over — guarantee headroom first.
+    //
+    // NOTE on sequencing: a `Promise.all` batch of concurrent requests was
+    // tried here first, but the quota counter is a plain KV get-then-put
+    // (not a DO / atomic increment — see the `/v3/directory` branch in
+    // index.ts), so firing requests concurrently races the read against
+    // the write: measured empirically, 30 concurrent lookups plus 1
+    // sequential one all came back 404 (every concurrent request read
+    // `used` before any of the others' `put` landed, so the count never
+    // reached 30). Keeping the requests sequential — as the original test
+    // did — is what actually exercises the 30/min cap; only the
+    // minute-boundary guard below was needed to make it deterministic.
+    await waitForFreshMinute();
     const a = await registerDevice("dev-dir-0000005");
     const t = (await a.reg.json() as { token: string }).token;
     let last = 0;

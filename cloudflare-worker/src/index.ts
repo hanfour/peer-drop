@@ -986,9 +986,7 @@ export default {
     const keysMatch = path.match(/^\/v2\/keys\/([a-z0-9]+)$/);
     if (keysMatch && request.method === "GET") {
       const mailboxId = keysMatch[1];
-      const bundle = await fetchAndConsumePreKeyBundle(env, mailboxId);
-      if (!bundle) return jsonResponse({ error: "Key bundle not found" }, 404);
-      return jsonResponse(bundle);
+      return await fetchAndConsumePreKeyBundle(env, mailboxId);
     }
 
     // POST /v2/messages/:mailboxId — Deliver encrypted message to target
@@ -1470,19 +1468,18 @@ export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | 
  * Fetch a mailbox's pre-key bundle from the PreKeyStore Durable Object,
  * consuming one one-time pre-key atomically as a side effect (see
  * `class PreKeyStore` below for the exact KV shape under `keys:<mailboxId>`
- * and the consumed-bundle response shape). Returns null when the mailbox
- * has no bundle (DO responds 404) — the caller decides how to surface
- * that (a 404 for the /v2 route, an omitted `preKeyBundle` field for the
- * /v3 directory lookup). Extracted from the original
- * `GET /v2/keys/:mailboxId` handler so /v3/directory?bundle=1 can reuse
- * the exact same atomic-consume behavior.
+ * and the consumed-bundle response shape). Returns the DO's raw Response
+ * unmodified — the caller decides how to surface a non-OK status (the /v2
+ * route passes it straight through, byte-for-byte identical to before
+ * this was extracted; the /v3 directory lookup treats any non-OK status
+ * as "no bundle" and omits the `preKeyBundle` field). Extracted from the
+ * original `GET /v2/keys/:mailboxId` handler so /v3/directory?bundle=1
+ * can reuse the exact same atomic-consume behavior.
  */
-async function fetchAndConsumePreKeyBundle(env: Env, mailboxId: string): Promise<unknown | null> {
+async function fetchAndConsumePreKeyBundle(env: Env, mailboxId: string): Promise<Response> {
   const doId = env.PREKEY_STORE.idFromName(mailboxId);
   const stub = env.PREKEY_STORE.get(doId);
-  const resp = await stub.fetch(new Request(`https://internal/consume?mailboxId=${mailboxId}`));
-  if (!resp.ok) return null;
-  return await resp.json();
+  return stub.fetch(new Request(`https://internal/consume?mailboxId=${mailboxId}`));
 }
 
 // /v3 route table for account-token-scoped routes (challenge/register run
@@ -1543,7 +1540,17 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     const used = parseInt((await env.V2_STORE.get(quotaKey)) ?? "0", 10) || 0;
     if (used >= 30) return jsonResponse({ error: "rate_limited" }, 429);
     await env.V2_STORE.put(quotaKey, String(used + 1), { expirationTtl: 120 });
-    const row = await findAccountByHandle(db, decodeURIComponent(dirMatch[1]));
+    // decodeURIComponent throws URIError on a malformed escape (e.g. "%zz")
+    // — treat that the same as "no such handle" rather than letting it
+    // escape as an uncaught 500. The quota increment above already ran,
+    // matching the "count even 404s" rule.
+    let handle: string;
+    try {
+      handle = decodeURIComponent(dirMatch[1]);
+    } catch {
+      return jsonResponse({ error: "not_found" }, 404);
+    }
+    const row = await findAccountByHandle(db, handle);
     if (!row) return jsonResponse({ error: "not_found" }, 404);
     const out: Record<string, unknown> = {
       accountId: row.account_id, nickname: row.nickname,
@@ -1552,8 +1559,8 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
       mailboxId: row.mailbox_id,
     };
     if (url.searchParams.get("bundle") === "1") {
-      const bundle = await fetchAndConsumePreKeyBundle(env, row.mailbox_id);
-      if (bundle) out.preKeyBundle = bundle;
+      const bundleResp = await fetchAndConsumePreKeyBundle(env, row.mailbox_id);
+      if (bundleResp.ok) out.preKeyBundle = await bundleResp.json();
     }
     return jsonResponse(out);
   }

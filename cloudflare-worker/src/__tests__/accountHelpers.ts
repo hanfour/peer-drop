@@ -54,3 +54,17 @@ export async function registerDevice(deviceId: string, platform = "ios", pair?: 
   });
   return { reg, pair: p };
 }
+
+// Any test that drives a minute-bucketed KV counter (e.g.
+// `dir-quota:<accountId>:<minuteWindow>` in /v3/directory) is flaky right
+// near a minute boundary: a batch of "same minute" requests can straddle
+// two buckets if real time ticks over mid-run. Call this at the top of
+// such a test to guarantee at least 5 fresh seconds before firing the
+// batch — cheap in the overwhelmingly common case (no-op unless already
+// within the last 5s of the current minute).
+export async function waitForFreshMinute(): Promise<void> {
+  const msIntoMinute = Date.now() % 60_000;
+  if (msIntoMinute > 55_000) {
+    await new Promise((r) => setTimeout(r, 60_000 - msIntoMinute + 50));
+  }
+}
