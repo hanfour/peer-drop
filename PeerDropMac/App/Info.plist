@@ -32,6 +32,16 @@
          icns at compile time. -->
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
+    <!-- Worker credential for native macOS. App Attest
+         (DCAppAttestService.isSupported) is false on native macOS apps
+         (verified 2026-09-15 on Apple silicon), so the Mac build
+         authenticates with a dedicated client key + X-Device-Id until a
+         DeviceCheck-based Mac attestation lands. This is NOT the operator
+         API_KEY: on the worker it is a restricted lane (relay routes plus
+         the read/registration half of /v3; never the account-mutating
+         routes). Value comes from Secrets.xcconfig. -->
+    <key>PeerDropWorkerAPIKey</key>
+    <string>$(PEERDROP_MAC_CLIENT_KEY)</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

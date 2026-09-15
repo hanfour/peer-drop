@@ -1720,6 +1720,7 @@
 		};
 		67C046C3A3E9A839F9155B26 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "PeerDropMac/App/PeerDrop-Mac.entitlements";
@@ -1931,6 +1932,7 @@
 		};
 		F2D6CAD8F28615F8F8BA5477 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "PeerDropMac/App/PeerDrop-Mac.entitlements";

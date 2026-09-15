@@ -30,9 +30,12 @@ public final class InboxService: NSObject, ObservableObject {
     }
 
     private func doConnect() async {
-        let base = UserDefaults.standard.string(forKey: "peerDropWorkerURL")
-            ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
-        guard var components = URLComponents(string: base) else { return }
+        // Via WorkerURL rather than a second hand-rolled copy of the key
+        // name + production default: those two literals drifted out of
+        // sync once already (the `workerBaseURL`/`peerDropWorkerURL`
+        // split), and a stale override here silently points the invite
+        // inbox at a different relay than every other request.
+        guard var components = URLComponents(url: WorkerURL.current(), resolvingAgainstBaseURL: false) else { return }
         components.scheme = components.scheme == "https" ? "wss" : "ws"
         components.path = "/v2/inbox/\(deviceId)"
 

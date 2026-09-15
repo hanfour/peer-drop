@@ -54,11 +54,12 @@ final class AccountClientTests: XCTestCase {
     }
     func testRegisterEncodesBase64AndDecodesResponse() async throws {
         TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"accountId":"7K3MQ2ZD","nickname":null,"token":"tok","expiresInSeconds":900}"#.utf8))]
-        let req = RegisterRequest(deviceId: "dev-1", platform: "ios", identityKey: Data(repeating: 1, count: 32), signingKey: Data(repeating: 2, count: 32), mailboxId: "m", nonce: Data(repeating: 3, count: 32), signature: Data(repeating: 4, count: 64))
+        let req = RegisterRequest(deviceId: "dev-1", platform: "ios", identityKey: Data(repeating: 1, count: 32), signingKey: Data(repeating: 2, count: 32), mailboxId: "m", mailboxToken: "mbx-tok", nonce: Data(repeating: 3, count: 32), signature: Data(repeating: 4, count: 64))
         let resp = try await client.register(req)
         XCTAssertEqual(resp.token, "tok")
         let sent = try JSONSerialization.jsonObject(with: TestURLProtocol.requests[0].httpBody ?? Data()) as? [String: Any]
         XCTAssertEqual(sent?["signingKey"] as? String, Data(repeating: 2, count: 32).base64EncodedString())
+        XCTAssertEqual(sent?["mailboxToken"] as? String, "mbx-tok")
     }
     func testSetNicknameNilSendsJsonNull() async throws {
         TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"nickname":null}"#.utf8))]

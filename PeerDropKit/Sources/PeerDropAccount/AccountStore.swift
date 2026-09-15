@@ -6,12 +6,17 @@ public final class AccountStore {
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "AccountStore")
     private let storageKey: String
     private let directory: URL
-    private let encryptor = ChatDataEncryptor.shared
+    private let encryptor: ChatDataEncryptor
 
-    public init(storageKey: String = "account", directory: URL? = nil) {
+    /// `encryptor` is injectable purely so tests can pass a
+    /// `ChatDataEncryptor(testKey:)` and exercise the real round trip on
+    /// hosts where `swift test` has no keychain access. Production callers
+    /// take the default.
+    public init(storageKey: String = "account", directory: URL? = nil, encryptor: ChatDataEncryptor = .shared) {
         self.storageKey = storageKey
         self.directory = directory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Security", isDirectory: true)
+        self.encryptor = encryptor
     }
     private var url: URL { directory.appendingPathComponent("\(storageKey).enc") }
 

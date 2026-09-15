@@ -20,12 +20,16 @@ import os.log
 /// token. Concurrent callers share a single in-flight refresh task.
 ///
 /// Fallback: if App Attest is unavailable (Simulator, dev builds without
-/// entitlement, attestation rejected by Apple), this actor returns nil
-/// and callers fall through to the operator `X-API-Key` lane — which,
-/// since the 2026-07 rotation, only carries a key on operator surfaces
-/// (Debug builds, peerdrop-cli via PEERDROP_WORKER_KEY). Release store
-/// builds have no key, so an App-Attest-unavailable device sends no
-/// credential and relay routes 401 until attestation succeeds.
+/// entitlement, attestation rejected by Apple, **and every native macOS
+/// build** — `DCAppAttestService.isSupported` is false there, verified
+/// 2026-09-15 on an M4 running macOS 15.7), this actor returns nil and
+/// callers fall through to the `X-API-Key` lane. Since the 2026-07
+/// rotation that lane carries a key on operator surfaces (Debug builds,
+/// peerdrop-cli via PEERDROP_WORKER_KEY) and — since 2026-09 — on the
+/// shipped Mac app, which bundles its own restricted `MAC_CLIENT_KEY`.
+/// Release **iOS** store builds have no key, so an App-Attest-unavailable
+/// iPhone sends no credential and relay routes 401 until attestation
+/// succeeds.
 @available(iOS 14.0, macOS 11.0, *)
 public actor DeviceTokenManager {
 

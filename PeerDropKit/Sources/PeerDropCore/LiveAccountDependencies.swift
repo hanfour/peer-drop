@@ -37,12 +37,25 @@ struct LiveAccountDependencies: AccountRegistrationDependencies, @unchecked Send
         #endif
     }
 
+    /// App Attest is the only source of self-service Bearer tokens, and it
+    /// is unavailable on native macOS (`DCAppAttestService.isSupported ==
+    /// false`, verified 2026-09-15 on an M4 running macOS 15.7) as well as
+    /// on the Simulator and entitlement-less dev builds.
     var attestSupported: Bool {
         if #available(iOS 14.0, macOS 11.0, *) {
             return DCAppAttestService.shared.isSupported
         } else {
             return false
         }
+    }
+
+    /// Registration needs *some* credential, not App Attest specifically:
+    /// the worker's key lane (`X-API-Key` + `X-Device-Id`) covers the
+    /// surfaces without it — peerdrop-cli, Debug/Simulator builds, and the
+    /// shipped Mac app, which bundles its own restricted `MAC_CLIENT_KEY`.
+    /// Only a build with neither falls through to `.attestUnsupported`.
+    var registrationSupported: Bool {
+        attestSupported || WorkerAuthHelper.legacyAPIKey() != nil
     }
 
     func identityKeys() throws -> (identity: Data, signing: Data) {
@@ -53,9 +66,10 @@ struct LiveAccountDependencies: AccountRegistrationDependencies, @unchecked Send
         try IdentityKeyManager.shared.sign(data)
     }
 
-    func currentMailboxId() async throws -> String {
+    func currentMailbox() async throws -> (id: String, token: String) {
         try await mailboxManager.registerIfNeeded()
-        guard let id = await mailboxManager.mailboxId else { throw AccountClientError.invalidResponse }
-        return id
+        guard let id = await mailboxManager.mailboxId,
+              let token = await mailboxManager.mailboxToken else { throw AccountClientError.invalidResponse }
+        return (id, token)
     }
 }

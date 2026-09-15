@@ -9,15 +9,19 @@ public struct RegisterRequest: Encodable, Sendable {
     public var identityKey: Data
     public var signingKey: Data
     public var mailboxId: String
+    /// The mailbox's ownership token (`MailboxManager.mailboxToken`). The
+    /// worker refuses to bind a mailbox the caller can't prove it owns.
+    public var mailboxToken: String
     public var nonce: Data
     public var signature: Data
 
-    public init(deviceId: String, platform: String, identityKey: Data, signingKey: Data, mailboxId: String, nonce: Data, signature: Data) {
+    public init(deviceId: String, platform: String, identityKey: Data, signingKey: Data, mailboxId: String, mailboxToken: String, nonce: Data, signature: Data) {
         self.deviceId = deviceId
         self.platform = platform
         self.identityKey = identityKey
         self.signingKey = signingKey
         self.mailboxId = mailboxId
+        self.mailboxToken = mailboxToken
         self.nonce = nonce
         self.signature = signature
     }
@@ -153,7 +157,14 @@ public actor AccountClient {
     private struct ErrorBody: Decodable { let error: String }
 
     private func send<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, retrying: Bool = true) async throws -> R {
-        var request = URLRequest(url: URL(string: path, relativeTo: baseURL)!.absoluteURL)
+        // `lookup` feeds a user-typed handle into `path`; percent-encoding
+        // it can still leave a string URL(string:) rejects, and a force
+        // unwrap there would crash the app on a malformed search rather
+        // than surfacing an error the UI can show.
+        guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
+            throw AccountClientError.invalidResponse
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let body {

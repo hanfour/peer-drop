@@ -212,9 +212,16 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
         ENABLE_HARDENED_RUNTIME: "YES"
-      # Pivot 2026-09 (sub-project 1): the Mac target no longer binds Secrets.xcconfig —
-      # it authenticates to the worker via App Attest (DeviceTokenManager is available on
-      # macOS 11+). No embedded PeerDropWorkerAPIKey ships in the Mac binary.
+    # Native macOS has no App Attest (DCAppAttestService.isSupported == false,
+    # verified 2026-09-15 on an M4 running macOS 15.7); the Mac build keeps a
+    # key lane (+ X-Device-Id) until a DeviceCheck-based attestation exists.
+    # Unlike iOS this is bound for Release too — a shipped Mac with no
+    # credential would 401 on every relay route — so the value is the
+    # dedicated PEERDROP_MAC_CLIENT_KEY (worker MAC_CLIENT_KEY), never the
+    # operator API_KEY, and the worker restricts what that key can reach.
+    configFiles:
+      Debug: Secrets.xcconfig
+      Release: Secrets.xcconfig
   PeerDropTests:
     type: bundle.unit-test
     platform: iOS
