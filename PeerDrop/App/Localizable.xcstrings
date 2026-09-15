@@ -113,12 +113,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "帳號尚未就緒" } }
       }
     },
-    "This Mac can't create an account (no Secure Enclave). Nearby sharing still works." : {
+    "This device can't create an account yet. Nearby sharing still works." : {
       "localizations" : {
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この Mac ではアカウントを作成できません（Secure Enclave 非搭載）。近くの共有は引き続き使えます。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 Mac에서는 계정을 만들 수 없습니다(Secure Enclave 없음). 근처 공유는 계속 사용할 수 있습니다." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台 Mac 无法创建账号（没有 Secure Enclave）。附近分享仍可使用。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這台 Mac 無法建立帳號（沒有 Secure Enclave）。附近分享仍可使用。" } }
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このデバイスではまだアカウントを作成できません。近くの共有は引き続き使えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 기기에서는 아직 계정을 만들 수 없습니다. 근처 공유는 계속 사용할 수 있습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台设备目前无法创建账号。附近分享仍可使用。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這台裝置目前無法建立帳號。附近分享仍可使用。" } }
       }
     },
     "You're offline. We'll retry automatically." : {
@@ -153,12 +153,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "要刪除帳號嗎？" } }
       }
     },
-    "Your ID and nickname will be released. Notes and diaries tied to this account will be lost. Nearby sharing keeps working." : {
+    "Your ID and nickname will be released and a new anonymous ID will be created. Notes and diaries tied to the old account will be lost. Nearby sharing keeps working." : {
       "localizations" : {
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ID とニックネームは解放され、このアカウントに紐づくメモと日記は失われます。近くの共有は引き続き使えます。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "ID와 닉네임이 해제되고 이 계정에 연결된 쪽지와 일기는 사라집니다. 근처 공유는 계속 사용할 수 있습니다." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的 ID 与昵称将被释放，与此账号相关的纸条与日记会丢失。附近分享仍可使用。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的 ID 與暱稱將被釋放，與此帳號相關的紙條與日記會遺失。附近分享仍可使用。" } }
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ID とニックネームは解放され、新しい匿名 ID が作成されます。以前のアカウントに紐づくメモと日記は失われます。近くの共有は引き続き使えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "ID와 닉네임이 해제되고 새 익명 ID가 만들어집니다. 이전 계정에 연결된 쪽지와 일기는 사라집니다. 근처 공유는 계속 사용할 수 있습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的 ID 与昵称将被释放，并创建一个新的匿名 ID。与旧账号相关的纸条与日记会丢失。附近分享仍可使用。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的 ID 與暱稱將被釋放，並建立一個新的匿名 ID。與舊帳號相關的紙條與日記會遺失。附近分享仍可使用。" } }
       }
     },
     "Changing devices creates a new account. There is no account recovery yet." : {

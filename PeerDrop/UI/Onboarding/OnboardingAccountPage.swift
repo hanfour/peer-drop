@@ -23,7 +23,7 @@ struct OnboardingAccountPage: View {
             case .registering, .idle:
                 ProgressView().tint(.white); Text("Setting up your account…").foregroundStyle(.white.opacity(0.8))
             case .unavailable(.attestUnsupported):
-                Text("This Mac can't create an account (no Secure Enclave). Nearby sharing still works.").foregroundStyle(.white.opacity(0.8)).multilineTextAlignment(.center).padding(.horizontal, 40)
+                Text("This device can't create an account yet. Nearby sharing still works.").foregroundStyle(.white.opacity(0.8)).multilineTextAlignment(.center).padding(.horizontal, 40)
             case .unavailable:
                 Text("Account not ready").foregroundStyle(.white)
                 Button("Retry") { Task { await accountManager.registerIfNeeded() } }.foregroundStyle(.white)

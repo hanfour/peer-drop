@@ -311,7 +311,11 @@ public final class ScreenshotModeProvider {
     public var mockAccount: Account {
         Account(
             accountId: AccountID(raw: "PDRPDEM0")!,
-            nickname: localizedName(("mochi", "麻糬", "麻薯", "もち", "모찌")),
+            // Every variant must be ≥ 3 Unicode scalars: the shorter
+            // originals ("麻糬", "もち", "모찌") fail `Nickname.validate`,
+            // so the screenshot showed a nickname the app itself would
+            // reject if a user typed it.
+            nickname: localizedName(("mochi", "麻糬醬", "麻薯酱", "もちもち", "모찌모찌")),
             mailboxId: "screenshotmailbox",
             createdAt: Date().addingTimeInterval(-86400 * 30)
         )

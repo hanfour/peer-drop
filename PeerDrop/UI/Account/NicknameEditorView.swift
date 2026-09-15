@@ -41,6 +41,10 @@ struct NicknameEditorView: View {
         catch AccountClientError.conflict("nickname_taken") { error = "This nickname is already taken" }
         catch AccountClientError.rateLimited { error = "Too many changes today. Try again tomorrow." }
         catch AccountManager.NicknameError.reserved { error = "This nickname is reserved" }
+        // Registration hasn't completed (or was just deleted): the editor
+        // used to dismiss as if the rename had been saved, because
+        // setNickname silently returned. Reuse the existing status copy.
+        catch AccountManager.AccountManagerError.noAccount { error = "Account not ready" }
         catch let e { error = LocalizedStringKey(String(describing: e)) }
     }
 }

@@ -56,7 +56,7 @@ struct AccountSectionView: View {
         }
         .confirmationDialog("Delete your account?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete Account", role: .destructive) { Task { await delete() } }
-        } message: { Text("Your ID and nickname will be released. Notes and diaries tied to this account will be lost. Nearby sharing keeps working.") }
+        } message: { Text("Your ID and nickname will be released and a new anonymous ID will be created. Notes and diaries tied to the old account will be lost. Nearby sharing keeps working.") }
         .alert("Delete Account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("OK") { deleteError = nil }
         } message: { Text(deleteError ?? "") }
@@ -70,7 +70,7 @@ struct AccountSectionView: View {
 
     private func message(for reason: AccountManager.Unavailable) -> LocalizedStringKey {
         switch reason {
-        case .attestUnsupported: return "This Mac can't create an account (no Secure Enclave). Nearby sharing still works."
+        case .attestUnsupported: return "This device can't create an account yet. Nearby sharing still works."
         case .offline: return "You're offline. We'll retry automatically."
         case .failed(let s): return LocalizedStringKey(s)
         }
