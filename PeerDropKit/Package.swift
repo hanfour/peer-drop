@@ -95,7 +95,7 @@ let package = Package(
             name: "PeerDropAccount",
             dependencies: ["PeerDropPlatform", "PeerDropSecurity", "PeerDropTransport"]
         ),
-        .testTarget(name: "PeerDropAccountTests", dependencies: ["PeerDropAccount"]),
+        .testTarget(name: "PeerDropAccountTests", dependencies: ["PeerDropAccount", "PeerDropSecurity"]),
         .executableTarget(
             name: "webterm",
             dependencies: [
