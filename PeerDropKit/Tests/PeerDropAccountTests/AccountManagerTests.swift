@@ -121,4 +121,39 @@ final class AccountManagerTests: XCTestCase {
         XCTAssertEqual(m.account?.nickname, "mochi")
         XCTAssertEqual(AccountStore(storageKey: "am", directory: dir).load()?.nickname, "mochi")
     }
+
+    /// Regression test for the bug where a failed first-launch registration
+    /// could never recover: `bootstrap()` used to set `didBootstrap = true`
+    /// unconditionally and no-op on every later call, so a `.unavailable`
+    /// device stayed stuck even once the network (or the server) recovered
+    /// and a later `.active` scene-phase transition called `bootstrap()`
+    /// again. `bootstrap()` must now delegate to `registerIfNeeded()` once
+    /// `didBootstrap` is already set.
+    func testActiveAfterFailureRetries() async throws {
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        let m = makeManager()
+        await m.bootstrap()
+        guard case .unavailable(.failed) = m.state else { return XCTFail("expected failed, got \(m.state)") }
+        TestURLProtocol.queue = [
+            .init(status: 201, body: Data(#"{"nonce":"\#(Data(repeating: 5, count: 32).base64EncodedString())"}"#.utf8)),
+            .init(status: 201, body: Data(#"{"accountId":"7K3MQ2ZD","nickname":null,"token":"t","expiresInSeconds":900}"#.utf8)),
+        ]
+        // Simulates a later `.active` scene-phase transition, NOT a manual
+        // retry call — this is the exact call `ConnectionManager` makes.
+        await m.bootstrap()
+        guard m.account != nil else {
+            try skipIfKeychainUnavailable(m.state)
+            return
+        }
+        XCTAssertEqual(m.account?.accountId.raw, "7K3MQ2ZD")
+    }
+
+    func testAttestUnsupportedNeverRetries() async {
+        let m = makeManager(deps: Deps(attestSupported: false))
+        await m.bootstrap()
+        XCTAssertEqual(m.state, .unavailable(.attestUnsupported))
+        await m.bootstrap()
+        XCTAssertEqual(m.state, .unavailable(.attestUnsupported))
+        XCTAssertTrue(TestURLProtocol.requests.isEmpty)
+    }
 }

@@ -26,6 +26,10 @@ public final class AccountManager: ObservableObject {
     private let deps: AccountRegistrationDependencies
     private let tokenAdopter: @Sendable (String, Int) async -> Void
     private var didBootstrap = false
+    /// Single in-flight auto-retry, scheduled after a transient (offline or
+    /// server-side) failure. Cancelled on success and on `deleteAccount()`.
+    private var retryTask: Task<Void, Never>?
+    private static let retryDelayNanoseconds: UInt64 = 60_000_000_000
 
     public init(client: AccountClient, store: AccountStore, deps: AccountRegistrationDependencies,
                 tokenAdopter: @escaping @Sendable (String, Int) async -> Void) {
@@ -35,9 +39,16 @@ public final class AccountManager: ObservableObject {
     public var account: Account? { if case .ready(let a) = state { return a } else { return nil } }
 
     /// Loads a persisted account if present; otherwise attempts registration.
-    /// Idempotent — safe to call from multiple scene-phase transitions.
+    /// Safe to call from multiple scene-phase transitions: once `didBootstrap`
+    /// is set, later calls (e.g. every `.active`) delegate to
+    /// `registerIfNeeded()` instead of no-op'ing, so a first-launch failure
+    /// (offline, server error) gets a real retry the next time the app comes
+    /// to the foreground rather than being stuck forever.
     public func bootstrap() async {
-        guard !didBootstrap else { return }
+        guard !didBootstrap else {
+            await registerIfNeeded()
+            return
+        }
         didBootstrap = true
         if let saved = store.load() { state = .ready(saved); return }
         await registerIfNeeded()
@@ -46,6 +57,10 @@ public final class AccountManager: ObservableObject {
     public func registerIfNeeded() async {
         if case .ready = state { return }
         if case .registering = state { return }
+        // Terminal: this device/build can never satisfy App Attest, so
+        // there is nothing a retry could change. Checked before re-reading
+        // `deps.attestSupported` so this state never re-probes.
+        if case .unavailable(.attestUnsupported) = state { return }
         guard deps.attestSupported else { state = .unavailable(.attestUnsupported); return }
         state = .registering
         do {
@@ -59,12 +74,57 @@ public final class AccountManager: ObservableObject {
             await tokenAdopter(resp.token, resp.expiresInSeconds)
             let account = Account(accountId: resp.accountId, nickname: resp.nickname, mailboxId: mailboxId, createdAt: Date())
             try store.save(account)
+            retryTask?.cancel(); retryTask = nil
             state = .ready(account)
-        } catch let e as URLError where e.code == .notConnectedToInternet || e.code == .timedOut {
+        } catch let e as URLError where Self.isOffline(e) {
             state = .unavailable(.offline)
+            scheduleRetry()
+        } catch let e as AccountClientError where Self.isUserActionable(e) {
+            // 4xx-shaped failures (bad/expired credentials, conflicting
+            // state, rejected input, rate limiting the caller itself caused)
+            // — the user (or a "Retry" button) drives the next attempt, not
+            // a timer.
+            Self.logger.error("registration rejected: \(String(describing: e), privacy: .public)")
+            state = .unavailable(.failed(String(describing: e)))
         } catch {
+            // Everything else — 5xx/other HTTP statuses, decode errors,
+            // local persistence failures, unexpected errors — is treated as
+            // transient and gets one delayed auto-retry.
             Self.logger.error("registration failed: \(String(describing: error), privacy: .public)")
             state = .unavailable(.failed(String(describing: error)))
+            scheduleRetry()
+        }
+    }
+
+    private static func isOffline(_ error: URLError) -> Bool {
+        switch error.code {
+        case .notConnectedToInternet, .timedOut, .networkConnectionLost, .cannotConnectToHost, .dnsLookupFailed, .cannotFindHost:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isUserActionable(_ error: AccountClientError) -> Bool {
+        switch error {
+        case .invalid, .conflict, .forbidden, .unauthorized:
+            return true
+        case .rateLimited, .http, .invalidResponse:
+            return false
+        }
+    }
+
+    /// Schedules exactly one delayed retry, replacing any previous one.
+    /// Re-checks cancellation after the delay so cancelling (on success or
+    /// `deleteAccount()`) actually suppresses the retry instead of firing it
+    /// immediately (the naive `try? await Task.sleep(...)` swallows
+    /// `CancellationError` and would otherwise call straight through).
+    private func scheduleRetry() {
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: AccountManager.retryDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            await self?.registerIfNeeded()
         }
     }
 
@@ -102,6 +162,7 @@ public final class AccountManager: ObservableObject {
     public func deleteAccount() async throws {
         try await client.deleteAccount()
         try store.clear()
+        retryTask?.cancel(); retryTask = nil
         state = .idle
         didBootstrap = false
     }
