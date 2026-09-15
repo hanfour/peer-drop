@@ -27,6 +27,8 @@ export interface Env {
   SIGNALING_ROOM: DurableObjectNamespace;
   PREKEY_STORE: DurableObjectNamespace;
   DEVICE_INBOX: DurableObjectNamespace;
+  // D1
+  ACCOUNTS_DB: D1Database;
   // Secrets
   TURN_KEY_ID: string;
   TURN_API_TOKEN: string;

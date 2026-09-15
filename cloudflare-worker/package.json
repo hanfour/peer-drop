@@ -8,7 +8,9 @@
     "build": "echo 'No separate build step required — wrangler compiles TS directly'",
     "test": "bash scripts/run-tests.sh",
     "test:ci": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "d1:migrate:local": "wrangler d1 migrations apply ACCOUNTS_DB --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply ACCOUNTS_DB --remote"
   },
   "keywords": [],
   "author": "",
