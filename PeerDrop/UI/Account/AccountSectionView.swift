@@ -44,7 +44,9 @@ struct AccountSectionView: View {
         .confirmationDialog("Delete your account?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete Account", role: .destructive) { Task { await delete() } }
         } message: { Text("Your ID and nickname will be released. Notes and diaries tied to this account will be lost. Nearby sharing keeps working.") }
-        .alert("Account not ready", isPresented: .constant(deleteError != nil)) { Button("OK") { deleteError = nil } } message: { Text(deleteError ?? "") }
+        .alert("Delete Account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK") { deleteError = nil }
+        } message: { Text(deleteError ?? "") }
     }
 
     private func message(for reason: AccountManager.Unavailable) -> LocalizedStringKey {

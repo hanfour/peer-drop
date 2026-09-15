@@ -18,6 +18,7 @@ struct OnboardingAccountPage: View {
                 Text("Friends can send you notes with this ID or your nickname.").font(.body).foregroundStyle(.white.opacity(0.8)).multilineTextAlignment(.center).padding(.horizontal, 40)
                 TextField("Nickname", text: $nickname).textFieldStyle(.roundedBorder).padding(.horizontal, 40)
                     .onSubmit { Task { await saveNickname() } }
+                    .task(id: nickname) { nicknameError = localError() }
                 if let nicknameError { Text(nicknameError).font(.caption).foregroundStyle(.yellow) }
             case .registering, .idle:
                 ProgressView().tint(.white); Text("Setting up your account…").foregroundStyle(.white.opacity(0.8))
@@ -31,11 +32,23 @@ struct OnboardingAccountPage: View {
         }
         .task { await accountManager.bootstrap() }
     }
+    private func localError() -> LocalizedStringKey? {
+        if nickname.isEmpty { return nil }
+        switch Nickname.validate(nickname) {
+        case .ok: return nil
+        case .tooShort: return "Nickname too short"
+        case .tooLong: return "Nickname too long"
+        case .invalidCharacters: return "Only letters, numbers and underscores"
+        case .reserved: return "This nickname is reserved"
+        }
+    }
     private func saveNickname() async {
-        guard !nickname.isEmpty else { return }
+        guard !nickname.isEmpty, localError() == nil else { return }
         do { try await accountManager.setNickname(nickname); nicknameError = nil }
         catch AccountClientError.conflict("nickname_taken") { nicknameError = "This nickname is already taken" }
-        catch { nicknameError = "Only letters, numbers and underscores" }
+        catch AccountClientError.rateLimited { nicknameError = "Too many changes today. Try again tomorrow." }
+        catch AccountManager.NicknameError.reserved { nicknameError = "This nickname is reserved" }
+        catch let e { nicknameError = LocalizedStringKey(String(describing: e)) }
     }
 }
 #else
