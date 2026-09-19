@@ -175,5 +175,63 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
     return json({ id }, 201);
   }
 
+  const inboxStub = () => env.ACCOUNT_INBOX.get(env.ACCOUNT_INBOX.idFromName(auth.accountId));
+
+  if (path === "/v3/inbox" && request.method === "GET") {
+    const after = url.searchParams.get("after") ?? "";
+    const limit = url.searchParams.get("limit") ?? "50";
+    if (after && !/^[0-9A-Z]{26}$/.test(after)) return json({ error: "invalid_cursor" }, 400);
+    const resp = await inboxStub().fetch(`https://inbox/items?after=${after}&limit=${encodeURIComponent(limit)}`);
+    return json(await resp.json(), resp.status);
+  }
+
+  const itemMatch = path.match(/^\/v3\/inbox\/([0-9A-Z]{26})(?:\/(read|block|report))?$/);
+  if (itemMatch) {
+    const id = itemMatch[1];
+    const sub = itemMatch[2];
+    if (request.method === "POST" && sub === "read") {
+      await inboxStub().fetch(`https://inbox/items/${id}/read`, { method: "POST" });
+      return new Response(null, { status: 204 });
+    }
+    if (request.method === "DELETE" && !sub) {
+      await inboxStub().fetch(`https://inbox/items/${id}`, { method: "DELETE" });
+      return new Response(null, { status: 204 });
+    }
+    if (request.method === "POST" && (sub === "block" || sub === "report")) {
+      const senderResp = await inboxStub().fetch(`https://inbox/items/${id}/sender`);
+      if (!senderResp.ok) return json({ error: "not_found" }, 404);
+      const { senderHash: sh } = await senderResp.json() as { senderHash: string };
+      if (sub === "block") {
+        await env.ACCOUNTS_DB.prepare("INSERT OR IGNORE INTO blocks (account_id, sender_hash, created_at) VALUES (?1, ?2, ?3)").bind(auth.accountId, sh, Date.now()).run();
+        return json({ blocked: sh });
+      }
+      const raw = await request.text();
+      if (raw.length > 8 * 1024) return json({ error: "too_large" }, 413);
+      let body: { reason?: unknown; excerpt?: unknown } | null;
+      try { body = JSON.parse(raw || "null"); } catch { body = null; }
+      if (!body || typeof body.reason !== "string" || !["spam", "harassment", "other"].includes(body.reason)) return json({ error: "invalid_report" }, 400);
+      let excerpt: string | null = null;
+      if (body.excerpt !== undefined && body.excerpt !== null) {
+        if (typeof body.excerpt !== "string" || Array.from(body.excerpt).length > NOTE_LIMITS.excerptMaxChars) return json({ error: "invalid_report" }, 400);
+        excerpt = body.excerpt;
+      }
+      if (!(await bumpQuota(env.V2_STORE, `report-quota:${auth.accountId}:${dayKey()}`, NOTE_LIMITS.reportsPerDay, 2 * 86400))) return json({ error: "rate_limited" }, 429);
+      const reportId = ulid();
+      await env.ACCOUNTS_DB.prepare("INSERT INTO reports (id, reporter_account_id, sender_hash, inbox_item_id, reason, excerpt, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+        .bind(reportId, auth.accountId, sh, id, body.reason, excerpt, Date.now()).run();
+      return json({ id: reportId }, 201);
+    }
+  }
+
+  if (path === "/v3/blocks" && request.method === "GET") {
+    const rows = (await env.ACCOUNTS_DB.prepare("SELECT sender_hash, created_at FROM blocks WHERE account_id = ?1 ORDER BY created_at DESC").bind(auth.accountId).all<{ sender_hash: string; created_at: number }>()).results;
+    return json(rows.map((r) => ({ senderHash: r.sender_hash, createdAt: r.created_at })));
+  }
+  const unblockMatch = path.match(/^\/v3\/blocks\/([0-9a-f]{64})$/);
+  if (unblockMatch && request.method === "DELETE") {
+    await env.ACCOUNTS_DB.prepare("DELETE FROM blocks WHERE account_id = ?1 AND sender_hash = ?2").bind(auth.accountId, unblockMatch[1]).run();
+    return new Response(null, { status: 204 });
+  }
+
   return null;
 }
