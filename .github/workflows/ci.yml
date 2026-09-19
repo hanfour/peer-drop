@@ -64,7 +64,7 @@ jobs:
       # have on a CI runner (see IdentityKeyManagerTests).
       - name: swift test — account + transport suites
         working-directory: PeerDropKit
-        run: swift test --filter "PeerDropAccountTests|PeerDropTransportTests|PeerDropNotesTests"
+        run: swift test --filter "PeerDropAccountTests|PeerDropTransportTests|PeerDropNotesTests|RelayPushKindTests"
 
   xcodebuild-apps:
     name: Xcode build — iOS app + macOS app (unsigned)
