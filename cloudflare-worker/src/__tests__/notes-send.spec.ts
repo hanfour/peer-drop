@@ -132,4 +132,10 @@ describe("fanOutNotePush", () => {
     expect(none.attempted).toBe(0);
     expect(calls.length).toBe(2);
   });
+
+  it("never throws — a D1 outage during fan-out resolves to { attempted: 0 }", async () => {
+    const send = async () => ({ ok: true, status: 200 });
+    const brokenEnv = { ...env, APNS_KEY_P8: "fake", ACCOUNTS_DB: { prepare() { throw new Error("d1 down"); } } } as unknown as Env;
+    await expect(fanOutNotePush(brokenEnv, "dev-note-push-any", "01ITEM0000000000000000000A", { send, topicFor: () => "x" })).resolves.toEqual({ attempted: 0 });
+  });
 });

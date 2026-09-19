@@ -89,25 +89,32 @@ async function bumpQuota(kv: KVNamespace, key: string, limit: number, ttl: numbe
 /** APNs fan-out to every device bound to the recipient account. Never throws. */
 export async function fanOutNotePush(env: Env, recipientAccountId: string, itemId: string, deps: PushDeps): Promise<{ attempted: number }> {
   if (!env.APNS_KEY_P8) return { attempted: 0 };
-  const devices = (await env.ACCOUNTS_DB.prepare("SELECT device_id, platform FROM account_devices WHERE account_id = ?1").bind(recipientAccountId).all<{ device_id: string; platform: string }>()).results;
   let attempted = 0;
-  for (const d of devices) {
-    const raw = await env.V2_STORE.get(`device:${d.device_id}`);
-    if (!raw) continue;
-    let info: { pushToken?: string; platform?: string };
-    try { info = JSON.parse(raw); } catch { continue; }
-    if (!info.pushToken) continue;
-    attempted++;
-    try {
-      await deps.send(
-        info.pushToken,
-        { alert: { "loc-key": "NOTE_RECEIVED" }, sound: "default", customData: { type: "note", inboxItemId: itemId } },
-        { keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, p8Key: env.APNS_KEY_P8, bundleId: env.APNS_BUNDLE_ID },
-        { topicOverride: deps.topicFor(info.platform ?? d.platform) },
-      );
-    } catch (e) {
-      console.error("note push failed", d.device_id, String(e));
+  try {
+    const devices = (await env.ACCOUNTS_DB.prepare("SELECT device_id, platform FROM account_devices WHERE account_id = ?1").bind(recipientAccountId).all<{ device_id: string; platform: string }>()).results;
+    for (const d of devices) {
+      const raw = await env.V2_STORE.get(`device:${d.device_id}`);
+      if (!raw) continue;
+      let info: { pushToken?: string; platform?: string };
+      try { info = JSON.parse(raw); } catch { continue; }
+      if (!info.pushToken) continue;
+      attempted++;
+      try {
+        await deps.send(
+          info.pushToken,
+          { alert: { "loc-key": "NOTE_RECEIVED" }, sound: "default", customData: { type: "note", inboxItemId: itemId } },
+          { keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, p8Key: env.APNS_KEY_P8, bundleId: env.APNS_BUNDLE_ID },
+          { topicOverride: deps.topicFor(info.platform ?? d.platform) },
+        );
+      } catch (e) {
+        console.error("note push failed", d.device_id, String(e));
+      }
     }
+  } catch (e) {
+    // A D1/KV outage here must not turn an already-stored note into a 500
+    // for the sender — the note is safely in the recipient's inbox either
+    // way; the recipient just misses (or partially misses) the push nudge.
+    console.error("note push fan-out failed", String(e));
   }
   return { attempted };
 }
@@ -149,10 +156,7 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
     const powKey = `pow:${auth.accountId}:${body.pow.challenge}`;
     if (!(await env.V2_STORE.get(powKey))) return json({ error: "bad_pow" }, 400);
     await env.V2_STORE.delete(powKey);
-    // Bind the hashcash to the exact recipient bytes the client hashed (the
-    // raw URL handle, e.g. dashed/lowercase), not the normalized account id
-    // — the two can differ and only the client-visible string is provable.
-    const msg = await notePoWMessage(body.pow.challenge, handle, parsed.bytes);
+    const msg = await notePoWMessage(body.pow.challenge, recipientId, parsed.bytes);
     if (!(await verifyPoW(msg, body.pow.nonce, NOTE_LIMITS.powDifficulty))) return json({ error: "bad_pow" }, 400);
     const recipient = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM accounts WHERE account_id = ?1").bind(recipientId).first<{ account_id: string }>();
     if (!recipient) return json({ error: "recipient_not_found" }, 404);

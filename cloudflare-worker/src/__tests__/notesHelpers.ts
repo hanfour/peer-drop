@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import { registerDevice } from "./accountHelpers";
 import { notePoWMessage } from "../notes";
 import { verifyPoW } from "../pow";
+import { normalizeAccountId } from "../account";
 
 export const TEST_MAC_CLIENT_KEY = "test-mac-client-key-67890";
 
@@ -31,10 +32,18 @@ export async function getChallenge(headers: Record<string, string>): Promise<str
   return (await r.json() as { challenge: string }).challenge;
 }
 
-/** Brute-force the 16-bit hashcash the way the client does (≈1 s). */
+/**
+ * Brute-force the 16-bit hashcash the way the client does (≈1 s). The
+ * server hashes the NORMALIZED (canonical 8-char) recipient id — not
+ * whatever handle string the caller typed into the URL — so normalize here
+ * too; falls back to the raw string if it doesn't normalize (matching the
+ * server's own "not a real handle" rejection path, which never reaches PoW
+ * verification anyway).
+ */
 export async function solvePoW(challenge: string, recipientAccountId: string, envelopeB64: string): Promise<number> {
   const bytes = Uint8Array.from(atob(envelopeB64), (c) => c.charCodeAt(0));
-  const msg = await notePoWMessage(challenge, recipientAccountId, bytes);
+  const canonical = normalizeAccountId(recipientAccountId) ?? recipientAccountId;
+  const msg = await notePoWMessage(challenge, canonical, bytes);
   let nonce = 0;
   while (!(await verifyPoW(msg, nonce, 16))) nonce++;
   return nonce;
