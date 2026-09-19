@@ -44,7 +44,8 @@
 ```
 NoteEnvelope (JSON；wire 上 base64)
   v               UInt8   = 1
-  ephemeralKey    Data    -- 寄件者臨時 X25519 公鑰（32 B）
+  ephemeralKey    Data    -- 寄件者臨時 X25519 公鑰 EK_A（32 B；在 X3DH 中扮演身分金鑰，見下）
+  ephemeralKey2   Data    -- 寄件者第二把臨時 X25519 公鑰 EK_A2（32 B；X3DH 的 ephemeral）
   spkId           UInt32  -- 收件者 signed pre-key id
   opkId           UInt32? -- 收件者 one-time pre-key id；缺 OPK 時依 SecurityPolicy.opkExhaustionBehavior 決定 fail-closed 或降級（沿用 X3DH 既有邏輯）
   nonce           Data    -- 12 B
