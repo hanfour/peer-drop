@@ -94,7 +94,7 @@ AccountDevice
 
 1. 客戶端已持有裝置 Bearer token（App Attest 流程不變）。
 2. `POST /v3/account/challenge` → 伺服器發 32 位元組 nonce（KV，5 分鐘，單次使用）。
-3. `POST /v3/account/register`，body：`{identityKey, signingKey, mailboxId, nonce, signature}`，`signature` = 以身分簽章私鑰（`IdentityKeyManager.sign`）對 `"peerdrop-account-v1" || nonce || deviceId` 的 Ed25519 簽章。
+3. `POST /v3/account/register`，body：`{deviceId, platform, identityKey, signingKey, mailboxId, mailboxToken, nonce, signature}`（子專案 1 實作結果，2026-09-15 更新）；`mailboxToken` 證明信箱所有權；`signature` = 以身分簽章私鑰（`IdentityKeyManager.sign`）對 `"peerdrop-account-v2" ‖ nonce ‖ utf8(deviceId) ‖ sha256(identityKey ‖ utf8(mailboxId))` 的 Ed25519 簽章。Mac 走專用金鑰通道（見子專案 1 規格 §7 註記）。
    - `signingKey` 已存在 → 視為「新裝置加入既有帳號」，寫入 `AccountDevice`，回同一 `accountId`。這是多裝置與日後換機的基礎，但 MVP 客戶端無金鑰備份，因此實際上仍是單裝置。
    - 不存在 → 建新帳號。
 4. 回應 `{accountId, nickname?, token}`，其中 `token` 是新的 Bearer，`scope = "account:<accountId>"`，15 分鐘 TTL，用既有 `/v2/device/assert` 續期時一併帶出 account scope。
