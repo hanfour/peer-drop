@@ -36,6 +36,7 @@
 		18FD4DE84C0812191CE2E003 /* NoteRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427D0E241EFDF4C6FDFD4070 /* NoteRowView.swift */; };
 		193D1200EE75457366B20512 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 97E396CF373A95A79049CC70 /* PeerDropTransport */; };
 		1BBF0F7407EE670C4DFC2E89 /* PeerDropPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 3A2F2113332917C7C947FE5F /* PeerDropPlatform */; };
+		1C5AACF4B0DF50FDD6786A5C /* NotesErrorText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259EBFD02A19040CC1754693 /* NotesErrorText.swift */; };
 		1C8E54CC816A78EEB4F60B58 /* Phase2IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 717DA78992AFADED72D66BEB /* Phase2IntegrationTests.swift */; };
 		1CC43871988FF017A6346B9C /* ReactionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA137F066528B6AB98E71424 /* ReactionPickerView.swift */; };
 		1EA6328B53F8E3CB67E0D401 /* PeerTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA06A8CC233CC926CF00403 /* PeerTransportTests.swift */; };
@@ -79,6 +80,7 @@
 		40F720FA53C330BB0E0D9925 /* PeerDropTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 79F4DAF8CEC60D536BA40C01 /* PeerDropTransport */; };
 		417D053C8864DDFAC81CC638 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
 		41C366502C800AE0951321B9 /* PeerDropSecurity in Frameworks */ = {isa = PBXBuildFile; productRef = CE8E1DBCF9E1E9936F03ED7A /* PeerDropSecurity */; };
+		42C657C5631DEBD92B8CD1E1 /* NotesErrorText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259EBFD02A19040CC1754693 /* NotesErrorText.swift */; };
 		46339D62B7FD01C9A1A8698B /* ConnectionStatusHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D03168691C8271ED0CCDFB8 /* ConnectionStatusHeaderView.swift */; };
 		46FEAAEBFCF56D312D35998B /* PlatformGraphicsRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB3607DC56240249CB4CF1E /* PlatformGraphicsRendererTests.swift */; };
 		4700A5799483DE1A0208A038 /* TwoDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DC79A8D29D6B05BC7B689B /* TwoDeviceTests.swift */; };
@@ -369,6 +371,7 @@
 		1DD1035C987434358B87AFCD /* DisabledFeatureUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledFeatureUXTests.swift; sourceTree = "<group>"; };
 		1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteAcceptView.swift; sourceTree = "<group>"; };
 		220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerIdentitySecurityTests.swift; sourceTree = "<group>"; };
+		259EBFD02A19040CC1754693 /* NotesErrorText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesErrorText.swift; sourceTree = "<group>"; };
 		26204406BF0EB84A54256B9E /* PlatformImageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformImageTests.swift; sourceTree = "<group>"; };
 		2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Image+PlatformImage.swift"; sourceTree = "<group>"; };
 		28CD7A07E4B0EE99182B2EA3 /* GuidanceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCard.swift; sourceTree = "<group>"; };
@@ -852,6 +855,7 @@
 				849650327F2B6DF641EB4A86 /* ComposeNoteView.swift */,
 				791D4E4A217AF6253793B87E /* NoteDetailView.swift */,
 				427D0E241EFDF4C6FDFD4070 /* NoteRowView.swift */,
+				259EBFD02A19040CC1754693 /* NotesErrorText.swift */,
 				6999E1DF7DE62BFA7BE6F55B /* NotesInboxView.swift */,
 				8F07FA1205CD38F6F9DDE037 /* SentNotesView.swift */,
 			);
@@ -1526,6 +1530,7 @@
 				20082230CD59A72F8F28E3BC /* NicknameEditorView.swift in Sources */,
 				B9E1511063108B885976A05E /* NoteDetailView.swift in Sources */,
 				0F749BD8DC39FF9F773DB313 /* NoteRowView.swift in Sources */,
+				1C5AACF4B0DF50FDD6786A5C /* NotesErrorText.swift in Sources */,
 				A21651B56B722D79794576B3 /* NotesInboxView.swift in Sources */,
 				F1986D27CF7A5272B1C8E0B7 /* OnboardingAccountPage.swift in Sources */,
 				F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */,
@@ -1626,6 +1631,7 @@
 				6400F23A0E99EE20B5D619E4 /* NicknameEditorView.swift in Sources */,
 				35D2706DA2FC9054E82D75AC /* NoteDetailView.swift in Sources */,
 				18FD4DE84C0812191CE2E003 /* NoteRowView.swift in Sources */,
+				42C657C5631DEBD92B8CD1E1 /* NotesErrorText.swift in Sources */,
 				0005A3357EFF6883AE79FEE6 /* NotesInboxView.swift in Sources */,
 				0EF2FE8280D938D19A740879 /* OnboardingAccountPage.swift in Sources */,
 				4AA3B3C282F59BE062C67844 /* OnboardingView.swift in Sources */,

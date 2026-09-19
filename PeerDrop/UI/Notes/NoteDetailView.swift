@@ -42,7 +42,7 @@ struct NoteDetailView: View {
                     Menu {
                         Button(role: .destructive) { showBlockConfirm = true } label: { Label("Block Sender", systemImage: "hand.raised") }
                         Button { showReport = true } label: { Label("Report Note", systemImage: "exclamationmark.bubble") }
-                    } label: { Label("Report Note", systemImage: "ellipsis.circle") }
+                    } label: { Label("More", systemImage: "ellipsis.circle") }
                 }
             }
         }
@@ -88,10 +88,10 @@ struct NoteDetailView: View {
 
     private func block() async {
         do { _ = try await store.block(current); toast = String(localized: "Sender blocked") }
-        catch { errorMessage = String(describing: error) }
+        catch { errorMessage = (error as? NotesStoreError)?.userMessage(context: .inboxAction) ?? String(localized: "Something went wrong. Please try again.") }
     }
     private func report() async {
         do { try await store.report(current, reason: reportReason, includeText: includeText); showReport = false; toast = String(localized: "Report sent") }
-        catch { showReport = false; errorMessage = String(describing: error) }
+        catch { showReport = false; errorMessage = (error as? NotesStoreError)?.userMessage(context: .inboxAction) ?? String(localized: "Something went wrong. Please try again.") }
     }
 }

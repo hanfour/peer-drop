@@ -40,5 +40,11 @@ struct MacContentView: View {
             selection = .notes
             openNoteID = id
         }
+        // A pushed note-detail path must not survive switching away from and
+        // back to the Notes section — otherwise the user lands back on a
+        // stale note instead of the inbox.
+        .onChange(of: selection) { newValue in
+            if newValue != .notes { notesPath = [] }
+        }
     }
 }

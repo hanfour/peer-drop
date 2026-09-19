@@ -34,10 +34,10 @@ struct BlockListSection: View {
     }
 
     private func reload() async {
-        do { blocks = try await store.blocks(); errorMessage = nil } catch { errorMessage = String(describing: error) }
+        do { blocks = try await store.blocks(); errorMessage = nil } catch { errorMessage = (error as? NotesStoreError)?.userMessage(context: .inboxAction) ?? String(localized: "Something went wrong. Please try again.") }
         loaded = true
     }
     private func unblock(_ hash: String) async {
-        do { try await store.unblock(senderHash: hash); blocks.removeAll { $0.senderHash == hash } } catch { errorMessage = String(describing: error) }
+        do { try await store.unblock(senderHash: hash); blocks.removeAll { $0.senderHash == hash } } catch { errorMessage = (error as? NotesStoreError)?.userMessage(context: .inboxAction) ?? String(localized: "Something went wrong. Please try again.") }
     }
 }

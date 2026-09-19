@@ -53,20 +53,9 @@ struct ComposeNoteView: View {
             _ = try await store.send(text: text.trimmingCharacters(in: .whitespacesAndNewlines), to: handle.trimmingCharacters(in: .whitespaces), anonymous: anonymous)
             dismiss()
         } catch let e as NotesStoreError {
-            errorMessage = Self.message(for: e)
+            errorMessage = e.userMessage(context: .compose)
         } catch {
             errorMessage = String(localized: "Could not send the note.")
-        }
-    }
-
-    static func message(for error: NotesStoreError) -> String {
-        switch error {
-        case .recipientNotFound: return String(localized: "No account found for this ID or nickname.")
-        case .recipientHasNoKeys, .opkExhausted: return String(localized: "This person cannot receive notes yet.")
-        case .inboxFull: return String(localized: "Their inbox is full. Try again later.")
-        case .rateLimited: return String(localized: "Too many notes today. Try again tomorrow.")
-        case .textTooLong: return String(format: String(localized: "%lld characters left"), 0)
-        case .noAccount, .proofOfWorkFailed, .network: return String(localized: "Could not send the note.")
         }
     }
 }
