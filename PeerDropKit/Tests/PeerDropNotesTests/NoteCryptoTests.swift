@@ -71,9 +71,12 @@ final class NoteCryptoTests: XCTestCase {
     }
     func testSenderSignatureDigestIsStable() {
         let d = NoteCrypto.senderSignatureDigest(text: "hi", sentAt: 1_700_000_000, recipientAccountId: "TESTRCPT")
-        // sha256("peerdrop-note-sender-v1" || "hi" || 0x0000000065 4E 10 00 || "TESTRCPT") — pin once, then keep.
+        // Pinned vector: sha256("peerdrop-note-sender-v1" || "hi" || 0x0000000065 4E 10 00 || "TESTRCPT"),
+        // computed once from a standalone reimplementation of senderSignatureDigest. A change here means
+        // the digest construction changed — every already-signed note's signature would stop verifying.
+        let expectedHex = "d152da891721d2bfc99dfe49bd276edaffad7683604d9850991171645e3d2784"
         XCTAssertEqual(d.count, 32)
-        XCTAssertEqual(d, NoteCrypto.senderSignatureDigest(text: "hi", sentAt: 1_700_000_000, recipientAccountId: "TESTRCPT"))
+        XCTAssertEqual(d.map { String(format: "%02x", $0) }.joined(), expectedHex)
         XCTAssertNotEqual(d, NoteCrypto.senderSignatureDigest(text: "hi", sentAt: 1_700_000_001, recipientAccountId: "TESTRCPT"))
     }
 }

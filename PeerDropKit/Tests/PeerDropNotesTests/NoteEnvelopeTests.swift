@@ -15,4 +15,14 @@ final class NoteEnvelopeTests: XCTestCase {
         XCTAssertFalse(String(decoding: try env.wireBytes(), as: UTF8.self).contains("opkId"))
         XCTAssertNil(try NoteEnvelope.fromWire(env.wireBytes()).opkId)
     }
+    func testBase64SlashesAreNotEscapedOnTheWire() throws {
+        // Data([0xff, 0xff, 0xff]).base64EncodedString() == "////" — JSON's
+        // default escaping (`\/`) would otherwise make the wire payload
+        // depend on which encoder produced it; `.withoutEscapingSlashes`
+        // keeps the base64 verbatim.
+        let env = NoteEnvelope(v: 1, ephemeralKey: Data([0xff, 0xff, 0xff]), ephemeralKey2: Data(count: 32), spkId: 1, opkId: nil, nonce: Data(count: 12), ciphertext: Data(count: 16))
+        let text = String(decoding: try env.wireBytes(), as: UTF8.self)
+        XCTAssertTrue(text.contains(#""ephemeralKey":"////""#), text)
+        XCTAssertFalse(text.contains(#"\/"#), text)
+    }
 }

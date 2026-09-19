@@ -5,6 +5,15 @@ public enum NoteKind: String, Codable, Sendable {
 }
 
 /// Inner, encrypted sender attestation. Absent on anonymous notes.
+///
+/// **UNVERIFIED until `NoteCrypto.verifySender` succeeds — never display
+/// `accountId`/`nickname` from this block directly.** `NoteCrypto.open`
+/// only checks the AEAD tag on the envelope; the sender fields inside are
+/// whatever the encrypting party chose to put there, so a malicious or
+/// compromised sender can claim any `accountId`/`nickname` here. Callers
+/// MUST call `NoteCrypto.verifySender(_:recipientAccountId:directorySigningKey:)`
+/// with the directory's signing key for the claimed `accountId` before
+/// showing these fields to a user.
 public struct NoteSenderBlock: Codable, Equatable, Sendable {
     public var accountId: String
     public var nickname: String?

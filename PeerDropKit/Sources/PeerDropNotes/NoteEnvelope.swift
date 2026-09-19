@@ -25,7 +25,7 @@ public struct NoteEnvelope: Codable, Equatable, Sendable {
     /// omitted when nil (the worker's `parseEnvelope` accepts both).
     public func wireBytes() throws -> Data {
         let enc = JSONEncoder()
-        enc.outputFormatting = [.sortedKeys]
+        enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try enc.encode(self)
     }
 

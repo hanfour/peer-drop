@@ -119,7 +119,7 @@ private struct RegisterKeysResponse: Codable {
 }
 
 /// Server returns a single one-time pre-key (consumed), not the full array
-public struct FetchedPreKeyBundle: Codable, Equatable {
+public struct FetchedPreKeyBundle: Codable, Equatable, Sendable {
     public let identityKey: Data
     public let signingKey: Data
     public let signedPreKey: PublicSignedPreKey

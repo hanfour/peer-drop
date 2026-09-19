@@ -118,18 +118,27 @@ public enum NoteCrypto {
                             spkId: bundle.signedPreKey.id, opkId: bundle.oneTimePreKey?.id, nonce: Data(nonce), ciphertext: combined)
     }
 
+    /// **The returned `NotePlaintext.sender` block is UNVERIFIED.** `open`
+    /// only checks the AEAD tag on the envelope; it does not check that the
+    /// inner sender attestation's `accountId`/`nickname` are genuine. Callers
+    /// MUST call `verifySender(_:recipientAccountId:directorySigningKey:)`
+    /// before displaying `sender.accountId`/`sender.nickname` to a user.
     public static func open(_ env: NoteEnvelope, recipientAccountId: String, keys: NoteRecipientKeys) throws -> NotePlaintext {
         guard env.v == NoteEnvelope.currentVersion else { throw NoteCryptoError.unsupportedVersion }
         guard let spk = try keys.signedPreKey(env.spkId) else { throw NoteCryptoError.unknownSignedPreKey }
+        // Structural checks (nonce/ciphertext length, ephemeral keys parse)
+        // BEFORE the one-time pre-key lookup: a malformed/tampered envelope
+        // that will fail anyway shouldn't consume — and thereby waste — a
+        // real OPK from the store.
+        guard env.nonce.count == 12, env.ciphertext.count >= tagLength,
+              let ek1 = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: env.ephemeralKey),
+              let ek2 = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: env.ephemeralKey2)
+        else { throw NoteCryptoError.decryptionFailed }
         var opkPrivate: Curve25519.KeyAgreement.PrivateKey? = nil
         if let opkId = env.opkId {
             guard let opk = try keys.oneTimePreKey(opkId) else { throw NoteCryptoError.oneTimePreKeyUnavailable }
             opkPrivate = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: opk.privateKey)
         }
-        guard env.nonce.count == 12, env.ciphertext.count >= tagLength,
-              let ek1 = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: env.ephemeralKey),
-              let ek2 = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: env.ephemeralKey2)
-        else { throw NoteCryptoError.decryptionFailed }
         let agreement = try X3DH.responderKeyAgreement(myIdentityKey: keys.identityKey, mySignedPreKey: try spk.agreementPrivateKey(),
                                                        myOneTimePreKey: opkPrivate, theirIdentityKey: ek1, theirEphemeralKey: ek2)
         let plaintext: Data

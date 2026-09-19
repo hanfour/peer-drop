@@ -40,7 +40,7 @@ public struct MeResponse: Decodable, Sendable {
     public let mailboxId: String
 }
 
-public struct DirectoryEntry: Decodable, Equatable, @unchecked Sendable {
+public struct DirectoryEntry: Decodable, Equatable, Sendable {
     public let accountId: AccountID
     public let nickname: String?
     public let identityKey: Data
