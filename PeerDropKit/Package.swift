@@ -49,6 +49,7 @@ let package = Package(
                 "PeerDropSecurity",
                 "PeerDropProtocol",
                 "PeerDropAccount",
+                "PeerDropNotes",
             ]
         ),
         .target(

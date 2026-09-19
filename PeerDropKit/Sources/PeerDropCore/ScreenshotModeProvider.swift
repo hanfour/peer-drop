@@ -2,6 +2,7 @@ import Foundation
 import PeerDropAccount
 import PeerDropTransport
 import PeerDropSecurity
+import PeerDropNotes
 import Network
 
 /// Provides mock data for App Store screenshot capture mode.
@@ -319,6 +320,31 @@ public final class ScreenshotModeProvider {
             mailboxId: "screenshotmailbox",
             createdAt: Date().addingTimeInterval(-86400 * 30)
         )
+    }
+
+    // MARK: - Mock Notes (sub-project 2)
+
+    /// Three inbox notes (signed, anonymous, unverified) and one sent note for the notes screens.
+    public var mockNotes: (inbox: [NoteRecord], sent: [NoteRecord]) {
+        let now = Date()
+        let inbox = [
+            NoteRecord(id: "01M0CK0000000000000000003", direction: .inbound,
+                       text: localizedName(("Coffee at 3? The place by the station just opened.", "三點喝咖啡？車站旁那家剛開幕。", "三点喝咖啡？车站旁那家刚开业。", "3時にコーヒーどう？駅前の店が開店したよ。", "3시에 커피 어때? 역 앞에 새로 생긴 곳.")),
+                       sentAt: now.addingTimeInterval(-600), sender: .verified(accountId: "7K3MQ2ZD", nickname: localizedName(("mochi", "麻糬醬", "麻薯酱", "もちもち", "모찌모찌"))),
+                       recipientAccountId: nil, readAt: nil, receivedAt: now.addingTimeInterval(-600)),
+            NoteRecord(id: "01M0CK0000000000000000002", direction: .inbound,
+                       text: localizedName(("You did great today. Don't forget to rest.", "你今天很棒，記得休息。", "你今天很棒，记得休息。", "今日はよくがんばったね。休んでね。", "오늘 정말 잘했어. 푹 쉬어.")),
+                       sentAt: now.addingTimeInterval(-7_200), sender: .anonymous, recipientAccountId: nil, readAt: now.addingTimeInterval(-7_000), receivedAt: now.addingTimeInterval(-7_200)),
+            NoteRecord(id: "01M0CK0000000000000000001", direction: .inbound,
+                       text: localizedName(("Sending the photos tonight.", "今晚把照片傳給你。", "今晚把照片传给你。", "今夜写真を送るね。", "오늘 밤 사진 보낼게.")),
+                       sentAt: now.addingTimeInterval(-86_400), sender: .unverified(accountId: "Q2ZD7K3M"), recipientAccountId: nil, readAt: now.addingTimeInterval(-80_000), receivedAt: now.addingTimeInterval(-86_400)),
+        ]
+        let sent = [
+            NoteRecord(id: "01M0CK0000000000000000005", direction: .outbound,
+                       text: localizedName(("Happy birthday!", "生日快樂！", "生日快乐！", "お誕生日おめでとう！", "생일 축하해!")),
+                       sentAt: now.addingTimeInterval(-3_600), sender: .verified(accountId: "PDRPDEM0", nickname: nil), recipientAccountId: "7K3MQ2ZD", readAt: nil, receivedAt: now.addingTimeInterval(-3_600)),
+        ]
+        return (inbox, sent)
     }
 
     // MARK: - Check if a peer ID is mock

@@ -133,6 +133,11 @@ public final class PushNotificationManager: NSObject, ObservableObject {
     /// The push only contains roomCode + senderName (no roomToken for security).
     /// Triggers InboxService reconnect to fetch the full invite from the DO queue.
     public func handleRemoteNotification(_ userInfo: [AnyHashable: Any], inboxService: InboxService) {
+        if case .note(let itemId) = RelayPushKind.classify(userInfo) {
+            logger.info("Push received for a note")
+            NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": itemId ?? ""])
+            return
+        }
         guard let roomCode = userInfo["roomCode"] as? String else {
             logger.warning("Ignoring push without roomCode")
             return
@@ -156,6 +161,27 @@ public final class PushNotificationManager: NSObject, ObservableObject {
             senderId: senderId,
             source: .apns
         )
+    }
+}
+
+public extension Notification.Name {
+    /// A `type: "note"` APNs payload arrived; userInfo `["inboxItemId": String]`
+    /// (may be empty). Listeners run `NotesStore.sync()`.
+    static let didReceiveNotePush = Notification.Name("com.hanfour.peerdrop.didReceiveNotePush")
+    /// The user tapped a note notification; userInfo `["id": String]`.
+    static let openNote = Notification.Name("com.hanfour.peerdrop.openNote")
+}
+
+/// What kind of relay push a payload is — kept pure so it is unit-testable.
+public enum RelayPushKind: Equatable {
+    case note(inboxItemId: String?)
+    case chatInvite(roomCode: String)
+    case other
+
+    public static func classify(_ userInfo: [AnyHashable: Any]) -> RelayPushKind {
+        if userInfo["type"] as? String == "note" { return .note(inboxItemId: userInfo["inboxItemId"] as? String) }
+        if let room = userInfo["roomCode"] as? String { return .chatInvite(roomCode: room) }
+        return .other
     }
 }
 
