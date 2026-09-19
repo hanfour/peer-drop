@@ -186,8 +186,9 @@ public final class NotesStore: ObservableObject {
     /// "we could not reach/read the directory right now" — a plain
     /// `Entry?` can't, and conflating the two is what let a transient
     /// failure permanently downgrade a signed sender (see `NotesStoreError`
-    /// F1 fix note above `decode`).
-    private enum DirectoryLookup { case found(DirectoryCache.Entry), notFound, failed }
+    /// F1 fix note above `decode`). `internal` (not `private`) so tests can
+    /// drive `reverifySender` directly.
+    enum DirectoryLookup { case found(DirectoryCache.Entry), notFound, failed }
 
     private func directoryLookup(for accountId: String) async -> DirectoryLookup {
         if let cached = directoryCache.get(accountId) { return .found(cached) }
@@ -213,27 +214,54 @@ public final class NotesStore: ObservableObject {
     /// directory lookup failed transiently (network/rate-limit — not a 404,
     /// not a key mismatch) stays `.unverified` forever otherwise, since
     /// nothing else ever revisits an already-persisted inbox record.
+    ///
+    /// Candidates are snapshotted as `(id, block)` pairs, NOT array indices:
+    /// `NotesStore` is `@MainActor`, but the actor is released for the
+    /// duration of each candidate's `await directoryLookup` — `delete(_:)`
+    /// (or an earlier candidate's own promotion) can mutate `inbox`
+    /// synchronously while we're suspended, so an index captured before the
+    /// loop can point at the wrong record (or be out of range) by the time
+    /// we come back. `reverifySender` re-resolves by id AFTER its own
+    /// await and is a no-op if the id is gone or no longer `.unverified`.
     private func reverifyUnverifiedSenders(account: Account) async {
-        let candidates = inbox.indices.filter { idx in
-            guard inbox[idx].senderBlock != nil, !confirmedMismatchIds.contains(inbox[idx].id) else { return false }
-            if case .unverified = inbox[idx].sender { return true }
-            return false
-        }.prefix(20)
-        for idx in candidates {
-            let record = inbox[idx]
-            guard let block = record.senderBlock else { continue }
-            switch await directoryLookup(for: block.accountId) {
-            case .found(let entry):
-                if verifySenderBlock(block, text: record.text, sentAt: record.sentAt, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
-                    inbox[idx].sender = .verified(accountId: block.accountId, nickname: entry.nickname)
-                    do { try storage.save(inbox[idx]) } catch { lastError = error.localizedDescription }
-                } else {
-                    confirmedMismatchIds.insert(record.id)
-                }
-            case .notFound, .failed:
-                continue   // may resolve later (account not yet propagated / directory still down) — retry next sync
+        let candidates: [(id: String, block: NoteSenderBlock)] = inbox.compactMap { record in
+            guard let block = record.senderBlock, !confirmedMismatchIds.contains(record.id),
+                  case .unverified = record.sender else { return nil }
+            return (record.id, block)
+        }
+        // Memoized only for this one sync's pass: several stale candidates
+        // can share a sender account that has since been deleted, and
+        // without this every one of them would spend its own directory
+        // lookup (and quota) on the same 404 — retried again next sync.
+        var notFoundThisSync: Set<String> = []
+        for candidate in candidates.prefix(20) {
+            guard !notFoundThisSync.contains(candidate.block.accountId) else { continue }
+            if case .notFound = await reverifySender(id: candidate.id, block: candidate.block, account: account) {
+                notFoundThisSync.insert(candidate.block.accountId)
             }
         }
+    }
+
+    /// Looks up (cache-first) and, if it verifies, promotes exactly one
+    /// unverified sender by id. `internal` rather than `private` so a test
+    /// can drive the disappearance race directly and deterministically
+    /// (delete the record, then call this with its now-stale id/block —
+    /// no real concurrency needed to prove the guard below holds).
+    func reverifySender(id: String, block: NoteSenderBlock, account: Account) async -> DirectoryLookup {
+        let lookup = await directoryLookup(for: block.accountId)
+        guard case .found(let entry) = lookup else { return lookup }
+        // Re-resolve by id — never trust an index/reference captured before
+        // the await above. The record may have been deleted, or (sharing
+        // the same sender account as an earlier candidate in this same
+        // pass) already promoted or confirmed-mismatched.
+        guard let idx = inbox.firstIndex(where: { $0.id == id }), case .unverified = inbox[idx].sender else { return lookup }
+        if verifySenderBlock(block, text: inbox[idx].text, sentAt: inbox[idx].sentAt, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
+            inbox[idx].sender = .verified(accountId: block.accountId, nickname: entry.nickname)
+            do { try storage.save(inbox[idx]) } catch { lastError = error.localizedDescription }
+        } else {
+            confirmedMismatchIds.insert(id)
+        }
+        return lookup
     }
 
     // MARK: - Send

@@ -109,21 +109,91 @@ final class NotesStoreTests: XCTestCase {
         await store.sync()
         XCTAssertEqual(store.inbox[0].sender, .verified(accountId: "SENDR001", nickname: "alice"))
     }
+    /// Deterministic clock injected into `DirectoryCache` so this test can
+    /// force cache expiry between two `sync()` calls without depending on
+    /// real wall-clock speed (`DirectoryCache(ttl: 0)` alone doesn't work:
+    /// empirically, even the microseconds between `decode`'s own lookup and
+    /// the SAME sync's reverify pass are enough real elapsed time to exceed
+    /// a zero ttl, so the mismatch is never actually cached long enough to
+    /// be discovered as `.found` — it just free-falls to `.failed` on every
+    /// call instead, which proves nothing about `confirmedMismatchIds`).
+    private final class TestClock { var now = Date() }
+
     func testKeyMismatchStaysUnverifiedWithoutFurtherLookups() async throws {
+        // A generous ttl keeps the FIRST sync's decode-then-reverify lookups
+        // (microseconds apart) sharing one cache entry, so the mismatch is
+        // discovered normally; advancing the clock past the ttl before the
+        // SECOND sync then makes that cache entry stale, isolating the
+        // "no second lookup" assertion to `confirmedMismatchIds` rather
+        // than cache reuse.
+        let clock = TestClock()
+        let localDir = FileManager.default.temporaryDirectory.appendingPathComponent("notes-store-mismatch-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: localDir) }
+        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [TestURLProtocol.self]
+        let account = AccountClient(baseURL: URL(string: "https://worker.test")!, session: URLSession(configuration: cfg), authProvider: { _ in }, tokenInvalidator: {})
+        let manager = AccountManager(mock: Account(accountId: me.accountId, nickname: "rcpt", mailboxId: "mbxtest", createdAt: Date()))
+        let localStore = NotesStore(client: NotesClient(account: account), accountManager: manager, crypto: FakeCrypto(fixture: me),
+                                    storage: NotesStorage(directory: localDir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))),
+                                    directoryCache: DirectoryCache(ttl: 60, now: { clock.now }))
         let sender = SenderFixture()
         let env = try NoteCrypto.seal(text: "s", recipient: try me.entry(), signer: sender.signer)
         let id = "01AAAAAAAAAAAAAAAAAAAAAAAY"
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)])), .init(status: 200, body: directoryJSON(signingKey: Data(repeating: 9, count: 32)))]
-        await store.sync()
-        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+        await localStore.sync()
+        XCTAssertEqual(localStore.inbox[0].sender, .unverified(accountId: "SENDR001"))
         let requestsAfterFirstSync = TestURLProtocol.requests.count
-        // Second sync: no directory stub queued — if the mismatch were
-        // retried it would consume the default 500 and stay unverified
-        // anyway, so assert on the request COUNT to prove no lookup ran.
+        // Expire the cache entry before the second sync — if `confirmedMismatchIds`
+        // weren't gating the retry, a stale cache would force a real lookup,
+        // which would consume the default 500 and stay unverified anyway,
+        // so assert on the request COUNT to prove no lookup ran at all.
+        clock.now.addTimeInterval(61)
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)]))]
-        await store.sync()
-        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+        await localStore.sync()
+        XCTAssertEqual(localStore.inbox[0].sender, .unverified(accountId: "SENDR001"))
         XCTAssertEqual(TestURLProtocol.requests.count, requestsAfterFirstSync + 1)   // only the inbox page; no directory call
+    }
+    func testReverifySenderSkipsAndDoesNotCorruptAnotherRecordWhenItsOwnRecordVanishes() async throws {
+        // `NotesStore` is `@MainActor`, but the actor is released for the
+        // duration of `reverifySender`'s own `await directoryLookup` — a
+        // concurrently issued `delete(_:)` can remove the very record a
+        // pending lookup is about to answer for. Rather than race real
+        // concurrency (flaky: `TestURLProtocol`'s stub queue is a single
+        // global FIFO shared by every in-flight request, so a second
+        // request racing the first can steal its stub), simulate the
+        // post-await state directly: delete the record, THEN hand
+        // `reverifySender` its now-stale id/block, exactly what it would
+        // see if the delete had happened while the lookup was in flight.
+        let sender = SenderFixture()
+        let envA = try NoteCrypto.seal(text: "a", recipient: try me.entry(), signer: sender.signer)
+        let idA = "01AAAAAAAAAAAAAAAAAAAAAAA1"
+        // recordB: a plain anonymous note, unrelated to this pass — proves
+        // a stale index/reference can never stamp recordA's identity onto
+        // whatever now occupies its old slot.
+        let envB = try NoteCrypto.seal(text: "b", recipient: try me.entry(), signer: nil)
+        let idB = "01AAAAAAAAAAAAAAAAAAAAAAA2"
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(idA, envA), (idB, envB)]))]
+        await store.sync()
+        XCTAssertEqual(Set(store.inbox.map(\.id)), Set([idA, idB]))
+        let recordA = try XCTUnwrap(store.inbox.first { $0.id == idA })
+        XCTAssertEqual(recordA.sender, .unverified(accountId: "SENDR001"))
+        let blockA = try XCTUnwrap(recordA.senderBlock)
+        XCTAssertEqual(store.inbox.first { $0.id == idB }?.sender, .anonymous)
+
+        // Simulate recordA being deleted while its own lookup was in flight.
+        await store.delete(recordA)
+        XCTAssertEqual(store.inbox.map(\.id), [idB])
+
+        // A directory answer that WOULD verify recordA arrives late.
+        TestURLProtocol.queue = [.init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation))]
+        let account = Account(accountId: me.accountId, nickname: "rcpt", mailboxId: "mbxtest", createdAt: Date())
+        let outcome = await store.reverifySender(id: idA, block: blockA, account: account)
+        guard case .found = outcome else { return XCTFail("expected the directory lookup to still succeed") }
+
+        // The bug this guards against: writing recordA's verified identity
+        // into whatever now sits at the stale index. recordB must be
+        // untouched, and nothing should have crashed getting here.
+        XCTAssertEqual(store.inbox.map(\.id), [idB])
+        XCTAssertEqual(store.inbox[0].sender, .anonymous)
     }
     func testUndecryptableItemIsKeptWithNilText() async throws {
         let junk = NoteEnvelope(v: 1, ephemeralKey: Data(repeating: 1, count: 32), ephemeralKey2: Data(repeating: 2, count: 32), spkId: 99, opkId: nil, nonce: Data(count: 12), ciphertext: Data(count: 32))
