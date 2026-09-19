@@ -18,7 +18,15 @@ struct MacSettingsView: View {
             SupportSettingsTab()
                 .tabItem { Label("Support", systemImage: "heart.fill") }
         }
-        .frame(width: 520, height: 420)
+        // Task 12 E2E fix: the Profile tab grew a "Blocked Senders"
+        // section (BlockListSection, added in Task 11) that this shared
+        // TabView frame never accounted for. A fixed-height frame on a
+        // Mac Settings TabView does not grow to fit a taller tab's
+        // content and there is no scroll fallback, so anything past the
+        // old 420pt was permanently clipped and unreachable — the block
+        // list was invisible even though `GET /v3/blocks` succeeded.
+        // 620pt comfortably fits Identity + Account + Blocked Senders.
+        .frame(width: 520, height: 620)
     }
 }
 
