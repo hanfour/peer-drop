@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropSecurity  // for PeerIdentity
+import PeerDropNotes
 
 struct MacSettingsView: View {
     var body: some View {
@@ -94,6 +95,7 @@ private struct ProfileSettingsTab: View {
             }
 
             AccountSectionView(accountManager: connectionManager.accountManager)
+            BlockListSection(store: connectionManager.notesStore)
         }
         .formStyle(.grouped)
         .padding()

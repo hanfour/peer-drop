@@ -27,6 +27,19 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         completionHandler([.banner, .sound])
     }
 
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if case .note(let id) = RelayPushKind.classify(userInfo) {
+            NotificationCenter.default.post(name: .openNote, object: nil, userInfo: ["id": id ?? ""])
+            NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": id ?? ""])
+        }
+        completionHandler()
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { await PushNotificationManager.shared.handleDeviceToken(deviceToken) }
     }

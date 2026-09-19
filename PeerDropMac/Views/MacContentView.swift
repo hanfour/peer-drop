@@ -1,8 +1,11 @@
 import SwiftUI
 import PeerDropCore
+import PeerDropNotes
 
 struct MacContentView: View {
-    @State private var selection: MacSidebarSection? = .nearby
+    @State private var selection: MacSidebarSection? = .notes
+    @State private var notesPath: [NoteRecord] = []
+    @State private var openNoteID: String?
     @AppStorage("sidebar.width") private var sidebarWidth: Double = 220
     @State private var isDropTargeted = false
 
@@ -11,7 +14,7 @@ struct MacContentView: View {
             MacSidebar(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 180, ideal: sidebarWidth, max: 360)
         } detail: {
-            MacDetailRouter(section: selection)
+            MacDetailRouter(section: selection, notesPath: $notesPath, openNoteID: $openNoteID)
                 .navigationSplitViewColumnWidth(min: 480, ideal: 600)
         }
         .navigationSplitViewStyle(.balanced)
@@ -31,6 +34,11 @@ struct MacContentView: View {
             if let section = note.object as? MacSidebarSection {
                 selection = section
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openNote)) { note in
+            guard let id = note.userInfo?["id"] as? String else { return }
+            selection = .notes
+            openNoteID = id
         }
     }
 }

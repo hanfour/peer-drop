@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
+import PeerDropNotes
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
@@ -35,6 +36,7 @@ struct SettingsView: View {
                 Section { TextField("Display Name", text: $displayName).autocorrectionDisabled() } header: { Text("Identity") } footer: { Text("This name is visible to nearby devices.") }
                 Section("Profile") { NavigationLink("Edit Profile") { UserProfileView() } }
                 AccountSectionView(accountManager: connectionManager.accountManager)
+                BlockListSection(store: connectionManager.notesStore)
                 Section {
                     Toggle("File Transfer", isOn: $fileTransferEnabled)
                         .accessibilityHint("Allows sending and receiving files")

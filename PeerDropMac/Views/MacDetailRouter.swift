@@ -1,5 +1,6 @@
 import SwiftUI
 import PeerDropCore
+import PeerDropNotes
 
 /// Routes the selected sidebar section to its detail content.
 ///
@@ -10,6 +11,8 @@ import PeerDropCore
 /// pickers / QR rendering.
 struct MacDetailRouter: View {
     let section: MacSidebarSection?
+    @Binding var notesPath: [NoteRecord]
+    @Binding var openNoteID: String?
     @EnvironmentObject var connectionManager: ConnectionManager
     // `NearbyTab` uses this binding on iOS to flip the parent TabView's
     // selected index after certain actions. macOS has no tab parent —
@@ -18,8 +21,11 @@ struct MacDetailRouter: View {
     @State private var nearbyTabIndex: Int = 0
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $notesPath) {
             switch section {
+            case .notes:
+                NotesInboxView(store: connectionManager.notesStore, accountManager: connectionManager.accountManager, openNoteID: $openNoteID, path: $notesPath)
+                    .environmentObject(connectionManager)
             case .nearby:
                 NearbyTab(selectedTab: $nearbyTabIndex)
                     .environmentObject(connectionManager)
@@ -33,7 +39,7 @@ struct MacDetailRouter: View {
                 ContentUnavailableView(
                     "Choose a section",
                     systemImage: "sidebar.left",
-                    description: Text("Pick Nearby, Library, or Relay from the sidebar.")
+                    description: Text("Pick Notes, Nearby, Library, or Relay from the sidebar.")
                 )
             }
         }

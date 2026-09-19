@@ -169,12 +169,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "換裝置會建立新帳號，目前尚無帳號還原功能。" } }
       }
     },
-    "Pick Nearby, Library, or Relay from the sidebar." : {
+    "Pick Notes, Nearby, Library, or Relay from the sidebar." : {
       "localizations" : {
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドバーから「近くのデバイス」「ライブラリ」「リレー」を選んでください。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사이드바에서 근처, 라이브러리 또는 릴레이를 선택하세요." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从侧边栏选择附近、资料库或中继。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "從側邊欄選擇附近、資料庫或 Relay。" } }
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドバーからメモ・付近・ライブラリ・Relay を選択してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사이드바에서 쪽지, 주변, 라이브러리 또는 Relay를 선택하세요." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从侧边栏选择纸条、附近、图书馆或 Relay。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "從側邊欄選擇紙條、附近、圖書館或 Relay。" } }
       }
     },
     "%lld 天" : {

@@ -1,12 +1,13 @@
 import SwiftUI
 
 extension Notification.Name {
-    /// Posted by PeerDropCommands when the user invokes ⌘⌥{1-3}.
+    /// Posted by PeerDropCommands when the user invokes ⌘⌥{1-4}.
     /// MacContentView observes and flips its sidebar selection.
     static let macSidebarJump = Notification.Name("com.hanfour.peerdrop.mac.sidebarJump")
 }
 
 enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
+    case notes
     case nearby
     case trusted
     case relay
@@ -15,6 +16,7 @@ enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
 
     var localizedName: String {
         switch self {
+        case .notes:   return NSLocalizedString("Notes", comment: "")
         case .nearby:  return NSLocalizedString("Nearby", comment: "")
         case .trusted: return NSLocalizedString("Library", comment: "")
         case .relay:   return NSLocalizedString("Relay", comment: "")
@@ -23,6 +25,7 @@ enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .notes:   return "envelope.fill"
         case .nearby:  return "wifi"
         case .trusted: return "checkmark.shield"
         case .relay:   return "network"

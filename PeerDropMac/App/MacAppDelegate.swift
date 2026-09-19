@@ -215,6 +215,21 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
     ) {
         completionHandler([.banner, .sound])
     }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if case .note(let id) = RelayPushKind.classify(userInfo) {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .openNote, object: nil, userInfo: ["id": id ?? ""])
+                NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": id ?? ""])
+            }
+        }
+        completionHandler()
+    }
 }
 
 extension Notification.Name {

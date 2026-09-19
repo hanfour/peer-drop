@@ -1,6 +1,8 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
+import PeerDropNotes
+import PeerDropAccount
 
 /// Modifier to force tab bar style on iPad (iOS 18+)
 struct TabBarOnlyModifier: ViewModifier {
@@ -57,7 +59,9 @@ struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @EnvironmentObject var inboxService: InboxService
     @ObservedObject private var pushManager = PushNotificationManager.shared
-    @State private var selectedTab = 0
+    @State private var selectedTab = 3
+    @State private var notesPath: [NoteRecord] = []
+    @State private var openNoteID: String?
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var activeSheet: ContentSheet?
@@ -72,6 +76,11 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
         TabView(selection: $selectedTab) {
+            NotesTabContent(store: connectionManager.notesStore, accountManager: connectionManager.accountManager, openNoteID: $openNoteID, path: $notesPath)
+                .tabItem { Label("Notes", systemImage: "envelope.fill") }
+                .tag(3)
+                .accessibilityLabel("Notes")
+
             NavigationStack {
                 NearbyTab(selectedTab: $selectedTab)
             }
@@ -103,6 +112,11 @@ struct ContentView: View {
             .accessibilityHint("View saved devices and groups")
         }
         .modifier(TabBarOnlyModifier())  // Force tab bar on iPad
+        .onReceive(NotificationCenter.default.publisher(for: .openNote)) { note in
+            guard let id = note.userInfo?["id"] as? String else { return }
+            selectedTab = 3
+            openNoteID = id
+        }
         .sheet(item: securitySheetBinding) { route in
             switch route {
             case .incomingRequest(let request):
@@ -342,6 +356,22 @@ struct ContentView: View {
                 }
             }
         )
+    }
+}
+
+/// Notes tab body: owns the NavigationStack path so a notification tap can push a note,
+/// and observes the store so the tab badge updates.
+private struct NotesTabContent: View {
+    @ObservedObject var store: NotesStore
+    @ObservedObject var accountManager: AccountManager
+    @Binding var openNoteID: String?
+    @Binding var path: [NoteRecord]
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            NotesInboxView(store: store, accountManager: accountManager, openNoteID: $openNoteID, path: $path)
+        }
+        .badge(store.unreadCount)
     }
 }
 
