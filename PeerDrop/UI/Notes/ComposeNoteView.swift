@@ -1,5 +1,4 @@
 import SwiftUI
-import PeerDropAccount
 import PeerDropNotes
 
 struct ComposeNoteView: View {
@@ -39,7 +38,7 @@ struct ComposeNoteView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button { Task { await send() } } label: {
-                    if isSending { HStack { ProgressView(); Text("Sending…") } } else { Text("Send") }
+                    if isSending { HStack { ProgressView(); Text("Sending...") } } else { Text("Send") }
                 }
                 .disabled(!canSend)
             }
