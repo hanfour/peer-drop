@@ -30,6 +30,7 @@ export interface Env {
   SIGNALING_ROOM: DurableObjectNamespace;
   PREKEY_STORE: DurableObjectNamespace;
   DEVICE_INBOX: DurableObjectNamespace;
+  ACCOUNT_INBOX: DurableObjectNamespace;
   // D1
   ACCOUNTS_DB: D1Database;
   // Secrets
@@ -2173,3 +2174,5 @@ export class DeviceInbox {
     try { ws.close(1011, "error"); } catch { /* already closed */ }
   }
 }
+
+export { AccountInbox } from "./accountInbox";
