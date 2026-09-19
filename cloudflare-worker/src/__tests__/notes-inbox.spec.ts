@@ -36,6 +36,12 @@ describe("/v3/inbox", () => {
     expect((await SELF.fetch(`https://example.com/v3/inbox/${id}`, { method: "DELETE", headers: bearer(c) })).status).toBe(204);
     expect((await inbox(bearer(b))).items.length).toBe(1);
   });
+  it("rejects a malformed after cursor", async () => {
+    const a = await makeAccount("dev-note-inb-0006");
+    const r = await SELF.fetch("https://example.com/v3/inbox?after=garbage", { headers: bearer(a) });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "invalid_cursor" });
+  });
 });
 
 describe("blocks", () => {
@@ -55,6 +61,11 @@ describe("blocks", () => {
     expect((await sendNote(bearer(a), b.accountId, fakeEnvelope(3))).status).toBe(201);
     expect((await inbox(bearer(b))).items.length).toBe(2);
     expect((await SELF.fetch(`https://example.com/v3/inbox/${"0".repeat(26)}/block`, { method: "POST", headers: bearer(b) })).status).toBe(404);
+  });
+  it("accepts the Mac key lane for block", async () => {
+    const a = await makeAccount("dev-note-blk-0003"), mac = await makeAccount("dev-note-blk-0004", "macos");
+    const id = ((await (await sendNote(bearer(a), mac.accountId)).json()) as { id: string }).id;
+    expect((await SELF.fetch(`https://example.com/v3/inbox/${id}/block`, { method: "POST", headers: keyLane(mac) })).status).toBe(200);
   });
 });
 
@@ -77,5 +88,11 @@ describe("reports", () => {
     expect(mine.senderHash).toMatch(/^[0-9a-f]{64}$/);
     await env.V2_STORE.put(`report-quota:${b.accountId}:${new Date().toISOString().slice(0, 10)}`, String(NOTE_LIMITS.reportsPerDay));
     expect((await SELF.fetch(`https://example.com/v3/inbox/${id}/report`, { method: "POST", headers: bearer(b), body: JSON.stringify({ reason: "spam" }) })).status).toBe(429);
+  });
+  it("accepts the Mac key lane for report", async () => {
+    const a = await makeAccount("dev-note-rep-0003"), mac = await makeAccount("dev-note-rep-0004", "macos");
+    const id = ((await (await sendNote(bearer(a), mac.accountId)).json()) as { id: string }).id;
+    const r = await SELF.fetch(`https://example.com/v3/inbox/${id}/report`, { method: "POST", headers: keyLane(mac), body: JSON.stringify({ reason: "spam" }) });
+    expect(r.status).toBe(201);
   });
 });

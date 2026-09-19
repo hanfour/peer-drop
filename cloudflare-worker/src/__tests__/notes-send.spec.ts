@@ -75,6 +75,17 @@ describe("POST /v3/notes/:recipient", () => {
     expect(((await r.json()) as { id: string }).id).toMatch(/^[0-9A-Z]{26}$/);
     expect((await inboxOf(b)).items).toEqual([]);
   });
+  it("charges the sender's quota but not the recipient's for a blocked send (block check precedes the recipient quota)", async () => {
+    const a = await makeAccount("dev-note-send-0014"), b = await makeAccount("dev-note-send-0015");
+    const sh = await senderHash("test-token-secret-deterministic", a.accountId);
+    await env.ACCOUNTS_DB.prepare("INSERT INTO blocks (account_id, sender_hash, created_at) VALUES (?1, ?2, ?3)").bind(b.accountId, sh, Date.now()).run();
+    const day = new Date().toISOString().slice(0, 10);
+    expect(await env.V2_STORE.get(`note-quota:r:${b.accountId}:${day}`)).toBeNull();
+    expect(await env.V2_STORE.get(`note-quota:s:${a.accountId}:${day}`)).toBeNull();
+    expect((await sendNote(bearer(a), b.accountId)).status).toBe(201);
+    expect(await env.V2_STORE.get(`note-quota:s:${a.accountId}:${day}`)).toBe("1");
+    expect(await env.V2_STORE.get(`note-quota:r:${b.accountId}:${day}`)).toBeNull();
+  });
   it("enforces the per-sender and per-recipient daily quotas", async () => {
     const a = await makeAccount("dev-note-send-0010"), b = await makeAccount("dev-note-send-0011");
     const day = new Date().toISOString().slice(0, 10);

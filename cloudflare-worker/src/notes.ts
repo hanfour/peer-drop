@@ -161,12 +161,17 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
     const recipient = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM accounts WHERE account_id = ?1").bind(recipientId).first<{ account_id: string }>();
     if (!recipient) return json({ error: "recipient_not_found" }, 404);
     const day = dayKey();
+    // Sender quota first (the cost of trying at all), THEN the block check —
+    // a blocked send must not also burn the RECIPIENT's daily quota, since
+    // it never reaches their inbox either way (2026-09-19 fix: this used to
+    // run after both quota bumps, so a blocked sender could exhaust a
+    // recipient's inbox quota purely by retrying).
     if (!(await bumpQuota(env.V2_STORE, `note-quota:s:${auth.accountId}:${day}`, NOTE_LIMITS.perSenderPerDay, 2 * 86400))) return json({ error: "rate_limited" }, 429);
-    if (!(await bumpQuota(env.V2_STORE, `note-quota:r:${recipientId}:${day}`, NOTE_LIMITS.perRecipientPerDay, 2 * 86400))) return json({ error: "rate_limited" }, 429);
-    const id = ulid();
     const sh = await senderHash(env.TOKEN_SECRET, auth.accountId);
     const blocked = await env.ACCOUNTS_DB.prepare("SELECT 1 AS x FROM blocks WHERE account_id = ?1 AND sender_hash = ?2").bind(recipientId, sh).first();
-    if (blocked) return json({ id }, 201); // silent drop: the sender must not learn they are blocked
+    if (blocked) return json({ id: ulid() }, 201); // silent drop: the sender must not learn they are blocked
+    if (!(await bumpQuota(env.V2_STORE, `note-quota:r:${recipientId}:${day}`, NOTE_LIMITS.perRecipientPerDay, 2 * 86400))) return json({ error: "rate_limited" }, 429);
+    const id = ulid();
     const stub = env.ACCOUNT_INBOX.get(env.ACCOUNT_INBOX.idFromName(recipientId));
     const doResp = await stub.fetch(new Request("https://inbox/items", { method: "PUT", body: JSON.stringify({ id, kind: "note", envelope: body.envelope, senderHash: sh, createdAt: Date.now() }) }));
     if (doResp.status === 507) return json({ error: "inbox_full" }, 507);
