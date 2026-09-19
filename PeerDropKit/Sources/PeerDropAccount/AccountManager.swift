@@ -258,10 +258,10 @@ public final class AccountManager: ObservableObject {
         state = .ready(account)
     }
 
-    public func lookup(handle: String) async throws -> DirectoryEntry? {
+    public func lookup(handle: String, includeBundle: Bool = false) async throws -> DirectoryEntry? {
         guard account != nil else { throw AccountManagerError.noAccount }
         try await ensureFreshTokenIfNeeded()
-        return try await client.lookup(handle: handle, includeBundle: false)
+        return try await client.lookup(handle: handle, includeBundle: includeBundle)
     }
 
     public func refreshFromServer() async {
