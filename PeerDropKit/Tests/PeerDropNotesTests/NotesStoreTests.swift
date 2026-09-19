@@ -90,6 +90,41 @@ final class NotesStoreTests: XCTestCase {
         await store.sync()
         XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
     }
+    func testTransientDirectoryFailureDoesNotPermanentlyDowngradeSender() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "s", recipient: try me.entry(), signer: sender.signer)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAAZ"
+        // First sync: the inbox page is the only queued stub, so every
+        // directory lookup (the initial `decode` and the same-sync bounded
+        // re-verification pass) falls through `TestURLProtocol`'s empty-queue
+        // default of a 500 — a transient failure, not a 404.
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)]))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+        XCTAssertNotNil(store.inbox[0].senderBlock)
+        // Second sync: the inbox item is already known so `decode` is not
+        // re-run; only the bounded re-verification pass looks the sender up
+        // again, this time the directory answers with the right key.
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)])), .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .verified(accountId: "SENDR001", nickname: "alice"))
+    }
+    func testKeyMismatchStaysUnverifiedWithoutFurtherLookups() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "s", recipient: try me.entry(), signer: sender.signer)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAAY"
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)])), .init(status: 200, body: directoryJSON(signingKey: Data(repeating: 9, count: 32)))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+        let requestsAfterFirstSync = TestURLProtocol.requests.count
+        // Second sync: no directory stub queued — if the mismatch were
+        // retried it would consume the default 500 and stay unverified
+        // anyway, so assert on the request COUNT to prove no lookup ran.
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)]))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+        XCTAssertEqual(TestURLProtocol.requests.count, requestsAfterFirstSync + 1)   // only the inbox page; no directory call
+    }
     func testUndecryptableItemIsKeptWithNilText() async throws {
         let junk = NoteEnvelope(v: 1, ephemeralKey: Data(repeating: 1, count: 32), ephemeralKey2: Data(repeating: 2, count: 32), spkId: 99, opkId: nil, nonce: Data(count: 12), ciphertext: Data(count: 32))
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAD", junk)]))]
@@ -172,9 +207,19 @@ final class NotesStoreTests: XCTestCase {
         let excerpt = body["excerpt"] as! String
         XCTAssertEqual(excerpt.unicodeScalars.count, NotesStore.maxExcerptScalars)
     }
-    func testMockInitIsReadyWithoutNetwork() {
+    func testBlockOn404ThrowsNoteNotFound() async throws {
+        TestURLProtocol.queue = [.init(status: 404, body: Data(#"{"error":"not_found"}"#.utf8))]
+        let rec = NoteRecord(id: "01NF", direction: .inbound, text: "t", sentAt: Date(), sender: .anonymous, recipientAccountId: nil, readAt: nil, receivedAt: Date())
+        do { _ = try await store.block(rec); XCTFail() } catch { XCTAssertEqual(error as? NotesStoreError, .noteNotFound) }
+    }
+    func testMockInitIsReadyWithoutNetwork() async throws {
         let r = NoteRecord(id: "01M", direction: .inbound, text: "mock", sentAt: Date(), sender: .anonymous, recipientAccountId: nil, readAt: nil, receivedAt: Date())
         let s = NotesStore(mockInbox: [r], sent: [])
         XCTAssertEqual(s.inbox, [r]); XCTAssertEqual(s.unreadCount, 1)
+        let blocks = try await s.blocks()
+        XCTAssertTrue(blocks.isEmpty)
+        await s.markRead("01M")
+        XCTAssertNotNil(s.inbox[0].readAt)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: s.storage.directory.path))   // markRead never touched disk
     }
 }

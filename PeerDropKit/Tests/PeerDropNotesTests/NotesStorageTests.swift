@@ -46,6 +46,15 @@ final class NotesStorageTests: XCTestCase {
         let reopened = NotesStorage(directory: dir, encryptor: storage.encryptor)
         XCTAssertEqual(reopened.lastSeenInboxId, "01B")
     }
+    func testRoundTripPreservesSenderBlock() throws {
+        let block = NoteSenderBlock(accountId: "SENDR001", nickname: "alice", signingKey: Data(repeating: 1, count: 32), signature: Data(repeating: 2, count: 64))
+        var rec = record("01SB")
+        rec.sender = .unverified(accountId: "SENDR001")
+        rec.senderBlock = block
+        try storage.save(rec)
+        XCTAssertEqual(storage.loadInbox().first { $0.id == "01SB" }, rec)
+        XCTAssertEqual(storage.loadInbox().first { $0.id == "01SB" }?.senderBlock, block)
+    }
     func testSenderStateCodableRoundTrip() throws {
         for state in [NoteSenderState.anonymous, .verified(accountId: "A1", nickname: nil), .unverified(accountId: "A2")] {
             let data = try JSONEncoder().encode(state)

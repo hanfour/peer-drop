@@ -14,7 +14,7 @@ public enum NoteKind: String, Codable, Sendable {
 /// MUST call `NoteCrypto.verifySender(_:recipientAccountId:directorySigningKey:)`
 /// with the directory's signing key for the claimed `accountId` before
 /// showing these fields to a user.
-public struct NoteSenderBlock: Codable, Equatable, Sendable {
+public struct NoteSenderBlock: Codable, Hashable, Sendable {
     public var accountId: String
     public var nickname: String?
     public var signingKey: Data

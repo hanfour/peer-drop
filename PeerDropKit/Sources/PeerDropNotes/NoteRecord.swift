@@ -48,10 +48,16 @@ public struct NoteRecord: Codable, Hashable, Identifiable, Sendable {   // Hasha
     public let recipientAccountId: String?   // outbound only
     public var readAt: Date?
     public let receivedAt: Date
+    /// The inner sender attestation as received, kept even when unverified
+    /// (or when verification failed only because the directory lookup was
+    /// transiently unavailable) so a later sync can re-verify it without
+    /// re-fetching the envelope. **Still unverified** unless `sender` is
+    /// `.verified` — never display these fields directly.
+    public var senderBlock: NoteSenderBlock?
 
-    public init(id: String, direction: NoteDirection, text: String?, sentAt: Date, sender: NoteSenderState, recipientAccountId: String?, readAt: Date?, receivedAt: Date) {
+    public init(id: String, direction: NoteDirection, text: String?, sentAt: Date, sender: NoteSenderState, recipientAccountId: String?, readAt: Date?, receivedAt: Date, senderBlock: NoteSenderBlock? = nil) {
         self.id = id; self.direction = direction; self.text = text; self.sentAt = sentAt; self.sender = sender
-        self.recipientAccountId = recipientAccountId; self.readAt = readAt; self.receivedAt = receivedAt
+        self.recipientAccountId = recipientAccountId; self.readAt = readAt; self.receivedAt = receivedAt; self.senderBlock = senderBlock
     }
 
     public var isUnread: Bool { direction == .inbound && readAt == nil }

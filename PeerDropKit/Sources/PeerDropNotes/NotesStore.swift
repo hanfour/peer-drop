@@ -20,6 +20,7 @@ public enum NotesStoreError: Error, Equatable {
     case opkExhausted
     case rateLimited
     case inboxFull
+    case noteNotFound
     case network(String)
 }
 
@@ -40,6 +41,12 @@ public final class NotesStore: ObservableObject {
     private let directoryCache: DirectoryCache
     private let policy: SecurityPolicy
     private let isMock: Bool
+    /// Ids of inbound records whose sender block was looked up, FOUND in the
+    /// directory, and did not match — a permanent mismatch, unlike a
+    /// transient lookup failure. Skipped by future re-verification passes so
+    /// we don't keep re-querying the directory for a note that will never
+    /// verify. Per-instance only; a relaunch simply re-derives it once.
+    private var confirmedMismatchIds: Set<String> = []
 
     public init(client: NotesClient, accountManager: AccountManager, crypto: NotesCryptoContext, storage: NotesStorage,
                 directoryCache: DirectoryCache = DirectoryCache(), policy: SecurityPolicy = .bundledDefault) {
@@ -139,6 +146,11 @@ public final class NotesStore: ObservableObject {
                 after = next
             }
             lastError = nil
+            // Only on a fully successful page walk: a transient directory
+            // failure (rate-limited/network) during `decode` above must not
+            // permanently strand a signed sender as unverified — retry a
+            // bounded slice of them now that the account is reachable again.
+            await reverifyUnverifiedSenders(account: account)
         } catch {
             lastError = String(describing: Self.mapNetwork(error))
             Self.logger.error("inbox sync failed: \(String(describing: error), privacy: .public)")
@@ -157,20 +169,71 @@ public final class NotesStore: ObservableObject {
         var sender: NoteSenderState = .anonymous
         if let block = plaintext.sender {
             sender = .unverified(accountId: block.accountId)
-            if let entry = await directoryEntry(for: block.accountId),
+            // A 404 ("not found") and a network/rate-limit failure both leave
+            // the sender `.unverified` here — the difference only matters to
+            // `reverifyUnverifiedSenders`, which must retry the latter but
+            // not waste lookups on a confirmed key mismatch.
+            if case .found(let entry) = await directoryLookup(for: block.accountId),
                NoteCrypto.verifySender(plaintext, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
                 sender = .verified(accountId: block.accountId, nickname: entry.nickname)
             }
         }
         return NoteRecord(id: item.id, direction: .inbound, text: plaintext.text, sentAt: Date(timeIntervalSince1970: TimeInterval(plaintext.sentAt)),
-                          sender: sender, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt)
+                          sender: sender, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt, senderBlock: plaintext.sender)
     }
 
-    private func directoryEntry(for accountId: String) async -> DirectoryCache.Entry? {
-        if let cached = directoryCache.get(accountId) { return cached }
-        guard let entry = try? await client.lookup(handle: accountId, includeBundle: false) else { return nil }
-        directoryCache.set(accountId, signingKey: entry.signingKey, nickname: entry.nickname)
-        return directoryCache.get(accountId)
+    /// Distinguishes "the directory definitively has no such account" from
+    /// "we could not reach/read the directory right now" — a plain
+    /// `Entry?` can't, and conflating the two is what let a transient
+    /// failure permanently downgrade a signed sender (see `NotesStoreError`
+    /// F1 fix note above `decode`).
+    private enum DirectoryLookup { case found(DirectoryCache.Entry), notFound, failed }
+
+    private func directoryLookup(for accountId: String) async -> DirectoryLookup {
+        if let cached = directoryCache.get(accountId) { return .found(cached) }
+        do {
+            guard let entry = try await client.lookup(handle: accountId, includeBundle: false) else { return .notFound }
+            directoryCache.set(accountId, signingKey: entry.signingKey, nickname: entry.nickname)
+            guard let cached = directoryCache.get(accountId) else { return .failed }   // TTL <= 0 edge case
+            return .found(cached)
+        } catch {
+            return .failed
+        }
+    }
+
+    /// Reconstructs just enough of the original `NotePlaintext` from a saved
+    /// `NoteRecord` to re-run `NoteCrypto.verifySender` — the record never
+    /// stores the whole plaintext, only the fields the signature covers.
+    private func verifySenderBlock(_ block: NoteSenderBlock, text: String?, sentAt: Date, recipientAccountId: String, directorySigningKey: Data) -> Bool {
+        let plaintext = NotePlaintext(kind: .note, text: text ?? "", sentAt: Int64(sentAt.timeIntervalSince1970), sender: block)
+        return NoteCrypto.verifySender(plaintext, recipientAccountId: recipientAccountId, directorySigningKey: directorySigningKey)
+    }
+
+    /// Bounded retry, run at the end of every successful sync: a note whose
+    /// directory lookup failed transiently (network/rate-limit — not a 404,
+    /// not a key mismatch) stays `.unverified` forever otherwise, since
+    /// nothing else ever revisits an already-persisted inbox record.
+    private func reverifyUnverifiedSenders(account: Account) async {
+        let candidates = inbox.indices.filter { idx in
+            guard inbox[idx].senderBlock != nil, !confirmedMismatchIds.contains(inbox[idx].id) else { return false }
+            if case .unverified = inbox[idx].sender { return true }
+            return false
+        }.prefix(20)
+        for idx in candidates {
+            let record = inbox[idx]
+            guard let block = record.senderBlock else { continue }
+            switch await directoryLookup(for: block.accountId) {
+            case .found(let entry):
+                if verifySenderBlock(block, text: record.text, sentAt: record.sentAt, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
+                    inbox[idx].sender = .verified(accountId: block.accountId, nickname: entry.nickname)
+                    do { try storage.save(inbox[idx]) } catch { lastError = error.localizedDescription }
+                } else {
+                    confirmedMismatchIds.insert(record.id)
+                }
+            case .notFound, .failed:
+                continue   // may resolve later (account not yet propagated / directory still down) — retry next sync
+            }
+        }
     }
 
     // MARK: - Send
@@ -188,6 +251,7 @@ public final class NotesStore: ObservableObject {
         catch NoteCryptoError.opkExhausted { throw NotesStoreError.opkExhausted }
         catch NoteCryptoError.textTooLong { throw NotesStoreError.textTooLong }
         let bytes = try envelope.wireBytes()
+        guard bytes.count <= 16 * 1024 else { throw NotesStoreError.textTooLong }
         do {
             let challenge = try await client.powChallenge()
             guard let nonce = await NoteProofOfWork.solve(challenge: challenge, recipientAccountId: entry.accountId.raw, envelopeBytes: bytes) else { throw NotesStoreError.proofOfWorkFailed }
@@ -195,7 +259,9 @@ public final class NotesStore: ObservableObject {
             let record = NoteRecord(id: id, direction: .outbound, text: text, sentAt: Date(),
                                     sender: anonymous ? .anonymous : .verified(accountId: account.accountId.raw, nickname: account.nickname),
                                     recipientAccountId: entry.accountId.raw, readAt: nil, receivedAt: Date())
-            do { try storage.save(record) } catch { lastError = error.localizedDescription }
+            if !isMock {
+                do { try storage.save(record) } catch { lastError = error.localizedDescription }
+            }
             sent.insert(record, at: 0)
             return record
         } catch let e as NotesStoreError { throw e } catch { throw Self.mapNetwork(error) }
@@ -210,18 +276,35 @@ public final class NotesStore: ObservableObject {
         }
     }
 
+    /// Same mapping as `mapNetwork`, except a 404 means the specific note/
+    /// item is gone rather than "recipient not found" — used by the
+    /// item-scoped server calls below (`send`'s 404 really does mean the
+    /// recipient handle doesn't exist, so it keeps `mapNetwork`).
+    private static func mapItemError(_ error: Error) -> NotesStoreError {
+        switch error {
+        case AccountClientError.rateLimited: return .rateLimited
+        case AccountClientError.http(507): return .inboxFull
+        case AccountClientError.http(404): return .noteNotFound
+        default: return .network(String(describing: error))
+        }
+    }
+
     // MARK: - Inbox actions (local first, server best-effort)
 
     public func markRead(_ id: String) async {
         guard let i = inbox.firstIndex(where: { $0.id == id }), inbox[i].readAt == nil else { return }
         inbox[i].readAt = Date()
-        do { try storage.save(inbox[i]) } catch { lastError = error.localizedDescription }
+        if !isMock {
+            do { try storage.save(inbox[i]) } catch { lastError = error.localizedDescription }
+        }
         recount()
         if !isMock { try? await client.markRead(id: id) }
     }
 
     public func delete(_ record: NoteRecord) async {
-        do { try storage.remove(id: record.id, direction: record.direction) } catch { lastError = error.localizedDescription }
+        if !isMock {
+            do { try storage.remove(id: record.id, direction: record.direction) } catch { lastError = error.localizedDescription }
+        }
         if record.direction == .inbound {
             inbox.removeAll { $0.id == record.id }
             recount()
@@ -232,7 +315,7 @@ public final class NotesStore: ObservableObject {
     }
 
     public func block(_ record: NoteRecord) async throws -> String {
-        do { return try await client.block(itemId: record.id) } catch { throw Self.mapNetwork(error) }
+        do { return try await client.block(itemId: record.id) } catch { throw Self.mapItemError(error) }
     }
 
     /// The worker checks `Array.from(excerpt).length <= 1_000` (Unicode
@@ -242,7 +325,7 @@ public final class NotesStore: ObservableObject {
 
     public func report(_ record: NoteRecord, reason: ReportReason, includeText: Bool) async throws {
         let excerpt = includeText ? record.text.map(Self.truncatedExcerpt) : nil
-        do { _ = try await client.report(itemId: record.id, reason: reason, excerpt: excerpt) } catch { throw Self.mapNetwork(error) }
+        do { _ = try await client.report(itemId: record.id, reason: reason, excerpt: excerpt) } catch { throw Self.mapItemError(error) }
     }
 
     private static func truncatedExcerpt(_ text: String) -> String {
@@ -251,10 +334,12 @@ public final class NotesStore: ObservableObject {
     }
 
     public func blocks() async throws -> [BlockDTO] {
-        do { return try await client.blocks() } catch { throw Self.mapNetwork(error) }
+        guard !isMock else { return [] }
+        do { return try await client.blocks() } catch { throw Self.mapItemError(error) }
     }
 
     public func unblock(senderHash: String) async throws {
-        do { try await client.unblock(senderHash: senderHash) } catch { throw Self.mapNetwork(error) }
+        guard !isMock else { return }
+        do { try await client.unblock(senderHash: senderHash) } catch { throw Self.mapItemError(error) }
     }
 }
