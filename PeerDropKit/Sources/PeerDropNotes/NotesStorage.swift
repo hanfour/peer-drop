@@ -9,6 +9,9 @@ public final class NotesStorage {
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "NotesStorage")
     public let directory: URL
     public let encryptor: ChatDataEncryptor
+    /// Reflects the outcome of the LAST `loadInbox()`/`loadSent()` call only —
+    /// reset to nil at the start of every load, so a later clean load clears
+    /// an earlier poison-file error rather than latching it forever.
     public private(set) var lastLoadError: String?
 
     private struct State: Codable { var lastSeenInboxId: String? }
@@ -28,6 +31,7 @@ public final class NotesStorage {
     public func loadSent() -> [NoteRecord] { load(.outbound) }
 
     private func load(_ direction: NoteDirection) -> [NoteRecord] {
+        lastLoadError = nil
         let dir = folder(direction)
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return [] }
         var out: [NoteRecord] = []

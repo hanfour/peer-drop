@@ -32,9 +32,13 @@ final class NotesStorageTests: XCTestCase {
     func testPoisonFileIsSkippedAndReported() throws {
         try storage.save(record("01A"))
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("inbox"), withIntermediateDirectories: true)
-        try Data("garbage".utf8).write(to: dir.appendingPathComponent("inbox/01Z.enc"))
+        let poisonURL = dir.appendingPathComponent("inbox/01Z.enc")
+        try Data("garbage".utf8).write(to: poisonURL)
         XCTAssertEqual(storage.loadInbox().map(\.id), ["01A"])
         XCTAssertNotNil(storage.lastLoadError)
+        try FileManager.default.removeItem(at: poisonURL)
+        XCTAssertEqual(storage.loadInbox().map(\.id), ["01A"])
+        XCTAssertNil(storage.lastLoadError)   // cleared by the later clean load, not latched
     }
     func testLastSeenInboxIdPersists() {
         XCTAssertNil(storage.lastSeenInboxId)
@@ -47,5 +51,9 @@ final class NotesStorageTests: XCTestCase {
             let data = try JSONEncoder().encode(state)
             XCTAssertEqual(try JSONDecoder().decode(NoteSenderState.self, from: data), state)
         }
+    }
+    func testSenderStateUnknownTagThrows() {
+        let data = Data(#"{"state":"bogus"}"#.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(NoteSenderState.self, from: data))
     }
 }
