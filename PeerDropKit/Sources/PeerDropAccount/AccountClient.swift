@@ -40,12 +40,21 @@ public struct MeResponse: Decodable, Sendable {
     public let mailboxId: String
 }
 
-public struct DirectoryEntry: Decodable, Equatable, Sendable {
+public struct DirectoryEntry: Decodable, Equatable, @unchecked Sendable {
     public let accountId: AccountID
     public let nickname: String?
     public let identityKey: Data
     public let signingKey: Data
     public let mailboxId: String
+    /// Present only for `lookup(handle:includeBundle: true)`; the worker
+    /// consumes one of the recipient's one-time pre-keys to produce it, so
+    /// callers must request it only when they are about to send.
+    public let preKeyBundle: FetchedPreKeyBundle?
+
+    public init(accountId: AccountID, nickname: String?, identityKey: Data, signingKey: Data, mailboxId: String, preKeyBundle: FetchedPreKeyBundle? = nil) {
+        self.accountId = accountId; self.nickname = nickname; self.identityKey = identityKey
+        self.signingKey = signingKey; self.mailboxId = mailboxId; self.preKeyBundle = preKeyBundle
+    }
 }
 
 public enum AccountClientError: Error, Equatable {

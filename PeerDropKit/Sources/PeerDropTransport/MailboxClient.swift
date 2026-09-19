@@ -119,7 +119,7 @@ private struct RegisterKeysResponse: Codable {
 }
 
 /// Server returns a single one-time pre-key (consumed), not the full array
-public struct FetchedPreKeyBundle: Codable {
+public struct FetchedPreKeyBundle: Codable, Equatable {
     public let identityKey: Data
     public let signingKey: Data
     public let signedPreKey: PublicSignedPreKey
@@ -128,6 +128,13 @@ public struct FetchedPreKeyBundle: Codable {
     // (v5.0–v5.3) responder bundles still decode.
     public let signedPreKeyTimestamp: UInt64?
     public let signedPreKeyTimestampSignature: Data?
+
+    public init(identityKey: Data, signingKey: Data, signedPreKey: PublicSignedPreKey, oneTimePreKey: PublicOneTimePreKey?,
+                signedPreKeyTimestamp: UInt64? = nil, signedPreKeyTimestampSignature: Data? = nil) {
+        self.identityKey = identityKey; self.signingKey = signingKey; self.signedPreKey = signedPreKey
+        self.oneTimePreKey = oneTimePreKey
+        self.signedPreKeyTimestamp = signedPreKeyTimestamp; self.signedPreKeyTimestampSignature = signedPreKeyTimestampSignature
+    }
 }
 
 public struct SendMessageRequest: Codable {
