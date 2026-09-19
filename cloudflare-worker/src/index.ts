@@ -20,6 +20,7 @@ import {
 import type { TokenPayload } from "./deviceToken";
 import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
 import { verifyPoW } from "./pow";
+import { handleNotesRoute } from "./notes";
 
 export interface Env {
   // KV
@@ -1702,6 +1703,9 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     ]);
     return new Response(null, { status: 204, headers: corsHeaders });
   }
+  const notesResp = await handleNotesRoute(request, url, path, env, auth, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) } });
+  if (notesResp) return notesResp;
+
   // GET /v3/directory/:handle[?bundle=1] — resolve a normalized account id
   // or nickname to its public directory entry. Rate limited per calling
   // account (not per target) at 30 lookups/min via KV

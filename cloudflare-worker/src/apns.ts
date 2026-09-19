@@ -9,7 +9,9 @@ interface APNsConfig {
 }
 
 export interface APNsPayload {
-  alert?: { title: string; body: string };
+  // Either a literal title/body or a localized alert resolved by the app
+  // from its Localizable catalog (`loc-key` / `loc-args`).
+  alert?: { title: string; body: string } | { "loc-key": string; "loc-args"?: string[] };
   sound?: string;
   contentAvailable?: boolean;
   customData?: Record<string, unknown>;
