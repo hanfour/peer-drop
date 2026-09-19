@@ -82,37 +82,74 @@ public final class NotesStore: ObservableObject {
     public func sync() async {
         guard !isMock, !isSyncing, let account = accountManager.account else { return }
         isSyncing = true
-        defer { isSyncing = false }
-        var after = storage.lastSeenInboxId
+        // Always run, on every exit path (normal completion, mid-page network
+        // failure, or the early `return` below): a page-2 failure must not
+        // leave newly appended records unsorted with a stale unread count.
+        defer {
+            isSyncing = false
+            inbox.sort { $0.sentAt > $1.sentAt }
+            recount()
+        }
+
+        // Hoisted above the loop: a transient key-access failure aborts the
+        // sync WITHOUT advancing the cursor or writing any tombstones — vs.
+        // an envelope that fails to decrypt with valid keys, which still
+        // yields a `text: nil` record via `decode`'s own fallback below.
+        let keys: NoteRecipientKeys
+        do {
+            keys = try crypto.recipientKeys()
+        } catch {
+            lastError = String(describing: Self.mapNetwork(error))
+            return
+        }
+
+        // The persisted cursor only ever advances past records that actually
+        // saved — `lastPersistedId` tracks that high-water mark separately
+        // from `after` (the server-controlled paging cursor), and is only
+        // written back when it has moved.
+        let initialCursor = storage.lastSeenInboxId
+        var after = initialCursor
+        var lastPersistedId = initialCursor
         var known = Set(inbox.map(\.id))
         do {
             while true {
                 let page = try await client.inbox(after: after, limit: 50)
                 for item in page.items {
+                    // Defensive monotonic guard against a misbehaving/replayed
+                    // page: every item must sort after the cursor we requested.
                     if let last = after, item.id <= last { continue }
-                    after = item.id
                     guard !known.contains(item.id) else { continue }
-                    let record = await decode(item, account: account)
-                    do { try storage.save(record) } catch { lastError = error.localizedDescription }
+                    let record = await decode(item, account: account, keys: keys)
+                    do {
+                        try storage.save(record)
+                        lastPersistedId = item.id
+                    } catch {
+                        lastError = error.localizedDescription
+                        inbox.append(record); known.insert(item.id)
+                        if lastPersistedId != initialCursor { storage.lastSeenInboxId = lastPersistedId }
+                        return
+                    }
                     inbox.append(record); known.insert(item.id)
                 }
-                if let last = page.items.last?.id { after = last }
-                storage.lastSeenInboxId = after
-                if page.nextAfter == nil { break }
+                // Paging terminates on server-controlled input: `nextAfter`
+                // is the next request cursor. Stop when the server says
+                // there's no more (`nil`) or hands back the same cursor
+                // again (would otherwise loop forever).
+                guard let next = page.nextAfter, next != after else { break }
+                after = next
             }
-            inbox.sort { $0.sentAt > $1.sentAt }
-            recount()
+            lastError = nil
         } catch {
-            lastError = error.localizedDescription
+            lastError = String(describing: Self.mapNetwork(error))
             Self.logger.error("inbox sync failed: \(String(describing: error), privacy: .public)")
         }
+        if lastPersistedId != initialCursor { storage.lastSeenInboxId = lastPersistedId }
     }
 
-    private func decode(_ item: InboxItemDTO, account: Account) async -> NoteRecord {
+    private func decode(_ item: InboxItemDTO, account: Account, keys: NoteRecipientKeys) async -> NoteRecord {
         let receivedAt = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000)
         let readAt = item.readAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
         guard let bytes = Data(base64Encoded: item.envelope), let envelope = try? NoteEnvelope.fromWire(bytes),
-              let keys = try? crypto.recipientKeys(),
               let plaintext = try? NoteCrypto.open(envelope, recipientAccountId: account.accountId.raw, keys: keys)
         else {
             return NoteRecord(id: item.id, direction: .inbound, text: nil, sentAt: receivedAt, sender: .anonymous, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt)
@@ -198,8 +235,19 @@ public final class NotesStore: ObservableObject {
         do { return try await client.block(itemId: record.id) } catch { throw Self.mapNetwork(error) }
     }
 
+    /// The worker checks `Array.from(excerpt).length <= 1_000` (Unicode
+    /// scalars, not UTF-16 units) — truncate before sending so a long note
+    /// doesn't get rejected instead of reported.
+    public static let maxExcerptScalars = 1_000
+
     public func report(_ record: NoteRecord, reason: ReportReason, includeText: Bool) async throws {
-        do { _ = try await client.report(itemId: record.id, reason: reason, excerpt: includeText ? record.text : nil) } catch { throw Self.mapNetwork(error) }
+        let excerpt = includeText ? record.text.map(Self.truncatedExcerpt) : nil
+        do { _ = try await client.report(itemId: record.id, reason: reason, excerpt: excerpt) } catch { throw Self.mapNetwork(error) }
+    }
+
+    private static func truncatedExcerpt(_ text: String) -> String {
+        guard text.unicodeScalars.count > maxExcerptScalars else { return text }
+        return String(String.UnicodeScalarView(text.unicodeScalars.prefix(maxExcerptScalars)))
     }
 
     public func blocks() async throws -> [BlockDTO] {

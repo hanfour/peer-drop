@@ -54,6 +54,27 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.inbox.count, 1)
         XCTAssertEqual(TestURLProtocol.requests[1].url?.query, "after=01AAAAAAAAAAAAAAAAAAAAAAAA&limit=50")
     }
+    func testSyncFollowsNextAfterAcrossPages() async throws {
+        let env1 = try NoteCrypto.seal(text: "page one", recipient: try me.entry(), signer: nil)
+        let env2 = try NoteCrypto.seal(text: "page two", recipient: try me.entry(), signer: nil)
+        let id1 = "01AAAAAAAAAAAAAAAAAAAAAAAF"
+        let id2 = "01AAAAAAAAAAAAAAAAAAAAAAAG"
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(id1, env1)], nextAfter: id1)),
+            .init(status: 200, body: try inboxJSON([(id2, env2)], nextAfter: nil)),
+        ]
+        await store.sync()
+        XCTAssertEqual(Set(store.inbox.map(\.id)), Set([id1, id2]))
+        XCTAssertEqual(TestURLProtocol.requests[1].url?.query, "after=\(id1)&limit=50")
+        XCTAssertEqual(store.storage.lastSeenInboxId, id2)
+    }
+    func testSyncRateLimitedMapsError() async throws {
+        TestURLProtocol.queue = [.init(status: 429, body: Data(#"{"error":"rate_limited"}"#.utf8))]
+        await store.sync()
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertEqual(store.lastError, String(describing: NotesStoreError.rateLimited))
+    }
     func testSyncVerifiesSignedSenderViaDirectory() async throws {
         let sender = SenderFixture()
         let env = try NoteCrypto.seal(text: "signed", recipient: try me.entry(), signer: sender.signer)
@@ -138,6 +159,18 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(TestURLProtocol.requests[5].httpMethod, "DELETE")
         // A fresh store over the same directory no longer sees the deleted note.
         XCTAssertTrue(NotesStorage(directory: dir, encryptor: store.storage.encryptor).loadInbox().isEmpty)
+    }
+    func testReportTruncatesExcerptToMaxScalars() async throws {
+        let longText = String(repeating: "a", count: 1_500)
+        let env = try NoteCrypto.seal(text: longText, recipient: try me.entry(), signer: nil)
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAI", env)]))]
+        await store.sync()
+        let rec = store.inbox[0]
+        TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"id":"01R3"}"#.utf8))]
+        try await store.report(rec, reason: .spam, includeText: true)
+        let body = try JSONSerialization.jsonObject(with: TestURLProtocol.requests[1].httpBody!) as! [String: Any]
+        let excerpt = body["excerpt"] as! String
+        XCTAssertEqual(excerpt.unicodeScalars.count, NotesStore.maxExcerptScalars)
     }
     func testMockInitIsReadyWithoutNetwork() {
         let r = NoteRecord(id: "01M", direction: .inbound, text: "mock", sentAt: Date(), sender: .anonymous, recipientAccountId: nil, readAt: nil, receivedAt: Date())
