@@ -1,7 +1,7 @@
 # 子專案 2：傳紙條 — 設計規格
 
 日期：2026-09-19
-狀態：已核可（2026-09-19，「ok, go」）；同日依程式碼實況補充 §3.1 儲存佈局、§3.2 PoW 訊息形式、§4.1 純函式金鑰介面
+狀態：已實作（PR 待合併）；2026-09-19 核可後依程式碼實況補充 §3.1 儲存佈局、§3.2 PoW 訊息形式、§4.1 純函式金鑰介面；Task 12（全套驗證與本機 E2E）已完成，見下方各段「（實作 2026-09-19 調整）」註記
 上位規格：`docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md` §3（傳紙條）、§8（上架影響）
 前置：子專案 1（帳號地基，PR #147）——本規格以其實際結果為準：帳號 token 與 Mac 金鑰通道、`GET /v3/directory/:handle?bundle=1`、`AccountManager`、`PeerDropAccount` 模組、`WorkerURL`。
 
@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS reports_sender ON reports(sender_hash, created_at);
 |---|---|
 | `GET /v3/pow/challenge` | 回 `{challenge}`（32 B，base64）；KV `pow:<accountId>:<challenge>` TTL 300 秒、單次。每帳號每分鐘 60 次（KV `pow-quota:<accountId>:<minute>`）。 |
 | `POST /v3/notes/:recipientAccountId` | body `{envelope, pow: {challenge, nonce}}`；`envelope` = NoteEnvelope JSON 的 base64；驗 challenge 存在→刪（單次）；PoW 訊息 `M = utf8(challenge ‖ "|" ‖ recipientAccountId ‖ "|" ‖ hex(sha256(envelopeBytes)))`，驗 `sha256(M ‖ nonce(8 B big-endian))` 前 16 bit 為零（伺服器沿用既有 `verifyPoW(M, nonce, 16)`，客戶端沿用 `ProofOfWork.generate(challenge: M)`）；`recipientAccountId` 正規化後須存在；`envelope` 解碼 ≤ 16 KB 且能解析為 `{v:1, ephemeralKey, ephemeralKey2, spkId, opkId?, nonce, ciphertext}`（四個 Data 欄位為 base64，長度 32/32/12/≥16）；配額：每寄件者每日 200 則（KV `note-quota:s:<accountId>:<day>`）、每收件者每日 500 則（KV `note-quota:r:<accountId>:<day>`）→ 429 `rate_limited`；**封鎖檢查**：`blocks(recipientAccountId, senderHash)` 存在 → 回 `201 {id: <新 ULID>}` 靜默丟棄；否則 DO PUT；成功後推播（§3.3，失敗只記 log）。回 `201 {id}`。錯誤：404 `recipient_not_found`、400 `bad_pow`／`invalid_envelope`／`missing_fields`、413 `too_large`、507 `inbox_full`。 |
-| `GET /v3/inbox?after=<id>&limit=50` | 依 `id` 升冪回 `{items:[{id, kind, envelope, createdAt, readAt}], nextAfter?}`；不含 `sender_hash`。 |
+| `GET /v3/inbox?after=<id>&limit=50` | 依 `id` 升冪回 `{items:[{id, kind, envelope, createdAt, readAt}], nextAfter?}`；不含 `sender_hash`。`after` 格式錯誤 → 400 `invalid_cursor`；AccountInbox DO 呼叫失敗（非 2xx）→ 502 `inbox_error`（實作 2026-09-19 調整：規格原未列，補上避免呑掉 DO 層錯誤）。 |
 | `POST /v3/inbox/:id/read` | 標記已讀；冪等。 |
 | `DELETE /v3/inbox/:id` | 刪除；冪等（不存在也 204）。 |
 | `POST /v3/inbox/:id/block` | 讀取該項目的 `sender_hash` → `INSERT OR IGNORE blocks`；回 `{blocked: sender_hash}`；項目本身不刪（由客戶端決定）。 |
@@ -127,7 +127,7 @@ CREATE INDEX IF NOT EXISTS reports_sender ON reports(sender_hash, created_at);
 寄件者的 `senderHash` 由 `authorizeV3` 的 `accountId` 計算，與內層署名無關（匿名也能封）。
 
 ### 3.3 推播扇出
-`POST /v3/notes` 成功後：查 D1 `account_devices WHERE account_id = recipient` → 對每台裝置讀 KV `device:<deviceId>` → 有 `pushToken` 者 `sendAPNs(token, {alert: {"loc-key": "NOTE_RECEIVED"}, sound: "default", customData: {type: "note", inboxItemId: id}}, config, {topicOverride: selectApnsTopic(platform, env)})`。失敗只記 log，不影響回應。無任何裝置有 token 或 `APNS_KEY_P8` 未設 → 只入匣（下次前景拉取）。扇出邏輯抽成 `fanOutNotePush(env, recipientAccountId, itemId, deps: { send, topicFor })`，測試以假的 `send` 斷言每台裝置各一次、topic 依平台；回應不透露收件者裝置數。客戶端字串目錄提供 `NOTE_RECEIVED` 五語（「你收到一張紙條」等）。
+`POST /v3/notes` 成功後：查 D1 `account_devices WHERE account_id = recipient` → 對每台裝置讀 KV `device:<deviceId>` → 有 `pushToken` 者 `sendAPNs(token, {alert: {"loc-key": "NOTE_RECEIVED"}, sound: "default", customData: {type: "note", inboxItemId: id}}, config, {topicOverride: selectApnsTopic(platform, env)})`。失敗只記 log，不影響回應。無任何裝置有 token 或 `APNS_KEY_P8` 未設 → 只入匣（下次前景拉取）。扇出邏輯抽成 `fanOutNotePush(env, recipientAccountId, itemId, deps: { send, topicFor })`，測試以假的 `send` 斷言每台裝置各一次、topic 依平台；回應不透露收件者裝置數。客戶端字串目錄提供 `NOTE_RECEIVED` 五語（「你收到一張紙條」等）。（實作 2026-09-19 調整：`fanOutNotePush` 整個函式包一層 `try/catch`，D1／KV 查詢本身失敗也只記 log 並回傳 `{attempted: 0}`，絕不拋出——規格原僅說「單台裝置推播失敗只記 log」，實作把「查詢裝置清單」這一步也納入同樣的容錯範圍，因為紙條已寫入收件匣，扇出整體失敗不該讓寄件者收到錯誤。）
 
 ### 3.4 PoW
 沿用客戶端 `ProofOfWork`（難度 16，已在背景執行），但 challenge 由伺服器發放（§3.2）。舊的 `/v2/messages` PoW 不動。
@@ -162,6 +162,8 @@ NotesStore.swift       @MainActor final class NotesStore: ObservableObject {
                          func sync() async          // GET inbox?after=最大 id → 逐則 open → 驗簽（目錄快取）→ 落盤 → 發布
                          func send(text:, to handle: String, anonymous: Bool) async throws -> NoteRecord   // 目錄 bundle=1 → seal → pow → send → sent 落盤
                          func markRead(_:) async; func delete(_:) async; func block(_:) async throws; func report(_:, reason:, includeText:) async throws }
+                       // （實作 2026-09-19 調整）sync() 的游標處理比規格描述更保守：`after` 送給伺服器分頁用的是本次迴圈當下的 `nextAfter`（可能跨好幾頁），但存進 `NotesStorage` 的「已同步到哪」游標（`lastPersistedId`）只在該筆記錄實際成功落盤後才前進；某一頁中途落盤失敗（例如毒檔或磁碟錯誤）不會讓游標跳過那筆——下次 sync() 還會重新拉到它。
+                       // （實作 2026-09-19 調整）report(_:reason:includeText:) 在呼叫 NotesClient 之前，於用戶端把 `record.text` 截到 `maxExcerptScalars`（1,000 Unicode scalars，對齊伺服器 `NOTE_LIMITS.excerptMaxChars`），而不是整段原文送給伺服器再由伺服器截——避免明知超長仍把多餘明文送出網路。
 NotesStorage.swift     每則一檔 Documents/Notes/inbox/<id>.enc、Documents/Notes/sent/<id>.enc（ChatDataEncryptor，可注入 testKey）；索引由目錄列舉＋檔內 sentAt 排序；毒檔記錄 lastError 並略過
 DirectoryCache.swift   accountId → (signingKey, nickname, fetchedAt)，24 h TTL，經 AccountManager.lookup
 ```
@@ -177,12 +179,12 @@ DirectoryCache.swift   accountId → (signingKey, nickname, fetchedAt)，24 h TT
 - **分頁**：iOS `ContentView` → 紙條（`envelope.fill`，宣告在第一個位置、`tag(3)`，既有 0/1/2 不動；預設選取 3）、附近、已連線、圖書館；Mac `MacSidebarSection.notes` 置頂，⌘⌥1 → 紙條、2 附近、3 圖書館、4 Relay。
 - `NotesInboxView`：清單（未讀點、寄件者列＝暱稱＋ID／「匿名」／「無法驗證」、首行預覽、相對時間），下拉重新整理，空狀態「還沒有紙條。把你的 ID 給朋友吧」＋複製 ID；帳號 `state != .ready` 時顯示 `AccountSectionView` 的狀態卡（不隱藏分頁）。
 - `NoteDetailView`：全文、寄件者、時間；工具列：刪除、封鎖寄件者（確認對話框；匿名也可）、檢舉（reason 選單＋「附上紙條內容給審核」開關）。
-- `ComposeNoteView`：收件者欄位（輸入 ID 或暱稱 → 查目錄 → 顯示確認 chip「暱稱 · XXXX-XXXX」；找不到顯示「找不到這個 ID 或暱稱」）、文字區（2,000 字計數）、「匿名發送」開關（預設關，開啟時提示「對方不會看到你的 ID」）、送出（PoW 在背景，顯示進度）。
+- `ComposeNoteView`：收件者欄位（輸入 ID 或暱稱）、文字區（2,000 字計數）、「匿名發送」開關（預設關，開啟時提示「對方不會看到你的 ID」）、送出（PoW 在背景，顯示進度）。（實作 2026-09-19 調整：沒有做即時目錄查詢與確認 chip——`canSend` 只檢查兩個欄位非空與字數 ≤ 上限；實際的目錄查詢／找不到收件者發生在按下送出之後，經 `store.send()` 內部呼叫 `AccountManager.lookup`，失敗時顯示 `NotesStoreError` 對應的行內錯誤文字（例如「找不到這個 ID 或暱稱」），而不是打字時就顯示確認 chip。送出中的按鈕文字沿用既有 `Sending...`／`Send`，不是逐步 PoW 進度。）
 - `SentNotesView`：寄件備份清單（本機）。
 - 設定頁：「封鎖清單」（`GET /v3/blocks`，可解除；只顯示雜湊前 8 碼與封鎖時間，因為伺服器不回傳身分）。
 
 ### 4.4 字串
-約 30 個鍵五語（分頁名「紙條」、空狀態、匿名、封鎖、檢舉理由、錯誤文案、`NOTE_RECEIVED`）。
+約 30 個鍵五語（分頁名「紙條」、空狀態、匿名、封鎖、檢舉理由、錯誤文案、`NOTE_RECEIVED`）。（實作 2026-09-19 調整：送出中的按鈕文字沿用既有鍵 `"Sending..."`（聊天附件上傳已在用），沒有新增 `ComposeNoteSending` 之類的重複鍵——符合 Global Constraints「新增前先檢查鍵是否已存在」。）
 
 ---
 
@@ -191,8 +193,9 @@ DirectoryCache.swift   accountId → (signingKey, nickname, fetchedAt)，24 h TT
 - **NoteCrypto**：seal→open 往返（署名／匿名）、AAD 錯誤（收件者不符）失敗、OPK 缺席依政策、竄改密文失敗、簽章驗證（正確／金鑰不符／訊息竄改）；金鑰全由測試建構注入（不碰 keychain）。凍結向量加入 `CryptoTestKit` 延後到 PR 合併後、送審前。
 - **NotesClient**：`TestURLProtocol` 路徑與錯誤映射。
 - **NotesStore**：以 `ChatDataEncryptor(testKey:)` 落盤往返、毒檔略過、sync 去重（相同 id 不重複）、send 全流程（目錄→seal→pow→send→sent）。
-- **UI**：截圖模式 `mockNotes`（三則：署名、匿名、無法驗證），fastlane 截圖加 `NotesInbox`、`ComposeNote` 兩畫面（iOS 與 Mac）。
-- **E2E**：本 PR 以 `wrangler dev` + Mac dev build 自寄（署名／匿名、封鎖後不出現、解除後出現、檢舉後 admin 可見）驗證；兩台裝置（iPhone ↔ Mac）互寄在合併後、送審前補做。
+- **UI**：截圖模式 `mockNotes`（三則：署名、匿名、無法驗證），fastlane 截圖加 `NotesInbox`、`ComposeNote` 兩畫面（iOS 與 Mac）—— fastlane 截圖本身列在 Task 12 範圍外（見計畫「後續」段），screenshot-mode 煙霧測試已於 Task 12 用 `-SCREENSHOT_MODE` 手動驗證通過（見下）。
+- **CI**（實作 2026-09-19 調整）：`RelayPushKindTests`（`PeerDropCoreTests`）納入 `.github/workflows/ci.yml` 與 Task 12 驗證矩陣的 `swift test --filter` 清單，與 `PeerDropAccountTests|PeerDropTransportTests|PeerDropNotesTests` 並列，確保 note push 分類邏輯持續被 CI 覆蓋。
+- **E2E**：Task 12（2026-09-19）以 `wrangler dev`（本機 D1/KV/DO）+ Mac dev build（Apple Development 簽章）跑完整自寄流程並全部通過：署名紙條送達＋未讀點亮＋開啟後清除、匿名紙條寄件者顯示「匿名」、封鎖寄件者後再自寄靜默丟棄（伺服器回 201 但收件匣不出現）、解除封鎖後恢復送達、檢舉一則並附上內容後 `GET /v3/admin/reports` 可見明文 excerpt。過程中發現並修正一個 Mac 端 UI 缺陷（`MacSettingsView` 的 Settings 視窗固定高度 420pt，未隨 Task 11 新增的「封鎖清單」區塊調整，導致該區塊完全不可見/不可互動；修成 620pt）。screenshot-mode 煙霧測試（三則 mock 紙條 + 一則已寄出＋⌘⌥1–4 切換）另行驗證通過。兩台裝置（iPhone ↔ Mac）互寄仍如原規劃，留待合併後、送審前用實體 iPhone 補做。
 
 ---
 
