@@ -1,0 +1,79 @@
+import SwiftUI
+import PeerDropCore
+import PeerDropTransport
+
+struct ManualConnectView: View {
+    @EnvironmentObject var connectionManager: ConnectionManager
+    @Environment(\.dismiss) private var dismiss
+
+    /// When non-nil, the view is in edit mode for an existing manual peer.
+    var editingPeer: DiscoveredPeer?
+
+    @State private var host = ""
+    @State private var port = "9000"
+    @State private var name = ""
+
+    private var isEditing: Bool { editingPeer != nil }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Peer Address") {
+                    TextField("IP Address or Hostname", text: $host)
+                        #if os(iOS)
+                        .keyboardType(.numbersAndPunctuation)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+                        .accessibilityLabel("IP Address or Hostname")
+                        .accessibilityHint("Enter the peer's IP address or hostname")
+
+                    TextField("Port", text: $port)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                        .accessibilityLabel("Port")
+                        .accessibilityHint("Enter port number, defaults to 9000")
+                }
+
+                Section("Display Name (Optional)") {
+                    TextField("Name", text: $name)
+                        .accessibilityLabel("Display Name")
+                        .accessibilityHint("Optional name for this peer")
+                }
+            }
+            .navigationTitle(isEditing ? "Edit Peer" : "Manual Connect")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isEditing ? "Save" : "Connect") {
+                        guard let portNum = UInt16(port), !host.isEmpty else { return }
+                        if let existing = editingPeer {
+                            connectionManager.removeManualPeer(id: existing.id)
+                        }
+                        connectionManager.addManualPeer(
+                            host: host,
+                            port: portNum,
+                            name: name.isEmpty ? nil : name
+                        )
+                        dismiss()
+                    }
+                    .disabled(host.isEmpty || UInt16(port) == nil)
+                    .accessibilityHint(host.isEmpty ? "Enter a host address first" : "Double tap to connect")
+                }
+            }
+            .onAppear {
+                if let peer = editingPeer, case .manual(let h, let p) = peer.endpoint {
+                    host = h
+                    port = "\(p)"
+                    name = peer.displayName
+                }
+            }
+        }
+    }
+}

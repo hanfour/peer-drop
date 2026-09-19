@@ -1,0 +1,289 @@
+import SwiftUI
+import PeerDropCore
+import PeerDropTransport
+import PeerDropSecurity
+
+struct ConnectedTab: View {
+    @EnvironmentObject var connectionManager: ConnectionManager
+    @State private var showDetail = false
+    @State private var selectedPeerID: String?
+
+    private var isConnected: Bool {
+        switch connectionManager.state {
+        case .connected, .transferring, .voiceCall: return true
+        default: return false
+        }
+    }
+
+    /// All active peer connections sorted by display name.
+    private var activeConnections: [PeerConnection] {
+        connectionManager.connections.values
+            .filter { $0.state.isConnected }
+            .sorted { $0.peerIdentity.displayName < $1.peerIdentity.displayName }
+    }
+
+    private var contactRecords: [DeviceRecord] {
+        connectionManager.deviceStore.sorted(by: .name)
+    }
+
+    var body: some View {
+        Group {
+            if isConnected || !activeConnections.isEmpty {
+                connectedView
+            } else if contactRecords.isEmpty {
+                emptyStateView
+            } else {
+                contactsOnlyView
+            }
+        }
+        .navigationTitle("Connected")
+    }
+
+    // MARK: - Connected View (with active connections)
+
+    private var connectedView: some View {
+        List {
+            Section("Active (\(activeConnections.count)/\(connectionManager.maxConnections))") {
+                ForEach(activeConnections) { peerConn in
+                    Button {
+                        connectionManager.focus(on: peerConn.id)
+                        selectedPeerID = peerConn.id
+                        showDetail = true
+                    } label: {
+                        activePeerRow(for: peerConn)
+                    }
+                    .tint(.primary)
+                    .accessibilityIdentifier("active-peer-row")
+                    .accessibilityLabel("\(peerConn.peerIdentity.displayName), \(peerConn.isTransferring ? "transferring" : peerConn.isInVoiceCall ? "in call" : "connected")")
+                    .accessibilityHint("Double tap to view connection details")
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            Task {
+                                await connectionManager.disconnect(from: peerConn.id)
+                            }
+                        } label: {
+                            Label("Disconnect", systemImage: "xmark.circle.fill")
+                        }
+                    }
+                }
+            }
+
+            Section("Contacts") {
+                if contactRecords.isEmpty {
+                    Text("No saved devices")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(contactRecords) { record in
+                        DeviceRecordRow(record: record) {
+                            reconnect(record: record)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteRecord(record)
+                            } label: {
+                                Image(systemName: "trash.circle.fill")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showDetail) {
+            ConnectionView()
+                .environmentObject(connectionManager)
+        }
+    }
+
+    private func activePeerRow(for peerConn: PeerConnection) -> some View {
+        HStack {
+            PeerAvatar(name: peerConn.peerIdentity.displayName)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(peerConn.peerIdentity.displayName)
+                        .font(.body.bold())
+                    SecureChannelIndicator(peerConn: peerConn)
+                }
+
+                HStack(spacing: 4) {
+                    if peerConn.isTransferring {
+                        Text("Transferring")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                        if peerConn.transferSpeed > 0 {
+                            Text(ByteCountFormatter.string(fromByteCount: peerConn.transferSpeed, countStyle: .file) + "/s")
+                                .font(.caption2)
+                                .foregroundStyle(.blue.opacity(0.7))
+                        }
+                    } else if peerConn.isInVoiceCall {
+                        Text("In Call")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text("Connected")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+
+                    if connectionManager.focusedPeerID == peerConn.id {
+                        Text("• Active")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // NI proximity info
+                if let proximity = connectionManager.nearbyInteractionManager?.peerProximity[peerConn.id] {
+                    HStack(spacing: 4) {
+                        if let distance = proximity.distance {
+                            Image(systemName: "ruler")
+                                .font(.system(size: 9))
+                            Text(String(format: "%.1f m", distance))
+                                .font(.caption2)
+                        }
+                        if let direction = proximity.direction {
+                            Image(systemName: "location.north.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.blue)
+                                .rotationEffect(.radians(Double(atan2(direction.x, direction.z))))
+                        }
+                    }
+                    .foregroundStyle(.secondary)
+                }
+
+                // Connection duration
+                if let connectedSince = peerConn.connectedSince {
+                    Text(connectedSince, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer()
+
+            if let count = connectionManager.chatManager.unreadCounts[peerConn.id], count > 0 {
+                Text("\(count)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(Circle().fill(.red))
+                    .accessibilityLabel("\(count) unread messages")
+            }
+
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    // MARK: - Empty State
+
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("No saved devices")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text("Devices you connect to will appear here")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: - Contacts Only View (no active connections)
+
+    private var contactsOnlyView: some View {
+        List {
+            Section {
+                VStack(spacing: 8) {
+                    Image(systemName: "link")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.secondary)
+                    Text("No active connection")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+
+            Section("Contacts") {
+                ForEach(contactRecords) { record in
+                    DeviceRecordRow(record: record) {
+                        reconnect(record: record)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            deleteRecord(record)
+                        } label: {
+                            Image(systemName: "trash.circle.fill")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func deleteRecord(_ record: DeviceRecord) {
+        connectionManager.forgetDevice(id: record.id)
+    }
+
+    private func reconnect(record: DeviceRecord) {
+        if let peer = connectionManager.discoveredPeers.first(where: { $0.id == record.id }) {
+            connectionManager.requestConnection(to: peer)
+        } else if let host = record.host, let port = record.port {
+            connectionManager.addManualPeer(host: host, port: port, name: record.displayName)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                if let peer = connectionManager.discoveredPeers.first(where: { $0.id == record.id }) {
+                    connectionManager.requestConnection(to: peer)
+                }
+            }
+        }
+    }
+}
+
+/// Small chip rendering the `LocalSecureChannel` status next to a peer's
+/// name. Observes the `PeerConnection` directly so it updates the instant
+/// `secureChannelState` or `pinningVerdict` flips, without depending on
+/// the parent view re-rendering.
+private struct SecureChannelIndicator: View {
+    @ObservedObject var peerConn: PeerConnection
+
+    var body: some View {
+        switch peerConn.secureChannelState {
+        case .disabled, .handshakeInProgress:
+            // Don't promise encryption while the handshake is still in
+            // flight — the channel can still fall back to plaintext.
+            EmptyView()
+        case .fallbackPlaintext:
+            Image(systemName: "lock.open")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Plaintext fallback — peer didn't complete secure handshake")
+        case .secured:
+            switch peerConn.pinningVerdict {
+            case .mismatch:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("Encryption key changed — verify peer")
+            case .firstTrust:
+                Image(systemName: "lock.shield")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("Encrypted, first-time peer (TOFU)")
+            case .matched, .notChecked:
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                    .accessibilityLabel("Encrypted with verified peer")
+            }
+        }
+    }
+}
