@@ -182,6 +182,7 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
     const limit = url.searchParams.get("limit") ?? "50";
     if (after && !/^[0-9A-Z]{26}$/.test(after)) return json({ error: "invalid_cursor" }, 400);
     const resp = await inboxStub().fetch(`https://inbox/items?after=${after}&limit=${encodeURIComponent(limit)}`);
+    if (!resp.ok) return json({ error: "inbox_error" }, 502);
     return json(await resp.json(), resp.status);
   }
 

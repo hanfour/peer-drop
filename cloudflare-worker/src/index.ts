@@ -1521,7 +1521,8 @@ export default {
       const denied = requireKey(request, env, "ANALYTICS_KEY");
       if (denied) return denied;
       const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
-      const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "100", 10) || 100, 1), 100);
+      const limitRaw = parseInt(url.searchParams.get("limit") ?? "100", 10);
+      const limit = Math.min(Math.max(Number.isNaN(limitRaw) ? 100 : limitRaw, 1), 100);
       const rows = (await env.ACCOUNTS_DB.prepare("SELECT id, reporter_account_id, sender_hash, inbox_item_id, reason, excerpt, created_at FROM reports WHERE created_at > ?1 ORDER BY created_at ASC LIMIT ?2").bind(since, limit)
         .all<{ id: string; reporter_account_id: string; sender_hash: string; inbox_item_id: string; reason: string; excerpt: string | null; created_at: number }>()).results;
       return jsonResponse({ reports: rows.map((r) => ({ id: r.id, reporterAccountId: r.reporter_account_id, senderHash: r.sender_hash, inboxItemId: r.inbox_item_id, reason: r.reason, excerpt: r.excerpt, createdAt: r.created_at })) });
