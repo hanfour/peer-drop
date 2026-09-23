@@ -78,7 +78,10 @@ struct PeerDropApp: App {
                 PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
             }
             .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotePush)) { _ in
-                Task { await connectionManager.notesStore.sync() }
+                // `syncNotes()` forces the `diaryStore` lazy first so a
+                // `diaryKey` item already sitting in the inbox can be
+                // installed instead of aborting the round (see its doc).
+                Task { await connectionManager.syncNotes() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .didReceiveDiaryPush)) { notification in
                 guard let kind = notification.userInfo?["kind"] as? String,

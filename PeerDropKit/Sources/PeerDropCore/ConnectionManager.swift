@@ -393,6 +393,30 @@ public final class ConnectionManager: ObservableObject {
         return store
     }()
 
+    /// The ONLY way anything outside the Notes UI should drive an inbox
+    /// sync (review round 4, I2).
+    ///
+    /// `notesStore.diaryKeyHandler` is installed as a side effect of the
+    /// `diaryStore` lazy above, so until something has touched `diaryStore`
+    /// the handler is still `nil` — and `NotesStore.decodeDiaryKey` treats a
+    /// nil handler as `.diaryKeyTransient`, which aborts the WHOLE inbox
+    /// round without advancing the cursor (spec §3.4). A silent `diaryKey`
+    /// background push arriving before the app has ever been `.active` (so
+    /// before `handleScenePhaseChange` touched `diaryStore`) would therefore
+    /// not only fail to install the key — it would also strand every plain
+    /// note queued behind it until the user next opened the app.
+    ///
+    /// `_ = diaryStore` forces the lazy (and with it the handler injection)
+    /// BEFORE the sync runs. It is deliberately not folded into
+    /// `notesStore`'s own lazy: `diaryStore` reads `notesStore` to install
+    /// the handler, so having `notesStore` build `diaryStore` would be a
+    /// lazy-initialization cycle.
+    @MainActor
+    public func syncNotes() async {
+        _ = diaryStore
+        await notesStore.sync()
+    }
+
     /// Classifies a raw push payload and drives the diary-lane sync it
     /// names (spec §4); a no-op for every other `RelayPushKind`. This is
     /// what `AppDelegate.didReceiveRemoteNotification`'s bounded
@@ -411,7 +435,7 @@ public final class ConnectionManager: ObservableObject {
             let accountId = userInfo["accountId"] as? String
             await diaryStore.handlePush(kind: kind, diaryId: diaryId, accountId: accountId)
         case .diaryKey:
-            await notesStore.sync()
+            await syncNotes()
         case .note, .chatInvite, .other:
             break
         }
@@ -1664,7 +1688,11 @@ public final class ConnectionManager: ObservableObject {
             // side effects) in that mode.
             if !ScreenshotModeProvider.shared.isActive {
                 Task { await accountManager.bootstrap() }
-                Task { await notesStore.sync() }
+                // `syncNotes()`, not `notesStore.sync()` — these two Tasks
+                // are unordered, so the inbox round can otherwise start
+                // before the `diaryStore` lazy below has installed
+                // `diaryKeyHandler` (see `syncNotes`' doc).
+                Task { await syncNotes() }
                 Task { await diaryStore.syncList() }
             }
             // Restart discovery when returning to foreground
