@@ -51,6 +51,10 @@ class_name = "DeviceInbox"
 name = "ACCOUNT_INBOX"
 class_name = "AccountInbox"
 
+[[durable_objects.bindings]]
+name = "DIARY_ROOM"
+class_name = "DiaryRoom"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalingRoom"]
@@ -66,3 +70,7 @@ new_sqlite_classes = ["DeviceInbox"]
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["AccountInbox"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["DiaryRoom"]

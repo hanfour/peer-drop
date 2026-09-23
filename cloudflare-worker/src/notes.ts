@@ -73,13 +73,13 @@ export interface NotesAuth { deviceId: string; accountId: string }
 export interface PushDeps { send: typeof sendAPNs; topicFor: (platform: string) => string }
 export interface NotesRouteDeps { push: PushDeps }
 
-function json(data: unknown, status = 200): Response {
+export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 }
 const b64 = (u8: Uint8Array) => btoa(String.fromCharCode(...u8));
-const dayKey = () => new Date().toISOString().slice(0, 10);
+export const dayKey = () => new Date().toISOString().slice(0, 10);
 
-async function bumpQuota(kv: KVNamespace, key: string, limit: number, ttl: number): Promise<boolean> {
+export async function bumpQuota(kv: KVNamespace, key: string, limit: number, ttl: number): Promise<boolean> {
   const used = parseInt((await kv.get(key)) ?? "0", 10) || 0;
   if (used >= limit) return false;
   await kv.put(key, String(used + 1), { expirationTtl: ttl });
