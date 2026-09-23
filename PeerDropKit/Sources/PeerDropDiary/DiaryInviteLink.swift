@@ -46,4 +46,16 @@ extension Data {
         guard let data = Data(base64Encoded: base64) else { return nil }
         self = data
     }
+
+    /// The encode side of `init?(base64URLEncoded:)` — used by
+    /// `DiaryStore.inviteLink(for:)` to embed the content key in a
+    /// `#k=` fragment. No padding (matches how a link's fragment is
+    /// written; the decoder above re-pads before doing the actual
+    /// base64 decode).
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
 }

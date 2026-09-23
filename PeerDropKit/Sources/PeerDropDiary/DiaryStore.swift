@@ -527,6 +527,54 @@ public final class DiaryStore: ObservableObject {
         }
     }
 
+    // MARK: - Invite (Task 6: DiaryInviteSheet — spec §5.2/§6)
+
+    /// `POST /v3/diaries/:id/invite/reset` — owner-only (spec §2.3); the
+    /// previous code stops working immediately, the diary's content key is
+    /// unaffected (spec §6: "重設邀請碼只讓舊碼失效，金鑰不變"). Updates the
+    /// locally persisted `inviteCode` on success, same gate/refresh pattern
+    /// as `close(_:)`.
+    public func resetInvite(_ id: String) async throws -> String {
+        guard !isMock else { throw DiaryError.network("mock") }
+        do {
+            let code = try await client.resetInvite(id)
+            try await withDiaryLock(id) { [self] in
+                if let meta = readMeta(id) {
+                    let updated = DiaryMeta(
+                        diaryId: meta.diaryId, ownerAccountId: meta.ownerAccountId, members: meta.members,
+                        holderIndex: meta.holderIndex, seq: meta.seq, state: meta.state, keyEpoch: meta.keyEpoch,
+                        metaCipher: meta.metaCipher, inviteCode: code, name: meta.name)
+                    persistMeta(id, updated)
+                    refreshSummary(id: id, meta: updated, events: states[id]?.events ?? [])
+                }
+            }
+            lastError = nil
+            return code
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    /// This device's shareable invite link for `id` (spec §3.2:
+    /// `peerdrop://diary/<diaryId>?code=<inviteCode>#k=<base64url key>`) —
+    /// nil unless BOTH the owner-only `inviteCode` (spec §2.3: `GET
+    /// /v3/diaries/:id`'s `inviteCode` is only ever populated for the
+    /// owner) and this device's own content key are locally available. A
+    /// non-owner (or an owner without a working key yet) simply has
+    /// nothing shareable — `DiaryInviteSheet` falls back to code-only or a
+    /// "waiting for key" state in that case. Pure/synchronous, no I/O
+    /// beyond what `readMeta`/`keyStore.key` already do; never sent over
+    /// the wire itself.
+    public func inviteLink(for id: String) -> URL? {
+        guard let meta = readMeta(id), let code = meta.inviteCode, let key = keyStore.key(for: id) else { return nil }
+        guard var comps = URLComponents(string: "peerdrop://diary/\(id)") else { return nil }
+        comps.queryItems = [URLQueryItem(name: "code", value: code)]
+        comps.fragment = "k=" + key.withUnsafeBytes { Data($0) }.base64URLEncodedString()
+        return comps.url
+    }
+
     // MARK: - Writing (entry / pass / skip / comment / like)
 
     /// Requires a working local key — an entry can't be sealed without one.
