@@ -26,6 +26,12 @@ struct DiaryView: View {
     @State private var errorMessage: String?
     @State private var holderNickname: String?
     @State private var didScrollToTarget = false
+    /// In-flight guard for the two turn-mutating buttons (same pattern as
+    /// the composer's `isPosting` and the comments sheet's `isLiking`).
+    /// Without it a double-tap on Pass posts the turn twice — the second
+    /// call is no longer the holder, so it just surfaces a `not_holder`
+    /// alert on top of a turn that did change.
+    @State private var isActing = false
 
     private var state: DiaryState? { store.states[diaryId] }
     private var entries: [DiaryEvent] { (state?.events ?? []).filter { $0.type == .entry }.sorted { $0.seq < $1.seq } }
@@ -134,10 +140,12 @@ struct DiaryView: View {
                             .buttonStyle(.borderedProminent)
                         Button("Pass to Next") { Task { await pass() } }
                             .buttonStyle(.bordered)
+                            .disabled(isActing)
                     }
                     if state.isOwner && !state.isHolder {
                         Button("Skip") { Task { await skip() } }
                             .buttonStyle(.bordered)
+                            .disabled(isActing)
                     }
                 }
             }
@@ -271,11 +279,17 @@ struct DiaryView: View {
     }
 
     private func pass() async {
+        guard !isActing else { return }
+        isActing = true
+        defer { isActing = false }
         do { try await store.pass(diaryId) }
         catch let e as DiaryError { errorMessage = e.userMessage() }
         catch { errorMessage = String(localized: "Something went wrong. Please try again.") }
     }
     private func skip() async {
+        guard !isActing else { return }
+        isActing = true
+        defer { isActing = false }
         do { try await store.skip(diaryId) }
         catch let e as DiaryError { errorMessage = e.userMessage() }
         catch { errorMessage = String(localized: "Something went wrong. Please try again.") }
