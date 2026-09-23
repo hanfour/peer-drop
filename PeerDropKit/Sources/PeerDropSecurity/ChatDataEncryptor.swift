@@ -22,6 +22,22 @@ public final class ChatDataEncryptor {
 
     private init() {}
 
+    /// TEST-ONLY: an encryptor that uses `testKey` and never touches the
+    /// Keychain (nor the CLI key file) — `getOrCreateKey()` returns the
+    /// injected key straight from the cache, so neither
+    /// `loadKeyFromKeychain` nor `saveKeyToKeychain` is ever reached.
+    ///
+    /// Exists because `swift test` runs an unsigned binary with no keychain
+    /// entitlement on some hosts: every test that persists through
+    /// `ChatDataEncryptor.shared` there fails with `errSecMissingEntitlement`
+    /// (-34018) and had to be skipped, which quietly disabled six
+    /// `AccountStore`/`AccountManager` tests. Production code must keep
+    /// using `.shared`; this init deliberately takes the key as a parameter
+    /// so it can't accidentally be used to weaken at-rest encryption.
+    public init(testKey: SymmetricKey) {
+        self.cachedKey = testKey
+    }
+
     // MARK: - Key Management
 
     public func getOrCreateKey() throws -> SymmetricKey {

@@ -16,7 +16,14 @@ public final class MailboxManager: ObservableObject {
 
     private let client: MailboxClient
     private let preKeyStore: PreKeyStore
-    private var mailboxToken: String?
+    /// The mailbox's ownership secret, minted by `POST /v2/keys/register`
+    /// and persisted in Keychain (see `loadTokenFromKeychain()` — this
+    /// property is seeded from it at init and kept in step on every
+    /// register/rotate). Readable outside the class because
+    /// `/v3/account/register` now requires it as proof that the caller
+    /// owns the mailbox it is binding to its account; still only
+    /// settable from here.
+    public private(set) var mailboxToken: String?
     private var pollTask: Task<Void, Never>?
 
     private static let mailboxIdKey = "peerDropMailboxId"

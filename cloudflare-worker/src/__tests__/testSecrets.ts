@@ -4,4 +4,6 @@
 // own literal; a mismatch fails the auth specs immediately and loudly).
 export const TEST_TOKEN_SECRET = "test-token-secret-deterministic";
 export const TEST_API_KEY = "test-api-key-12345";
+export const TEST_MAC_CLIENT_KEY = "test-mac-client-key-67890";
 export const TEST_ANALYTICS_KEY = "test-analytics-key-67890";
+export const TEST_BUNDLE_IDS = ["com.hanfour.peerdrop", "com.hanfour.peerdrop.mac"];

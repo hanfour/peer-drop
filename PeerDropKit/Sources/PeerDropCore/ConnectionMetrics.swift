@@ -269,7 +269,7 @@ public actor ConnectionMetrics {
         // unit-test runs quiet (otherwise every flush triggers 401s the
         // "no queue" drop policy swallows silently anyway).
         let hasAuth: Bool
-        if #available(iOS 14.0, *) {
+        if #available(iOS 14.0, macOS 11.0, *) {
             hasAuth = (await DeviceTokenManager.shared.bearerHeader()) != nil
                    || WorkerAuthHelper.legacyAPIKey() != nil
         } else {

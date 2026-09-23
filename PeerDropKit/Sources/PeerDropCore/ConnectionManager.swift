@@ -3,6 +3,7 @@ import PeerDropTransport
 import PeerDropProtocol
 import PeerDropSecurity
 import PeerDropPlatform
+import PeerDropAccount
 import Network
 import Combine
 import CryptoKit
@@ -325,6 +326,26 @@ public final class ConnectionManager: ObservableObject {
         mailboxClient: MailboxClient()
     )
 
+    // MARK: - Account (Task 9)
+
+    public private(set) lazy var accountManager: AccountManager = {
+        if ScreenshotModeProvider.shared.isActive {
+            // Skip real registration entirely in screenshot mode — no
+            // network/keychain access, and the Profile/Account UI has a
+            // stable, already-`.ready` mock account to render.
+            return AccountManager(mock: ScreenshotModeProvider.shared.mockAccount)
+        }
+        return AccountManager(
+            client: AccountClient(),
+            store: AccountStore(storageKey: PeerDropPersistence.scopedKey("account")),
+            deps: LiveAccountDependencies(mailboxManager: mailboxManager),
+            tokenAdopter: { token, ttl in
+                if #available(iOS 14.0, macOS 11.0, *) {
+                    await DeviceTokenManager.shared.adopt(token: token, expiresInSeconds: ttl)
+                }
+            })
+    }()
+
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 
     /// Policy store injected at App startup (PeerDropApp.onAppear) or via the
@@ -488,6 +509,11 @@ public final class ConnectionManager: ObservableObject {
         policyStore: SecurityPolicyStore? = nil,
         cryptoMetrics: CryptoHardeningMetrics? = nil
     ) {
+        // One-time migration off the pre-6.1 MailboxClient-only UserDefaults
+        // key onto the canonical `WorkerURL.defaultsKey`, before anything
+        // below reads the worker base URL.
+        WorkerURL.migrateLegacyKey()
+
         self.policyStore = policyStore
         self.cryptoMetrics = cryptoMetrics
 
@@ -1561,6 +1587,13 @@ public final class ConnectionManager: ObservableObject {
             discoveryCoordinator?.cleanupStalePeers(olderThan: 86400)
             mailboxManager.startPolling()
             Task { await mailboxManager.uploadPreKeysIfNeeded() }
+            // Screenshot mode has no worker to register against and the UI
+            // reads `ScreenshotModeProvider.mockAccount` instead — don't
+            // spend a real registration attempt (and its network/App Attest
+            // side effects) in that mode.
+            if !ScreenshotModeProvider.shared.isActive {
+                Task { await accountManager.bootstrap() }
+            }
             // Restart discovery when returning to foreground
             switch state {
             case .idle:

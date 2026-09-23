@@ -29,6 +29,12 @@ id = "9968f53e396f441da9e9fa419285ed68"
 binding = "METRICS"
 id = "d49e0db6cc5b4dc3b17678937cb11233"
 
+[[d1_databases]]
+binding = "ACCOUNTS_DB"
+database_name = "peerdrop-accounts"
+database_id = "8d39ccd9-a41f-40a2-85d4-a20bef410a9e"
+migrations_dir = "migrations"
+
 [[durable_objects.bindings]]
 name = "SIGNALING_ROOM"
 class_name = "SignalingRoom"

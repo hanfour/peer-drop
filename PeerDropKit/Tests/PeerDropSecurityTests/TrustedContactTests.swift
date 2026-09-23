@@ -25,7 +25,7 @@ final class TrustedContactTests: XCTestCase {
         XCTAssertEqual(contact.trustLevel, .verified)
         XCTAssertFalse(contact.isBlocked)
         XCTAssertNil(contact.mailboxId)
-        XCTAssertNil(contact.userId)
+        XCTAssertNil(contact.accountId)
     }
 
     func testKeyFingerprint() {
@@ -52,7 +52,7 @@ final class TrustedContactTests: XCTestCase {
             firstConnected: Date(),
             lastVerified: nil,
             mailboxId: "mbx_test",
-            userId: nil,
+            accountId: nil,
             isBlocked: false
         )
         let data = try JSONEncoder().encode(original)

@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PeerDropSecurity", targets: ["PeerDropSecurity"]),
         .library(name: "PeerDropProtocol", targets: ["PeerDropProtocol"]),
         .library(name: "PeerDropPTY", targets: ["PeerDropPTY"]),
+        .library(name: "PeerDropAccount", targets: ["PeerDropAccount"]),
     ],
     dependencies: [
         // External SPM packages — re-declared here so PeerDropKit can be
@@ -46,6 +47,7 @@ let package = Package(
                 "PeerDropTransport",
                 "PeerDropSecurity",
                 "PeerDropProtocol",
+                "PeerDropAccount",
             ]
         ),
         .target(
@@ -89,6 +91,11 @@ let package = Package(
         .testTarget(name: "PeerDropProtocolTests", dependencies: ["PeerDropProtocol"]),
         .target(name: "PeerDropPTY"),
         .testTarget(name: "PeerDropPTYTests", dependencies: ["PeerDropPTY"]),
+        .target(
+            name: "PeerDropAccount",
+            dependencies: ["PeerDropPlatform", "PeerDropSecurity", "PeerDropTransport"]
+        ),
+        .testTarget(name: "PeerDropAccountTests", dependencies: ["PeerDropAccount", "PeerDropSecurity"]),
         .executableTarget(
             name: "webterm",
             dependencies: [

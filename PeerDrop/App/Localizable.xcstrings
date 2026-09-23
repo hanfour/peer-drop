@@ -1,6 +1,174 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Account" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アカウント" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "계정" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "账号" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "帳號" } }
+      }
+    },
+    "Your PeerDrop ID" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "あなたの PeerDrop ID" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "내 PeerDrop ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的 PeerDrop ID" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的 PeerDrop ID" } }
+      }
+    },
+    "Friends can send you notes with this ID or your nickname." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "友だちはこの ID かニックネームであなたにメモを送れます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "친구는 이 ID나 닉네임으로 당신에게 쪽지를 보낼 수 있어요." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "朋友可以用这个 ID 或你的昵称传纸条给你。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "朋友可以用這個 ID 或你的暱稱傳紙條給你。" } }
+      }
+    },
+    "Copy ID" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ID をコピー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "ID 복사" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制 ID" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "複製 ID" } }
+      }
+    },
+    "Nickname" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ニックネーム" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "닉네임" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "昵称" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暱稱" } }
+      }
+    },
+    "Optional. 3–20 letters, numbers or underscores." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "任意。3〜20 文字の英数字、文字、またはアンダースコア。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "선택. 3~20자의 문자, 숫자 또는 밑줄." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选填。3 到 20 个字母、数字或下划线。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選填。3 到 20 個字母、數字或底線。" } }
+      }
+    },
+    "Nickname too short" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ニックネームが短すぎます" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "닉네임이 너무 짧습니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "昵称太短" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暱稱太短" } }
+      }
+    },
+    "Nickname too long" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ニックネームが長すぎます" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "닉네임이 너무 깁니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "昵称太长" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暱稱太長" } }
+      }
+    },
+    "Only letters, numbers and underscores" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字・数字・アンダースコアのみ使えます" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "문자, 숫자, 밑줄만 사용할 수 있습니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "只能用字母、数字与下划线" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "只能用字母、數字與底線" } }
+      }
+    },
+    "This nickname is reserved" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このニックネームは予約されています" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 닉네임은 예약되어 있습니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个昵称是保留字" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這個暱稱是保留字" } }
+      }
+    },
+    "This nickname is already taken" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このニックネームは既に使われています" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 닉네임은 이미 사용 중입니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个昵称已被使用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這個暱稱已被使用" } }
+      }
+    },
+    "Too many changes today. Try again tomorrow." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "本日の変更回数の上限に達しました。明日もう一度お試しください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "오늘 변경 횟수를 초과했습니다. 내일 다시 시도하세요." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "今天修改次数已达上限，明天再试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "今天修改次數已達上限，明天再試。" } }
+      }
+    },
+    "Setting up your account…" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アカウントを作成しています…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "계정을 만드는 중…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在创建账号…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在建立帳號…" } }
+      }
+    },
+    "Account not ready" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アカウントの準備ができていません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "계정이 아직 준비되지 않았습니다" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "账号尚未就绪" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "帳號尚未就緒" } }
+      }
+    },
+    "This device can't create an account yet. Nearby sharing still works." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このデバイスではまだアカウントを作成できません。近くの共有は引き続き使えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 기기에서는 아직 계정을 만들 수 없습니다. 근처 공유는 계속 사용할 수 있습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台设备目前无法创建账号。附近分享仍可使用。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這台裝置目前無法建立帳號。附近分享仍可使用。" } }
+      }
+    },
+    "You're offline. We'll retry automatically." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オフラインです。自動的に再試行します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "오프라인 상태입니다. 자동으로 다시 시도합니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前离线，稍后会自动重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "目前離線，稍後會自動重試。" } }
+      }
+    },
+    "Retry" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "再試行" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다시 시도" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重試" } }
+      }
+    },
+    "Delete Account" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アカウントを削除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "계정 삭제" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除账号" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "刪除帳號" } }
+      }
+    },
+    "Delete your account?" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アカウントを削除しますか？" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "계정을 삭제할까요?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "要删除账号吗？" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "要刪除帳號嗎？" } }
+      }
+    },
+    "Your ID and nickname will be released and a new anonymous ID will be created. Notes and diaries tied to the old account will be lost. Nearby sharing keeps working." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ID とニックネームは解放され、新しい匿名 ID が作成されます。以前のアカウントに紐づくメモと日記は失われます。近くの共有は引き続き使えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "ID와 닉네임이 해제되고 새 익명 ID가 만들어집니다. 이전 계정에 연결된 쪽지와 일기는 사라집니다. 근처 공유는 계속 사용할 수 있습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的 ID 与昵称将被释放，并创建一个新的匿名 ID。与旧账号相关的纸条与日记会丢失。附近分享仍可使用。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的 ID 與暱稱將被釋放，並建立一個新的匿名 ID。與舊帳號相關的紙條與日記會遺失。附近分享仍可使用。" } }
+      }
+    },
+    "Changing devices creates a new account. There is no account recovery yet." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "端末を変えると新しいアカウントになります。アカウントの復元はまだできません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기기를 바꾸면 새 계정이 만들어집니다. 아직 계정 복구 기능은 없습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "换设备会创建新账号，目前尚无账号恢复功能。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "換裝置會建立新帳號，目前尚無帳號還原功能。" } }
+      }
+    },
     "Pick Nearby, Library, or Relay from the sidebar." : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドバーから「近くのデバイス」「ライブラリ」「リレー」を選んでください。" } },

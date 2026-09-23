@@ -20,13 +20,17 @@ import os.log
 /// token. Concurrent callers share a single in-flight refresh task.
 ///
 /// Fallback: if App Attest is unavailable (Simulator, dev builds without
-/// entitlement, attestation rejected by Apple), this actor returns nil
-/// and callers fall through to the operator `X-API-Key` lane — which,
-/// since the 2026-07 rotation, only carries a key on operator surfaces
-/// (Debug builds, peerdrop-cli via PEERDROP_WORKER_KEY). Release store
-/// builds have no key, so an App-Attest-unavailable device sends no
-/// credential and relay routes 401 until attestation succeeds.
-@available(iOS 14.0, *)
+/// entitlement, attestation rejected by Apple, **and every native macOS
+/// build** — `DCAppAttestService.isSupported` is false there, verified
+/// 2026-09-15 on an M4 running macOS 15.7), this actor returns nil and
+/// callers fall through to the `X-API-Key` lane. Since the 2026-07
+/// rotation that lane carries a key on operator surfaces (Debug builds,
+/// peerdrop-cli via PEERDROP_WORKER_KEY) and — since 2026-09 — on the
+/// shipped Mac app, which bundles its own restricted `MAC_CLIENT_KEY`.
+/// Release **iOS** store builds have no key, so an App-Attest-unavailable
+/// iPhone sends no credential and relay routes 401 until attestation
+/// succeeds.
+@available(iOS 14.0, macOS 11.0, *)
 public actor DeviceTokenManager {
 
     public static let shared = DeviceTokenManager()
@@ -78,6 +82,23 @@ public actor DeviceTokenManager {
     public func hasActiveToken() -> Bool {
         guard let _ = cachedToken, let exp = tokenExpiresAt else { return false }
         return exp > Date()
+    }
+
+    /// Drop the cached bearer so the next request re-asserts (used after a 401).
+    /// Deliberately does not cancel `inFlightRefresh`: any refresh already
+    /// in flight still re-asserts against the server and yields a genuinely
+    /// fresh token, so letting it run to completion is correct rather than
+    /// wasted work.
+    public func invalidate() {
+        cachedToken = nil
+        tokenExpiresAt = nil
+        Self.deleteKeychainToken()
+        UserDefaults.standard.removeObject(forKey: Self.expiryKey)
+    }
+
+    /// Adopt a token minted by another route (e.g. `/v3/account/register`).
+    public func adopt(token: String, expiresInSeconds: Int) {
+        storeToken(token, expiresInSeconds: expiresInSeconds)
     }
 
     // MARK: - Core flow
@@ -240,8 +261,7 @@ public actor DeviceTokenManager {
     }
 
     private var workerBaseURL: URL {
-        URL(string: UserDefaults.standard.string(forKey: "peerDropWorkerURL")
-            ?? "https://peerdrop-signal.hanfourhuang.workers.dev")!
+        WorkerURL.current()
     }
 
     // MARK: - Persistence
@@ -305,5 +325,13 @@ public actor DeviceTokenManager {
             addQuery[kSecValueData as String] = data
             SecItemAdd(addQuery as CFDictionary, nil)
         }
+    }
+
+    private static func deleteKeychainToken() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrLabel as String: keychainTokenLabel,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

@@ -12,10 +12,7 @@ public actor MailboxClient {
     private let session: URLSession
 
     public init(baseURL: URL? = nil) {
-        self.baseURL = baseURL ?? URL(string:
-            UserDefaults.standard.string(forKey: "workerBaseURL")
-            ?? "https://peerdrop-signal.hanfourhuang.workers.dev"
-        )!
+        self.baseURL = baseURL ?? WorkerURL.current()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)

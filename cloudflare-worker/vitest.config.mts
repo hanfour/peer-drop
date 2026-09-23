@@ -18,6 +18,11 @@ export default defineConfig({
         // Override secrets for test runs (real secrets aren't available in CI).
         bindings: {
           API_KEY: "test-api-key-12345",
+          // Distinct from API_KEY so the specs can tell the operator lane
+          // and the Mac client lane apart (production sets both; when this
+          // one is unset the client lane falls back to API_KEY — see
+          // isKeyLane).
+          MAC_CLIENT_KEY: "test-mac-client-key-67890",
           ANALYTICS_KEY: "test-analytics-key-67890",
           TURN_KEY_ID: "",
           TURN_API_TOKEN: "",
@@ -27,6 +32,7 @@ export default defineConfig({
           APNS_BUNDLE_ID: "",
           TOKEN_SECRET: "test-token-secret-deterministic",
           APP_BUNDLE_ID: "com.hanfour.peerdrop",
+          APP_BUNDLE_IDS: "com.hanfour.peerdrop,com.hanfour.peerdrop.mac",
           APP_TEAM_ID: "UK48R5KWLV",
         },
       },

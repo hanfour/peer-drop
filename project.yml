@@ -37,6 +37,8 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropAccount
     settings:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
@@ -195,6 +197,8 @@ targets:
         product: PeerDropSecurity
       - package: PeerDropKit
         product: PeerDropProtocol
+      - package: PeerDropKit
+        product: PeerDropAccount
     settings:
       base:
         INFOPLIST_FILE: PeerDropMac/App/Info.plist
@@ -208,20 +212,16 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SDKROOT: macosx
         ENABLE_HARDENED_RUNTIME: "YES"
-      # NOTE deliberately NOT mirroring the iOS Release key-strip here:
-      # DCAppAttestService is unavailable to this Mac target, so without
-      # the bundled key a MAS build would have ZERO worker credential —
-      # every relay route 401s (2026-07-05 review finding). Revisit
-      # before the v6.0 Mac ship: either verify App Attest works on
-      # macOS for this target, or keep the key Mac-only and accept that
-      # a Mac IPA leaks it (rotate again if the Mac key ever burns).
+    # Native macOS has no App Attest (DCAppAttestService.isSupported == false,
+    # verified 2026-09-15 on an M4 running macOS 15.7); the Mac build keeps a
+    # key lane (+ X-Device-Id) until a DeviceCheck-based attestation exists.
+    # Unlike iOS this is bound for Release too — a shipped Mac with no
+    # credential would 401 on every relay route — so the value is the
+    # dedicated PEERDROP_MAC_CLIENT_KEY (worker MAC_CLIENT_KEY), never the
+    # operator API_KEY, and the worker restricts what that key can reach.
     configFiles:
-      # Same Secrets.xcconfig as iOS so $(PEERDROP_WORKER_API_KEY)
-      # substitution works in Info.plist. Gitignored; copy from
-      # Secrets.xcconfig.example for new dev setup.
       Debug: Secrets.xcconfig
       Release: Secrets.xcconfig
-
   PeerDropTests:
     type: bundle.unit-test
     platform: iOS

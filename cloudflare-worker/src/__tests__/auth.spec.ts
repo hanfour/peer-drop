@@ -10,6 +10,8 @@
 
 import { SELF } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
+import { issueToken, freshTokenPayload } from "../deviceToken";
+import { TEST_TOKEN_SECRET } from "./testSecrets";
 
 const API_KEY = "test-api-key-12345";
 const WRONG_KEY = "definitely-wrong-key";
@@ -159,5 +161,26 @@ describe("auth — WS /v2/inbox/:deviceId", () => {
       { headers: { Upgrade: "websocket" } },
     );
     expect(resp.status).toBe(401);
+  });
+});
+
+// --------------------------------------------------------------------------
+// /v2/inbox ownership binding — a device token only opens ITS OWN inbox
+// --------------------------------------------------------------------------
+
+describe("auth — /v2/inbox ownership binding", () => {
+  it("rejects a device token whose deviceId differs from the path", async () => {
+    const token = await issueToken(freshTokenPayload("device-aaaa-1111", "default"), TEST_TOKEN_SECRET);
+    const resp = await SELF.fetch(`https://example.com/v2/inbox/device-bbbb-2222?token=${token}`, {
+      headers: { Upgrade: "websocket" },
+    });
+    expect(resp.status).toBe(403);
+  });
+  it("accepts a device token for its own inbox", async () => {
+    const token = await issueToken(freshTokenPayload("device-aaaa-1111", "default"), TEST_TOKEN_SECRET);
+    const resp = await SELF.fetch(`https://example.com/v2/inbox/device-aaaa-1111?token=${token}`, {
+      headers: { Upgrade: "websocket" },
+    });
+    expect(resp.status).toBe(101);
   });
 });
