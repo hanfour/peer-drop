@@ -5,6 +5,7 @@ import PeerDropSecurity
 import PeerDropPlatform
 import PeerDropAccount
 import PeerDropNotes
+import PeerDropDiary
 import Network
 import Combine
 import CryptoKit
@@ -360,6 +361,36 @@ public final class ConnectionManager: ObservableObject {
             crypto: LiveNotesCryptoContext(preKeyStore: preKeyStore),
             storage: NotesStorage(directory: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent(PeerDropPersistence.scopedKey("Notes"), isDirectory: true)))
+    }()
+
+    // MARK: - Diary (sub-project 3)
+
+    public private(set) lazy var diaryStore: DiaryStore = {
+        if ScreenshotModeProvider.shared.isActive {
+            let mock = ScreenshotModeProvider.shared.mockDiaries
+            return DiaryStore(mock: mock.diaries, states: mock.states)
+        }
+        // Same per-diary folder layout hosts key.enc/meta.enc/events.log/
+        // pending.enc (spec §3.5) — `keyStore` and the store's own
+        // `directory` share this one root.
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(PeerDropPersistence.scopedKey("Diary"), isDirectory: true)
+        let store = DiaryStore(
+            client: DiaryClient(account: AccountClient()),
+            notesClient: NotesClient(),
+            accountManager: accountManager,
+            crypto: LiveNotesCryptoContext(preKeyStore: preKeyStore),
+            keyStore: DiaryKeyStore(directory: dir, encryptor: ChatDataEncryptor.shared),
+            directory: dir,
+            encryptor: ChatDataEncryptor.shared,
+            directoryCache: DirectoryCache())
+        // Spec §1 row "收件匣分流": PeerDropNotes never imports
+        // PeerDropDiary, so the `diaryKey` inbox-item disposition handler is
+        // injected here — the one place both stores actually get built.
+        notesStore.diaryKeyHandler = { [store] plaintext, sender, _ in
+            await store.acceptRelayedKey(plaintext, sender: sender)
+        }
+        return store
     }()
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
@@ -1610,6 +1641,7 @@ public final class ConnectionManager: ObservableObject {
             if !ScreenshotModeProvider.shared.isActive {
                 Task { await accountManager.bootstrap() }
                 Task { await notesStore.sync() }
+                Task { await diaryStore.syncList() }
             }
             // Restart discovery when returning to foreground
             switch state {
