@@ -298,7 +298,7 @@ public final class NotesStore: ObservableObject {
     private static func mapNetwork(_ error: Error) -> NotesStoreError {
         switch error {
         case AccountClientError.rateLimited: return .rateLimited
-        case AccountClientError.http(507): return .inboxFull
+        case AccountClientError.insufficientStorage: return .inboxFull
         case AccountClientError.http(404): return .recipientNotFound
         default: return .network(String(describing: error))
         }
@@ -311,7 +311,7 @@ public final class NotesStore: ObservableObject {
     private static func mapItemError(_ error: Error) -> NotesStoreError {
         switch error {
         case AccountClientError.rateLimited: return .rateLimited
-        case AccountClientError.http(507): return .inboxFull
+        case AccountClientError.insufficientStorage: return .inboxFull
         case AccountClientError.http(404): return .noteNotFound
         default: return .network(String(describing: error))
         }

@@ -63,7 +63,7 @@ final class NotesClientTests: XCTestCase {
     }
     func testErrorMapping() async {
         TestURLProtocol.queue = [.init(status: 507, body: Data(#"{"error":"inbox_full"}"#.utf8)), .init(status: 404, body: Data(#"{"error":"recipient_not_found"}"#.utf8)), .init(status: 400, body: Data(#"{"error":"bad_pow"}"#.utf8))]
-        do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .http(507)) }
+        do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .insufficientStorage("inbox_full")) }
         do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .http(404)) }
         do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .invalid("bad_pow")) }
     }
