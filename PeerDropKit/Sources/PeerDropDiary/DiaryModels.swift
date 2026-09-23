@@ -69,14 +69,16 @@ public struct DiaryMeta: Codable, Hashable, Sendable {
     public let holderIndex: Int
     public let seq: Int
     public let state: String
-    public let keyEpoch: Int
+    /// `UInt32` to match `DiaryCrypto`'s meta AAD encoding (big-endian
+    /// 4 bytes) — the MVP never rotates it (fixed at 1).
+    public let keyEpoch: UInt32
     public let metaCipher: String
     public let inviteCode: String?
     public var name: String?
 
     public init(
         diaryId: String, ownerAccountId: String, members: [String], holderIndex: Int,
-        seq: Int, state: String, keyEpoch: Int, metaCipher: String,
+        seq: Int, state: String, keyEpoch: UInt32, metaCipher: String,
         inviteCode: String? = nil, name: String? = nil
     ) {
         self.diaryId = diaryId
@@ -107,9 +109,22 @@ public struct DiarySummary: Codable, Hashable, Sendable {
 /// Client-facing errors — `DiaryClient` maps every `AccountClientError`
 /// (via its body error code) into one of these; `DiaryCrypto`/`DiaryStore`
 /// raise `.noKey`/`.network` directly for local conditions the server never
-/// reports. `.network(String)` is the catch-all for any body code, HTTP
-/// status, or transport failure not otherwise named here — callers that
-/// need the raw code/description can pattern-match its payload.
+/// reports.
+///
+/// - `.transient(String)` covers conditions worth retrying without user
+///   action: 429 (`"rate_limited"`), any 5xx (`"http_<status>"`), and a
+///   raw `URLError` transport failure (`"transport_<code>"`).
+/// - `.network(String)` is the catch-all for a body code/HTTP status this
+///   client doesn't otherwise name and that ISN'T transient — an
+///   unrecognized 4xx (a code the worker added that this client doesn't
+///   know yet) — so a caller can still inspect the raw payload but
+///   shouldn't blindly retry it.
+/// - `.notFound` unifies a genuine 404 from the worker with `event(id:seq:)`'s
+///   synthetic "no event at that seq in the page" case (spec §2.3 — the
+///   worker itself returns 404 `not_found` for an unresolvable diaryId).
+/// - `.badId` is raised client-side, before any request is sent, when an
+///   `id` a `DiaryClient` method would embed in a URL path doesn't match
+///   the diary ULID shape (`^[0-9A-HJKMNP-TV-Z]{26}$`).
 public enum DiaryError: Error, Equatable, Sendable {
     case notMember
     case notHolder
@@ -124,5 +139,8 @@ public enum DiaryError: Error, Equatable, Sendable {
     case exists
     case tooLarge
     case noKey
+    case notFound
+    case badId
+    case transient(String)
     case network(String)
 }

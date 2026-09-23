@@ -42,7 +42,13 @@ public enum DiaryCrypto {
 
     private struct MetaPlaintext: Codable { let name: String }
 
-    public static func seal(payload: DiaryPayload, key: SymmetricKey, diaryId: String, authorAccountId: String, eventId: String) throws -> Data {
+    /// Enforces the same `maxScalars` limit `open` checks on the way back
+    /// out — a caller that seals oversized text would otherwise only find
+    /// out when SOME device later tries to open it and silently discards
+    /// the event (spec §3.1's oversize rule is meant to reject at the
+    /// source, not just at every reader).
+    public static func seal(payload: DiaryPayload, key: SymmetricKey, diaryId: String, authorAccountId: String, eventId: String, maxScalars: Int) throws -> Data {
+        guard payload.text.unicodeScalars.count <= maxScalars else { throw DiaryCryptoError.oversized }
         let plaintext = try JSONEncoder().encode(payload)
         return try seal(plaintext: plaintext, key: key, aad: aad(diaryId: diaryId, authorAccountId: authorAccountId, eventId: eventId))
     }

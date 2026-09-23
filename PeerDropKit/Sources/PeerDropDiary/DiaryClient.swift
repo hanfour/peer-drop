@@ -43,8 +43,9 @@ public actor DiaryClient {
     /// §5.1); current-member-only, `inviteCode` present only when the
     /// caller is the owner.
     public func get(_ id: String) async throws -> DiaryMeta {
+        let pathId = try Self.pathSafeDiaryId(id)
         do {
-            let r: GetMetaResponse = try await account.request("GET", "v3/diaries/\(id)", body: Optional<EmptyBody>.none)
+            let r: GetMetaResponse = try await account.request("GET", "v3/diaries/\(pathId)", body: Optional<EmptyBody>.none)
             return r.asMeta
         } catch { throw DiaryError.from(error) }
     }
@@ -52,8 +53,9 @@ public actor DiaryClient {
     /// `POST /v3/diaries/:id/join {inviteCode}` — join via a link (id
     /// already known, code carried in the URL fragment).
     public func join(id: String, code: String) async throws -> DiaryMeta {
+        let pathId = try Self.pathSafeDiaryId(id)
         do {
-            let r: JoinResponse = try await account.request("POST", "v3/diaries/\(id)/join", body: JoinRequestBody(inviteCode: code))
+            let r: JoinResponse = try await account.request("POST", "v3/diaries/\(pathId)/join", body: JoinRequestBody(inviteCode: code))
             return r.asMeta
         } catch { throw DiaryError.from(error) }
     }
@@ -69,24 +71,27 @@ public actor DiaryClient {
 
     /// `POST /v3/diaries/:id/leave` → 204.
     public func leave(_ id: String) async throws {
+        let pathId = try Self.pathSafeDiaryId(id)
         do {
-            let _: EmptyBody = try await account.request("POST", "v3/diaries/\(id)/leave", body: Optional<EmptyBody>.none)
+            let _: EmptyBody = try await account.request("POST", "v3/diaries/\(pathId)/leave", body: Optional<EmptyBody>.none)
         } catch { throw DiaryError.from(error) }
     }
 
     /// `POST /v3/diaries/:id/close` → 204, owner-only.
     public func close(_ id: String) async throws {
+        let pathId = try Self.pathSafeDiaryId(id)
         do {
-            let _: EmptyBody = try await account.request("POST", "v3/diaries/\(id)/close", body: Optional<EmptyBody>.none)
+            let _: EmptyBody = try await account.request("POST", "v3/diaries/\(pathId)/close", body: Optional<EmptyBody>.none)
         } catch { throw DiaryError.from(error) }
     }
 
     /// `POST /v3/diaries/:id/invite/reset` → `{inviteCode}`, owner-only.
     /// Invalidates the previous code; the diary key itself is unaffected.
     public func resetInvite(_ id: String) async throws -> String {
+        let pathId = try Self.pathSafeDiaryId(id)
         struct R: Decodable { let inviteCode: String }
         do {
-            let r: R = try await account.request("POST", "v3/diaries/\(id)/invite/reset", body: Optional<EmptyBody>.none)
+            let r: R = try await account.request("POST", "v3/diaries/\(pathId)/invite/reset", body: Optional<EmptyBody>.none)
             return r.inviteCode
         } catch { throw DiaryError.from(error) }
     }
@@ -96,8 +101,9 @@ public actor DiaryClient {
     /// `GET /v3/diaries/:id/events?since=&limit=` — `since` is EXCLUSIVE
     /// (spec §0: "since 不含該序號"); current-member-only.
     public func events(id: String, since: Int, limit: Int = 100) async throws -> (events: [DiaryEvent], nextSince: Int?) {
+        let pathId = try Self.pathSafeDiaryId(id)
         do {
-            let r: EventsPageResponse = try await account.request("GET", "v3/diaries/\(id)/events?since=\(since)&limit=\(limit)", body: Optional<EmptyBody>.none)
+            let r: EventsPageResponse = try await account.request("GET", "v3/diaries/\(pathId)/events?since=\(since)&limit=\(limit)", body: Optional<EmptyBody>.none)
             return (r.events.map(\.asEvent), r.nextSince)
         } catch { throw DiaryError.from(error) }
     }
@@ -108,11 +114,12 @@ public actor DiaryClient {
     /// exact `eventId` replay, or a repeat `like` on the same entry by the
     /// same account).
     public func postEvent(id: String, eventId: String, type: DiaryEventType, refSeq: Int? = nil, payloadCipher: String? = nil) async throws -> (seq: Int, holderIndex: Int) {
+        let pathId = try Self.pathSafeDiaryId(id)
         struct Body: Encodable { let eventId: String; let type: DiaryEventType; let refSeq: Int?; let payloadCipher: String? }
         struct R: Decodable { let seq: Int; let holderIndex: Int }
         do {
             let r: R = try await account.request(
-                "POST", "v3/diaries/\(id)/events",
+                "POST", "v3/diaries/\(pathId)/events",
                 body: Body(eventId: eventId, type: type, refSeq: refSeq, payloadCipher: payloadCipher)
             )
             return (r.seq, r.holderIndex)
@@ -125,11 +132,12 @@ public actor DiaryClient {
     /// lookups, never as a public route. Implemented here via the list
     /// route instead: `since: seq - 1, limit: 1` returns exactly the event
     /// at `seq` (since is exclusive and seq starts at 1, so `seq - 1` is a
-    /// valid `since` even for `seq == 1`).
+    /// valid `since` even for `seq == 1`). `id` validation happens inside
+    /// the delegated `events(id:since:limit:)` call.
     public func event(id: String, seq: Int) async throws -> DiaryEvent {
         let (events, _) = try await events(id: id, since: seq - 1, limit: 1)
         guard let match = events.first(where: { $0.seq == seq }) else {
-            throw DiaryError.network("not_found")
+            throw DiaryError.notFound
         }
         return match
     }
@@ -138,8 +146,9 @@ public actor DiaryClient {
     /// fans out a SILENT `diaryKeyRequest` push to the diary's other
     /// members (spec §3.3 step 1/§4) — never a visible notification.
     public func requestKey(_ id: String) async throws {
+        let pathId = try Self.pathSafeDiaryId(id)
         do {
-            let _: EmptyBody = try await account.request("POST", "v3/diaries/\(id)/request-key", body: Optional<EmptyBody>.none)
+            let _: EmptyBody = try await account.request("POST", "v3/diaries/\(pathId)/request-key", body: Optional<EmptyBody>.none)
         } catch { throw DiaryError.from(error) }
     }
 
@@ -148,12 +157,34 @@ public actor DiaryClient {
     /// (`spam`/`harassment`/`other`) the worker accepts for both notes and
     /// diary reports.
     public func report(id: String, seq: Int, reason: ReportReason, excerpt: String?) async throws -> String {
+        let pathId = try Self.pathSafeDiaryId(id)
         struct Body: Encodable { let reason: ReportReason; let excerpt: String? }
         struct R: Decodable { let id: String }
         do {
-            let r: R = try await account.request("POST", "v3/diaries/\(id)/events/\(seq)/report", body: Body(reason: reason, excerpt: excerpt))
+            let r: R = try await account.request("POST", "v3/diaries/\(pathId)/events/\(seq)/report", body: Body(reason: reason, excerpt: excerpt))
             return r.id
         } catch { throw DiaryError.from(error) }
+    }
+
+    // MARK: - Path-safety
+
+    /// Every route that embeds a caller-supplied diary `id` in a URL path
+    /// (all of them except `create`, whose `diaryId` travels only in the
+    /// JSON body, and `joinByCode`, which takes no id at all) validates it
+    /// against the diary ULID shape FIRST and throws `.badId` — issuing no
+    /// request — rather than interpolating an arbitrary string into a URL
+    /// path. A value that could never be a real diaryId (e.g. containing
+    /// `/` or `..`) must never reach `URLRequest` construction. The regex
+    /// mirrors `diary.ts`'s own `DIARY_ID_RE`. A validated id is also
+    /// percent-encoded (a no-op for this alphabet, but matches
+    /// `AccountClient.lookup`'s convention for a path segment).
+    private static let diaryIdPattern = "^[0-9A-HJKMNP-TV-Z]{26}$"
+
+    private static func pathSafeDiaryId(_ id: String) throws -> String {
+        guard id.range(of: diaryIdPattern, options: .regularExpression) != nil else {
+            throw DiaryError.badId
+        }
+        return id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
     }
 }
 
@@ -169,7 +200,7 @@ private struct GetMetaResponse: Decodable {
     let holderIndex: Int
     let seq: Int
     let state: String
-    let keyEpoch: Int
+    let keyEpoch: UInt32
     let metaCipher: String
     let inviteCode: String?
 
@@ -231,9 +262,11 @@ extension DiaryError {
     /// status — several distinct codes share a status (e.g. 403 covers
     /// `not_member`/`not_holder`/`not_owner`/`skip_self`/`diary_closed`/
     /// `bad_code`). A code this client doesn't have a named case for
-    /// (`bad_type`, `bad_payload`, `missing_fields`, `invalid_id`,
-    /// `d1_error`, `rate_limited`, a raw `not_found`, …) falls through to
-    /// `.network(code)` so callers can still inspect it.
+    /// (`bad_type`, `bad_payload`, `missing_fields`, `invalid_id`, …) falls
+    /// through to `.network(code)`. 429/5xx/transport failures map to
+    /// `.transient` instead — worth a caller retrying without user
+    /// action — and any 404 (the worker's `not_found`, or `event(id:seq:)`'s
+    /// synthetic "no event at that seq") unifies to `.notFound`.
     static func from(_ error: Error) -> DiaryError {
         switch error {
         case AccountClientError.forbidden(let code):
@@ -262,13 +295,19 @@ extension DiaryError {
         case AccountClientError.insufficientStorage(let code):
             return code == "diary_full" ? .full : .network(code)
         case AccountClientError.rateLimited:
-            return .network("rate_limited")
+            return .transient("rate_limited")
+        case AccountClientError.http(404):
+            return .notFound
+        case AccountClientError.http(let status) where (500...599).contains(status):
+            return .transient("http_\(status)")
         case AccountClientError.http(let status):
             return .network("http_\(status)")
         case AccountClientError.unauthorized:
             return .network("unauthorized")
         case AccountClientError.invalidResponse:
             return .network("invalid_response")
+        case let urlError as URLError:
+            return .transient("transport_\(urlError.code.rawValue)")
         default:
             return .network(String(describing: error))
         }
