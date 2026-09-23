@@ -393,6 +393,30 @@ public final class ConnectionManager: ObservableObject {
         return store
     }()
 
+    /// Classifies a raw push payload and drives the diary-lane sync it
+    /// names (spec §4); a no-op for every other `RelayPushKind`. This is
+    /// what `AppDelegate.didReceiveRemoteNotification`'s bounded
+    /// background-fetch path (F2) calls so it doesn't need to duplicate
+    /// the "reclassify, read `accountId`, call the right store" glue that
+    /// `PushNotificationManager.handleRemoteNotification` already has for
+    /// the `.didReceiveDiaryPush`/`.didReceiveNotePush` notification path
+    /// (kept as-is — it's still the fallback AppDelegate uses when
+    /// `connectionManager` isn't wired yet, and its own userInfo shape by
+    /// that point is the already-parsed notification payload, not the raw
+    /// push, so it can't just call this method too).
+    @MainActor
+    public func handleDiaryPush(userInfo: [AnyHashable: Any]) async {
+        switch RelayPushKind.classify(userInfo) {
+        case .diary(let kind, let diaryId, _):
+            let accountId = userInfo["accountId"] as? String
+            await diaryStore.handlePush(kind: kind, diaryId: diaryId, accountId: accountId)
+        case .diaryKey:
+            await notesStore.sync()
+        case .note, .chatInvite, .other:
+            break
+        }
+    }
+
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 
     /// Policy store injected at App startup (PeerDropApp.onAppear) or via the

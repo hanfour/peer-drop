@@ -118,6 +118,11 @@ struct PeerDropApp: App {
                     connectionManager.configureVoiceCalling(callProvider: callKit)
                 }
 
+                // F2: let AppDelegate's didReceiveRemoteNotification await
+                // the diary/diaryKey sync directly instead of racing the
+                // background-fetch completion handler against it.
+                appDelegate.connectionManager = connectionManager
+
                 // Wire SecurityPolicyStore + CryptoHardeningMetrics into ConnectionManager.
                 // Done at .onAppear (not @StateObject lazy init) because the lazy
                 // initializer can't reference other instance properties. Future
