@@ -174,7 +174,7 @@ Wrangler：`[[durable_objects.bindings]] name = "DIARY_ROOM" class_name = "Diary
 - 成功：先寫 `key.enc`，再 `DELETE /v3/inbox/:id`，再推進游標。不建立 `NoteRecord`。
 
 ### 3.5 落盤
-`Documents/Diary/<diaryId>/{key.enc, meta.enc, events.log, pending.enc}`、清單 `Documents/Diary/index.enc`，全部 `ChatDataEncryptor`。`events.log` 框架 = `UInt32 BE 長度 ‖ ChatDataEncryptor.encrypt(單筆 JSON)`；載入時逐框架解密建 seq→event 索引（記憶體），解密失敗跳過該長度，長度超出剩餘檔案則停止並保留尾端；IO 在 `nonisolated` 執行，不在 `@MainActor` 上解整本。
+`Documents/Diary/<diaryId>/{key.enc, meta.enc, events.log, pending.enc}`、清單 `Documents/Diary/index.enc`，全部 `ChatDataEncryptor`。`events.log` 框架 = `UInt32 BE 長度 ‖ ChatDataEncryptor.encrypt(單筆 JSON)`；載入時逐框架解密建 seq→event 索引（記憶體，同 seq 以檔案後者為準），解密失敗或解出非 JSON 則跳過該長度；長度不合法或超出剩餘檔案時**把檔案截斷到最後一個完整框架**（伺服器是真相來源、尾端無法復原；實作 2026-09-23 調整，原文為保留尾端）並回報；IO 在 `nonisolated` 執行、日誌型別為 `Sendable`（載入結果以回傳值帶出，不用可變屬性）。
 
 ---
 
