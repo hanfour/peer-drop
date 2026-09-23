@@ -68,6 +68,7 @@ struct DiaryListView: View {
     private func openPendingDiary() {
         guard let id = openDiaryID, store.diaries.contains(where: { $0.diaryId == id }) else { return }
         path = [id]
+        openDiaryID = nil
     }
 
     private var emptyState: some View {
