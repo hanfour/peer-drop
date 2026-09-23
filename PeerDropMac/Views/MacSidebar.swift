@@ -8,6 +8,7 @@ extension Notification.Name {
 
 enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
     case notes
+    case diaries
     case nearby
     case trusted
     case relay
@@ -17,6 +18,7 @@ enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
     var localizedName: String {
         switch self {
         case .notes:   return NSLocalizedString("Notes", comment: "")
+        case .diaries: return NSLocalizedString("Diaries", comment: "")
         case .nearby:  return NSLocalizedString("Nearby", comment: "")
         case .trusted: return NSLocalizedString("Library", comment: "")
         case .relay:   return NSLocalizedString("Relay", comment: "")
@@ -26,6 +28,7 @@ enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .notes:   return "envelope.fill"
+        case .diaries: return "book.closed"
         case .nearby:  return "wifi"
         case .trusted: return "checkmark.shield"
         case .relay:   return "network"

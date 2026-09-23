@@ -3,6 +3,7 @@ import PeerDropCore
 import PeerDropPlatform
 import PeerDropTransport
 import PeerDropSecurity
+import PeerDropDiary
 
 @main
 struct PeerDropMacApp: App {
@@ -212,6 +213,12 @@ struct PeerDropMacApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotePush)) { _ in
                     Task { await connectionManager.notesStore.sync() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .didReceiveDiaryPush)) { notification in
+                    guard let kind = notification.userInfo?["kind"] as? String,
+                          let diaryId = notification.userInfo?["diaryId"] as? String else { return }
+                    let accountId = notification.userInfo?["accountId"] as? String
+                    Task { await connectionManager.diaryStore.handlePush(kind: kind, diaryId: diaryId, accountId: accountId) }
                 }
                 .task {
                     // Round 5 audit fix: drain any APNs payloads buffered by

@@ -33,9 +33,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if case .note(let id) = RelayPushKind.classify(userInfo) {
+        switch RelayPushKind.classify(userInfo) {
+        case .note(let id):
             NotificationCenter.default.post(name: .openNote, object: nil, userInfo: ["id": id ?? ""])
             NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": id ?? ""])
+        case .diary(_, let diaryId, let seq):
+            // Spec §4: tapping any diary notification opens that diary
+            // (selectedTab = 4 on iOS) and scrolls to `seq` when present.
+            var info: [String: Any] = ["diaryId": diaryId]
+            if let seq { info["seq"] = seq }
+            NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: info)
+        default:
+            break
         }
         completionHandler()
     }

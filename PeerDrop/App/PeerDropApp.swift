@@ -3,6 +3,7 @@ import PeerDropCore
 import PeerDropTransport
 import PeerDropSecurity
 import PeerDropPlatform
+import PeerDropDiary
 
 @main
 struct PeerDropApp: App {
@@ -78,6 +79,12 @@ struct PeerDropApp: App {
             }
             .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotePush)) { _ in
                 Task { await connectionManager.notesStore.sync() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .didReceiveDiaryPush)) { notification in
+                guard let kind = notification.userInfo?["kind"] as? String,
+                      let diaryId = notification.userInfo?["diaryId"] as? String else { return }
+                let accountId = notification.userInfo?["accountId"] as? String
+                Task { await connectionManager.diaryStore.handlePush(kind: kind, diaryId: diaryId, accountId: accountId) }
             }
             .onReceive(policyStore.$current) { newPolicy in
                 // PR3 follow-up: re-snapshot `activePolicy` on every policy update so
@@ -236,6 +243,20 @@ struct PeerDropApp: App {
                 showInviteAccept = true
             } catch {
                 // Invalid invite URL
+            }
+        case "diary":
+            // peerdrop://diary/<diaryId>?code=<code>#k=<key> — spec §3.2.
+            // Structural validation only (no query/fragment ever logged);
+            // the actual join call re-validates against the server.
+            guard DiaryInviteLink.parse(url) != nil else { return }
+            Task {
+                // Re-tapping a link for a diary this account already
+                // belongs to is idempotent server-side (spec §2.1 "join":
+                // "已是成員仍執行" — still returns 200), so this also covers
+                // "just open the diary I'm already in".
+                if let diaryId = try? await connectionManager.diaryStore.join(link: url) {
+                    NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: ["diaryId": diaryId])
+                }
             }
         default:
             break
