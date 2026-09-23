@@ -256,6 +256,7 @@ public final class DiaryStore: ObservableObject {
                 let logURL = eventsLogURL(id)
                 var since = readCursor(id)
                 while true {
+                    let sinceBeforePage = since
                     let (events, nextSince) = try await client.events(id: id, since: since, limit: 100)
                     for event in events {
                         let decoded = withDecodedPayload(event, id: id, key: key)
@@ -272,8 +273,24 @@ public final class DiaryStore: ObservableObject {
                         since = maxFetched
                         writeCursor(id, since)
                     }
-                    guard let next = nextSince, next != since else { break }
-                    since = next
+                    // Review round 4, I1: keep paging while the server says
+                    // there IS another page (`nextSince != nil`) AND this page
+                    // actually moved us forward. The old test — `next != since`
+                    // — could never be true: the worker sets `nextSince` to the
+                    // LAST seq of the page it just served (`diaryRoom.ts`
+                    // `out.nextSince = page[page.length - 1].seq`), which is
+                    // exactly the `maxFetched` we just assigned to `since`, so
+                    // every paginated catch-up stopped dead after page 1 and
+                    // only crept forward one page per `sync`.
+                    //
+                    // `since` is deliberately NOT re-assigned from `nextSince`:
+                    // the two are the same value under the worker's contract,
+                    // and re-requesting from our own highest FETCHED seq is the
+                    // safe direction if a future server ever returns a larger
+                    // `nextSince` (at worst one redundant page; never a skipped
+                    // event). The strict `>` also guarantees termination — each
+                    // extra round trip must raise `since` by at least 1.
+                    guard nextSince != nil, since > sinceBeforePage else { break }
                 }
 
                 let finalEvents = await logCoordinator.load(url: logURL).events

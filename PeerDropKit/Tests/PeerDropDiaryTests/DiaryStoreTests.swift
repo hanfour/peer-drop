@@ -278,6 +278,59 @@ final class DiaryStoreTests: XCTestCase {
         XCTAssertEqual(TestURLProtocol.requests[3].url?.query, "since=2&limit=100")
     }
 
+    // MARK: - I1: one sync walks EVERY page of a paginated catch-up
+
+    /// Reproduces the worker's real paging contract: `nextSince` is the LAST
+    /// seq of the page just served — i.e. always equal to the `since` the
+    /// client has just derived from `events.map(\.seq).max()`. The old
+    /// `next != since` loop test could therefore never be true, so a
+    /// 250-event backlog took three separate `sync` calls to drain (and any
+    /// `join` event on page 2+ stayed invisible to the key relay for that
+    /// long). One `sync` must now fetch all three pages.
+    func testSyncWalksEveryEventPageInASingleRound() async throws {
+        let diaryId = did("PAGE0001")
+        func eventsPage(_ range: ClosedRange<Int>, nextSince: Int?) -> TestURLProtocol.Stub {
+            let events = range.map { seq in
+                #"{"seq":\#(seq),"eventId":"E\#(seq)","type":"pass","authorAccountId":"0WNER001","createdAt":\#(1_700_000_000_000 + seq)}"#
+            }.joined(separator: ",")
+            let next = nextSince.map { #","nextSince":\#($0)"# } ?? ""
+            return .init(status: 200, body: Data(#"{"events":[\#(events)]\#(next)}"#.utf8))
+        }
+        let metaBody = Data(#"""
+        {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":250,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+        """#.utf8)
+        TestURLProtocol.queue = [
+            .init(status: 200, body: metaBody),
+            eventsPage(1...100, nextSince: 100),
+            eventsPage(101...200, nextSince: 200),
+            eventsPage(201...250, nextSince: nil),
+        ]
+        await store.sync(diaryId)
+
+        XCTAssertEqual(store.states[diaryId]?.events.count, 250)
+        XCTAssertEqual(store.states[diaryId]?.events.last?.seq, 250)
+        XCTAssertEqual(TestURLProtocol.requests.count, 4)   // 1 meta + 3 event pages
+        XCTAssertEqual(TestURLProtocol.requests[1].url?.query, "since=0&limit=100")
+        XCTAssertEqual(TestURLProtocol.requests[2].url?.query, "since=100&limit=100")
+        XCTAssertEqual(TestURLProtocol.requests[3].url?.query, "since=200&limit=100")
+
+        struct DirectCursorFile: Codable { let syncedThrough: Int }
+        let cursorURL = dir.appendingPathComponent(diaryId, isDirectory: true).appendingPathComponent("cursor.enc")
+        let cursorData = try XCTUnwrap(try? encryptor.readAndDecrypt(from: cursorURL))
+        XCTAssertEqual(try JSONDecoder().decode(DirectCursorFile.self, from: cursorData).syncedThrough, 250)
+
+        // A second sync resumes from the persisted cursor and, with nothing
+        // new on the server, makes exactly ONE events request.
+        TestURLProtocol.queue = [
+            .init(status: 200, body: metaBody),
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+        XCTAssertEqual(TestURLProtocol.requests.count, 6)
+        XCTAssertEqual(TestURLProtocol.requests[5].url?.query, "since=250&limit=100")
+        XCTAssertEqual(store.states[diaryId]?.events.count, 250)
+    }
+
     func testSyncTriggersKeyRelayForAnUnrelayedJoinEvent() async throws {
         let diaryId = did("SYNCRY1")
         let key = SymmetricKey(size: .bits256)
