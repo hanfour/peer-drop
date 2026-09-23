@@ -43,7 +43,7 @@ export interface DiaryEvent {
 }
 
 const POSTABLE_EVENT_TYPES = new Set<string>(["entry", "comment", "like", "pass", "skip"]);
-const MAX_MEMBERS = 12;
+export const MAX_MEMBERS = 12;
 const MAX_BYTES_USED = 64 * 1024 * 1024;
 const MAX_PAYLOAD_BYTES = 64 * 1024;
 const DEFAULT_EVENTS_LIMIT = 100;
@@ -111,24 +111,34 @@ export class DiaryRoom {
 
     // ---- join ------------------------------------------------------------
     if (path === "/join" && request.method === "POST") {
-      const body = await request.json() as { accountId: string };
+      const body = await request.json() as { accountId: string; inviteCode?: string };
       const meta = await this.getMeta();
       if (!meta) return this.json({ error: "not_found" }, 404);
-      // Idempotent short-circuit takes priority over closed/full — an
-      // existing member re-joining needs no fresh authorization.
+      // Idempotent short-circuit takes priority over the code/closed/full
+      // checks below — an existing member re-joining (e.g. replaying a
+      // stale invite link after a code reset) needs no fresh authorization.
       if (meta.members.includes(body.accountId)) return this.json({ added: false, meta }, 200);
+      // Authoritative check: D1's diary_invites only resolves a code to a
+      // diaryId (see diary.ts) — whether that code is CURRENTLY valid is
+      // decided here, against the DO's own meta.inviteCode, so a route-level
+      // precheck can never be bypassed by a stale/tampered D1 row or a race
+      // with a concurrent invite/reset.
+      if (meta.inviteCode !== body.inviteCode) return this.json({ error: "bad_code" }, 403);
       if (meta.state === "closed") return this.json({ error: "diary_closed" }, 403);
       if (meta.members.length >= MAX_MEMBERS) return this.json({ error: "diary_full_members" }, 409);
       meta.members.push(body.accountId);
       meta.seq += 1;
+      // "srv:" is a reserved eventId prefix a client can never produce (its
+      // eventIds are ULIDs) — no `eid:` entry needed since nobody can ever
+      // replay-POST this id.
       const event: DiaryEvent = {
         seq: meta.seq,
-        eventId: `join:${body.accountId}:${meta.seq}`,
+        eventId: `srv:join:${body.accountId}:${meta.seq}`,
         type: "join",
         authorAccountId: body.accountId,
         createdAt: Date.now(),
       };
-      await storage.put({ meta, [evKey(meta.seq)]: event, [`eid:${event.eventId}`]: meta.seq });
+      await storage.put({ meta, [evKey(meta.seq)]: event });
       return this.json({ added: true, meta }, 201);
     }
 
@@ -142,6 +152,7 @@ export class DiaryRoom {
       meta.members.splice(idx, 1);
       if (meta.members.length === 0) {
         meta.state = "closed";
+        meta.holderIndex = 0;
       } else {
         if (idx === meta.holderIndex) meta.holderIndex = idx % meta.members.length;
         else if (idx < meta.holderIndex) meta.holderIndex -= 1;
@@ -150,12 +161,12 @@ export class DiaryRoom {
       meta.seq += 1;
       const event: DiaryEvent = {
         seq: meta.seq,
-        eventId: `leave:${body.accountId}:${meta.seq}`,
+        eventId: `srv:leave:${body.accountId}:${meta.seq}`,
         type: "leave",
         authorAccountId: body.accountId,
         createdAt: Date.now(),
       };
-      await storage.put({ meta, [evKey(meta.seq)]: event, [`eid:${event.eventId}`]: meta.seq });
+      await storage.put({ meta, [evKey(meta.seq)]: event });
       return this.json({ meta }, 200);
     }
 

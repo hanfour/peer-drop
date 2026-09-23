@@ -17,6 +17,7 @@ import type { Env } from "./index";
 import { bumpQuota, dayKey, json, NOTE_LIMITS, senderHash, ulid } from "./notes";
 import type { PushDeps } from "./notes";
 import { generateAccountId, normalizeAccountId } from "./account";
+import { MAX_MEMBERS } from "./diaryRoom";
 import type { DiaryEvent, DiaryMeta } from "./diaryRoom";
 
 export interface DiaryAuth { deviceId: string; accountId: string }
@@ -28,6 +29,7 @@ const REQUEST_KEY_LIMIT_PER_HOUR = 6;
 const MAX_CREATE_BODY_BYTES = 4 * 1024;
 const MAX_EVENT_BODY_BYTES = 96 * 1024;
 const MAX_REPORT_BODY_BYTES = 8 * 1024;
+const MAX_INVITE_BIND_ATTEMPTS = 5;
 
 // Same 32-symbol Crockford-ish alphabet as notes.ts's ULID_ALPHABET (26
 // chars, excludes I/L/O/U).
@@ -94,13 +96,43 @@ async function failJoinCode(env: Env, accountId: string): Promise<Response> {
   return json({ error: "bad_code" }, 403);
 }
 
-/** Shared tail of both join routes once `diaryId` + a validated invite code are known. */
-async function performJoin(env: Env, diaryId: string, accountId: string): Promise<Response> {
+/**
+ * Shared tail of both join routes once `diaryId` + a normalized (but not
+ * yet verified) invite code are known. Order matters: an already-current
+ * member bypasses every other check (idempotent re-join needs no fresh
+ * authorization); otherwise the code is checked against the DO's own
+ * `meta.inviteCode` (D1's `diary_invites` only ever resolves a code to a
+ * diaryId — it is never trusted as proof the code is still valid), then
+ * closed/full-members, and the caller's own 20-diary cap LAST — so a
+ * caller already at the cap still gets `diary_closed`/`diary_full_members`
+ * for a diary that is actually closed/full, rather than a misleading
+ * `diary_limit`. The DO's own `/join` re-validates code/closed/full
+ * authoritatively regardless (closes the race window between this preflight
+ * read and the mutating call below).
+ */
+async function performJoin(env: Env, diaryId: string, accountId: string, inviteCode: string): Promise<Response> {
   const db = env.ACCOUNTS_DB;
-  if (!(await underDiaryLimit(db, accountId, diaryId))) return json({ error: "diary_limit" }, 409);
-  const joinResp = await doCall(env, diaryId, "/join", { method: "POST", body: JSON.stringify({ accountId }) });
+  const metaResp = await doCall(env, diaryId, "/meta");
+  if (!metaResp.ok) return json({ error: "not_found" }, 404);
+  const meta = await metaResp.json() as DiaryMeta;
+  if (!meta.members.includes(accountId)) {
+    if (meta.inviteCode !== inviteCode) return failJoinCode(env, accountId);
+    if (meta.state === "closed") return json({ error: "diary_closed" }, 403);
+    if (meta.members.length >= MAX_MEMBERS) return json({ error: "diary_full_members" }, 409);
+    if (!(await underDiaryLimit(db, accountId, diaryId))) return json({ error: "diary_limit" }, 409);
+  }
+
+  const joinResp = await doCall(env, diaryId, "/join", { method: "POST", body: JSON.stringify({ accountId, inviteCode }) });
+  if (joinResp.status === 403) {
+    const errBody = await joinResp.json() as { error?: string };
+    // A race between our preflight read above and this call (e.g. a
+    // concurrent invite/reset) — route it through the same rate-limited
+    // path as a code caught at preflight, rather than a bare pass-through.
+    if (errBody.error === "bad_code") return failJoinCode(env, accountId);
+    return json(errBody, 403);
+  }
   if (!joinResp.ok) return json(await joinResp.json(), joinResp.status);
-  const { added, meta } = await joinResp.json() as { added: boolean; meta: DiaryMeta };
+  const { added, meta: newMeta } = await joinResp.json() as { added: boolean; meta: DiaryMeta };
   try {
     await db.prepare("INSERT OR IGNORE INTO diary_members (account_id, diary_id, joined_at) VALUES (?1, ?2, ?3)")
       .bind(accountId, diaryId, Date.now()).run();
@@ -109,9 +141,43 @@ async function performJoin(env: Env, diaryId: string, accountId: string): Promis
     return json({ error: "d1_error" }, 500);
   }
   return json(
-    { diaryId, members: meta.members, holderIndex: meta.holderIndex, ownerAccountId: meta.ownerAccountId, state: meta.state, seq: meta.seq, metaCipher: meta.metaCipher },
+    { diaryId, members: newMeta.members, holderIndex: newMeta.holderIndex, ownerAccountId: newMeta.ownerAccountId, state: newMeta.state, seq: newMeta.seq, metaCipher: newMeta.metaCipher },
     added ? 201 : 200,
   );
+}
+
+/** Ask the DO to mint a fresh invite code (updating its own `meta.inviteCode`), returning the new code. */
+async function regenerateInviteCode(env: Env, diaryId: string, ownerAccountId: string): Promise<string> {
+  const r = await doCall(env, diaryId, "/invite/reset", { method: "POST", body: JSON.stringify({ accountId: ownerAccountId }) });
+  const { inviteCode } = await r.json() as { inviteCode: string };
+  return inviteCode;
+}
+
+/**
+ * Bind `code → diaryId` in D1, verifying the row actually resolves to THIS
+ * diary — `INSERT OR IGNORE` silently no-ops on a primary-key collision
+ * with a DIFFERENT diary's code (astronomically unlikely with 8 random
+ * chars from a 32-symbol alphabet, but checked rather than assumed: the
+ * alternative is a diary permanently stuck sharing another diary's invite
+ * row). On a genuine collision, mints a fresh code via `regenerate` (which
+ * also updates the DO's own `meta.inviteCode`, keeping D1 and the DO in
+ * sync) and retries, up to `MAX_INVITE_BIND_ATTEMPTS` times.
+ */
+async function bindInviteCode(env: Env, diaryId: string, initialCode: string, regenerate: () => Promise<string>): Promise<{ code: string } | Response> {
+  const db = env.ACCOUNTS_DB;
+  let code = initialCode;
+  for (let attempt = 0; attempt < MAX_INVITE_BIND_ATTEMPTS; attempt++) {
+    try {
+      await db.prepare("INSERT OR IGNORE INTO diary_invites (invite_code, diary_id) VALUES (?1, ?2)").bind(code, diaryId).run();
+      const row = await db.prepare("SELECT diary_id FROM diary_invites WHERE invite_code = ?1").bind(code).first<{ diary_id: string }>();
+      if (row?.diary_id === diaryId) return { code };
+    } catch (e) {
+      console.error("diary invite bind: D1 write failed", String(e));
+      return json({ error: "d1_error" }, 500);
+    }
+    code = await regenerate();
+  }
+  return json({ error: "invite_code_collision" }, 500);
 }
 
 /**
@@ -145,15 +211,15 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     const isNew = initResp.status === 201;
 
     try {
-      await db.batch([
-        db.prepare("INSERT OR IGNORE INTO diary_members (account_id, diary_id, joined_at) VALUES (?1, ?2, ?3)").bind(auth.accountId, diaryId, Date.now()),
-        db.prepare("INSERT OR IGNORE INTO diary_invites (invite_code, diary_id) VALUES (?1, ?2)").bind(meta.inviteCode, diaryId),
-      ]);
+      await db.prepare("INSERT OR IGNORE INTO diary_members (account_id, diary_id, joined_at) VALUES (?1, ?2, ?3)")
+        .bind(auth.accountId, diaryId, Date.now()).run();
     } catch (e) {
       console.error("diary create: D1 write failed", String(e));
       return json({ error: "d1_error" }, 500);
     }
-    return json({ diaryId, inviteCode: meta.inviteCode }, isNew ? 201 : 200);
+    const bound = await bindInviteCode(env, diaryId, meta.inviteCode, () => regenerateInviteCode(env, diaryId, auth.accountId));
+    if (bound instanceof Response) return bound;
+    return json({ diaryId, inviteCode: bound.code }, isNew ? 201 : 200);
   }
 
   // ---- GET /v3/diaries — this account's diary list ----------------------
@@ -187,14 +253,10 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     try { body = JSON.parse((await request.text()) || "null"); } catch { body = null; }
     const normalized = typeof body?.inviteCode === "string" ? normalizeAccountId(body.inviteCode) : null;
     if (!normalized) return failJoinCode(env, auth.accountId);
-    const metaResp = await doCall(env, diaryId, "/meta");
-    if (!metaResp.ok) return json({ error: "not_found" }, 404);
-    const meta = await metaResp.json() as DiaryMeta;
-    if (meta.inviteCode !== normalized) return failJoinCode(env, auth.accountId);
-    return performJoin(env, diaryId, auth.accountId);
+    return performJoin(env, diaryId, auth.accountId, normalized);
   }
 
-  // ---- POST /v3/diaries/join — code-only join (id resolved via D1) ------
+  // ---- POST /v3/diaries/join — code-only join (id resolved via D1, code verified against the DO) ------
   if (path === "/v3/diaries/join" && request.method === "POST") {
     let body: { inviteCode?: unknown } | null;
     try { body = JSON.parse((await request.text()) || "null"); } catch { body = null; }
@@ -202,7 +264,7 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     if (!normalized) return failJoinCode(env, auth.accountId);
     const row = await db.prepare("SELECT diary_id FROM diary_invites WHERE invite_code = ?1").bind(normalized).first<{ diary_id: string }>();
     if (!row) return failJoinCode(env, auth.accountId);
-    return performJoin(env, row.diary_id, auth.accountId);
+    return performJoin(env, row.diary_id, auth.accountId, normalized);
   }
 
   // ---- POST /v3/diaries/:id/leave ---------------------------------------
@@ -240,15 +302,14 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     if (!resetResp.ok) return json(await resetResp.json(), resetResp.status);
     const { inviteCode, previousCode } = await resetResp.json() as { inviteCode: string; previousCode: string };
     try {
-      await db.batch([
-        db.prepare("DELETE FROM diary_invites WHERE invite_code = ?1").bind(previousCode),
-        db.prepare("INSERT OR IGNORE INTO diary_invites (invite_code, diary_id) VALUES (?1, ?2)").bind(inviteCode, diaryId),
-      ]);
+      await db.prepare("DELETE FROM diary_invites WHERE invite_code = ?1").bind(previousCode).run();
     } catch (e) {
-      console.error("diary invite reset: D1 write failed", String(e));
+      console.error("diary invite reset: D1 delete failed", String(e));
       return json({ error: "d1_error" }, 500);
     }
-    return json({ inviteCode });
+    const bound = await bindInviteCode(env, diaryId, inviteCode, () => regenerateInviteCode(env, diaryId, auth.accountId));
+    if (bound instanceof Response) return bound;
+    return json({ inviteCode: bound.code });
   }
 
   // ---- .../events (GET list, POST append) --------------------------------
@@ -276,7 +337,14 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
       method: "POST",
       body: JSON.stringify({ accountId: auth.accountId, eventId: body.eventId, type: body.type, refSeq: body.refSeq, payloadCipher: body.payloadCipher }),
     });
-    return json(await resp.json(), resp.status);
+    if (!resp.ok) return json(await resp.json(), resp.status);
+    // The DO's success body also carries `event`/`meta` (used internally,
+    // e.g. by diary-room.spec.ts driving the DO directly) — `meta` in
+    // particular carries `inviteCode`, which must never reach every other
+    // member's device just because they posted an event. Project down to
+    // exactly the spec's §2.3 response shape.
+    const { seq, holderIndex } = await resp.json() as { seq: number; holderIndex: number };
+    return json({ seq, holderIndex }, resp.status);
   }
 
   // ---- POST /v3/diaries/:id/request-key ----------------------------------

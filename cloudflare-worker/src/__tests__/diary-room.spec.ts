@@ -14,10 +14,14 @@ const stubFor = (name: string) => env.DIARY_ROOM.get(env.DIARY_ROOM.idFromName(n
 async function initDiary(stub: DurableObjectStub, ownerAccountId: string, opts: { diaryId?: string; metaCipher?: string; inviteCode?: string } = {}) {
   const diaryId = opts.diaryId ?? ulid();
   const r = await stub.fetch("https://diary/init", { method: "POST", body: JSON.stringify({ diaryId, ownerAccountId, metaCipher: opts.metaCipher ?? fakeCipher(), inviteCode: opts.inviteCode }) });
-  return { r, diaryId };
+  // Cloned so the caller can still read `r` itself (status/body) — this
+  // just peeks at `inviteCode` so every test doesn't have to re-derive it.
+  const body = await r.clone().json() as Partial<DiaryMeta>;
+  return { r, diaryId, inviteCode: body.inviteCode as string };
 }
 const getMeta = (stub: DurableObjectStub) => stub.fetch("https://diary/meta");
-const join = (stub: DurableObjectStub, accountId: string) => stub.fetch("https://diary/join", { method: "POST", body: JSON.stringify({ accountId }) });
+const join = (stub: DurableObjectStub, accountId: string, inviteCode: string) =>
+  stub.fetch("https://diary/join", { method: "POST", body: JSON.stringify({ accountId, inviteCode }) });
 const leave = (stub: DurableObjectStub, accountId: string) => stub.fetch("https://diary/leave", { method: "POST", body: JSON.stringify({ accountId }) });
 const close = (stub: DurableObjectStub, accountId: string) => stub.fetch("https://diary/close", { method: "POST", body: JSON.stringify({ accountId }) });
 const resetInvite = (stub: DurableObjectStub, accountId: string) => stub.fetch("https://diary/invite/reset", { method: "POST", body: JSON.stringify({ accountId }) });
@@ -59,38 +63,50 @@ describe("DiaryRoom: init", () => {
 describe("DiaryRoom: join", () => {
   it("adds a new member (201, added: true) and is idempotent for an existing member (200, added: false)", async () => {
     const stub = stubFor("room-join-1");
-    await initDiary(stub, "OWNER001");
-    const r1 = await join(stub, "MEMBER01");
+    const { inviteCode } = await initDiary(stub, "OWNER001");
+    const r1 = await join(stub, "MEMBER01", inviteCode);
     expect(r1.status).toBe(201);
     const b1 = await r1.json() as { added: boolean; meta: DiaryMeta };
     expect(b1.added).toBe(true);
     expect(b1.meta.members).toEqual(["OWNER001", "MEMBER01"]);
 
-    const r2 = await join(stub, "MEMBER01");
+    const r2 = await join(stub, "MEMBER01", inviteCode);
     expect(r2.status).toBe(200);
     const b2 = await r2.json() as { added: boolean; meta: DiaryMeta };
     expect(b2.added).toBe(false);
     expect(b2.meta.members).toEqual(["OWNER001", "MEMBER01"]);
   });
 
+  it("rejects a wrong invite code with 403 bad_code; an already-current member's rejoin bypasses the code check entirely", async () => {
+    const stub = stubFor("room-join-wrongcode");
+    const { inviteCode } = await initDiary(stub, "OWNER001");
+    const rWrong = await join(stub, "MEMBER01", "WRONGCOD");
+    expect(rWrong.status).toBe(403);
+    expect(await rWrong.json()).toEqual({ error: "bad_code" });
+    expect((await join(stub, "MEMBER01", inviteCode)).status).toBe(201);
+    // The owner is already a member — rejoining with a garbage code is still an idempotent 200.
+    const rIdempotent = await join(stub, "OWNER001", "STILLWRONG");
+    expect(rIdempotent.status).toBe(200);
+  });
+
   it("refuses new joins once closed (403 diary_closed) but an already-existing member still gets an idempotent 200", async () => {
     const stub = stubFor("room-join-2");
-    await initDiary(stub, "OWNER001");
-    await join(stub, "MEMBER01");
+    const { inviteCode } = await initDiary(stub, "OWNER001");
+    await join(stub, "MEMBER01", inviteCode);
     await close(stub, "OWNER001");
-    const rNew = await join(stub, "MEMBER02");
+    const rNew = await join(stub, "MEMBER02", inviteCode);
     expect(rNew.status).toBe(403);
     expect(await rNew.json()).toEqual({ error: "diary_closed" });
-    const rExisting = await join(stub, "MEMBER01");
+    const rExisting = await join(stub, "MEMBER01", inviteCode);
     expect(rExisting.status).toBe(200);
   });
 
   it("refuses an 13th member with 409 diary_full_members (cap is 12)", async () => {
     const stub = stubFor("room-join-3");
-    await initDiary(stub, "OWNER001");
-    for (let i = 1; i <= 11; i++) expect((await join(stub, `MEMBER${String(i).padStart(2, "0")}`)).status).toBe(201);
+    const { inviteCode } = await initDiary(stub, "OWNER001");
+    for (let i = 1; i <= 11; i++) expect((await join(stub, `MEMBER${String(i).padStart(2, "0")}`, inviteCode)).status).toBe(201);
     // 12 members now (owner + 11). The 13th distinct account is refused.
-    const r = await join(stub, "MEMBER12");
+    const r = await join(stub, "MEMBER12", inviteCode);
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({ error: "diary_full_members" });
   });
@@ -99,9 +115,9 @@ describe("DiaryRoom: join", () => {
 describe("DiaryRoom: leave", () => {
   it("holder in the middle leaves: holderIndex stays pointed at the same person (shifted down)", async () => {
     const stub = stubFor("room-leave-mid");
-    await initDiary(stub, "A");
-    await join(stub, "B");
-    await join(stub, "C"); // members = [A, B, C]
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
+    await join(stub, "C", inviteCode); // members = [A, B, C]
     await postEvent(stub, "A", { type: "pass" }); // holderIndex -> 1 (B)
     const r = await leave(stub, "B");
     const { meta } = await r.json() as { meta: DiaryMeta };
@@ -111,9 +127,9 @@ describe("DiaryRoom: leave", () => {
 
   it("holder at the end leaves: holderIndex wraps to the first member", async () => {
     const stub = stubFor("room-leave-end");
-    await initDiary(stub, "A");
-    await join(stub, "B");
-    await join(stub, "C"); // members = [A, B, C]
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
+    await join(stub, "C", inviteCode); // members = [A, B, C]
     await postEvent(stub, "A", { type: "pass" });
     await postEvent(stub, "B", { type: "pass" }); // holderIndex -> 2 (C)
     const r = await leave(stub, "C");
@@ -124,9 +140,9 @@ describe("DiaryRoom: leave", () => {
 
   it("someone before the holder leaves: holderIndex re-indexes to keep pointing at the same holder", async () => {
     const stub = stubFor("room-leave-before");
-    await initDiary(stub, "A");
-    await join(stub, "B");
-    await join(stub, "C"); // members = [A, B, C]
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
+    await join(stub, "C", inviteCode); // members = [A, B, C]
     await postEvent(stub, "A", { type: "pass" });
     await postEvent(stub, "B", { type: "pass" }); // holderIndex -> 2 (C)
     const r = await leave(stub, "A");
@@ -137,9 +153,9 @@ describe("DiaryRoom: leave", () => {
 
   it("owner who is also the current holder leaves: ownership transfers to the new members[0]", async () => {
     const stub = stubFor("room-leave-owner-holder");
-    await initDiary(stub, "A");
-    await join(stub, "B");
-    await join(stub, "C"); // members = [A, B, C], holder = A (owner)
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
+    await join(stub, "C", inviteCode); // members = [A, B, C], holder = A (owner)
     const r = await leave(stub, "A");
     const { meta } = await r.json() as { meta: DiaryMeta };
     expect(meta.members).toEqual(["B", "C"]);
@@ -147,7 +163,7 @@ describe("DiaryRoom: leave", () => {
     expect(meta.holderIndex).toBe(0); // wrapped from idx 0 % 2
   });
 
-  it("the last member leaving closes the diary without crashing", async () => {
+  it("the last member leaving closes the diary without crashing, and resets holderIndex to 0", async () => {
     const stub = stubFor("room-leave-last");
     await initDiary(stub, "SOLO001");
     const r = await leave(stub, "SOLO001");
@@ -155,12 +171,13 @@ describe("DiaryRoom: leave", () => {
     const { meta } = await r.json() as { meta: DiaryMeta };
     expect(meta.members).toEqual([]);
     expect(meta.state).toBe("closed");
+    expect(meta.holderIndex).toBe(0);
   });
 
   it("leave still works once closed, and a non-member leave is an idempotent no-op", async () => {
     const stub = stubFor("room-leave-closed");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     await close(stub, "A");
     const r = await leave(stub, "B");
     expect(r.status).toBe(200);
@@ -174,8 +191,8 @@ describe("DiaryRoom: leave", () => {
 describe("DiaryRoom: close / invite reset", () => {
   it("close is owner-only", async () => {
     const stub = stubFor("room-close-1");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     expect((await close(stub, "B")).status).toBe(403);
     const r = await close(stub, "A");
     expect(r.status).toBe(200);
@@ -194,6 +211,10 @@ describe("DiaryRoom: close / invite reset", () => {
     expect(inviteCode).not.toBe(before);
     const meta = await (await getMeta(stub)).json() as DiaryMeta;
     expect(meta.inviteCode).toBe(inviteCode);
+    // The old code no longer authorizes a join, directly at the DO.
+    const rOld = await join(stub, "MEMBER01", before);
+    expect(rOld.status).toBe(403);
+    expect(await rOld.json()).toEqual({ error: "bad_code" });
   });
 });
 
@@ -208,10 +229,14 @@ describe("DiaryRoom: POST /events", () => {
 
   it("rejects entry/pass from a non-holder with 403 not_holder; allows comment/like from any member", async () => {
     const stub = stubFor("room-ev-holder");
-    await initDiary(stub, "A");
-    await join(stub, "B"); // A holds
-    expect((await postEvent(stub, "B", { type: "entry", payloadCipher: fakeCipher() })).status).toBe(403);
-    expect((await postEvent(stub, "B", { type: "pass" })).status).toBe(403);
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode); // A holds
+    const rEntry = await postEvent(stub, "B", { type: "entry", payloadCipher: fakeCipher() });
+    expect(rEntry.status).toBe(403);
+    expect(await rEntry.json()).toEqual({ error: "not_holder" });
+    const rPass = await postEvent(stub, "B", { type: "pass" });
+    expect(rPass.status).toBe(403);
+    expect(await rPass.json()).toEqual({ error: "not_holder" });
     const entrySeq = await postEntry(stub, "A");
     expect((await postEvent(stub, "B", { type: "comment", refSeq: entrySeq, payloadCipher: fakeCipher() })).status).toBe(201);
     expect((await postEvent(stub, "A", { type: "like", refSeq: entrySeq })).status).toBe(201);
@@ -219,8 +244,8 @@ describe("DiaryRoom: POST /events", () => {
 
   it("a second like by the same person on the same entry returns the existing seq (200), not a duplicate", async () => {
     const stub = stubFor("room-ev-like-dedup");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     const entrySeq = await postEntry(stub, "A");
     const r1 = await postEvent(stub, "B", { type: "like", refSeq: entrySeq });
     expect(r1.status).toBe(201);
@@ -233,8 +258,8 @@ describe("DiaryRoom: POST /events", () => {
 
   it("rejects a refSeq pointing at a nonexistent event or a non-entry event with 400 bad_ref", async () => {
     const stub = stubFor("room-ev-badref");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     const rMissing = await postEvent(stub, "B", { type: "comment", refSeq: 999, payloadCipher: fakeCipher() });
     expect(rMissing.status).toBe(400);
     expect(await rMissing.json()).toEqual({ error: "bad_ref" });
@@ -257,8 +282,8 @@ describe("DiaryRoom: POST /events", () => {
 
   it("rejects an entry with no payload (400 bad_payload) and a like carrying a payload (400 bad_payload)", async () => {
     const stub = stubFor("room-ev-payload");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     const rNoPayload = await postEvent(stub, "A", { type: "entry" });
     expect(rNoPayload.status).toBe(400);
     expect(await rNoPayload.json()).toEqual({ error: "bad_payload" });
@@ -278,8 +303,8 @@ describe("DiaryRoom: POST /events", () => {
 
   it("a duplicate eventId returns the same seq (200) and does not advance holderIndex again", async () => {
     const stub = stubFor("room-ev-dup");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     const eventId = ulid();
     const r1 = await postEvent(stub, "A", { eventId, type: "pass" });
     expect(r1.status).toBe(201);
@@ -294,8 +319,8 @@ describe("DiaryRoom: POST /events", () => {
 
   it("pass advances holderIndex and wraps around", async () => {
     const stub = stubFor("room-ev-pass-wrap");
-    await initDiary(stub, "A");
-    await join(stub, "B");
+    const { inviteCode } = await initDiary(stub, "A");
+    await join(stub, "B", inviteCode);
     const r1 = await postEvent(stub, "A", { type: "pass" });
     expect((await r1.json() as { holderIndex: number }).holderIndex).toBe(1);
     const r2 = await postEvent(stub, "B", { type: "pass" });
@@ -304,12 +329,12 @@ describe("DiaryRoom: POST /events", () => {
 
   it("skip: non-owner 403 not_owner; sole member 403 skip_self; owner-as-holder 403 skip_self; success records `skipped`", async () => {
     const stub = stubFor("room-ev-skip");
-    await initDiary(stub, "A"); // owner + sole member, holder = A
+    const { inviteCode } = await initDiary(stub, "A"); // owner + sole member, holder = A
     const rSolo = await postEvent(stub, "A", { type: "skip" });
     expect(rSolo.status).toBe(403);
     expect(await rSolo.json()).toEqual({ error: "skip_self" });
 
-    await join(stub, "B"); // members = [A, B], holder still A (owner) -> skip_self
+    await join(stub, "B", inviteCode); // members = [A, B], holder still A (owner) -> skip_self
     const rOwnerHolds = await postEvent(stub, "A", { type: "skip" });
     expect(rOwnerHolds.status).toBe(403);
     expect(await rOwnerHolds.json()).toEqual({ error: "skip_self" });
@@ -326,6 +351,17 @@ describe("DiaryRoom: POST /events", () => {
     expect(holderIndex).toBe(0); // wrapped back to A
   });
 
+  it("bytesUsed equals the decoded payload length after one entry, and the sum after a second", async () => {
+    const stub = stubFor("room-ev-bytesused");
+    await initDiary(stub, "A");
+    await postEntry(stub, "A", fakeCipher(1, 100));
+    const meta1 = await (await getMeta(stub)).json() as DiaryMeta;
+    expect(meta1.bytesUsed).toBe(100);
+    await postEntry(stub, "A", fakeCipher(2, 50));
+    const meta2 = await (await getMeta(stub)).json() as DiaryMeta;
+    expect(meta2.bytesUsed).toBe(150);
+  });
+
   it("accumulates bytesUsed, refuses a new event past the 64 MB cap with 507, and still lets an already-accepted eventId resend through at 200", async () => {
     const stub = stubFor("room-ev-full");
     await initDiary(stub, "A");
@@ -340,11 +376,9 @@ describe("DiaryRoom: POST /events", () => {
     expect(rFull.status).toBe(507);
     expect(await rFull.json()).toEqual({ error: "diary_full" });
     // Resending the eventId of the entry accepted BEFORE the cap was hit is still idempotent-200.
-    const meta = await (await getMeta(stub)).json() as DiaryMeta;
     const acceptedEvent = await (await getEvent(stub, acceptedSeq)).json() as DiaryEvent;
     const rReplay = await postEvent(stub, "A", { eventId: acceptedEvent.eventId, type: "entry", payloadCipher: acceptedEvent.payloadCipher });
     expect(rReplay.status).toBe(200);
-    void meta;
   });
 });
 

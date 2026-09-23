@@ -12,6 +12,7 @@ import {
   getEvents, postEvent, requestKey, reportEvent, postEntryOk,
 } from "./diaryHelpers";
 import type { TestAccount } from "./diaryHelpers";
+import type { DiaryMeta } from "../diaryRoom";
 
 beforeAll(async () => { await applyMigrations(env.ACCOUNTS_DB); });
 
@@ -163,6 +164,35 @@ describe("join", () => {
     expect(r.status).toBe(403);
     expect(await r.json()).toEqual({ error: "diary_closed" });
   });
+
+  it("closed wins over the caller's own 20-diary cap — a caller already at 20 diaries still gets diary_closed, not diary_limit", async () => {
+    const owner = await mkAccount("closed-vs-cap-owner"), caller = await mkAccount("closed-vs-cap-caller");
+    const { diaryId, inviteCode } = await createDiaryOk(owner);
+    expect((await closeDiary(bearer(owner), diaryId)).status).toBe(204);
+    for (let i = 0; i < 20; i++) expect((await createDiary(bearer(caller), newDiaryId(), fakeCipher())).status).toBe(201);
+    const r = await joinByLink(bearer(caller), diaryId, inviteCode);
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: "diary_closed" });
+  });
+
+  it("after invite/reset, the old code fails on both join routes even if a stale D1 diary_invites row still points at this diary", async () => {
+    const owner = await mkAccount("reset-stale-owner"), b = await mkAccount("reset-stale-b"), c = await mkAccount("reset-stale-c");
+    const { diaryId, inviteCode: oldCode } = await createDiaryOk(owner);
+    const rReset = await resetInvite(bearer(owner), diaryId);
+    const { inviteCode: newCode } = await rReset.json() as { inviteCode: string };
+    // Simulate a stale row for the OLD code that a prior request's D1 write left behind (or a race re-inserted).
+    await env.ACCOUNTS_DB.prepare("INSERT OR IGNORE INTO diary_invites (invite_code, diary_id) VALUES (?1, ?2)").bind(oldCode, diaryId).run();
+
+    const rCode = await joinByCode(bearer(b), oldCode);
+    expect(rCode.status).toBe(403);
+    expect(await rCode.json()).toEqual({ error: "bad_code" });
+
+    const rLink = await joinByLink(bearer(c), diaryId, oldCode);
+    expect(rLink.status).toBe(403);
+    expect(await rLink.json()).toEqual({ error: "bad_code" });
+
+    expect((await joinByLink(bearer(c), diaryId, newCode)).status).toBe(201);
+  });
 });
 
 describe("member-only routes", () => {
@@ -170,9 +200,15 @@ describe("member-only routes", () => {
     const owner = await mkAccount("member-only-owner"), outsider = await mkAccount("member-only-outsider");
     const { diaryId } = await createDiaryOk(owner);
     const seq = await postEntryOk(bearer(owner), diaryId);
-    expect((await getEvents(bearer(outsider), diaryId)).status).toBe(403);
-    expect((await requestKey(bearer(outsider), diaryId)).status).toBe(403);
-    expect((await reportEvent(bearer(outsider), diaryId, seq, { reason: "spam" })).status).toBe(403);
+    const rEvents = await getEvents(bearer(outsider), diaryId);
+    expect(rEvents.status).toBe(403);
+    expect(await rEvents.json()).toEqual({ error: "not_member" });
+    const rReqKey = await requestKey(bearer(outsider), diaryId);
+    expect(rReqKey.status).toBe(403);
+    expect(await rReqKey.json()).toEqual({ error: "not_member" });
+    const rReport = await reportEvent(bearer(outsider), diaryId, seq, { reason: "spam" });
+    expect(rReport.status).toBe(403);
+    expect(await rReport.json()).toEqual({ error: "not_member" });
   });
 });
 
@@ -204,7 +240,9 @@ describe("leave / close / invite-reset — D1 side effects", () => {
     expect((await closeDiary(bearer(b), diaryId)).status).toBe(403);
     expect((await closeDiary(bearer(owner), diaryId)).status).toBe(204);
     expect((await joinByLink(bearer(outsider), diaryId, inviteCode)).status).toBe(403);
-    expect((await postEvent(bearer(owner), diaryId, { type: "pass" })).status).toBe(403);
+    const rClosedEvent = await postEvent(bearer(owner), diaryId, { type: "pass" });
+    expect(rClosedEvent.status).toBe(403);
+    expect(await rClosedEvent.json()).toEqual({ error: "diary_closed" });
     expect((await getDiary(bearer(owner), diaryId)).status).toBe(200);
     expect((await getEvents(bearer(owner), diaryId)).status).toBe(200);
     // leave still works once closed, and still deletes the D1 row.
@@ -220,7 +258,9 @@ describe("leave / close / invite-reset — D1 side effects", () => {
     expect(r.status).toBe(200);
     const { inviteCode: newCode } = await r.json() as { inviteCode: string };
     expect(newCode).not.toBe(oldCode);
-    expect((await joinByCode(bearer(b), oldCode)).status).not.toBe(201);
+    const rOld = await joinByCode(bearer(b), oldCode);
+    expect(rOld.status).toBe(403);
+    expect(await rOld.json()).toEqual({ error: "bad_code" });
     expect((await joinByLink(bearer(b), diaryId, newCode)).status).toBe(201);
     const oldRow = await env.ACCOUNTS_DB.prepare("SELECT 1 AS x FROM diary_invites WHERE invite_code = ?1").bind(oldCode).first();
     expect(oldRow).toBeNull();
@@ -243,6 +283,25 @@ describe("POST .../events — HTTP wiring and raw body size", () => {
     const rEvents = await getEvents(bearer(owner), diaryId);
     expect(rEvents.status).toBe(200);
     expect(((await rEvents.json()) as { events: unknown[] }).events.length).toBe(5); // join, entry, comment, like, pass
+  });
+
+  it("projects the response to exactly {seq, holderIndex} for both a fresh (201) and an idempotent resend (200) — no event/meta/inviteCode leak to other members", async () => {
+    const owner = await mkAccount("proj-owner"), b = await mkAccount("proj-b");
+    const { diaryId, inviteCode } = await createDiaryOk(owner);
+    await joinByLink(bearer(b), diaryId, inviteCode);
+    const eventId = "01PROJEVENT0000000000001A";
+
+    const r1 = await postEvent(bearer(owner), diaryId, { eventId, type: "pass" });
+    expect(r1.status).toBe(201);
+    const body1 = await r1.json() as Record<string, unknown>;
+    expect(Object.keys(body1).sort()).toEqual(["holderIndex", "seq"]);
+    expect(JSON.stringify(body1)).not.toContain(inviteCode);
+
+    const r2 = await postEvent(bearer(owner), diaryId, { eventId, type: "pass" }); // idempotent resend
+    expect(r2.status).toBe(200);
+    const body2 = await r2.json() as Record<string, unknown>;
+    expect(Object.keys(body2).sort()).toEqual(["holderIndex", "seq"]);
+    expect(JSON.stringify(body2)).not.toContain(inviteCode);
   });
 
   it("rejects a raw body over 96 KB with 413", async () => {
@@ -285,6 +344,43 @@ describe("report", () => {
     const owner = await mkAccount("report-404-owner");
     const { diaryId } = await createDiaryOk(owner);
     expect((await reportEvent(bearer(owner), diaryId, 999, { reason: "spam" })).status).toBe(404);
+  });
+});
+
+describe("invite code D1 collision", () => {
+  it("regenerates the invite code when INSERT OR IGNORE silently no-ops on a primary-key collision with another diary's code", async () => {
+    const victim = await mkAccount("collide-victim");
+    const { diaryId: victimDiaryId } = await createDiaryOk(victim);
+    const FORCED_CODE = "ZZZZZZZ1"; // a syntactically valid 8-char code from ACCOUNT_ID_ALPHABET
+    await env.ACCOUNTS_DB.prepare("INSERT INTO diary_invites (invite_code, diary_id) VALUES (?1, ?2)").bind(FORCED_CODE, victimDiaryId).run();
+
+    const owner = await mkAccount("collide-owner");
+    const diaryId = newDiaryId();
+    // Seed the DO's meta directly (bypassing /init's random generateAccountId())
+    // so its minted inviteCode collides with the victim's — forcing the same
+    // code the real generator would only ever hit by astronomical chance.
+    const stub = env.DIARY_ROOM.get(env.DIARY_ROOM.idFromName(diaryId));
+    await runInDurableObject(stub, async (_instance, state) => {
+      const meta: DiaryMeta = {
+        diaryId, ownerAccountId: owner.accountId, members: [owner.accountId], holderIndex: 0, seq: 0,
+        inviteCode: FORCED_CODE, state: "open", keyEpoch: 1, metaCipher: "seed-cipher", createdAt: Date.now(), bytesUsed: 0,
+      };
+      await state.storage.put("meta", meta);
+    });
+
+    const r = await createDiary(bearer(owner), diaryId, "seed-cipher");
+    expect(r.status).toBe(200); // meta already existed (seeded above) with this owner -> idempotent /init path
+    const { inviteCode: finalCode } = await r.json() as { inviteCode: string };
+    expect(finalCode).not.toBe(FORCED_CODE);
+
+    // The regenerated code actually resolves to OUR diary, both via D1 and the DO.
+    const joiner = await mkAccount("collide-joiner");
+    expect((await joinByCode(bearer(joiner), finalCode)).status).toBe(201);
+    const row = await env.ACCOUNTS_DB.prepare("SELECT diary_id FROM diary_invites WHERE invite_code = ?1").bind(finalCode).first<{ diary_id: string }>();
+    expect(row?.diary_id).toBe(diaryId);
+    // The victim's own (still-colliding) code is untouched and still theirs.
+    const victimRow = await env.ACCOUNTS_DB.prepare("SELECT diary_id FROM diary_invites WHERE invite_code = ?1").bind(FORCED_CODE).first<{ diary_id: string }>();
+    expect(victimRow?.diary_id).toBe(victimDiaryId);
   });
 });
 
