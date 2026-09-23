@@ -25,6 +25,12 @@ export interface DiaryAuth { deviceId: string; accountId: string }
 export interface DiaryRouteDeps { push: PushDeps }
 
 const DIARY_LIMIT_PER_ACCOUNT = 20;
+// `DIARY_LIMIT_PER_ACCOUNT` only counts CURRENT memberships, so
+// create -> leave -> create is unmetered on its own: one account could
+// spin up unbounded Durable Objects and D1 index rows for free. This
+// per-UTC-day quota is the cost-of-trying limit on top of it (same
+// helper/TTL shape as the notes send route's `note-quota:s:` bump).
+const DIARY_CREATE_LIMIT_PER_DAY = 20;
 const JOIN_FAIL_LIMIT_PER_HOUR = 10;
 const REQUEST_KEY_LIMIT_PER_HOUR = 6;
 const MAX_CREATE_BODY_BYTES = 4 * 1024;
@@ -251,6 +257,15 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     const metaCipher = body.metaCipher;
 
     if (!(await underDiaryLimit(db, auth.accountId, diaryId))) return json({ error: "diary_limit" }, 409);
+    // Ordered AFTER the membership cap so an account that is simply at 20
+    // live diaries still gets the accurate `diary_limit` rather than a
+    // misleading `rate_limited`, and BEFORE `/init` so a rate-limited
+    // create never wakes (let alone writes to) a Durable Object. An
+    // idempotent re-create of the same diaryId spends a unit too — that is
+    // the point: it is another request the server had to serve.
+    if (!(await bumpQuota(env.V2_STORE, `diary-create:${auth.accountId}:${dayKey()}`, DIARY_CREATE_LIMIT_PER_DAY, 2 * 86400))) {
+      return json({ error: "rate_limited" }, 429);
+    }
 
     const initResp = await doCall(env, diaryId, "/init", {
       method: "POST",
@@ -324,8 +339,25 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     if (!(await diaryExistsInD1(db, diaryId))) return json({ error: "not_found" }, 404);
     const leaveResp = await doCall(env, diaryId, "/leave", { method: "POST", body: JSON.stringify({ accountId: auth.accountId }) });
     if (!leaveResp.ok) return json(await leaveResp.json(), leaveResp.status);
+    const { meta: leftMeta } = await leaveResp.json() as { meta: DiaryMeta };
     try {
       await db.prepare("DELETE FROM diary_members WHERE account_id = ?1 AND diary_id = ?2").bind(auth.accountId, diaryId).run();
+      // The DO reports the post-leave membership; when the last member has
+      // walked out, the diary can never be re-entered (join requires a
+      // member list to append to and the DO has already flipped itself to
+      // `closed`), so its `diary_invites` row is pure garbage that would
+      // otherwise keep an 8-char code reserved forever — and keep the
+      // emptied diary "existing" for `diaryExistsInD1`. Dropped in the SAME
+      // try block as the member delete so a D1 failure still returns 500
+      // and the client retries the whole (idempotent) leave.
+      //
+      // Deliberately NOT done on `close`: §3 gives `diary_invites` no
+      // close-time behaviour, and a closed diary still has members, so
+      // keeping the row is what lets a join attempt answer the accurate
+      // `diary_closed` instead of a misleading `bad_code`.
+      if (leftMeta.members.length === 0) {
+        await db.prepare("DELETE FROM diary_invites WHERE diary_id = ?1").bind(diaryId).run();
+      }
     } catch (e) {
       console.error("diary leave: D1 write failed", String(e));
       return json({ error: "d1_error" }, 500);

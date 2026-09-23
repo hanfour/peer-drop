@@ -66,6 +66,30 @@ describe("POST /v3/diaries — create", () => {
     expect(r21.status).toBe(409);
     expect(await r21.json()).toEqual({ error: "diary_limit" });
   });
+
+  it("refuses a 21st create in the same UTC day with 429 rate_limited even after every earlier diary was left, and never wakes the DO", async () => {
+    const a = await mkAccount("create-quota");
+    const ids: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const id = newDiaryId();
+      expect((await createDiary(bearer(a), id, fakeCipher())).status).toBe(201);
+      ids.push(id);
+    }
+    // Leave them all, so `underDiaryLimit` sees zero current memberships:
+    // the only thing that can still refuse the next create is the daily
+    // quota — which is exactly the hole this closes (create/leave/create…
+    // was otherwise unlimited).
+    for (const id of ids) expect((await leaveDiary(bearer(a), id)).status).toBe(204);
+
+    const blockedId = newDiaryId();
+    const r21 = await createDiary(bearer(a), blockedId, fakeCipher());
+    expect(r21.status).toBe(429);
+    expect(await r21.json()).toEqual({ error: "rate_limited" });
+    const stub = env.DIARY_ROOM.get(env.DIARY_ROOM.idFromName(blockedId));
+    await runInDurableObject(stub, async (_instance, state) => {
+      expect(await state.storage.get("meta")).toBeUndefined();
+    });
+  });
 });
 
 describe("GET /v3/diaries", () => {
@@ -231,6 +255,28 @@ describe("leave / close / invite-reset — D1 side effects", () => {
     const row = await env.ACCOUNTS_DB.prepare("SELECT 1 AS x FROM diary_members WHERE account_id = ?1 AND diary_id = ?2").bind(b.accountId, diaryId).first();
     expect(row).toBeNull();
     expect((await leaveDiary(bearer(b), diaryId)).status).toBe(204);
+  });
+
+  it("the LAST member leaving also drops the diary's diary_invites row, so its code stops resolving", async () => {
+    const owner = await mkAccount("leave-last-owner"), b = await mkAccount("leave-last-b");
+    const { diaryId, inviteCode } = await createDiaryOk(owner);
+    expect((await joinByLink(bearer(b), diaryId, inviteCode)).status).toBe(201);
+
+    const inviteRow = () => env.ACCOUNTS_DB.prepare("SELECT 1 AS x FROM diary_invites WHERE diary_id = ?1").bind(diaryId).first();
+    // Not the last one out — the invite row must survive.
+    expect((await leaveDiary(bearer(b), diaryId)).status).toBe(204);
+    expect(await inviteRow()).toBeTruthy();
+
+    // Owner is now the last member; the emptied diary's code is garbage.
+    expect((await leaveDiary(bearer(owner), diaryId)).status).toBe(204);
+    expect(await inviteRow()).toBeNull();
+
+    // With both index tables empty the id no longer exists at all...
+    expect((await joinByLink(bearer(b), diaryId, inviteCode)).status).toBe(404);
+    // ...and the short code resolves to nothing (the ordinary bad-code path).
+    const rCode = await joinByCode(bearer(b), inviteCode);
+    expect(rCode.status).toBe(403);
+    expect(await rCode.json()).toEqual({ error: "bad_code" });
   });
 
   it("close is owner-only; afterwards join and POST events 403 diary_closed, but GET meta/events still work", async () => {
