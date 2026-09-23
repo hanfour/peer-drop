@@ -260,7 +260,15 @@ public final class DiaryStore: ObservableObject {
                     let (events, nextSince) = try await client.events(id: id, since: since, limit: 100)
                     for event in events {
                         let decoded = withDecodedPayload(event, id: id, key: key)
-                        await logCoordinator.append(decoded, url: logURL)
+                        // Review round 4, M3: this used to be `try?`. A failed
+                        // append (disk full, encryptor failure, an events.log
+                        // that can't be opened) silently dropped the event and
+                        // then let the cursor advance past it below — the
+                        // event was gone locally AND would never be refetched.
+                        // Now it aborts the whole sync for this diary via the
+                        // enclosing `catch`, BEFORE `writeCursor`, so the next
+                        // sync refetches the same page.
+                        try await logCoordinator.append(decoded, url: logURL)
                     }
                     // The cursor only ever advances via THIS paged, contiguous
                     // fetch — never via a write's own `performWrite`/
@@ -739,11 +747,17 @@ public final class DiaryStore: ObservableObject {
         let r = try await client.postEvent(id: id, eventId: pending.eventId, type: pending.type, refSeq: pending.refSeq, payloadCipher: pending.payloadCipher)
         let fetched = try await client.event(id: id, seq: r.seq)
         let decoded = withDecodedPayload(fetched, id: id, key: keyStore.key(for: id))
-        await logCoordinator.append(decoded, url: eventsLogURL(id))
+        // Deliberately still best-effort here (unlike `sync`, round 4 M3):
+        // the event IS committed server-side by this point, so a local
+        // append failure must not turn a succeeded write into a thrown
+        // error and leave `pending.enc` in place to be re-POSTed. What it
+        // MUST not do is let the cursor move past an event that never
+        // reached the log — a later `sync` has to be able to refetch it.
+        let appended = (try? await logCoordinator.append(decoded, url: eventsLogURL(id))) != nil
         clearPendingEvent(id)
 
         let cursor = readCursor(id)
-        if decoded.seq == cursor + 1 {
+        if appended, decoded.seq == cursor + 1 {
             writeCursor(id, decoded.seq)
         }
 
@@ -1093,8 +1107,8 @@ private actor DiaryLogCoordinator {
     init(encryptor: ChatDataEncryptor) { self.encryptor = encryptor }
 
     @discardableResult
-    func append(_ event: DiaryEvent, url: URL) -> Int? {
-        try? DiaryEventLog(url: url, encryptor: encryptor).append(event)
+    func append(_ event: DiaryEvent, url: URL) throws -> Int {
+        try DiaryEventLog(url: url, encryptor: encryptor).append(event)
     }
 
     func load(url: URL) -> DiaryEventLog.LoadResult {

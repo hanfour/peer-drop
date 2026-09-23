@@ -331,6 +331,44 @@ final class DiaryStoreTests: XCTestCase {
         XCTAssertEqual(store.states[diaryId]?.events.count, 250)
     }
 
+    // MARK: - M3: an append failure aborts the sync instead of being swallowed
+
+    /// `logCoordinator.append` used to be `try?`, so an event that failed to
+    /// reach `events.log` was dropped AND the cursor advanced past it on the
+    /// very next line — the event was then unreachable forever. The sync must
+    /// abort before `writeCursor` and surface the error like any other.
+    func testSyncAbortsWithoutAdvancingTheCursorWhenAnEventAppendFails() async throws {
+        let diaryId = did("APPENDF1")
+        let diaryDir = dir.appendingPathComponent(diaryId, isDirectory: true)
+        // Make `events.log` a DIRECTORY: `DiaryEventLog.append` then can't
+        // open it for writing and throws — the one append failure reachable
+        // without swapping in a fake log type.
+        let logURL = diaryDir.appendingPathComponent("events.log")
+        try FileManager.default.createDirectory(at: logURL, withIntermediateDirectories: true)
+
+        let metaBody = Data(#"""
+        {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":1,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+        """#.utf8)
+        let eventsBody = Data(#"""
+        {"events":[{"seq":1,"eventId":"E1","type":"pass","authorAccountId":"0WNER001","createdAt":1700000000000}]}
+        """#.utf8)
+        TestURLProtocol.queue = [.init(status: 200, body: metaBody), .init(status: 200, body: eventsBody)]
+        await store.sync(diaryId)
+
+        XCTAssertNotNil(store.lastError)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diaryDir.appendingPathComponent("cursor.enc").path))
+
+        // Resumable: with the log path repaired, the next sync asks for the
+        // SAME page again and the event finally lands.
+        try FileManager.default.removeItem(at: logURL)
+        TestURLProtocol.queue = [.init(status: 200, body: metaBody), .init(status: 200, body: eventsBody)]
+        await store.sync(diaryId)
+
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.query, "since=0&limit=100")
+        XCTAssertEqual(store.states[diaryId]?.events.map(\.seq), [1])
+        XCTAssertNil(store.lastError)
+    }
+
     func testSyncTriggersKeyRelayForAnUnrelayedJoinEvent() async throws {
         let diaryId = did("SYNCRY1")
         let key = SymmetricKey(size: .bits256)
