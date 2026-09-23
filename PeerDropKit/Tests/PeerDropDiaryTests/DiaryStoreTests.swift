@@ -1058,4 +1058,46 @@ final class DiaryStoreTests: XCTestCase {
         let cursor = try JSONDecoder().decode(DirectCursorFile.self, from: cursorData)
         XCTAssertGreaterThanOrEqual(cursor.syncedThrough, 5)
     }
+
+    // MARK: - inviteLink(for:) / resetInvite (Task 6 fix round 1: F4)
+
+    /// `inviteLink(for:)` builds a `peerdrop://diary/<id>?code=...#k=...`
+    /// link out of purely local state (owner-only `inviteCode` + this
+    /// device's content key, both already present right after `create`) —
+    /// `DiaryInviteLink.parse` must recover exactly the same diaryId,
+    /// invite code, and raw key bytes from that link.
+    func testInviteLinkRoundTripsThroughDiaryInviteLinkParse() async throws {
+        let diaryId = try await createDiary(name: "Link Diary")
+
+        let link = try XCTUnwrap(store.inviteLink(for: diaryId))
+        let parsed = try XCTUnwrap(DiaryInviteLink.parse(link))
+
+        XCTAssertEqual(parsed.diaryId, diaryId)
+        XCTAssertEqual(parsed.code, "CODE0001")   // stubbed by createDiary()'s create response
+        let localKey = try XCTUnwrap(keyStore.key(for: diaryId))
+        XCTAssertEqual(parsed.key, localKey.withUnsafeBytes { Data($0) })
+    }
+
+    /// `resetInvite` (spec §6: "重設邀請碼只讓舊碼失效，金鑰不變") must persist
+    /// the new code locally, not just relay the client's success back to
+    /// the caller — `inviteLink(for:)` (and the raw `meta.inviteCode`)
+    /// have to reflect it afterwards. Mocks the client response the same
+    /// way `DiaryClientTests.testResetInviteReturnsNewCode` does.
+    func testResetInviteUpdatesTheStoredInviteCode() async throws {
+        let diaryId = try await createDiary(name: "Reset Diary")
+        XCTAssertEqual(store.states[diaryId]?.meta.inviteCode, "CODE0001")
+        let keyBeforeReset = try XCTUnwrap(keyStore.key(for: diaryId)).withUnsafeBytes { Data($0) }
+
+        TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"inviteCode":"NEWCODE1"}"#.utf8))]
+        let newCode = try await store.resetInvite(diaryId)
+
+        XCTAssertEqual(newCode, "NEWCODE1")
+        XCTAssertEqual(store.states[diaryId]?.meta.inviteCode, "NEWCODE1")
+        // The key is unaffected by a code reset.
+        XCTAssertEqual(try XCTUnwrap(keyStore.key(for: diaryId)).withUnsafeBytes { Data($0) }, keyBeforeReset)
+
+        let link = try XCTUnwrap(store.inviteLink(for: diaryId))
+        let parsed = try XCTUnwrap(DiaryInviteLink.parse(link))
+        XCTAssertEqual(parsed.code, "NEWCODE1")
+    }
 }
