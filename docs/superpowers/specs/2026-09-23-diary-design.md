@@ -1,7 +1,7 @@
 # 子專案 3：交換日記 — 設計規格
 
 日期：2026-09-23
-狀態：v3 定案（2026-09-23）— 第一輪（grok-review-1.md）與第二輪（grok-review-2.md，8 項）意見全部採納；第三輪 grok 確認因餘額用盡中斷，改由主廚逐條核對後定案
+狀態：**已實作（PR 待合併）**（2026-09-23，Task 7 全套驗證＋本機 E2E 通過）— v3 定案（2026-09-23）：第一輪（grok-review-1.md）與第二輪（grok-review-2.md，8 項）意見全部採納；第三輪 grok 確認因餘額用盡中斷，改由主廚逐條核對後定案。實作拆分 Task 1–6（worker／Kit／App，見 §8）與 Task 7（本檔）均完成；分支 `feat/diary`，7 個實作任務共經多輪 review-fix，詳見 `.superpowers/sdd/2026-09-23-diary/progress.md`。程式碼與本規格文字若有出入，逐節以「**實作差異**」註記（不覆寫本規格原文）。
 上位規格：`docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md` §4、§5.2、§5.3
 前置：子專案 1（帳號，#147）、子專案 2（紙條，#148）已併入 main 並部署。本規格以其實際程式碼為準（`authorizeV3`、`AccountInbox`、`POST /v3/notes`、`NoteEnvelope`／`NoteCrypto`／`NotesStore`、`AccountClient.request`、`RelayPushKind`、D1 `reports`）。
 
@@ -92,6 +92,8 @@ eid:<eventId> → seq
 **leave**：`POST /v3/diaries/:id/leave`，closed 之後仍可呼叫。呼叫者是成員時：設 `idx` 為其索引，先移除；空了 → 只設 `state = "closed"`、寫 `leave` 事件，**不讀 `members[0]`**；否則：`idx == holderIndex` → `holderIndex = idx % members.length`；`idx < holderIndex` → `holderIndex -= 1`；離開者是 owner → `ownerAccountId = members[0]`（轉移在移除之後）；寫 `leave` 事件。呼叫者已不是成員時不改 DO。兩種情況都執行 D1 delete，成功後回 204。
 
 **close**：`POST /v3/diaries/:id/close`，owner 專用；`state = "closed"` 後**只**拒絕 join 與 `POST /events`（403 `diary_closed`）；成員仍可讀、可 leave。
+
+> **實作差異（§2.1，Task 1 review 定案，2026-09-23）**：① 建立成功回應（`POST /v3/diaries` 及 `POST /events`）不再夾帶完整 `meta`（原草案曾把整包 meta 含 `inviteCode` 回給每個成員）——`POST /events` 一律只回 `{seq, holderIndex}`，`inviteCode` 只在 `GET /v3/diaries/:id`（owner）與建立／join 回應中出現。② 短碼 join（`POST /v3/diaries/join`）雖用 D1 `diary_invites` 解出 `diaryId`，但兩個入口最終都在 DO 內比對正規化後的碼與 `meta.inviteCode`，D1 只負責短碼→id 的索引，不是信任來源（防已撤銷碼透過 D1 殘留繼續生效）。③ 短碼 collision（`INSERT OR IGNORE` 撞號）改為讀回比對、不符則重新產碼最多 5 次，撞滿 5 次回 500，而非原先隱式吞掉。④ 已知次要限制（未修正、E2E 中未撞到）：closed 日記本被「既有成員」重新呼叫 join 仍會回 200（只是補 D1 INSERT OR IGNORE），未特別擋 closed 狀態下的既有成員重送；`close` 後空本的 `holderIndex` 固定回 0。
 
 ### 2.2 D1（migration `0003_diary.sql`）
 
@@ -193,6 +195,8 @@ Wrangler：`[[durable_objects.bindings]] name = "DIARY_ROOM" class_name = "Diary
 
 客戶端：`RelayPushKind.classify` 加 `.diary(kind, diaryId, seq?)`、`.diaryKey`；`handleRemoteNotification` 在 `roomCode` 判斷前分流：diary → `DiaryStore.sync(diaryId)`（`diaryKeyRequest` 額外觸發 `DiaryKeyRelay`）；`diaryKey` → `NotesStore.sync()`；iOS `fetchCompletionHandler` 等 sync 結束再呼叫。點擊通知 → `selectedTab = 4`／Mac `.diaries` 並開該本，有 `seq` 則捲到該篇。
 
+> **實作差異（§4，Task 6 review round 1 ruling，2026-09-23）**：「iOS `fetchCompletionHandler` 等 sync 結束再呼叫」目前**只對 `.diary`／`.diaryKey` 兩種推播分類生效**（在 `AppDelegate` 中 await 對應的 `DiaryStore`/`NotesStore` sync，上限約 25 秒，留給 30 秒 background-fetch 預算的餘裕）；既有 `.note` 分類（子專案 2 遺留）仍是 fire-and-forget、不等待，維持原行為未變動——這是既有缺口，非本次引入，Task 7 範圍未修正，列在下方「疑慮」供後續排查。
+
 ---
 
 ## 5. 客戶端
@@ -212,6 +216,8 @@ DiaryStore.swift     @MainActor：diaries; open(id) -> DiaryState{meta, events, 
 - 送事件：先寫 `pending.enc`（eventId 固定），POST 成功後**向伺服器拉該 seq** 建立本機事件（不用請求內容自造）。只有網路失敗、5xx、429 才重送；403／400 清掉 pending 並把錯誤交給 UI。冪等 200 的 `holderIndex` 是當下 meta；若本機 seq 已超過該筆，不用該回應改輪次。
 - `DiaryStore` 自己把 `AccountClientError` 映射成 `DiaryError`（`notHolder`、`notMember`、`notOwner`、`closed`、`full`、`limit`、`badCode`…）。
 
+> **實作差異（§5.1，Task 3／5 review 定案，2026-09-23）**：① `DiaryError` 多一個 `.transient(String)`（429／5xx／`URLError`）與 `.network(String)`（其他未知錯誤）分開，`pending.enc` 只對 `.transient` 重送——原文的單一 `network` 案例合併了「可重試」與「不可重試」兩種語意，拆開後更精確。② `DiaryStore` 對每本日記加了 per-diary 序列化鎖（`withDiaryLock(id)`），`sync`／`performWrite`／`handlePush`／`acceptRelayedKey` 同一本不會交錯執行，避免 cursor／pending／meta 競態（原文未提及此併發保護，屬新增的正確性強化，不影響對外行為）。③ 短碼補發驅動：`DiaryKeyRelay` 需要新成員在**其 `/v2/keys/register` 上傳過一份可通過 `X3DH.verifyBundleFreshness`／簽章驗證的合法 pre-key bundle**（本次 E2E 用 harness 產生真實 X25519＋Ed25519 簽章的 bundle 才成功；一個只有 `{dummy:true}` 的假 bundle 會讓 `NoteCrypto.seal` 在來源端直接丟出 `missingPreKeyBundle`/`invalidRecipientKeys`，relay 靜默失敗且不去重、留待下次 sync 重試）——這與規格 §3.3 步驟 2「目錄 bundle=1 取新成員金鑰」的既有語意一致，僅補充其在真實／harness 帳號上的前置條件記錄於此。
+
 ### 5.2 UI（`PeerDrop/UI/Diary/`，無 UIKit/AppKit）
 - `DiaryListView`：名稱、成員數、持有者（帳號 ID）、輪到我徽章；建立、加入（貼連結或輸入短碼）。
 - `DiaryView`：時間軸（只畫 `entry`，讚數與留言數由 `refSeq` 聚合）／翻頁；持有者列（進入時查一次暱稱，失敗顯示 ID）；持有者見「書寫」「傳給下一人」；owner 於非自己持有時見「跳過」；無金鑰時等待卡＋「重新請求」；closed 顯示唯讀。
@@ -230,6 +236,8 @@ DiaryStore.swift     @MainActor：diaries; open(id) -> DiaryState{meta, events, 
 - 離開者不再能拉事件、檢舉、要金鑰（全部要求現任成員）；但已同步到本機的內容仍在其裝置上。
 - 檢舉 `excerpt` 是伺服器唯一保存的明文，選用、預設不勾、不進 log。
 - `owner` 轉移給移除後的 `members[0]`。
+- **新風險（Task 7 E2E 發現，2026-09-23）**：iOS `fetchCompletionHandler` 目前只在 `.diary`／`.diaryKey` 推播分流時等待 sync 完成才回呼；既有 `.note`（紙條）分類仍是舊行為（fire-and-forget，子專案 2 遺留、非本次引入）。若使用者主要透過背景推播接收紙條，短時間內的背景喚醒視窗可能來不及完成同步——建議後續排入紙條側的對應修正（見 §4 實作差異）。
+- **新風險（Task 7 E2E 發現，2026-09-23）**：短碼補發（`DiaryKeyRelay`）成功與否完全取決於新成員裝置端是否已上傳**通過 X3DH 驗證的合法 pre-key bundle**（真實 X25519 金鑰＋對應 Ed25519 簽章）；一個格式不完整或未簽章的 bundle 會讓補發在寄件端靜默失敗（不計入去重、留待下次 sync 重試，行為符合 §3.3 設計），但對使用者而言除了「一直卡在等待金鑰」外沒有其他即時錯誤提示——建議之後補一個「補發已重試 N 次仍未成功」的 UI 提示或 `requestKey` 引導。
 
 ## 7. 測試
 - worker：建立原子初始化與冪等（同 id 重送不換 inviteCode、D1 補列）、`diary_exists`、join 冪等仍寫 D1、join-by-code 與 `diary_invites`、reset 換碼、最後一人 leave 不讀空陣列、close 後仍可 leave、非成員讀 events／report／request-key 403 且不推播、20 本（create 與 join）、非持有者 403、skip 謂詞四情境、leave 的四種索引（持有者在中間／末尾、持有者之前的人離開、owner 兼持有者離開）、close、like 冪等、`bad_ref`、`POST /events` 拒 `join`、64 KB／64 MB 與滿後冪等 200、D1 失敗回 500、`diaryKey` 非成員 403 與 background push 標頭、四種推播收件者集合、`request-key` 不產生 `DIARY_JOIN`、join 錯碼限流與正規化、reports 重建後紙條與日記檢舉皆可寫且 admin 查得到。
