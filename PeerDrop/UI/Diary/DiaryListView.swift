@@ -7,15 +7,27 @@ import PeerDropDiary
 struct DiaryListView: View {
     @ObservedObject var store: DiaryStore
     @ObservedObject var accountManager: AccountManager
-    /// Set by a notification tap; the view pushes that diary and clears it.
+    /// Set by a notification tap; `openPendingDiary()` consumes it (pushes
+    /// that diary onto `path`) and clears it in the same update.
     @Binding var openDiaryID: String?
     /// Carried alongside `openDiaryID` so a tapped `DIARY_ENTRY`/
     /// `DIARY_REACTION` notification can also scroll the pushed `DiaryView`
-    /// to the entry it named (spec §4: "有 seq 則捲到該篇").
+    /// to the entry it named (spec §4: "有 seq 則捲到該篇"). Consumed and
+    /// cleared together with `openDiaryID`.
     @Binding var openDiarySeq: Int?
     @Binding var path: [String]
     @State private var showCreate = false
     @State private var showJoin = false
+    /// Snapshot of the `(diaryId, seq)` pair `openPendingDiary()` just
+    /// pushed, taken before `openDiaryID`/`openDiarySeq` are cleared.
+    /// `navigationDestination` scrolls off this (not the bindings, which
+    /// are already nil by the time it re-evaluates) — fix round 2: F1's
+    /// round-1 fix cleared `openDiaryID` in the same update that set
+    /// `path`, so `id == openDiaryID` in `navigationDestination` was
+    /// always false and a tapped DIARY_ENTRY/DIARY_REACTION notification
+    /// stopped scrolling to the named entry. Cleared once `path` empties
+    /// so reopening the same diary manually later doesn't re-scroll.
+    @State private var pendingScroll: (id: String, seq: Int?)?
 
     var body: some View {
         List {
@@ -34,7 +46,7 @@ struct DiaryListView: View {
         }
         .navigationTitle("Diaries")
         .navigationDestination(for: String.self) { id in
-            DiaryView(diaryId: id, store: store, accountManager: accountManager, scrollToSeq: id == openDiaryID ? openDiarySeq : nil)
+            DiaryView(diaryId: id, store: store, accountManager: accountManager, scrollToSeq: id == pendingScroll?.id ? pendingScroll?.seq : nil)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -63,12 +75,15 @@ struct DiaryListView: View {
         .onChange(of: openDiaryID) { _ in openPendingDiary() }
         .onChange(of: store.diaries) { _ in openPendingDiary() }
         .onAppear { openPendingDiary() }
+        .onChange(of: path) { if $0.isEmpty { pendingScroll = nil } }
     }
 
     private func openPendingDiary() {
         guard let id = openDiaryID, store.diaries.contains(where: { $0.diaryId == id }) else { return }
+        pendingScroll = (id, openDiarySeq)
         path = [id]
         openDiaryID = nil
+        openDiarySeq = nil
     }
 
     private var emptyState: some View {
