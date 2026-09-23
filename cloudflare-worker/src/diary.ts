@@ -19,6 +19,7 @@ import type { PushDeps } from "./notes";
 import { generateAccountId, normalizeAccountId } from "./account";
 import { MAX_MEMBERS } from "./diaryRoom";
 import type { DiaryEvent, DiaryMeta } from "./diaryRoom";
+import { fanOutPush } from "./push";
 
 export interface DiaryAuth { deviceId: string; accountId: string }
 export interface DiaryRouteDeps { push: PushDeps }
@@ -110,7 +111,7 @@ async function failJoinCode(env: Env, accountId: string): Promise<Response> {
  * authoritatively regardless (closes the race window between this preflight
  * read and the mutating call below).
  */
-async function performJoin(env: Env, diaryId: string, accountId: string, inviteCode: string): Promise<Response> {
+async function performJoin(env: Env, diaryId: string, accountId: string, inviteCode: string, push: PushDeps): Promise<Response> {
   const db = env.ACCOUNTS_DB;
   const metaResp = await doCall(env, diaryId, "/meta");
   if (!metaResp.ok) return json({ error: "not_found" }, 404);
@@ -139,6 +140,17 @@ async function performJoin(env: Env, diaryId: string, accountId: string, inviteC
   } catch (e) {
     console.error("diary join: D1 write failed", String(e));
     return json({ error: "d1_error" }, 500);
+  }
+  // §4: diaryJoin is only sent to the diary's OTHER members, and only when
+  // this call actually added a new member — an idempotent re-join (e.g. a
+  // stale invite link replayed after the D1 repair above) must not
+  // re-notify anyone.
+  if (added) {
+    await Promise.all(
+      newMeta.members.filter((m) => m !== accountId).map((m) =>
+        fanOutPush(env, m, { alert: { "loc-key": "DIARY_JOIN" }, data: { type: "diaryJoin", diaryId, accountId } }, push),
+      ),
+    );
   }
   return json(
     { diaryId, members: newMeta.members, holderIndex: newMeta.holderIndex, ownerAccountId: newMeta.ownerAccountId, state: newMeta.state, seq: newMeta.seq, metaCipher: newMeta.metaCipher },
@@ -181,12 +193,50 @@ async function bindInviteCode(env: Env, diaryId: string, initialCode: string, re
 }
 
 /**
+ * §4 push table, for a POST /events success: exactly one push kind per
+ * event type, computed from the DO's own post-write `meta`/`event` (never
+ * from the request body) so the recipient set always reflects the state
+ * the event actually landed in. Never throws — a push failure (including
+ * the extra DO round-trip this makes for comment/like) must not turn an
+ * already-committed event into a 500 for the poster.
+ */
+async function fanOutEventPush(env: Env, diaryId: string, event: DiaryEvent, meta: DiaryMeta, push: PushDeps): Promise<void> {
+  try {
+    if (event.type === "pass" || event.type === "skip") {
+      const newHolder = meta.members[meta.holderIndex];
+      await fanOutPush(env, newHolder, { alert: { "loc-key": "DIARY_TURN" }, data: { type: "diaryTurn", diaryId } }, push);
+      return;
+    }
+    if (event.type === "entry") {
+      await Promise.all(
+        meta.members.filter((m) => m !== event.authorAccountId).map((m) =>
+          fanOutPush(env, m, { alert: { "loc-key": "DIARY_ENTRY" }, data: { type: "diaryEntry", diaryId, seq: event.seq } }, push),
+        ),
+      );
+      return;
+    }
+    if (event.type === "comment" || event.type === "like") {
+      if (event.refSeq === undefined) return;
+      // The comment/like event itself doesn't carry the target entry's
+      // author — look it up via the DO's single-event lookup (also used
+      // by the report route) rather than trusting anything client-supplied.
+      const entryResp = await doCall(env, diaryId, `/event/${event.refSeq}`);
+      if (!entryResp.ok) return;
+      const entryEvent = await entryResp.json() as DiaryEvent;
+      if (entryEvent.authorAccountId === event.authorAccountId) return; // reacting to your own entry: no push
+      await fanOutPush(env, entryEvent.authorAccountId, { alert: { "loc-key": "DIARY_REACTION" }, data: { type: "diaryReaction", diaryId, seq: event.refSeq } }, push);
+    }
+  } catch (e) {
+    console.error("diary event push fan-out failed", diaryId, event.type, String(e));
+  }
+}
+
+/**
  * /v3/diaries* routes. Returns null when `path` is not one of ours so
  * handleV3 can fall through (mirrors handleNotesRoute). All of these accept
- * the Mac key lane (same as notes — see NotesAuth). `deps.push` is unused
- * in this task; diary pushes land in a later task.
+ * the Mac key lane (same as notes — see NotesAuth).
  */
-export async function handleDiaryRoute(request: Request, url: URL, path: string, env: Env, auth: DiaryAuth, _deps: DiaryRouteDeps): Promise<Response | null> {
+export async function handleDiaryRoute(request: Request, url: URL, path: string, env: Env, auth: DiaryAuth, deps: DiaryRouteDeps): Promise<Response | null> {
   const db = env.ACCOUNTS_DB;
 
   // ---- POST /v3/diaries — create / idempotent re-create ----------------
@@ -253,7 +303,7 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     try { body = JSON.parse((await request.text()) || "null"); } catch { body = null; }
     const normalized = typeof body?.inviteCode === "string" ? normalizeAccountId(body.inviteCode) : null;
     if (!normalized) return failJoinCode(env, auth.accountId);
-    return performJoin(env, diaryId, auth.accountId, normalized);
+    return performJoin(env, diaryId, auth.accountId, normalized, deps.push);
   }
 
   // ---- POST /v3/diaries/join — code-only join (id resolved via D1, code verified against the DO) ------
@@ -264,7 +314,7 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     if (!normalized) return failJoinCode(env, auth.accountId);
     const row = await db.prepare("SELECT diary_id FROM diary_invites WHERE invite_code = ?1").bind(normalized).first<{ diary_id: string }>();
     if (!row) return failJoinCode(env, auth.accountId);
-    return performJoin(env, row.diary_id, auth.accountId, normalized);
+    return performJoin(env, row.diary_id, auth.accountId, normalized, deps.push);
   }
 
   // ---- POST /v3/diaries/:id/leave ---------------------------------------
@@ -343,7 +393,12 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     // particular carries `inviteCode`, which must never reach every other
     // member's device just because they posted an event. Project down to
     // exactly the spec's §2.3 response shape.
-    const { seq, holderIndex } = await resp.json() as { seq: number; holderIndex: number };
+    const { seq, holderIndex, event, meta } = await resp.json() as { seq: number; holderIndex: number; event: DiaryEvent; meta: DiaryMeta };
+    // Only a freshly-created event (201) pushes — an idempotent resend
+    // (200, either the exact-eventId replay or the same-person-same-entry
+    // like dedup) is the same logical event already pushed once and must
+    // not re-notify anyone.
+    if (resp.status === 201) await fanOutEventPush(env, diaryId, event, meta, deps.push);
     return json({ seq, holderIndex }, resp.status);
   }
 
@@ -353,10 +408,16 @@ export async function handleDiaryRoute(request: Request, url: URL, path: string,
     const diaryId = reqKeyMatch[1];
     const result = await requireMember(env, diaryId, auth.accountId);
     if (result instanceof Response) return result;
+    const { meta } = result;
     const allowed = await bumpQuota(env.V2_STORE, `diary-keyreq:${auth.accountId}:${diaryId}:${hourKey()}`, REQUEST_KEY_LIMIT_PER_HOUR, 2 * 3600);
     if (!allowed) return json({ error: "rate_limited" }, 429);
-    // Task 1 sends no pushes yet — a later task fans out a silent
-    // diaryKeyRequest to the diary's other members here.
+    // Silent — this only wakes other members' clients to sync and relay
+    // the key (spec §3.3 step 2), never a visible notification.
+    await Promise.all(
+      meta.members.filter((m) => m !== auth.accountId).map((m) =>
+        fanOutPush(env, m, { silent: true, data: { type: "diaryKeyRequest", diaryId, accountId: auth.accountId } }, deps.push),
+      ),
+    );
     return new Response(null, { status: 204 });
   }
 

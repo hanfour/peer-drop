@@ -64,6 +64,8 @@ export interface APNsOptions {
   priority?: number;
   expiration?: number;
   interruptionLevel?: "passive" | "active" | "time-sensitive" | "critical";
+  /** `apns-push-type` header. Defaults to "alert" (the historical, only, behavior). */
+  pushType?: "alert" | "background";
 }
 
 export async function sendAPNs(
@@ -87,7 +89,7 @@ export async function sendAPNs(
   const requestHeaders: Record<string, string> = {
     "authorization": `bearer ${jwt}`,
     "apns-topic": topic,
-    "apns-push-type": "alert",
+    "apns-push-type": options?.pushType ?? "alert",
     "content-type": "application/json",
   };
   if (options?.priority !== undefined) {
