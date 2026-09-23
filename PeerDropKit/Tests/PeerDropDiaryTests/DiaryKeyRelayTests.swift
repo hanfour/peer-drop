@@ -156,7 +156,11 @@ final class DiaryKeyRelayTests: XCTestCase {
         XCTAssertEqual(TestURLProtocol.requests.count, 6)
     }
 
-    // MARK: - A blocked/failed send never dedupes — "封鎖造成的假 201 不會出現"
+    // MARK: - A failed send never dedupes — a real 403 stays retryable
+    //
+    // (The worker's blocked-sender fake 201 is indistinguishable from a real
+    // success by design and DOES dedupe — see the spec's §6 實作差異 note
+    // and `DiaryKeyRelay.relayIfNeeded`'s doc. This pins the 403 case.)
 
     func testA403FromTheWorkerIsNotDedupedAndRetriesOnTheNextCall() async throws {
         let key = SymmetricKey(size: .bits256)

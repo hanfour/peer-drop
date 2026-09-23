@@ -231,7 +231,8 @@ DiaryStore.swift     @MainActor：diaries; open(id) -> DiaryState{meta, events, 
 ## 6. 合規與風險
 - UGC：每篇可檢舉、可離開、owner 可關閉；不做踢人。**離開者仍持有舊金鑰**是 MVP 已知限制，寫在「離開」與「邀請」文案。
 - 邀請連結含金鑰：轉傳即洩露；重設邀請碼只讓舊碼失效，金鑰不變；owner 可 `close` 止血。
-- 短碼補發依賴至少一名成員裝置在線 sync；`request-key` 限 6/小時；封鎖造成的假 201 不會出現（`diaryKey` 走真實 403）。
+- 短碼補發依賴至少一名成員裝置在線 sync；`request-key` 限 6/小時。
+- **實作差異（§6，review round 4 更正，2026-09-24）**：原文寫「封鎖造成的假 201 不會出現（`diaryKey` 走真實 403）」，與實作不符。`notes.ts` 只有**成員資格**檢查走真實 403 `not_member`；該檢查通過之後，一般的封鎖檢查照常執行，被封鎖的寄件者仍會收到靜默的假 201（`notes-diarykey.spec.ts`「the ordinary blocked-sender fake 201 still applies AFTER the membership check」刻意釘住這個行為，避免寄件者從回應碼推斷自己被封鎖）。實際後果：**已封鎖補發者的成員永遠收不到那把金鑰**（假 201 之後寄件端還會寫入 24 小時去重鍵，一天內不再重寄）。使用者側的復原路徑＝先解除封鎖，再用「重新請求金鑰」（`diaryKeyRequest` 忽略去重）。這是刻意取捨，不修改。
 - 一本可被單一成員寫滿（無每人上限）；滿後冪等重送仍 200。
 - 離開者不再能拉事件、檢舉、要金鑰（全部要求現任成員）；但已同步到本機的內容仍在其裝置上。
 - 檢舉 `excerpt` 是伺服器唯一保存的明文，選用、預設不勾、不進 log。

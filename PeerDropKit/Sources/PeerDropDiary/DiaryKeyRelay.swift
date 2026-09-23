@@ -104,10 +104,17 @@ public actor DiaryKeyRelay {
     /// bundle, PoW failure, a real 403 because this device turns out not to
     /// be a current member, a network error, …) is swallowed here: the
     /// caller (`DiaryStore.sync`) already knows to retry on the next round,
-    /// and nothing about a failed attempt should ever look like a "fake
-    /// 201" to the rest of the system (spec §6: "封鎖造成的假 201 不會出
-    /// 現") — and, critically, nothing is written to `relayStore` except on
-    /// a genuine success.
+    /// and nothing about a failed attempt should ever look like a success to
+    /// the rest of the system — critically, nothing is written to
+    /// `relayStore` except on a 2xx from the server.
+    ///
+    /// The one 2xx this CANNOT distinguish is the worker's blocked-sender
+    /// fake 201 (`notes.ts`, applied after the membership check): a member
+    /// who has blocked this device never receives the key, yet the dedupe is
+    /// written and suppresses retries for 24h. Deliberate — the fake 201
+    /// exists precisely so a sender can't detect a block — see the spec's
+    /// §6 實作差異 note; recovery is unblock + 「重新請求金鑰」, which
+    /// arrives here as `force: true`.
     public func relayIfNeeded(
         diaryId: String, newMember: String, metaCipher: String,
         senderAccountId: String, senderNickname: String?, force: Bool = false
