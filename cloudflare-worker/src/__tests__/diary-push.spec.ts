@@ -111,6 +111,17 @@ describe("POST .../events push fan-out", () => {
     expect(calls[0].payload).toEqual({ alert: { "loc-key": "DIARY_TURN" }, customData: { type: "diaryTurn", diaryId } });
   });
 
+  it("pass in a one-member diary: no DIARY_TURN, because the new holder is the actor", async () => {
+    const solo = await mkAccount("solo-pass");
+    const { diaryId } = await createDiaryOk(solo);
+    await seedPush(solo, "tok-solo");
+
+    const { deps, calls } = fakeDeps({ "tok-solo": solo.accountId });
+    const r = await callDiary(`/v3/diaries/${diaryId}/events`, "POST", solo.accountId, deps, { eventId: ulid(), type: "pass" });
+    expect(r.status).toBe(201);
+    expect(calls).toEqual([]);   // the turn came straight back to the only member
+  });
+
   it("comment/like: DIARY_REACTION to the entry's author, never to self", async () => {
     const owner = await mkAccount("react-owner"), b = await mkAccount("react-b");
     const { diaryId, inviteCode } = await createDiaryOk(owner);

@@ -210,6 +210,11 @@ async function fanOutEventPush(env: Env, diaryId: string, event: DiaryEvent, met
   try {
     if (event.type === "pass" || event.type === "skip") {
       const newHolder = meta.members[meta.holderIndex];
+      // In a one-member diary (or any rotation that lands back on the
+      // actor) the new holder IS whoever just passed/skipped — pushing
+      // "it's your turn" to the device that just acted is noise, and the
+      // same self-push rule the entry/comment/like branches already apply.
+      if (newHolder === event.authorAccountId) return;
       await fanOutPush(env, newHolder, { alert: { "loc-key": "DIARY_TURN" }, data: { type: "diaryTurn", diaryId } }, push);
       return;
     }
