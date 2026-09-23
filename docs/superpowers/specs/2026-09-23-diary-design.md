@@ -1,7 +1,7 @@
 # 子專案 3：交換日記 — 設計規格
 
 日期：2026-09-23
-狀態：v3 — 第一輪（grok-review-1.md）與第二輪（grok-review-2.md，8 項）意見全部採納；待第三輪確認後定案
+狀態：v3 定案（2026-09-23）— 第一輪（grok-review-1.md）與第二輪（grok-review-2.md，8 項）意見全部採納；第三輪 grok 確認因餘額用盡中斷，改由主廚逐條核對後定案
 上位規格：`docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md` §4、§5.2、§5.3
 前置：子專案 1（帳號，#147）、子專案 2（紙條，#148）已併入 main 並部署。本規格以其實際程式碼為準（`authorizeV3`、`AccountInbox`、`POST /v3/notes`、`NoteEnvelope`／`NoteCrypto`／`NotesStore`、`AccountClient.request`、`RelayPushKind`、D1 `reports`）。
 
