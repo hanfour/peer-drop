@@ -37,11 +37,18 @@ public actor NotesClient {
         return r.challenge
     }
 
-    public func send(to recipientAccountId: String, envelopeBase64: String, challenge: String, nonce: UInt64) async throws -> String {
+    public func send(to recipientAccountId: String, envelopeBase64: String, challenge: String, nonce: UInt64, kind: String = "note", diaryId: String? = nil) async throws -> String {
         struct PoW: Encodable { let challenge: String; let nonce: UInt64 }
-        struct Body: Encodable { let envelope: String; let pow: PoW }
+        struct Body: Encodable { let envelope: String; let pow: PoW; let kind: String?; let diaryId: String? }
         struct R: Decodable { let id: String }
-        let r: R = try await account.request("POST", "v3/notes/\(recipientAccountId)", body: Body(envelope: envelopeBase64, pow: PoW(challenge: challenge, nonce: nonce)))
+        // Only include `kind`/`diaryId` in the body for a diaryKey send — the
+        // worker's schema and existing tests both key off the exact body for
+        // a plain note (no extra fields), so a default "note" send must stay
+        // byte-for-byte the old shape.
+        let isDiaryKey = kind == "diaryKey"
+        let r: R = try await account.request("POST", "v3/notes/\(recipientAccountId)",
+                                              body: Body(envelope: envelopeBase64, pow: PoW(challenge: challenge, nonce: nonce),
+                                                        kind: isDiaryKey ? kind : nil, diaryId: isDiaryKey ? diaryId : nil))
         return r.id
     }
 

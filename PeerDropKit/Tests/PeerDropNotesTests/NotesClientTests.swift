@@ -30,6 +30,18 @@ final class NotesClientTests: XCTestCase {
         XCTAssertEqual((body(1)["pow"] as? [String: Any])?["nonce"] as? Int, 4242)
         XCTAssertEqual(TestURLProtocol.requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer t")
     }
+    func testSendDefaultBodyOmitsKindAndDiaryId() async throws {
+        TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"id":"01ITEM0000000000000000000B"}"#.utf8))]
+        _ = try await client.send(to: "TESTRCPT", envelopeBase64: "ZW52", challenge: "QUJD", nonce: 1)
+        XCTAssertNil(body(0)["kind"])
+        XCTAssertNil(body(0)["diaryId"])
+    }
+    func testSendDiaryKeyBodyIncludesKindAndDiaryId() async throws {
+        TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"id":"01ITEM0000000000000000000C"}"#.utf8))]
+        _ = try await client.send(to: "TESTRCPT", envelopeBase64: "ZW52", challenge: "QUJD", nonce: 1, kind: "diaryKey", diaryId: "DIARY001")
+        XCTAssertEqual(body(0)["kind"] as? String, "diaryKey")
+        XCTAssertEqual(body(0)["diaryId"] as? String, "DIARY001")
+    }
     func testInboxReadDeleteBlockReport() async throws {
         TestURLProtocol.queue = [
             .init(status: 200, body: Data(#"{"items":[{"id":"01A","kind":"note","envelope":"ZW52","createdAt":1700000000000,"readAt":null}],"nextAfter":"01A"}"#.utf8)),

@@ -40,6 +40,37 @@ final class NotesStoreTests: XCTestCase {
         Data(#"{"accountId":"SENDR001","nickname":"\#(nickname)","identityKey":"AAAA","signingKey":"\#(signingKey.base64EncodedString())","mailboxId":"m"}"#.utf8)
     }
 
+    /// Builds a `diaryKey` envelope with `sender == nil` — `NoteCrypto.seal`
+    /// itself refuses this (`.signerRequired`), by design: our own client
+    /// never sends an anonymous key relay. But a hostile/buggy sender that
+    /// bypasses this library entirely could still put such a plaintext on
+    /// the wire, and `NotesStore` must treat it as anonymous (§3.4) rather
+    /// than crash or trust it — so this replicates just enough of `seal`'s
+    /// crypto (via `@testable` access to its internal `aad`/`noteKey(from:)`
+    /// helpers) to produce that wire shape directly.
+    private func sealAnonymousDiaryKey(text: String, recipient: DirectoryEntry) throws -> NoteEnvelope {
+        let bundle = recipient.preKeyBundle!
+        let identity = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: recipient.identityKey)
+        let signingKey = try Curve25519.Signing.PublicKey(rawRepresentation: recipient.signingKey)
+        let spk = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: bundle.signedPreKey.publicKey)
+        let peerVersion = try X3DH.verifyBundleFreshness(signedPreKeyPublicKey: bundle.signedPreKey.publicKey, signedPreKeyTimestamp: bundle.signedPreKeyTimestamp,
+                                                          signedPreKeyTimestampSignature: bundle.signedPreKeyTimestampSignature, peerSigningKey: signingKey,
+                                                          now: Date(), policy: .bundledDefault, metrics: nil)
+        let opk = try bundle.oneTimePreKey.map { try Curve25519.KeyAgreement.PublicKey(rawRepresentation: $0.publicKey) }
+        let ek1 = Curve25519.KeyAgreement.PrivateKey()
+        let ek2 = Curve25519.KeyAgreement.PrivateKey()
+        let agreement = try X3DH.initiatorKeyAgreement(myIdentityKey: ek1, myEphemeralKey: ek2, theirIdentityKey: identity,
+                                                        theirSignedPreKey: spk, theirOneTimePreKey: opk, peerVersion: peerVersion, policy: .bundledDefault)
+        let plaintext = try JSONEncoder().encode(NotePlaintext(kind: .diaryKey, text: text, sentAt: Int64(Date().timeIntervalSince1970), sender: nil))
+        let nonce = AES.GCM.Nonce()
+        let box = try AES.GCM.seal(plaintext, using: NoteCrypto.noteKey(from: agreement), nonce: nonce,
+                                   authenticating: NoteCrypto.aad(recipientAccountId: recipient.accountId.raw, version: NoteEnvelope.currentVersion))
+        var combined = Data(box.ciphertext)
+        combined.append(box.tag)
+        return NoteEnvelope(v: NoteEnvelope.currentVersion, ephemeralKey: ek1.publicKey.rawRepresentation, ephemeralKey2: ek2.publicKey.rawRepresentation,
+                            spkId: bundle.signedPreKey.id, opkId: bundle.oneTimePreKey?.id, nonce: Data(nonce), ciphertext: combined)
+    }
+
     func testSyncDecryptsAnonymousNoteAndDedupes() async throws {
         let env = try NoteCrypto.seal(text: "hi there", recipient: try me.entry(), signer: nil)
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAA", env)]))]
@@ -203,6 +234,111 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertNil(store.inbox[0].text)
         XCTAssertTrue(store.inbox[0].isUndecryptable)
     }
+    // MARK: - diaryKey inbox disposition (spec §3.4)
+
+    func testDiaryKeyInstalledDeletesAndAdvancesCursorWithoutARecord() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAK1"
+        var handlerCalls: [(NoteKind, NoteSenderState, String)] = []
+        store.diaryKeyHandler = { plaintext, sender, itemId in
+            handlerCalls.append((plaintext.kind, sender, itemId))
+            return .installed
+        }
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(id, env)])),
+            .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation)),
+            .init(status: 204, body: Data()),
+        ]
+        await store.sync()
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertEqual(handlerCalls.count, 1)
+        XCTAssertEqual(handlerCalls[0].0, .diaryKey)
+        XCTAssertEqual(handlerCalls[0].1, .verified(accountId: "SENDR001", nickname: "alice"))
+        XCTAssertEqual(handlerCalls[0].2, id)
+        XCTAssertEqual(TestURLProtocol.requests.last?.httpMethod, "DELETE")
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/inbox/\(id)")
+        XCTAssertEqual(store.storage.lastSeenInboxId, id)
+    }
+    func testDiaryKeyRejectedDeletesAndAdvancesCursorWithoutARecord() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAK2"
+        store.diaryKeyHandler = { _, _, _ in .rejected }
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(id, env)])),
+            .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation)),
+            .init(status: 204, body: Data()),
+        ]
+        await store.sync()
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertEqual(TestURLProtocol.requests.last?.httpMethod, "DELETE")
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/inbox/\(id)")
+        XCTAssertEqual(store.storage.lastSeenInboxId, id)
+    }
+    func testDiaryKeyTransientAbortsRestOfSyncRound() async throws {
+        let sender = SenderFixture()
+        let diaryEnv = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let noteEnv = try NoteCrypto.seal(text: "hello after", recipient: try me.entry(), signer: nil)
+        let diaryId = "01AAAAAAAAAAAAAAAAAAAAAAT1"
+        let noteId = "01AAAAAAAAAAAAAAAAAAAAAAT2"
+        store.diaryKeyHandler = { _, _, _ in .transient }
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(diaryId, diaryEnv), (noteId, noteEnv)])),
+            .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation)),
+        ]
+        await store.sync()
+        // The following note in the SAME page must not be processed this
+        // round — the cursor is a single high-water mark, so persisting it
+        // would let the reader skip past the still-unresolved diaryKey item.
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertNil(store.storage.lastSeenInboxId)
+        XCTAssertFalse(TestURLProtocol.requests.contains { $0.httpMethod == "DELETE" })
+    }
+    func testAnonymousDiaryKeyIsRejectedWithoutInvokingHandler() async throws {
+        let env = try sealAnonymousDiaryKey(text: "keyjson", recipient: try me.entry())
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAAN"
+        var handlerCalled = false
+        store.diaryKeyHandler = { _, _, _ in handlerCalled = true; return .installed }
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(id, env)])),
+            .init(status: 204, body: Data()),
+        ]
+        await store.sync()
+        XCTAssertFalse(handlerCalled)
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertEqual(TestURLProtocol.requests.last?.httpMethod, "DELETE")
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/inbox/\(id)")
+        XCTAssertEqual(store.storage.lastSeenInboxId, id)
+    }
+    func testDiaryKeyWithNoHandlerIsTransientWithoutDirectoryLookup() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAANH"
+        // store.diaryKeyHandler left nil (default).
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)]))]
+        await store.sync()
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertNil(store.storage.lastSeenInboxId)
+        XCTAssertEqual(TestURLProtocol.requests.count, 1)   // just the inbox page — no directory lookup, no delete
+    }
+    func testDiaryKeyWithMismatchedDirectoryKeyStillReachesHandlerUnverified() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAM1"
+        var receivedState: NoteSenderState?
+        store.diaryKeyHandler = { _, state, _ in receivedState = state; return .rejected }
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(id, env)])),
+            .init(status: 200, body: directoryJSON(signingKey: Data(repeating: 9, count: 32))),   // mismatched key
+            .init(status: 204, body: Data()),
+        ]
+        await store.sync()
+        XCTAssertEqual(receivedState, .unverified(accountId: "SENDR001"))
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertEqual(store.storage.lastSeenInboxId, id)
+    }
+
     func testSendLooksUpBundleSealsSolvesAndStores() async throws {
         let recipient = try RecipientFixture()   // someone else; we only need their public bundle
         let entry = try recipient.entry()
