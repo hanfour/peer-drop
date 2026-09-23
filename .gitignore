@@ -86,6 +86,7 @@ Gemfile.lock
 
 # Git worktrees
 .worktrees/
+.superpowers/
 
 # Fastlane screenshot backups
 fastlane/screenshots_framed_backup/
