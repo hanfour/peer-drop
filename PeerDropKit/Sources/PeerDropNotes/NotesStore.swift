@@ -228,12 +228,30 @@ public final class NotesStore: ObservableObject {
     private func decodeDiaryKey(_ plaintext: NotePlaintext, itemId: String, account: Account) async -> ItemOutcome {
         // Anonymous → rejected without ever invoking the handler: an
         // unsigned `diaryKey` plaintext carries no verifiable installer.
-        guard plaintext.sender != nil else { return .diaryKeyResolved }
+        guard let block = plaintext.sender else { return .diaryKeyResolved }
         // No handler registered (e.g. `DiaryStore` not wired up yet) →
         // transient, same as "this diary isn't local yet": retry later
         // rather than silently dropping a key relay.
         guard let diaryKeyHandler else { return .diaryKeyTransient }
-        let sender = await senderState(for: plaintext, account: account)
+        // Review round 4, I3: the directory lookup is run HERE rather than
+        // inside `senderState`, because a `diaryKey` item cannot afford that
+        // helper's deliberate conflation of "the directory says no such
+        // account / a different key" with "we couldn't reach the directory
+        // right now". Both collapse to `.unverified`, and the handler maps
+        // `.unverified` → `.rejected` → this round DELETEs the inbox item and
+        // advances the cursor. For a plain note that only costs a sender
+        // badge (and `reverifyUnverifiedSenders` repairs it later); for a key
+        // relay it destroys the only copy of the key — and the sender's own
+        // 24h `relayed.enc` dedupe means no re-relay for a day.
+        //
+        // So: a transient lookup failure returns `.diaryKeyTransient`
+        // WITHOUT calling the handler — the item stays on the server, the
+        // cursor doesn't advance, and the next sync retries it. `.notFound`
+        // and a key mismatch are permanent answers and still reach the
+        // handler as `.unverified` (→ rejected), exactly as before.
+        let lookup = await directoryLookup(for: block.accountId)
+        if case .failed = lookup { return .diaryKeyTransient }
+        let sender = Self.senderState(for: plaintext, block: block, account: account, lookup: lookup)
         switch await diaryKeyHandler(plaintext, sender, itemId) {
         case .installed, .rejected: return .diaryKeyResolved
         case .transient: return .diaryKeyTransient
@@ -249,12 +267,18 @@ public final class NotesStore: ObservableObject {
     /// waste lookups on a confirmed key mismatch.
     private func senderState(for plaintext: NotePlaintext, account: Account) async -> NoteSenderState {
         guard let block = plaintext.sender else { return .anonymous }
-        var sender: NoteSenderState = .unverified(accountId: block.accountId)
-        if case .found(let entry) = await directoryLookup(for: block.accountId),
+        return Self.senderState(for: plaintext, block: block, account: account, lookup: await directoryLookup(for: block.accountId))
+    }
+
+    /// The lookup-result → `NoteSenderState` half of the above, split out so
+    /// `decodeDiaryKey` can inspect the `DirectoryLookup` itself first (I3)
+    /// and still derive exactly the same state the note path would.
+    private static func senderState(for plaintext: NotePlaintext, block: NoteSenderBlock, account: Account, lookup: DirectoryLookup) -> NoteSenderState {
+        if case .found(let entry) = lookup,
            NoteCrypto.verifySender(plaintext, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
-            sender = .verified(accountId: block.accountId, nickname: entry.nickname)
+            return .verified(accountId: block.accountId, nickname: entry.nickname)
         }
-        return sender
+        return .unverified(accountId: block.accountId)
     }
 
     /// Distinguishes "the directory definitively has no such account" from

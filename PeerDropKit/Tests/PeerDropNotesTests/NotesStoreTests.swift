@@ -339,6 +339,59 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.storage.lastSeenInboxId, id)
     }
 
+    // MARK: - I3: a transient directory failure must never destroy a relayed key
+
+    /// The handler maps `.unverified` → `.rejected`, and this layer then
+    /// DELETEs the inbox item and advances the cursor — permanently
+    /// destroying the only copy of the relayed diary key (the sender's own
+    /// 24h dedupe means no re-relay for a day). So a lookup that merely
+    /// FAILED (network/429/500 — as opposed to a definitive "no such
+    /// account" or a key mismatch) must not be allowed to produce
+    /// `.unverified` at all: the item is kept, the cursor stays put, and
+    /// the handler is never invoked.
+    func testDiaryKeyWithATransientDirectoryFailureIsTransientAndNeverReachesTheHandler() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAD1"
+        var handlerCalled = false
+        store.diaryKeyHandler = { _, _, _ in handlerCalled = true; return .rejected }
+        // Only the inbox page is stubbed: the directory lookup falls through
+        // `TestURLProtocol`'s empty-queue default of a 500 — transient, not a 404.
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)]))]
+        await store.sync()
+        XCTAssertFalse(handlerCalled)
+        XCTAssertTrue(store.inbox.isEmpty)                                                  // never becomes a NoteRecord either way
+        XCTAssertNil(store.storage.lastSeenInboxId)                                         // cursor NOT advanced
+        XCTAssertFalse(TestURLProtocol.requests.contains { $0.httpMethod == "DELETE" })     // server-side item kept
+        XCTAssertEqual(TestURLProtocol.requests.count, 2)                                   // inbox page + the one failed lookup
+    }
+
+    /// The other half of the same split: a definitive 404 from the directory
+    /// is a permanent answer, so it still reaches the handler as
+    /// `.unverified` (→ rejected → delete + cursor advance), exactly as
+    /// before. The `.found`-and-matching case is covered by
+    /// `testDiaryKeyInstalledDeletesAndAdvancesCursorWithoutARecord` above
+    /// (and, on the handler side, by `DiaryStoreTests`'
+    /// `testAcceptRelayedKeyInstallsWhenSenderIsAVerifiedMemberAndTheKeyOpensMetaCipher`).
+    func testDiaryKeyWithADirectory404StillReachesTheHandlerUnverifiedAndIsDeleted() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "keyjson", recipient: try me.entry(), signer: sender.signer, kind: .diaryKey)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAD2"
+        var receivedState: NoteSenderState?
+        store.diaryKeyHandler = { _, state, _ in receivedState = state; return .rejected }
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try inboxJSON([(id, env)])),
+            .init(status: 404, body: Data(#"{"error":"not_found"}"#.utf8)),
+            .init(status: 204, body: Data()),
+        ]
+        await store.sync()
+        XCTAssertEqual(receivedState, .unverified(accountId: "SENDR001"))
+        XCTAssertTrue(store.inbox.isEmpty)
+        XCTAssertEqual(TestURLProtocol.requests.last?.httpMethod, "DELETE")
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/inbox/\(id)")
+        XCTAssertEqual(store.storage.lastSeenInboxId, id)
+    }
+
     func testSendLooksUpBundleSealsSolvesAndStores() async throws {
         let recipient = try RecipientFixture()   // someone else; we only need their public bundle
         let entry = try recipient.entry()
