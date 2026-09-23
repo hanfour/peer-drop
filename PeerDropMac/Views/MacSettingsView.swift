@@ -1,23 +1,31 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropSecurity  // for PeerIdentity
+import PeerDropNotes
 
 struct MacSettingsView: View {
     var body: some View {
         TabView {
             GeneralSettingsTab()
+                .frame(height: 420)
                 .tabItem { Label("General", systemImage: "gear") }
 
+            // Taller than the other tabs: Identity + Account + the
+            // Blocked Senders section (BlockListSection, Task 11) need
+            // the extra room, and a Mac Settings window resizes per tab.
             ProfileSettingsTab()
+                .frame(height: 620)
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
 
             RelaySettingsTab()
+                .frame(height: 420)
                 .tabItem { Label("Relay", systemImage: "network") }
 
             SupportSettingsTab()
+                .frame(height: 420)
                 .tabItem { Label("Support", systemImage: "heart.fill") }
         }
-        .frame(width: 520, height: 420)
+        .frame(width: 520)
     }
 }
 
@@ -94,6 +102,7 @@ private struct ProfileSettingsTab: View {
             }
 
             AccountSectionView(accountManager: connectionManager.accountManager)
+            BlockListSection(store: connectionManager.notesStore)
         }
         .formStyle(.grouped)
         .padding()

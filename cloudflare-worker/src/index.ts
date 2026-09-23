@@ -19,6 +19,8 @@ import {
 } from "./deviceToken";
 import type { TokenPayload } from "./deviceToken";
 import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
+import { verifyPoW } from "./pow";
+import { handleNotesRoute } from "./notes";
 
 export interface Env {
   // KV
@@ -29,6 +31,7 @@ export interface Env {
   SIGNALING_ROOM: DurableObjectNamespace;
   PREKEY_STORE: DurableObjectNamespace;
   DEVICE_INBOX: DurableObjectNamespace;
+  ACCOUNT_INBOX: DurableObjectNamespace;
   // D1
   ACCOUNTS_DB: D1Database;
   // Secrets
@@ -1511,6 +1514,20 @@ export default {
       return jsonResponse({ accountId, nickname, token, expiresInSeconds: 900 }, 201);
     }
 
+    // GET /v3/admin/reports — operator view of the report archive. Keyed by
+    // ANALYTICS_KEY (not an account token), so it must sit before the
+    // account-scoped /v3 dispatch below.
+    if (path === "/v3/admin/reports" && request.method === "GET") {
+      const denied = requireKey(request, env, "ANALYTICS_KEY");
+      if (denied) return denied;
+      const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
+      const limitRaw = parseInt(url.searchParams.get("limit") ?? "100", 10);
+      const limit = Math.min(Math.max(Number.isNaN(limitRaw) ? 100 : limitRaw, 1), 100);
+      const rows = (await env.ACCOUNTS_DB.prepare("SELECT id, reporter_account_id, sender_hash, inbox_item_id, reason, excerpt, created_at FROM reports WHERE created_at > ?1 ORDER BY created_at ASC LIMIT ?2").bind(since, limit)
+        .all<{ id: string; reporter_account_id: string; sender_hash: string; inbox_item_id: string; reason: string; excerpt: string | null; created_at: number }>()).results;
+      return jsonResponse({ reports: rows.map((r) => ({ id: r.id, reporterAccountId: r.reporter_account_id, senderHash: r.sender_hash, inboxItemId: r.inbox_item_id, reason: r.reason, excerpt: r.excerpt, createdAt: r.created_at })) });
+    }
+
     // /v3/* — account-scoped routes. Bearer device token, or the key lane
     // (`X-API-Key` + `X-Device-Id`) for surfaces without App Attest; never
     // `?token=` or `?apiKey=`. The key lane reaches only the read/
@@ -1700,6 +1717,9 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     ]);
     return new Response(null, { status: 204, headers: corsHeaders });
   }
+  const notesResp = await handleNotesRoute(request, url, path, env, auth, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) } });
+  if (notesResp) return notesResp;
+
   // GET /v3/directory/:handle[?bundle=1] — resolve a normalized account id
   // or nickname to its public directory entry. Rate limited per calling
   // account (not per target) at 30 lookups/min via KV
@@ -1894,28 +1914,6 @@ function requireKey(request: Request, env: Env, keyName: "API_KEY" | "ANALYTICS_
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
   return null;
-}
-
-// Proof-of-Work verification (matches client-side SHA256 hashcash)
-async function verifyPoW(challenge: string, proof: number, difficulty: number): Promise<boolean> {
-  const data = new TextEncoder().encode(challenge);
-  const proofBytes = new ArrayBuffer(8);
-  new DataView(proofBytes).setBigUint64(0, BigInt(proof), false); // big-endian
-  const combined = new Uint8Array(data.length + 8);
-  combined.set(data, 0);
-  combined.set(new Uint8Array(proofBytes), data.length);
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", combined));
-  let zeroBits = 0;
-  for (const byte of hash) {
-    if (byte === 0) {
-      zeroBits += 8;
-    } else {
-      zeroBits += Math.clz32(byte) - 24; // clz32 counts 32-bit leading zeros
-      break;
-    }
-    if (zeroBits >= difficulty) return true;
-  }
-  return zeroBits >= difficulty;
 }
 
 // ---------------------------------------------------------------------------
@@ -2194,3 +2192,5 @@ export class DeviceInbox {
     try { ws.close(1011, "error"); } catch { /* already closed */ }
   }
 }
+
+export { AccountInbox } from "./accountInbox";

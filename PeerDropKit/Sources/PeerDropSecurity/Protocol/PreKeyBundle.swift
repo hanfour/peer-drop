@@ -49,7 +49,7 @@ public struct SignedPreKey {
 }
 
 /// Wire-safe version of SignedPreKey (no private key)
-public struct PublicSignedPreKey: Codable {
+public struct PublicSignedPreKey: Codable, Equatable, Sendable {
     public let id: UInt32
     public let publicKey: Data
     public let signature: Data
@@ -113,7 +113,7 @@ public struct OneTimePreKey {
 }
 
 /// Wire-safe version (no private key)
-public struct PublicOneTimePreKey: Codable {
+public struct PublicOneTimePreKey: Codable, Equatable, Sendable {
     public let id: UInt32
     public let publicKey: Data
 

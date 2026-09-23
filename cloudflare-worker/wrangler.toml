@@ -47,6 +47,10 @@ class_name = "PreKeyStore"
 name = "DEVICE_INBOX"
 class_name = "DeviceInbox"
 
+[[durable_objects.bindings]]
+name = "ACCOUNT_INBOX"
+class_name = "AccountInbox"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalingRoom"]
@@ -58,3 +62,7 @@ new_sqlite_classes = ["PreKeyStore"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["DeviceInbox"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["AccountInbox"]

@@ -61,6 +61,24 @@ final class AccountClientTests: XCTestCase {
         XCTAssertEqual(sent?["signingKey"] as? String, Data(repeating: 2, count: 32).base64EncodedString())
         XCTAssertEqual(sent?["mailboxToken"] as? String, "mbx-tok")
     }
+    /// `preKeyBundle` travels through the exact same `JSONDecoder` as the
+    /// rest of `DirectoryEntry` (default date strategy = `.deferredToDate`,
+    /// matching `MailboxClient.registerPreKeys`'s plain `JSONEncoder()` on
+    /// the upload side) — pin that contract so a future date-strategy
+    /// change on either side is caught here instead of at runtime.
+    func testLookupWithBundleDecodesPreKeyBundle() async throws {
+        TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"accountId":"7K3MQ2ZD","nickname":null,"identityKey":"AAAA","signingKey":"AAAA","mailboxId":"abc","preKeyBundle":{"identityKey":"AAAA","signingKey":"AAAA","signedPreKey":{"id":7,"publicKey":"AAAA","signature":"AAAA","timestamp":700000000.5},"oneTimePreKey":{"id":41,"publicKey":"AAAA"},"signedPreKeyTimestamp":1700000000,"signedPreKeyTimestampSignature":"AAAA"}}"#.utf8))]
+        let entry = try await client.lookup(handle: "7K3MQ2ZD", includeBundle: true)
+        XCTAssertEqual(TestURLProtocol.requests[0].url?.query, "bundle=1")
+        XCTAssertEqual(entry?.preKeyBundle?.signedPreKey.id, 7)
+        XCTAssertEqual(entry?.preKeyBundle?.oneTimePreKey?.id, 41)
+        XCTAssertEqual(entry?.preKeyBundle?.signedPreKeyTimestamp, 1700000000)
+        XCTAssertEqual(entry?.preKeyBundle?.signedPreKey.timestamp, Date(timeIntervalSinceReferenceDate: 700000000.5))
+
+        TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"accountId":"7K3MQ2ZD","nickname":null,"identityKey":"AAAA","signingKey":"AAAA","mailboxId":"abc","preKeyBundle":{"identityKey":"AAAA","signingKey":"AAAA","signedPreKey":{"id":7,"publicKey":"AAAA","signature":"AAAA","timestamp":700000000.5},"oneTimePreKey":null,"signedPreKeyTimestamp":1700000000,"signedPreKeyTimestampSignature":"AAAA"}}"#.utf8))]
+        let entryNoOPK = try await client.lookup(handle: "7K3MQ2ZD", includeBundle: true)
+        XCTAssertNil(entryNoOPK?.preKeyBundle?.oneTimePreKey)
+    }
     func testSetNicknameNilSendsJsonNull() async throws {
         TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"nickname":null}"#.utf8))]
         let result = try await client.setNickname(nil)

@@ -46,7 +46,19 @@ public struct DirectoryEntry: Decodable, Equatable, Sendable {
     public let identityKey: Data
     public let signingKey: Data
     public let mailboxId: String
+    /// Present only for `lookup(handle:includeBundle: true)`; the worker
+    /// consumes one of the recipient's one-time pre-keys to produce it, so
+    /// callers must request it only when they are about to send.
+    public let preKeyBundle: FetchedPreKeyBundle?
+
+    public init(accountId: AccountID, nickname: String?, identityKey: Data, signingKey: Data, mailboxId: String, preKeyBundle: FetchedPreKeyBundle? = nil) {
+        self.accountId = accountId; self.nickname = nickname; self.identityKey = identityKey
+        self.signingKey = signingKey; self.mailboxId = mailboxId; self.preKeyBundle = preKeyBundle
+    }
 }
+
+/// Marker for "no body" requests and empty 2xx responses.
+public struct EmptyBody: Codable, Sendable { public init() {} }
 
 public enum AccountClientError: Error, Equatable {
     case unauthorized
@@ -104,17 +116,17 @@ public actor AccountClient {
     public func challenge(deviceId: String) async throws -> Data {
         struct Body: Encodable { let deviceId: String }
         struct R: Decodable { let nonce: String }
-        let r: R = try await send("POST", "v3/account/challenge", body: Body(deviceId: deviceId))
+        let r: R = try await request("POST", "v3/account/challenge", body: Body(deviceId: deviceId))
         guard let d = Data(base64Encoded: r.nonce), d.count == 32 else { throw AccountClientError.invalidResponse }
         return d
     }
 
     public func register(_ req: RegisterRequest) async throws -> RegisterResponse {
-        try await send("POST", "v3/account/register", body: req)
+        try await request("POST", "v3/account/register", body: req)
     }
 
     public func me() async throws -> MeResponse {
-        try await send("GET", "v3/account/me", body: Optional<Empty>.none)
+        try await request("GET", "v3/account/me", body: Optional<EmptyBody>.none)
     }
 
     public func setNickname(_ nickname: String?) async throws -> String? {
@@ -133,7 +145,7 @@ public actor AccountClient {
             }
         }
         struct R: Decodable { let nickname: String? }
-        let r: R = try await send("PUT", "v3/account/nickname", body: NicknameBody(nickname: nickname))
+        let r: R = try await request("PUT", "v3/account/nickname", body: NicknameBody(nickname: nickname))
         return r.nickname
     }
 
@@ -141,22 +153,29 @@ public actor AccountClient {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? handle
         let path = "v3/directory/\(escaped)" + (includeBundle ? "?bundle=1" : "")
         do {
-            return try await send("GET", path, body: Optional<Empty>.none)
+            return try await request("GET", path, body: Optional<EmptyBody>.none)
         } catch AccountClientError.http(404) {
             return nil
         }
     }
 
     public func deleteAccount() async throws {
-        let _: Empty = try await send("DELETE", "v3/account", body: Optional<Empty>.none)
+        let _: EmptyBody = try await request("DELETE", "v3/account", body: Optional<EmptyBody>.none)
     }
 
-    // MARK: - HTTP plumbing
+    // MARK: - HTTP plumbing (shared with NotesClient, which wraps an AccountClient)
 
-    private struct Empty: Codable {}
     private struct ErrorBody: Decodable { let error: String }
 
-    private func send<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, retrying: Bool = true) async throws -> R {
+    /// One JSON round trip with the account's auth applied, a single 401
+    /// retry after invalidating the device token, and the worker's error
+    /// codes mapped to `AccountClientError`. Pass `Optional<EmptyBody>.none`
+    /// for body-less requests; use `EmptyBody` as `R` for 204/empty replies.
+    public func request<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?) async throws -> R {
+        try await send(method, path, body: body, retrying: true)
+    }
+
+    private func send<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, retrying: Bool) async throws -> R {
         // `lookup` feeds a user-typed handle into `path`; percent-encoding
         // it can still leave a string URL(string:) rejects, and a force
         // unwrap there would crash the app on a malformed search rather
@@ -179,8 +198,8 @@ public actor AccountClient {
 
         switch http.statusCode {
         case 200...299:
-            if data.isEmpty, R.self == Empty.self {
-                return Empty() as! R
+            if data.isEmpty, R.self == EmptyBody.self {
+                return EmptyBody() as! R
             }
             let dec = JSONDecoder()
             dec.dataDecodingStrategy = .base64

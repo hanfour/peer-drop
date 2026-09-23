@@ -4,6 +4,7 @@ import PeerDropProtocol
 import PeerDropSecurity
 import PeerDropPlatform
 import PeerDropAccount
+import PeerDropNotes
 import Network
 import Combine
 import CryptoKit
@@ -344,6 +345,21 @@ public final class ConnectionManager: ObservableObject {
                     await DeviceTokenManager.shared.adopt(token: token, expiresInSeconds: ttl)
                 }
             })
+    }()
+
+    // MARK: - Notes (sub-project 2)
+
+    public private(set) lazy var notesStore: NotesStore = {
+        if ScreenshotModeProvider.shared.isActive {
+            let mock = ScreenshotModeProvider.shared.mockNotes
+            return NotesStore(mockInbox: mock.inbox, sent: mock.sent)
+        }
+        return NotesStore(
+            client: NotesClient(),
+            accountManager: accountManager,
+            crypto: LiveNotesCryptoContext(preKeyStore: preKeyStore),
+            storage: NotesStorage(directory: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(PeerDropPersistence.scopedKey("Notes"), isDirectory: true)))
     }()
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
@@ -1593,6 +1609,7 @@ public final class ConnectionManager: ObservableObject {
             // side effects) in that mode.
             if !ScreenshotModeProvider.shared.isActive {
                 Task { await accountManager.bootstrap() }
+                Task { await notesStore.sync() }
             }
             // Restart discovery when returning to foreground
             switch state {

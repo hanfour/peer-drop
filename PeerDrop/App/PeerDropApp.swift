@@ -76,6 +76,9 @@ struct PeerDropApp: App {
                 guard let userInfo = notification.userInfo else { return }
                 PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotePush)) { _ in
+                Task { await connectionManager.notesStore.sync() }
+            }
             .onReceive(policyStore.$current) { newPolicy in
                 // PR3 follow-up: re-snapshot `activePolicy` on every policy update so
                 // PR4's async worker fetch reaches the background-thread C4 prune path

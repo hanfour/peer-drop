@@ -210,6 +210,9 @@ struct PeerDropMacApp: App {
                     guard let userInfo = notification.userInfo else { return }
                     PushNotificationManager.shared.handleRemoteNotification(userInfo, inboxService: inboxService)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotePush)) { _ in
+                    Task { await connectionManager.notesStore.sync() }
+                }
                 .task {
                     // Round 5 audit fix: drain any APNs payloads buffered by
                     // MacAppDelegate before this scene mounted. Cold-launch
