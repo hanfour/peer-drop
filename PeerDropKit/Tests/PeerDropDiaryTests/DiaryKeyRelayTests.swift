@@ -7,7 +7,9 @@ import PeerDropAccount
 
 final class DiaryKeyRelayTests: XCTestCase {
     private var tempDir: URL!
+    private var encryptor: ChatDataEncryptor!
     private var keyStore: DiaryKeyStore!
+    private var relayStore: DiaryKeyRelayStore!
     private var notesClient: NotesClient!
     private var crypto: DiaryFakeCrypto!
     private var recipient: DiaryRecipientFixture!
@@ -16,7 +18,9 @@ final class DiaryKeyRelayTests: XCTestCase {
     override func setUp() async throws {
         TestURLProtocol.reset()
         tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        keyStore = DiaryKeyStore(directory: tempDir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)))
+        encryptor = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
+        keyStore = DiaryKeyStore(directory: tempDir, encryptor: encryptor)
+        relayStore = DiaryKeyRelayStore(directory: tempDir, encryptor: encryptor)
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [TestURLProtocol.self]
         let account = AccountClient(baseURL: URL(string: "https://worker.test")!, session: URLSession(configuration: cfg), authProvider: { _ in }, tokenInvalidator: {})
@@ -44,7 +48,7 @@ final class DiaryKeyRelayTests: XCTestCase {
     // MARK: - No local key / wrong key → no-op, no network
 
     func testNoLocalKeyIsANoOpWithNoNetworkCall() async {
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: "bWV0YQ==",
                                   senderAccountId: "SENDER01", senderNickname: "me")
         XCTAssertEqual(TestURLProtocol.requests.count, 0)
@@ -55,7 +59,7 @@ final class DiaryKeyRelayTests: XCTestCase {
         let wrongKey = SymmetricKey(size: .bits256)
         try keyStore.save(key: wrongKey, for: diaryId)
         let cipher = try metaCipher(key: realKey)   // sealed with a DIFFERENT key than what's saved
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher,
                                   senderAccountId: "SENDER01", senderNickname: "me")
         XCTAssertEqual(TestURLProtocol.requests.count, 0)
@@ -68,7 +72,7 @@ final class DiaryKeyRelayTests: XCTestCase {
         try keyStore.save(key: key, for: diaryId)
         let cipher = try metaCipher(key: key)
         try queueSuccessfulSend()
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
 
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher,
                                   senderAccountId: "SENDER01", senderNickname: "alice")
@@ -107,7 +111,7 @@ final class DiaryKeyRelayTests: XCTestCase {
         try keyStore.save(key: key, for: diaryId)
         let cipher = try metaCipher(key: key)
         var now = Date()
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, now: { now })
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore, now: { now })
 
         try queueSuccessfulSend()
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
@@ -123,7 +127,7 @@ final class DiaryKeyRelayTests: XCTestCase {
         try keyStore.save(key: key, for: diaryId)
         let cipher = try metaCipher(key: key)
         var now = Date()
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, now: { now })
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore, now: { now })
 
         try queueSuccessfulSend()
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
@@ -141,7 +145,7 @@ final class DiaryKeyRelayTests: XCTestCase {
         let key = SymmetricKey(size: .bits256)
         try keyStore.save(key: key, for: diaryId)
         let cipher = try metaCipher(key: key)
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
 
         try queueSuccessfulSend()
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
@@ -158,7 +162,7 @@ final class DiaryKeyRelayTests: XCTestCase {
         let key = SymmetricKey(size: .bits256)
         try keyStore.save(key: key, for: diaryId)
         let cipher = try metaCipher(key: key)
-        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
 
         TestURLProtocol.queue = [
             .init(status: 200, body: try recipient.directoryJSON()),
@@ -173,5 +177,41 @@ final class DiaryKeyRelayTests: XCTestCase {
         try queueSuccessfulSend()
         await relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
         XCTAssertEqual(TestURLProtocol.requests.count, 6)
+    }
+
+    // MARK: - Reentrancy (review round 1, I2): concurrent calls for the same pair send once
+
+    func testConcurrentRelayIfNeededForTheSamePairSendsExactlyOnce() async throws {
+        let key = SymmetricKey(size: .bits256)
+        try keyStore.save(key: key, for: diaryId)
+        let cipher = try metaCipher(key: key)
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
+        try queueSuccessfulSend()
+
+        async let first: Void = relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
+        async let second: Void = relay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
+        _ = await (first, second)
+
+        let sendCount = TestURLProtocol.requests.filter { $0.url?.path == "/v3/notes/\(recipient.accountId.raw)" }.count
+        XCTAssertEqual(sendCount, 1)
+    }
+
+    // MARK: - Persisted dedupe (review round 1, I3): survives a fresh instance
+
+    func testANewRelayInstanceOverTheSameDirectoryDoesNotResendWithinTwentyFourHours() async throws {
+        let key = SymmetricKey(size: .bits256)
+        try keyStore.save(key: key, for: diaryId)
+        let cipher = try metaCipher(key: key)
+        let firstRelay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
+        try queueSuccessfulSend()
+        await firstRelay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
+        XCTAssertEqual(TestURLProtocol.requests.count, 3)
+
+        // A brand-new `DiaryKeyRelay` (as after a relaunch — no in-memory
+        // state carries over) sharing only the same `relayStore`/directory
+        // must still see the persisted dedupe and NOT resend.
+        let secondRelay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
+        await secondRelay.relayIfNeeded(diaryId: diaryId, newMember: recipient.accountId.raw, metaCipher: cipher, senderAccountId: "SENDER01", senderNickname: nil)
+        XCTAssertEqual(TestURLProtocol.requests.count, 3)   // no new requests
     }
 }

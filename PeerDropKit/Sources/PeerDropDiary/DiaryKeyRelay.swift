@@ -1,55 +1,91 @@
 import Foundation
 import CryptoKit
+import PeerDropSecurity
 import PeerDropAccount
 import PeerDropNotes
+
+/// On-disk record of which `(diaryId, member)` pairs this device has
+/// already successfully relayed its content key to, and when —
+/// `<diaryId>/relayed.enc`, encrypted via `ChatDataEncryptor`. Fixes an
+/// in-memory-only dedupe re-relaying (and burning an OPK) on every relaunch
+/// (review round 1, I3). Plain synchronous methods — no actor of its own —
+/// so `DiaryKeyRelay` can call them without an extra suspension point ahead
+/// of its own in-flight guard.
+public final class DiaryKeyRelayStore {
+    private let directory: URL
+    private let encryptor: ChatDataEncryptor
+
+    public init(directory: URL, encryptor: ChatDataEncryptor) {
+        self.directory = directory
+        self.encryptor = encryptor
+    }
+
+    private struct RelayedFile: Codable { var members: [String: Date] }
+    private func url(_ diaryId: String) -> URL {
+        directory.appendingPathComponent(diaryId, isDirectory: true).appendingPathComponent("relayed.enc")
+    }
+
+    private func read(_ diaryId: String) -> [String: Date] {
+        guard let data = try? encryptor.readAndDecrypt(from: url(diaryId)) else { return [:] }
+        return (try? JSONDecoder().decode(RelayedFile.self, from: data))?.members ?? [:]
+    }
+
+    public func lastRelay(diaryId: String, member: String) -> Date? {
+        read(diaryId)[member]
+    }
+
+    public func recordRelay(diaryId: String, member: String, at date: Date) {
+        var members = read(diaryId)
+        members[member] = date
+        do {
+            try FileManager.default.createDirectory(at: url(diaryId).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try encryptor.encryptAndWrite(JSONEncoder().encode(RelayedFile(members: members)), to: url(diaryId))
+        } catch {
+            // Best-effort: a failed write just means this relay might
+            // repeat sooner than 24h next time — not worth surfacing as a
+            // hard failure on an otherwise-successful send.
+        }
+    }
+}
 
 /// Short-code key hand-off (spec §3.3): once a new member has joined a
 /// diary by short code alone, they have no content key. Every OTHER member
 /// device that DOES hold a working key relays it to them the next time it
 /// notices the new member's `join` event — driven entirely by
 /// `DiaryStore.sync`, which calls `relayIfNeeded` once per un-relayed
-/// `join` event it sees (§3.3 point 2). There is no persisted "already
-/// relayed" bookkeeping on the `DiaryStore` side — the 24h dedupe here is
-/// the only thing standing between "harmless repeat relay" and "OPK spam",
-/// and it is intentionally in-memory/per-process (a relaunch simply
-/// refetches/retries, same as `DirectoryCache`).
+/// `join` event it sees (§3.3 point 2). The 24h dedupe is persisted via
+/// `relayStore` (review round 1, I3) so a relaunch doesn't re-relay to
+/// every member it's already reached today.
 ///
-/// `actor`-isolated: the dedupe cache is mutable state that can be touched
+/// `actor`-isolated: mutable state (the in-flight guard) can be touched
 /// concurrently by `DiaryStore.sync(_:)` (per-diary, on every sync) and
 /// `DiaryStore.handlePush(kind: "diaryKeyRequest", ...)` (force bypass) —
-/// both `@MainActor` callers, so actor isolation here serializes access to
-/// the cache without pulling this whole type onto the main actor.
+/// both `@MainActor` callers, so actor isolation here serializes access
+/// without pulling this whole type onto the main actor.
 public actor DiaryKeyRelay {
     private let notesClient: NotesClient
     private let crypto: NotesCryptoContext
     private let keyStore: DiaryKeyStore
+    private let relayStore: DiaryKeyRelayStore
     private let now: () -> Date
 
-    /// `"<diaryId>:<member>"` → the moment of the last SUCCESSFUL (server
-    /// accepted) relay send. Written ONLY after `notesClient.send` actually
-    /// returns — never on a blocked/failed attempt (spec §3.3 point 4:
-    /// "去重鍵只在 POST 真正 201 後寫入"). That is what makes a worker-side
-    /// 403 (a caller that turns out not to be a member after all) or any
-    /// other failure retry-able on the very next sync instead of being
-    /// silently suppressed for a day.
-    private var lastSuccess: [String: Date] = [:]
+    /// `(diaryId, member)` pairs with a send currently in progress —
+    /// checked and inserted BEFORE the first `await` in `relayIfNeeded`, so
+    /// two overlapping calls for the same pair can never both pass the
+    /// dedupe check and both send (review round 1, I2). Cleared via
+    /// `defer` on every exit path.
+    private var inFlight: Set<String> = []
     private static let dedupeWindow: TimeInterval = 86_400
 
-    public init(notesClient: NotesClient, crypto: NotesCryptoContext, keyStore: DiaryKeyStore, now: @escaping () -> Date = Date.init) {
+    public init(notesClient: NotesClient, crypto: NotesCryptoContext, keyStore: DiaryKeyStore, relayStore: DiaryKeyRelayStore, now: @escaping () -> Date = Date.init) {
         self.notesClient = notesClient
         self.crypto = crypto
         self.keyStore = keyStore
+        self.relayStore = relayStore
         self.now = now
     }
 
     private static func dedupeKey(_ diaryId: String, _ member: String) -> String { "\(diaryId):\(member)" }
-
-    /// Test/diagnostic hook only — not used by production relay logic,
-    /// which never needs to ask "did I already send this" outside the
-    /// dedupe check itself.
-    func lastSuccessForTesting(diaryId: String, member: String) -> Date? {
-        lastSuccess[Self.dedupeKey(diaryId, member)]
-    }
 
     /// Hands this device's diary content key to `newMember`, if — and only
     /// if — every one of these holds:
@@ -57,8 +93,10 @@ public actor DiaryKeyRelay {
     /// - that key genuinely opens `metaCipher` (guards against relaying a
     ///   stale/wrong local key onward — spec §3.3 point 2's "本機有金鑰且
     ///   `openMeta` 成功"),
-    /// - `force` is true, or the 24h dedupe window for `(diaryId,
-    ///   newMember)` has elapsed.
+    /// - no send for this exact `(diaryId, newMember)` is already in
+    ///   flight, AND
+    /// - `force` is true, or the persisted 24h dedupe window for
+    ///   `(diaryId, newMember)` has elapsed.
     ///
     /// `senderAccountId`/`senderNickname` are THIS device's own identity —
     /// the relay is always signed, never anonymous (spec §3.3 point 2:
@@ -68,7 +106,8 @@ public actor DiaryKeyRelay {
     /// caller (`DiaryStore.sync`) already knows to retry on the next round,
     /// and nothing about a failed attempt should ever look like a "fake
     /// 201" to the rest of the system (spec §6: "封鎖造成的假 201 不會出
-    /// 現").
+    /// 現") — and, critically, nothing is written to `relayStore` except on
+    /// a genuine success.
     public func relayIfNeeded(
         diaryId: String, newMember: String, metaCipher: String,
         senderAccountId: String, senderNickname: String?, force: Bool = false
@@ -79,9 +118,16 @@ public actor DiaryKeyRelay {
         else { return }
 
         let dedupeKey = Self.dedupeKey(diaryId, newMember)
-        if !force, let last = lastSuccess[dedupeKey], now().timeIntervalSince(last) < Self.dedupeWindow {
+        // Both checks below run synchronously (no `await` yet reached in
+        // this call), so they and the `inFlight` insert happen atomically
+        // with respect to any other task queued on this actor — that's
+        // what makes the in-flight guard actually race-free.
+        guard !inFlight.contains(dedupeKey) else { return }
+        if !force, let last = relayStore.lastRelay(diaryId: diaryId, member: newMember), now().timeIntervalSince(last) < Self.dedupeWindow {
             return
         }
+        inFlight.insert(dedupeKey)
+        defer { inFlight.remove(dedupeKey) }
 
         guard let entry = try? await notesClient.lookup(handle: newMember, includeBundle: true), entry.preKeyBundle != nil else { return }
 
@@ -98,7 +144,7 @@ public actor DiaryKeyRelay {
             let challenge = try await notesClient.powChallenge()
             guard let nonce = await NoteProofOfWork.solve(challenge: challenge, recipientAccountId: entry.accountId.raw, envelopeBytes: bytes) else { return }
             _ = try await notesClient.send(to: entry.accountId.raw, envelopeBase64: bytes.base64EncodedString(), challenge: challenge, nonce: nonce, kind: "diaryKey", diaryId: diaryId)
-            lastSuccess[dedupeKey] = now()
+            relayStore.recordRelay(diaryId: diaryId, member: newMember, at: now())
         } catch {
             // No dedupe write on any failure — see the doc comment above.
         }

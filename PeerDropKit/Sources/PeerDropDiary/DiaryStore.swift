@@ -87,6 +87,11 @@ public final class DiaryStore: ObservableObject {
     private let relay: DiaryKeyRelay
     private let logCoordinator: DiaryLogCoordinator
     private let isMock: Bool
+    /// Per-diary reentrancy guard for `sync(_:)` (review round 1, I2) — a
+    /// second concurrent `sync` call for the SAME diary returns
+    /// immediately instead of racing the first (duplicate GET meta/events
+    /// pages, duplicate relay attempts).
+    private var syncing: Set<String> = []
 
     public init(
         client: DiaryClient, notesClient: NotesClient, accountManager: AccountManager, crypto: NotesCryptoContext,
@@ -100,7 +105,8 @@ public final class DiaryStore: ObservableObject {
         self.directory = directory
         self.encryptor = encryptor
         self.directoryCache = directoryCache
-        self.relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        self.relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore,
+                                   relayStore: DiaryKeyRelayStore(directory: directory, encryptor: encryptor))
         self.logCoordinator = DiaryLogCoordinator(encryptor: encryptor)
         self.isMock = false
         load()
@@ -127,7 +133,8 @@ public final class DiaryStore: ObservableObject {
         self.directory = tempDir
         self.encryptor = mockEncryptor
         self.directoryCache = DirectoryCache()
-        self.relay = DiaryKeyRelay(notesClient: self.notesClient, crypto: self.crypto, keyStore: self.keyStore)
+        self.relay = DiaryKeyRelay(notesClient: self.notesClient, crypto: self.crypto, keyStore: self.keyStore,
+                                   relayStore: DiaryKeyRelayStore(directory: tempDir, encryptor: mockEncryptor))
         self.logCoordinator = DiaryLogCoordinator(encryptor: mockEncryptor)
         self.isMock = true
         self.diaries = diaries
@@ -147,17 +154,18 @@ public final class DiaryStore: ObservableObject {
         }
     }
 
-    /// Discovers diaries this account has joined/created that aren't in the
-    /// local index yet (e.g. this device missed the `create`/`join` call
-    /// that would normally have added them) and pulls each one's full
-    /// state via `sync(_:)`. Diaries already known locally are left to
-    /// their own explicit `sync(_:)` calls.
+    /// Refreshes EVERY diary this account belongs to (≤ 20 — review round
+    /// 1, I5: this used to only pull state for diaries not yet known
+    /// locally, so an already-known diary's turn order/events went stale
+    /// forever unless something else happened to call `sync(_:)` for it).
+    /// `client.list()` is the full membership list, so a plain `sync` per
+    /// row covers both "discover a diary this device missed create/join
+    /// for" and "refresh one it already knows about".
     public func syncList() async {
         guard !isMock else { return }
         do {
             let rows = try await client.list()
-            let known = Set(readIndex())
-            for row in rows where !known.contains(row.diaryId) {
+            for row in rows {
                 await sync(row.diaryId)
             }
             lastError = nil
@@ -176,8 +184,21 @@ public final class DiaryStore: ObservableObject {
     /// `logCoordinator`, off the main actor. After reconciling, relays this
     /// device's key (if it has one) to every member whose `join` event is
     /// visible and not within the relay's own 24h dedupe window.
+    ///
+    /// Guarded against reentrancy per diary (review round 1, I2): a second
+    /// concurrent call for the same `id` returns immediately rather than
+    /// racing the first. Also flushes any previously-stuck pending write
+    /// FIRST (round 1, C1), and uses a persisted, GET-driven-only cursor —
+    /// never the event log's own `maxSeq` — for `since` (round 1, C2; see
+    /// `readCursor`/`writeCursor`'s doc).
     public func sync(_ id: String) async {
         guard !isMock else { return }
+        guard !syncing.contains(id) else { return }
+        syncing.insert(id)
+        defer { syncing.remove(id) }
+
+        await flushPendingIfPossible(id: id)
+
         do {
             let meta = try await client.get(id)
             let key = keyStore.key(for: id)
@@ -192,12 +213,23 @@ public final class DiaryStore: ObservableObject {
             addToIndex(id)
 
             let logURL = eventsLogURL(id)
-            var since = await logCoordinator.load(url: logURL).maxSeq
+            var since = readCursor(id)
             while true {
                 let (events, nextSince) = try await client.events(id: id, since: since, limit: 100)
                 for event in events {
                     let decoded = withDecodedPayload(event, id: id, key: key)
                     await logCoordinator.append(decoded, url: logURL)
+                }
+                // The cursor only ever advances via THIS paged, contiguous
+                // fetch — never via a write's own `performWrite`/
+                // `sendPendingEvent` append, which can land arbitrarily far
+                // ahead (e.g. seq 16 while a gap of 11–15 from other
+                // members hasn't been synced yet). Advancing here, after
+                // every page, keeps a long paginated catch-up resumable
+                // even if it's interrupted partway through.
+                if let maxFetched = events.map(\.seq).max() {
+                    since = maxFetched
+                    writeCursor(id, since)
                 }
                 guard let next = nextSince, next != since else { break }
                 since = next
@@ -220,6 +252,22 @@ public final class DiaryStore: ObservableObject {
         }
     }
 
+    /// Best-effort resend of a previously-stuck pending event, run at the
+    /// top of every `sync(_:)` (review round 1, C1) so a device coming
+    /// back online doesn't have to wait for the next explicit write action
+    /// to clear a `.transient` pending event. Failures here never abort
+    /// the rest of `sync` — the GET-meta/events reconciliation below is
+    /// still worth doing regardless of whether the flush succeeded.
+    private func flushPendingIfPossible(id: String) async {
+        guard let pending = readPendingEvent(id) else { return }
+        do {
+            _ = try await sendPendingEvent(id: id, pending: pending)
+            lastError = nil
+        } catch {
+            lastError = String(describing: Self.mapError(error))
+        }
+    }
+
     // MARK: - Create
 
     /// Generates the `diaryId` (client ULID) and content key, seals the
@@ -230,11 +278,25 @@ public final class DiaryStore: ObservableObject {
     /// rather than minting a new one on the next call — the worker's own
     /// create route is idempotent by `diaryId` for exactly this reason.
     public func create(name: String) async throws -> String {
+        guard !isMock else { throw DiaryError.network("mock") }
         guard let myId = accountManager.account?.accountId.raw else { throw DiaryError.network("no_account") }
 
+        // A stuck pending create is only resumable for the SAME name
+        // (review round 1, I1) — the marker's `diaryId`/`metaCipher` were
+        // sealed for whatever name the FIRST attempt asked for, so
+        // resuming it for a different name would silently return a diary
+        // sealed with the wrong name. Abandon it (and its key — nothing
+        // else will ever reference that id) and mint fresh material.
+        var existingPending = readPendingCreate()
+        if let existing = existingPending, existing.name != name {
+            try? keyStore.removeKey(for: existing.diaryId)
+            clearPendingCreate()
+            existingPending = nil
+        }
+
         let pending: PendingCreate
-        if let existing = readPendingCreate() {
-            pending = existing
+        if let existingPending {
+            pending = existingPending
         } else {
             let diaryId = DiaryULID.generate()
             let key = SymmetricKey(size: .bits256)
@@ -299,7 +361,8 @@ public final class DiaryStore: ObservableObject {
     /// open `metaCipher` (or is absent) just leaves the diary in the
     /// `pendingKey` state, eligible for a later relay (§3.3).
     public func join(link: URL) async throws -> String {
-        let parsed = try Self.parseDiaryLink(link)
+        guard !isMock else { throw DiaryError.network("mock") }
+        guard let parsed = DiaryInviteLink.parse(link) else { throw DiaryError.badId }
         return try await performJoin(diaryId: parsed.diaryId, code: parsed.code, key: parsed.key)
     }
 
@@ -307,6 +370,7 @@ public final class DiaryStore: ObservableObject {
     /// diary always starts `pendingKey` until some other member's device
     /// relays the key (spec §3.3).
     public func join(code: String) async throws -> String {
+        guard !isMock else { throw DiaryError.network("mock") }
         do {
             let meta = try await client.joinByCode(code)
             persistMeta(meta.diaryId, meta)
@@ -349,6 +413,7 @@ public final class DiaryStore: ObservableObject {
     // MARK: - Leave / close
 
     public func leave(_ id: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         do {
             try await client.leave(id)
             removeFromIndex(id)
@@ -363,6 +428,7 @@ public final class DiaryStore: ObservableObject {
     }
 
     public func close(_ id: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         do {
             try await client.close(id)
             if let meta = readMeta(id) {
@@ -385,6 +451,7 @@ public final class DiaryStore: ObservableObject {
 
     /// Requires a working local key — an entry can't be sealed without one.
     public func writeEntry(_ id: String, text: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         guard let key = keyStore.key(for: id) else { throw DiaryError.noKey }
         guard let myId = accountManager.account?.accountId.raw else { throw DiaryError.network("no_account") }
         try await performWrite(id: id, type: .entry, refSeq: nil) { eventId in
@@ -394,14 +461,17 @@ public final class DiaryStore: ObservableObject {
     }
 
     public func pass(_ id: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         try await performWrite(id: id, type: .pass, refSeq: nil, seal: nil)
     }
 
     public func skip(_ id: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         try await performWrite(id: id, type: .skip, refSeq: nil, seal: nil)
     }
 
     public func comment(_ id: String, seq: Int, text: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         guard let key = keyStore.key(for: id) else { throw DiaryError.noKey }
         guard let myId = accountManager.account?.accountId.raw else { throw DiaryError.network("no_account") }
         try await performWrite(id: id, type: .comment, refSeq: seq) { eventId in
@@ -411,71 +481,83 @@ public final class DiaryStore: ObservableObject {
     }
 
     public func like(_ id: String, seq: Int) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         try await performWrite(id: id, type: .like, refSeq: seq, seal: nil)
     }
 
-    /// Shared write path for every `POST /events` type (spec §5.1): write
-    /// `pending.enc` (fixed `eventId`) → POST → on success, fetch the event
-    /// back from the server (never synthesize it locally) → append to the
-    /// log → clear pending. A previous unresolved pending event (only
-    /// possible after a `.transient` failure — anything else clears it
-    /// immediately) is always resent FIRST, ahead of the newly-requested
-    /// write, since only one pending event is ever kept per diary and the
-    /// worker's `POST /events` idempotency-by-`eventId` is exactly what
-    /// makes resending it safe (a prior attempt may have partially
-    /// succeeded server-side despite the client seeing a 5xx — spec §2.2:
-    /// "D1 寫入必須成功才回 2xx").
+    /// Shared write path for every `POST /events` type (spec §5.1).
+    ///
+    /// Review round 1, C1: a previously-stuck pending event (only possible
+    /// after an earlier `.transient` failure — anything else clears it
+    /// immediately) is ALWAYS resolved FIRST, as its OWN complete POST +
+    /// server-fetch, before this call's actual request is even sealed. The
+    /// two must never be conflated: the old bug resent the STUCK event and
+    /// reported success while silently discarding the caller's new text.
+    /// - If that resend still fails `.transient`, this call aborts
+    ///   entirely — `pending.enc` is untouched (still the OLD event), and
+    ///   `DiaryError.transient("pending")` is thrown so the caller's new
+    ///   text is never lost (it was never sealed/sent at all; the caller
+    ///   still has it and can retry).
+    /// - Any other resend failure clears `pending.enc` and this call falls
+    ///   through to attempt its OWN request as a fresh write.
+    /// - A successful resend clears `pending.enc` and this call proceeds
+    ///   with its own request as a SECOND, independent `POST /events`.
+    ///
+    /// Only after the above is the NEW pending event built (fresh
+    /// `eventId`, sealed with THIS call's `type`/`refSeq`/`seal`), written
+    /// to `pending.enc`, and sent — same success/failure handling as
+    /// above. The worker's `POST /events` idempotency-by-`eventId` is what
+    /// makes resending an old pending event (rather than discarding it)
+    /// safe: a prior attempt may have partially succeeded server-side
+    /// despite the client seeing a 5xx (spec §2.2: "D1 寫入必須成功才回
+    /// 2xx").
     @discardableResult
     private func performWrite(id: String, type: DiaryEventType, refSeq: Int?, seal: ((String) throws -> String)? = nil) async throws -> DiaryEvent {
+        guard !isMock else { throw DiaryError.network("mock") }
         guard readMeta(id) != nil else { throw DiaryError.notFound }
 
-        let toSend: PendingEvent
-        if let existing = readPendingEvent(id) {
-            toSend = existing
-        } else {
-            let eventId = DiaryULID.generate()
-            var payloadCipher: String?
-            if let seal {
-                do {
-                    payloadCipher = try seal(eventId)
-                } catch DiaryCryptoError.oversized {
-                    let err = DiaryError.tooLarge
-                    lastError = String(describing: err)
-                    throw err
-                } catch {
-                    let err = DiaryError.network(String(describing: error))
-                    lastError = String(describing: err)
-                    throw err
-                }
-            }
-            let fresh = PendingEvent(eventId: eventId, type: type, refSeq: refSeq, payloadCipher: payloadCipher)
+        if let existingPending = readPendingEvent(id) {
             do {
-                try writePendingEvent(id, fresh)
+                _ = try await sendPendingEvent(id: id, pending: existingPending)
+                lastError = nil
             } catch {
-                let err = DiaryError.network("persist_failed")
+                let diaryError = Self.mapError(error)
+                lastError = String(describing: diaryError)
+                if case .transient = diaryError {
+                    throw DiaryError.transient("pending")
+                }
+                clearPendingEvent(id)
+            }
+        }
+
+        let eventId = DiaryULID.generate()
+        var payloadCipher: String?
+        if let seal {
+            do {
+                payloadCipher = try seal(eventId)
+            } catch DiaryCryptoError.oversized {
+                let err = DiaryError.tooLarge
+                lastError = String(describing: err)
+                throw err
+            } catch {
+                let err = DiaryError.network(String(describing: error))
                 lastError = String(describing: err)
                 throw err
             }
-            toSend = fresh
+        }
+        let fresh = PendingEvent(eventId: eventId, type: type, refSeq: refSeq, payloadCipher: payloadCipher)
+        do {
+            try writePendingEvent(id, fresh)
+        } catch {
+            let err = DiaryError.network("persist_failed")
+            lastError = String(describing: err)
+            throw err
         }
 
         do {
-            let r = try await client.postEvent(id: id, eventId: toSend.eventId, type: toSend.type, refSeq: toSend.refSeq, payloadCipher: toSend.payloadCipher)
-            let fetched = try await client.event(id: id, seq: r.seq)
-            let decoded = withDecodedPayload(fetched, id: id, key: keyStore.key(for: id))
-            await logCoordinator.append(decoded, url: eventsLogURL(id))
-            clearPendingEvent(id)
-
-            var events = states[id]?.events ?? []
-            events.removeAll { $0.seq == decoded.seq }
-            events.append(decoded)
-            events.sort { $0.seq < $1.seq }
-
-            if let updatedMeta = applyPostResult(id: id, seq: r.seq, holderIndex: r.holderIndex) {
-                refreshSummary(id: id, meta: updatedMeta, events: events)
-            }
+            let event = try await sendPendingEvent(id: id, pending: fresh)
             lastError = nil
-            return decoded
+            return event
         } catch {
             let diaryError = Self.mapError(error)
             lastError = String(describing: diaryError)
@@ -488,9 +570,47 @@ public final class DiaryStore: ObservableObject {
         }
     }
 
+    /// POSTs one pending event, fetches the canonical event back from the
+    /// server (never synthesized locally), appends it to the log, and
+    /// clears `pending.enc` — all only on SUCCESS; on failure this rethrows
+    /// without touching `pending.enc`, leaving the caller (`performWrite`
+    /// or `flushPendingIfPossible`) to decide whether to keep or clear it.
+    ///
+    /// Advances the persisted sync cursor (`syncedThrough`) ONLY when the
+    /// fetched event is exactly the next contiguous seq (review round 1,
+    /// C2): a write can land far ahead of what a paged `sync(_:)` has seen
+    /// (e.g. this device posts seq 16 while other members' seq 11–15
+    /// haven't been synced yet) — advancing the cursor there would
+    /// permanently skip 11–15 on every future sync (and, with it, any
+    /// `join` event in that range that should have driven a key relay).
+    @discardableResult
+    private func sendPendingEvent(id: String, pending: PendingEvent) async throws -> DiaryEvent {
+        let r = try await client.postEvent(id: id, eventId: pending.eventId, type: pending.type, refSeq: pending.refSeq, payloadCipher: pending.payloadCipher)
+        let fetched = try await client.event(id: id, seq: r.seq)
+        let decoded = withDecodedPayload(fetched, id: id, key: keyStore.key(for: id))
+        await logCoordinator.append(decoded, url: eventsLogURL(id))
+        clearPendingEvent(id)
+
+        let cursor = readCursor(id)
+        if decoded.seq == cursor + 1 {
+            writeCursor(id, decoded.seq)
+        }
+
+        var events = states[id]?.events ?? []
+        events.removeAll { $0.seq == decoded.seq }
+        events.append(decoded)
+        events.sort { $0.seq < $1.seq }
+
+        if let updatedMeta = applyPostResult(id: id, seq: r.seq, holderIndex: r.holderIndex) {
+            refreshSummary(id: id, meta: updatedMeta, events: events)
+        }
+        return decoded
+    }
+
     // MARK: - Key request / relay hookup
 
     public func requestKey(_ id: String) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         do {
             try await client.requestKey(id)
             lastError = nil
@@ -502,17 +622,24 @@ public final class DiaryStore: ObservableObject {
     }
 
     /// Called for every diary push (spec §4): always re-syncs; a
-    /// `diaryKeyRequest` push additionally force-relays to every member the
-    /// currently-known `join` events name, bypassing the relay's 24h
-    /// dedupe (the requester explicitly asked again). The push payload
-    /// itself doesn't need to (and per this store's interface doesn't)
-    /// carry which member asked — a forced re-relay to everyone is a safe,
-    /// bounded superset (≤ 11 other members).
-    public func handlePush(kind: String, diaryId: String) async {
+    /// `diaryKeyRequest` push additionally force-relays, bypassing the
+    /// relay's 24h dedupe (the requester explicitly asked again).
+    /// `accountId` (review round 1, I4) — when the push carries the
+    /// specific member who asked (`{type:"diaryKeyRequest", diaryId,
+    /// accountId}`, spec §4) — targets the relay at exactly that member
+    /// instead of force-relaying to every `join` event's author; passing
+    /// `nil` keeps the previous fan-out-to-everyone behavior.
+    public func handlePush(kind: String, diaryId: String, accountId: String? = nil) async {
         await sync(diaryId)
         guard kind == "diaryKeyRequest", let myId = accountManager.account?.accountId.raw,
               let meta = readMeta(diaryId) else { return }
         let myNickname = accountManager.account?.nickname
+        if let accountId {
+            await relay.relayIfNeeded(
+                diaryId: diaryId, newMember: accountId, metaCipher: meta.metaCipher,
+                senderAccountId: myId, senderNickname: myNickname, force: true)
+            return
+        }
         let events = states[diaryId]?.events ?? []
         for event in events where event.type == .join && event.authorAccountId != myId {
             await relay.relayIfNeeded(
@@ -537,6 +664,13 @@ public final class DiaryStore: ObservableObject {
         guard let jsonData = plaintext.text.data(using: .utf8),
               let payload = try? JSONDecoder().decode(RelayPayload.self, from: jsonData)
         else { return .rejected }
+
+        // `payload.diaryId` is attacker-controlled (it comes straight out
+        // of a note's decrypted text) and is about to be used to build a
+        // file path (`diaryDir(id)`/`metaURL(id)`) — validate its shape
+        // BEFORE that happens (review round 1, minor), same pattern
+        // `DiaryClient` already enforces for every id it embeds in a URL.
+        guard payload.diaryId.range(of: Self.diaryIdPattern, options: .regularExpression) != nil else { return .rejected }
 
         guard let meta = readMeta(payload.diaryId) else { return .transient }
 
@@ -574,6 +708,7 @@ public final class DiaryStore: ObservableObject {
     public static let maxExcerptScalars = 1_000
 
     public func report(_ id: String, seq: Int, reason: ReportReason, includeText: Bool) async throws {
+        guard !isMock else { throw DiaryError.network("mock") }
         var excerpt: String?
         if includeText {
             let events: [DiaryEvent] = states[id]?.events ?? []
@@ -659,28 +794,12 @@ public final class DiaryStore: ObservableObject {
         error as? DiaryError ?? .network(String(describing: error))
     }
 
-    // MARK: - Deep link parsing
-
-    /// `peerdrop://diary/<diaryId>?code=<inviteCode>#k=<base64url key>`.
-    /// Throws only for a structurally invalid link (wrong host, missing
-    /// id, missing/empty code) — those are needed just to CALL the join
-    /// API. A missing or malformed key fragment resolves to `key: nil`
-    /// rather than throwing (spec: the fragment never reaches the server,
-    /// so it must never be able to block the join itself — a bad key
-    /// degrades to the `pendingKey` state instead, see `performJoin`).
-    nonisolated static func parseDiaryLink(_ url: URL) throws -> (diaryId: String, code: String, key: Data?) {
-        guard url.host == "diary" else { throw DiaryError.badId }
-        let diaryId = url.pathComponents.first { $0 != "/" } ?? ""
-        guard !diaryId.isEmpty else { throw DiaryError.badId }
-        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let code = comps.queryItems?.first(where: { $0.name == "code" })?.value, !code.isEmpty
-        else { throw DiaryError.badCode }
-        var key: Data?
-        if let fragment = url.fragment, fragment.hasPrefix("k=") {
-            key = Data(base64URLEncoded: String(fragment.dropFirst(2)))
-        }
-        return (diaryId, code, key)
-    }
+    /// Same shape `DiaryClient`'s own path validation enforces
+    /// (`^[0-9A-HJKMNP-TV-Z]{26}$`) — duplicated here (rather than reused,
+    /// since `DiaryClient`'s copy is private to that file) for
+    /// `acceptRelayedKey` to validate an attacker-controlled `diaryId`
+    /// BEFORE it's used to build a file path.
+    private static let diaryIdPattern = "^[0-9A-HJKMNP-TV-Z]{26}$"
 
     // MARK: - Disk layout
 
@@ -688,8 +807,31 @@ public final class DiaryStore: ObservableObject {
     private func metaURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("meta.enc") }
     private func eventsLogURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("events.log") }
     private func pendingEventURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("pending.enc") }
+    private func cursorURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("cursor.enc") }
     private var indexURL: URL { directory.appendingPathComponent("index.enc") }
     private var pendingCreateURL: URL { directory.appendingPathComponent("pending-create.enc") }
+
+    /// The highest `seq` this device has confirmed via a CONTIGUOUS,
+    /// paged `GET /events?since=` fetch (review round 1, C2) — deliberately
+    /// NOT the event log's own `maxSeq`, which a write's own
+    /// `sendPendingEvent` can push arbitrarily far ahead of what's
+    /// actually been synced, opening a permanent gap. 0 (never synced)
+    /// when no cursor file exists yet.
+    private struct CursorFile: Codable { var syncedThrough: Int }
+
+    private func readCursor(_ id: String) -> Int {
+        guard let data = try? encryptor.readAndDecrypt(from: cursorURL(id)) else { return 0 }
+        return (try? JSONDecoder().decode(CursorFile.self, from: data))?.syncedThrough ?? 0
+    }
+
+    private func writeCursor(_ id: String, _ value: Int) {
+        do {
+            try FileManager.default.createDirectory(at: diaryDir(id), withIntermediateDirectories: true)
+            try encryptor.encryptAndWrite(JSONEncoder().encode(CursorFile(syncedThrough: value)), to: cursorURL(id))
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
 
     private func readMeta(_ id: String) -> DiaryMeta? {
         guard let data = try? encryptor.readAndDecrypt(from: metaURL(id)) else { return nil }
@@ -806,20 +948,16 @@ enum DiaryULID {
             t /= 32
         }
         var randomBytes = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        // Check the actual status (review round 1, minor) instead of
+        // ignoring it — `SecRandomCopyBytes` CAN fail (however rarely), and
+        // silently proceeding with an all-zero buffer would collapse every
+        // id minted in the same millisecond to the same random suffix.
+        let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if status != errSecSuccess {
+            var rng = SystemRandomNumberGenerator()
+            for i in randomBytes.indices { randomBytes[i] = UInt8.random(in: 0...255, using: &rng) }
+        }
         let randomChars = randomBytes.map { alphabet[Int($0) % 32] }
         return String(timeChars) + String(randomChars)
-    }
-}
-
-private extension Data {
-    /// Base64url (RFC 4648 §5) decode — the diary invite link's `#k=`
-    /// fragment uses this alphabet (URL-safe, no padding required in the
-    /// link itself).
-    init?(base64URLEncoded string: String) {
-        var base64 = string.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        while base64.count % 4 != 0 { base64.append("=") }
-        guard let data = Data(base64Encoded: base64) else { return nil }
-        self = data
     }
 }

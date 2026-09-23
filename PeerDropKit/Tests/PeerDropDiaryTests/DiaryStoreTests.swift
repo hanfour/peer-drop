@@ -105,6 +105,19 @@ final class DiaryStoreTests: XCTestCase {
             .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }
 
+    /// `DiaryStore.PendingEvent` is private to `DiaryStore.swift` — this is
+    /// a structurally-identical decode target so tests can read
+    /// `pending.enc` directly off disk (review round 1, minor: tests that
+    /// actually inspect the file, not just infer its contents indirectly
+    /// via a resend).
+    private struct DirectPendingEvent: Codable, Equatable { let eventId: String; let type: DiaryEventType; let refSeq: Int?; let payloadCipher: String? }
+
+    private func readPendingEventDirectly(_ diaryId: String) -> DirectPendingEvent? {
+        let url = dir.appendingPathComponent(diaryId, isDirectory: true).appendingPathComponent("pending.enc")
+        guard let data = try? encryptor.readAndDecrypt(from: url) else { return nil }
+        return try? JSONDecoder().decode(DirectPendingEvent.self, from: data)
+    }
+
     // MARK: - init(mock:states:) touches no network/disk
 
     func testMockInitTouchesNoNetworkOrDisk() {
@@ -374,9 +387,75 @@ final class DiaryStoreTests: XCTestCase {
         XCTAssertEqual(state.events.map(\.type), [.comment, .like])
     }
 
-    // MARK: - pending: 403 clears it, .transient keeps it (same eventId resent)
+    // MARK: - pending: a stuck pending event is resolved FIRST, never silently swallowed (review round 1, C1)
 
-    func testTransientFailureKeepsPendingAndResendsTheSameEventId() async throws {
+    /// A stuck pending `pass` is resent as its OWN complete POST + fetch
+    /// BEFORE the caller's actual request (a new `writeEntry`) is even
+    /// sealed — two independent POSTs, in order, and the entry's text is
+    /// genuinely what got sealed and sent (the pre-fix bug silently
+    /// dropped it while reporting success for the stale `pass` instead).
+    func testPendingPassPlusNewEntryPostsBothInOrderAndSealsTheEntrysOwnText() async throws {
+        let diaryId = try await createDiary()
+
+        // Get a `pass` stuck in `pending.enc` via a transient failure.
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            try await store.pass(diaryId)
+            XCTFail("expected .transient")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("http_500"))
+        }
+        let stuckEventId = body(TestURLProtocol.requests.count - 1)["eventId"] as! String
+
+        // Now request something ELSE entirely — writeEntry.
+        TestURLProtocol.queue = [
+            .init(status: 201, body: Data(#"{"seq":1,"holderIndex":0}"#.utf8)),   // resend of the stuck pass
+            .init(status: 200, body: Data(#"""
+            {"events":[{"seq":1,"eventId":"PASSLANDED","type":"pass","authorAccountId":"0WNER001","createdAt":1700000000000}]}
+            """#.utf8)),
+            .init(status: 201, body: Data(#"{"seq":2,"holderIndex":0}"#.utf8)),   // the NEW entry
+            .init(status: 200, body: Data(#"""
+            {"events":[{"seq":2,"eventId":"ENTRYLANDED","type":"entry","authorAccountId":"0WNER001","payloadCipher":"REPLACED","createdAt":1700000001000}]}
+            """#.utf8)),
+        ]
+        try await store.writeEntry(diaryId, text: "hello from the new write")
+
+        // Requests, in order: create POST, failed pass POST(500), pass
+        // resend POST, pass GET-event (no body), entry POST, entry
+        // GET-event (no body) — 6 total. `body(_:)` can't be called on a
+        // GET (empty httpBody), so index the two POSTs by their position
+        // relative to the end.
+        XCTAssertEqual(TestURLProtocol.requests.count, 6)
+        let passResendPostIndex = TestURLProtocol.requests.count - 4
+        let entryPostIndex = TestURLProtocol.requests.count - 2
+        XCTAssertEqual(TestURLProtocol.requests[passResendPostIndex].httpMethod, "POST")
+        XCTAssertEqual(TestURLProtocol.requests[entryPostIndex].httpMethod, "POST")
+
+        let firstPostType = body(passResendPostIndex)["type"] as? String
+        let firstPostEventId = body(passResendPostIndex)["eventId"] as? String
+        let secondPostType = body(entryPostIndex)["type"] as? String
+        XCTAssertEqual(firstPostType, "pass")
+        XCTAssertEqual(firstPostEventId, stuckEventId)   // the STUCK pass, resent unchanged
+        XCTAssertEqual(secondPostType, "entry")
+
+        // The entry's OWN text was genuinely sealed for the NEW eventId —
+        // not skipped, not the stuck pass's payload.
+        let entryPayloadCipher = body(entryPostIndex)["payloadCipher"] as! String
+        let key = try XCTUnwrap(keyStore.key(for: diaryId))
+        let sealedData = try XCTUnwrap(Data(base64Encoded: entryPayloadCipher))
+        let sentEventId = body(entryPostIndex)["eventId"] as! String
+        let opened = try DiaryCrypto.open(sealedData, key: key, diaryId: diaryId, authorAccountId: myAccountId.raw, eventId: sentEventId, maxScalars: DiaryCrypto.maxEntryScalars)
+        XCTAssertEqual(opened.text, "hello from the new write")
+
+        let state = try XCTUnwrap(store.states[diaryId])
+        XCTAssertEqual(Set(state.events.map(\.eventId)), Set(["PASSLANDED", "ENTRYLANDED"]))
+    }
+
+    /// If the stuck pending event is STILL `.transient` on resend, the new
+    /// write never happens at all — the caller's new text is never
+    /// sealed/sent (it's simply never attempted), and `pending.enc` still
+    /// holds the ORIGINAL stuck event, untouched.
+    func testPendingStillTransientThrowsAndLeavesTheOriginalPendingEventInPlace() async throws {
         let diaryId = try await createDiary()
 
         TestURLProtocol.queue = [.init(status: 500, body: Data())]
@@ -386,17 +465,24 @@ final class DiaryStoreTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? DiaryError, .transient("http_500"))
         }
-        let firstEventId = body(TestURLProtocol.requests.count - 1)["eventId"] as! String
+        let stuckEventId = body(TestURLProtocol.requests.count - 1)["eventId"] as! String
 
-        TestURLProtocol.queue = [
-            .init(status: 201, body: Data(#"{"seq":1,"holderIndex":1}"#.utf8)),
-            .init(status: 200, body: Data(#"""
-            {"events":[{"seq":1,"eventId":"WHATEVER","type":"pass","authorAccountId":"0WNER001","createdAt":1700000000000}]}
-            """#.utf8)),
-        ]
-        try await store.pass(diaryId)
-        let secondAttemptEventId = body(TestURLProtocol.requests.count - 2)["eventId"] as! String
-        XCTAssertEqual(secondAttemptEventId, firstEventId)
+        // The resend ALSO fails transiently.
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            try await store.writeEntry(diaryId, text: "this must never be sent")
+            XCTFail("expected .transient(\"pending\")")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("pending"))
+        }
+        // Only the ONE resend attempt happened (create + the original
+        // failed pass + this one resend = 3) — the new entry was never
+        // even sealed/POSTed.
+        XCTAssertEqual(TestURLProtocol.requests.count, 3)
+
+        let stillPending = try XCTUnwrap(readPendingEventDirectly(diaryId))
+        XCTAssertEqual(stillPending.eventId, stuckEventId)
+        XCTAssertEqual(stillPending.type, .pass)
     }
 
     func testAHardFailureClearsPendingAndTheNextAttemptUsesAFreshEventId() async throws {
@@ -519,5 +605,171 @@ final class DiaryStoreTests: XCTestCase {
         XCTAssertEqual(TestURLProtocol.requests.count, 8)
         XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/notes/\(newMember.accountId.raw)")
         XCTAssertEqual(TestURLProtocol.requests.filter { $0.url?.path == "/v3/notes/\(newMember.accountId.raw)" }.count, 2)
+    }
+
+    /// Review round 1, I4: an `accountId` on the push targets the relay at
+    /// exactly that member, independent of `join` events entirely — here
+    /// there are NONE (the old fan-out-over-join-events loop would do
+    /// nothing), yet the targeted member still gets a relay attempt.
+    func testHandlePushDiaryKeyRequestWithAccountIdRelaysToThatMemberEvenWithoutAJoinEvent() async throws {
+        let diaryId = did("PSHTGT1")
+        let key = SymmetricKey(size: .bits256)
+        try keyStore.save(key: key, for: diaryId)
+        let metaCipher = try DiaryCrypto.sealMeta(name: "Diary", key: key, diaryId: diaryId, keyEpoch: 1).base64EncodedString()
+        let requester = "REQSTER1"
+
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","\#(requester)"],"holderIndex":0,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),   // no join events at all
+            .init(status: 404, body: Data(#"{"error":"not_found"}"#.utf8)),   // GET /v3/directory/REQSTER1?bundle=1
+        ]
+        await store.handlePush(kind: "diaryKeyRequest", diaryId: diaryId, accountId: requester)
+
+        XCTAssertEqual(TestURLProtocol.requests.count, 3)
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/directory/\(requester)")
+    }
+
+    // MARK: - syncList refreshes every known diary, not only new ones (review round 1, I5)
+
+    func testSyncListRefreshesAnAlreadyKnownDiarysTurnState() async throws {
+        let diaryId = try await createDiary()   // this device is the owner/holder at creation
+        XCTAssertTrue(store.states[diaryId]?.isHolder ?? false)
+
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"[{"diaryId":"\#(diaryId)","joinedAt":1700000000000}]"#.utf8)),   // client.list()
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","OTHRMBR1"],"holderIndex":1,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),   // sync's GET meta — someone ELSE now holds the turn
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        await store.syncList()
+
+        let summary = try XCTUnwrap(store.diaries.first { $0.diaryId == diaryId })
+        XCTAssertFalse(summary.isMyTurn)
+        XCTAssertEqual(summary.holderAccountId, "OTHRMBR1")
+        XCTAssertFalse(store.states[diaryId]?.isHolder ?? true)
+    }
+
+    // MARK: - C2: performWrite landing ahead of the sync cursor doesn't skip the gap
+
+    /// The event log's own `maxSeq` must never drive `since` — only a
+    /// persisted, GET-driven-only cursor. Seed the cursor at 10 (a real
+    /// paged sync), then have a write land at seq 16 (as if OTHER members
+    /// pushed 11–15 in the meantime, unsynced) — the NEXT sync must still
+    /// ask for `since=10`, not `since=16`, or 11–15 (and any `join` event
+    /// among them) would be skipped forever.
+    func testPerformWriteLandingAheadOfTheCursorDoesNotSkipTheGapOnTheNextSync() async throws {
+        let diaryId = did("CRSRGAP1")
+        let seedEvents = (1...10).map { seq in
+            #"{"seq":\#(seq),"eventId":"E\#(seq)","type":"pass","authorAccountId":"0WNER001","createdAt":\#(1_700_000_000_000 + seq)}"#
+        }.joined(separator: ",")
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":10,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"{"events":[\#(seedEvents)]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+        XCTAssertEqual(store.states[diaryId]?.events.count, 10)
+
+        TestURLProtocol.queue = [
+            .init(status: 201, body: Data(#"{"seq":16,"holderIndex":0}"#.utf8)),
+            .init(status: 200, body: Data(#"""
+            {"events":[{"seq":16,"eventId":"E16","type":"pass","authorAccountId":"0WNER001","createdAt":1700000016000}]}
+            """#.utf8)),
+        ]
+        try await store.pass(diaryId)
+
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":16,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.query, "since=10&limit=100")
+    }
+
+    // MARK: - I1: a stuck pending create is only resumable for the SAME name
+
+    func testCreateWithADifferentNameAbandonsTheStuckPendingCreateAndItsKey() async throws {
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            _ = try await store.create(name: "A")
+            XCTFail("expected .transient")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("http_500"))
+        }
+        let diaryIdA = body(TestURLProtocol.requests.count - 1)["diaryId"] as! String
+        XCTAssertNotNil(keyStore.key(for: diaryIdA))
+
+        TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"diaryId":"IGNORED00000000000000000Z","inviteCode":"CODEB001"}"#.utf8))]
+        let diaryIdB = try await store.create(name: "B")
+
+        XCTAssertNotEqual(diaryIdB, diaryIdA)
+        XCTAssertNil(keyStore.key(for: diaryIdA))   // A's key removed — abandoned, not reused
+        XCTAssertNotNil(keyStore.key(for: diaryIdB))
+        let stateB = try XCTUnwrap(store.states[diaryIdB])
+        XCTAssertEqual(stateB.meta.name, "B")
+    }
+
+    // MARK: - I2: DiaryStore.sync reentrancy guard
+
+    func testConcurrentSyncForTheSameDiaryOnlyRunsOnce() async throws {
+        let diaryId = did("SYNCRE1")
+        // Only ONE set of stubs — if `sync` ran twice concurrently for the
+        // same id, a second GET meta/events pair would either be missing
+        // (hitting the default 500 stub) or consumed out of order; either
+        // way the request count below would no longer be exactly 2.
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        async let first: Void = store.sync(diaryId)
+        async let second: Void = store.sync(diaryId)
+        _ = await (first, second)
+
+        XCTAssertEqual(TestURLProtocol.requests.count, 2)
+    }
+
+    // MARK: - Minors: load() rehydration after relaunch, pending.enc on disk before the POST
+
+    func testLoadRehydratesFromIndexAfterARelaunch() async throws {
+        let diaryId = try await createDiary(name: "Persisted Diary")
+
+        // A brand-new `DiaryStore` over the SAME directory/keyStore —
+        // simulates an app relaunch. `load()` runs automatically from the
+        // real `init`.
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [TestURLProtocol.self]
+        let account = AccountClient(baseURL: URL(string: "https://worker.test")!, session: URLSession(configuration: cfg), authProvider: { _ in }, tokenInvalidator: {})
+        let manager = AccountManager(mock: Account(accountId: myAccountId, nickname: "owner", mailboxId: "mbx", createdAt: Date()))
+        let relaunchedStore = DiaryStore(client: DiaryClient(account: account), notesClient: NotesClient(account: account), accountManager: manager,
+                                         crypto: DiaryFakeCrypto(), keyStore: keyStore, directory: dir, encryptor: encryptor, directoryCache: DirectoryCache())
+
+        let summary = try XCTUnwrap(relaunchedStore.diaries.first { $0.diaryId == diaryId })
+        XCTAssertEqual(summary.name, "Persisted Diary")
+        let state = try XCTUnwrap(relaunchedStore.states[diaryId])
+        XCTAssertTrue(state.hasKey)
+        XCTAssertTrue(state.isOwner)
+    }
+
+    func testPendingEventFileExistsOnDiskRegardlessOfThePostOutcome() async throws {
+        let diaryId = try await createDiary()
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            try await store.pass(diaryId)
+            XCTFail("expected .transient")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("http_500"))
+        }
+        let pending = try XCTUnwrap(readPendingEventDirectly(diaryId))
+        XCTAssertEqual(pending.type, .pass)
+        XCTAssertNil(pending.payloadCipher)
     }
 }
