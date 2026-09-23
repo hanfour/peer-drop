@@ -573,19 +573,21 @@ final class DiaryStoreTests: XCTestCase {
 
     // MARK: - handlePush("diaryKeyRequest"): syncs and force-relays
 
-    func testHandlePushDiaryKeyRequestSyncsAndForceRelays() async throws {
+    /// Review round 3: with NO `accountId`, `handlePush("diaryKeyRequest")`
+    /// is now just `sync(diaryId)` — the forced fan-out-to-every-join-event
+    /// loop was dropped entirely (the worker always includes `accountId`
+    /// on a real `diaryKeyRequest` push; a second, forced pass over events
+    /// `sync`'s own un-forced pass just relayed to had no real payload and
+    /// was what caused round 2's defect-3 double-send). `sync`'s OWN
+    /// un-forced, deduped relay pass is what actually reaches the
+    /// un-relayed `join` event's author here — exactly once.
+    func testHandlePushDiaryKeyRequestWithNoAccountIdIsJustASync() async throws {
         let diaryId = did("PSHFRC1")
         let key = SymmetricKey(size: .bits256)
         try keyStore.save(key: key, for: diaryId)
         let metaCipher = try DiaryCrypto.sealMeta(name: "Diary", key: key, diaryId: diaryId, keyEpoch: 1).base64EncodedString()
         let newMember = try DiaryRecipientFixture()
 
-        // `handlePush` always calls `sync(_:)` first, which ITSELF already
-        // relays to every un-relayed `join` event it sees (force: false) —
-        // then, because this push is `diaryKeyRequest`, it relays AGAIN
-        // (force: true), bypassing the dedupe the first attempt just wrote.
-        // Both attempts run the full lookup → PoW → send sequence, so two
-        // full sets of stubs are needed.
         TestURLProtocol.queue = [
             .init(status: 200, body: Data(#"""
             {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","\#(newMember.accountId.raw)"],"holderIndex":0,"seq":1,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
@@ -596,15 +598,12 @@ final class DiaryStoreTests: XCTestCase {
             .init(status: 200, body: try newMember.directoryJSON()),
             .init(status: 200, body: Data(#"{"challenge":"Q0hBTA=="}"#.utf8)),
             .init(status: 201, body: Data(#"{"id":"01SENT0000000000000000000C"}"#.utf8)),
-            .init(status: 200, body: try newMember.directoryJSON()),
-            .init(status: 200, body: Data(#"{"challenge":"Q0hBTA=="}"#.utf8)),
-            .init(status: 201, body: Data(#"{"id":"01SENT0000000000000000000D"}"#.utf8)),
         ]
         await store.handlePush(kind: "diaryKeyRequest", diaryId: diaryId)
 
-        XCTAssertEqual(TestURLProtocol.requests.count, 8)
+        XCTAssertEqual(TestURLProtocol.requests.count, 5)
         XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/notes/\(newMember.accountId.raw)")
-        XCTAssertEqual(TestURLProtocol.requests.filter { $0.url?.path == "/v3/notes/\(newMember.accountId.raw)" }.count, 2)
+        XCTAssertEqual(TestURLProtocol.requests.filter { $0.url?.path == "/v3/notes/\(newMember.accountId.raw)" }.count, 1)
     }
 
     /// Review round 1, I4: an `accountId` on the push targets the relay at
@@ -997,5 +996,66 @@ final class DiaryStoreTests: XCTestCase {
         struct DirectCursorFile: Codable { let syncedThrough: Int }
         let cursor = try JSONDecoder().decode(DirectCursorFile.self, from: cursorData)
         XCTAssertGreaterThanOrEqual(cursor.syncedThrough, 15)
+    }
+
+    /// Review round 3: `acceptRelayedKey` is now gated by `withDiaryLock`
+    /// the same as `sync` — racing them for the SAME diary must not
+    /// interleave their `meta.enc`/`key.enc`/`cursor.enc` read-modify-writes.
+    /// Uses the same `Task` + priming-sleep determinism as the
+    /// `sync`/`writeEntry` gate test above (see its doc comment) rather
+    /// than relying on `async let` declaration order.
+    func testAcceptRelayedKeyRacingSyncForTheSameDiaryCompletesWithoutInterleaving() async throws {
+        let diaryId = did("GATEKEY1")
+        let key = SymmetricKey(size: .bits256)
+        let metaCipher = try DiaryCrypto.sealMeta(name: "Diary", key: key, diaryId: diaryId, keyEpoch: 1).base64EncodedString()
+
+        // Seed: this device knows the diary (meta persisted, synced
+        // through seq 2) but doesn't hold the key yet.
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":2,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"""
+            {"events":[
+              {"seq":1,"eventId":"E1","type":"pass","authorAccountId":"0WNER001","createdAt":1700000001000},
+              {"seq":2,"eventId":"E2","type":"pass","authorAccountId":"0WNER001","createdAt":1700000002000}
+            ]}
+            """#.utf8)),
+        ]
+        await store.sync(diaryId)
+        XCTAssertFalse(store.states[diaryId]?.hasKey ?? true)
+
+        let plaintext = try relayPlaintext(diaryId: diaryId, key: key, senderAccountId: "0WNER001")
+
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":5,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"""
+            {"events":[
+              {"seq":3,"eventId":"E3","type":"pass","authorAccountId":"0WNER001","createdAt":1700000003000},
+              {"seq":4,"eventId":"E4","type":"pass","authorAccountId":"0WNER001","createdAt":1700000004000},
+              {"seq":5,"eventId":"E5","type":"pass","authorAccountId":"0WNER001","createdAt":1700000005000}
+            ]}
+            """#.utf8)),
+        ]
+
+        let syncTask = Task { await store.sync(diaryId) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let keyTask = Task {
+            await store.acceptRelayedKey(plaintext, sender: .verified(accountId: "0WNER001", nickname: nil))
+        }
+        let disposition = await keyTask.value
+        _ = await syncTask.value
+
+        assertDisposition(disposition, .installed)
+        XCTAssertNotNil(keyStore.key(for: diaryId))
+        XCTAssertTrue(store.states[diaryId]?.hasKey ?? false)
+
+        let cursorURL = dir.appendingPathComponent(diaryId, isDirectory: true).appendingPathComponent("cursor.enc")
+        let cursorData = try XCTUnwrap(try? encryptor.readAndDecrypt(from: cursorURL))
+        struct DirectCursorFile: Codable { let syncedThrough: Int }
+        let cursor = try JSONDecoder().decode(DirectCursorFile.self, from: cursorData)
+        XCTAssertGreaterThanOrEqual(cursor.syncedThrough, 5)
     }
 }

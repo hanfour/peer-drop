@@ -707,50 +707,37 @@ public final class DiaryStore: ObservableObject {
         }
     }
 
-    /// Called for every diary push (spec §4): always re-syncs; a
-    /// `diaryKeyRequest` push additionally force-relays, bypassing the
-    /// relay's 24h dedupe (the requester explicitly asked again).
-    /// `accountId` (review round 1, I4) — when the push carries the
-    /// specific member who asked (`{type:"diaryKeyRequest", diaryId,
-    /// accountId}`, spec §4) — targets the relay at exactly that member
-    /// instead of force-relaying to every `join` event's author; passing
-    /// `nil` keeps the previous fan-out-to-everyone behavior.
+    /// Called for every diary push (spec §4): always re-syncs. A
+    /// `diaryKeyRequest` push additionally force-relays — bypassing the
+    /// relay's 24h dedupe (the requester explicitly asked again) — but
+    /// ONLY when the push carries the specific member who asked
+    /// (`{type:"diaryKeyRequest", diaryId, accountId}`, spec §4; the
+    /// worker always includes it). Review round 3: dropped the
+    /// no-`accountId` fan-out-to-every-`join`-event-author entirely — with
+    /// no `accountId` this is just `sync(diaryId)`, whose own un-forced,
+    /// deduped relay pass already covers every un-relayed `join` event; a
+    /// second, forced pass over the same events had no real payload
+    /// (`diaryKeyRequest` always names who's asking) and, before round 2's
+    /// defect-3 fix, could double-send to members `sync`'s own pass had
+    /// only JUST relayed to.
     ///
-    /// Review round 2, defect 3: the TARGETED (`accountId != nil`) relay
-    /// now runs BEFORE `sync`, not after. `sync`'s own un-forced fan-out
-    /// (which runs as part of every sync, `force: false`) independently
-    /// relays to every `join` event author it sees — including this same
-    /// member, if `sync` happens to see their `join` event too. Running
-    /// the targeted relay first means a successful send persists the
-    /// dedupe entry immediately, so `sync`'s OWN pass then sees it and
-    /// skips — instead of both firing and burning two OPKs for one
-    /// request. The no-`accountId` fan-out deliberately still runs AFTER
-    /// `sync`, since — unlike the targeted case — it needs a FRESH event
-    /// list (whatever `join` events `sync` just fetched), not a
-    /// stale/empty one from before this push arrived.
+    /// Review round 2, defect 3: the targeted relay runs BEFORE `sync`,
+    /// not after — a successful send persists the dedupe entry
+    /// immediately, so `sync`'s own un-forced pass (`force: false`) then
+    /// sees it and skips that member, instead of both firing and burning
+    /// two OPKs for one request.
     public func handlePush(kind: String, diaryId: String, accountId: String? = nil) async {
-        guard kind == "diaryKeyRequest" else {
+        guard kind == "diaryKeyRequest", let accountId else {
             await sync(diaryId)
             return
         }
-        let myId = accountManager.account?.accountId.raw
-        let myNickname = accountManager.account?.nickname
-
-        if let accountId, let myId, let meta = readMeta(diaryId) {
+        if let myId = accountManager.account?.accountId.raw, let meta = readMeta(diaryId) {
+            let myNickname = accountManager.account?.nickname
             await relay.relayIfNeeded(
                 diaryId: diaryId, newMember: accountId, metaCipher: meta.metaCipher,
                 senderAccountId: myId, senderNickname: myNickname, force: true)
         }
-
         await sync(diaryId)
-
-        guard accountId == nil, let myId, let meta = readMeta(diaryId) else { return }
-        let events = states[diaryId]?.events ?? []
-        for event in events where event.type == .join && event.authorAccountId != myId {
-            await relay.relayIfNeeded(
-                diaryId: diaryId, newMember: event.authorAccountId, metaCipher: meta.metaCipher,
-                senderAccountId: myId, senderNickname: myNickname, force: true)
-        }
     }
 
     /// The `NotesStore.diaryKeyHandler` hookup (spec §3.3 step 5/§3.4),
@@ -777,35 +764,48 @@ public final class DiaryStore: ObservableObject {
         // `DiaryClient` already enforces for every id it embeds in a URL.
         guard payload.diaryId.range(of: Self.diaryIdPattern, options: .regularExpression) != nil else { return .rejected }
 
-        guard let meta = readMeta(payload.diaryId) else { return .transient }
+        // Review round 3: gated the same as sync/performWrite/join/leave/
+        // close/create — this reads meta.enc/members and writes key.enc,
+        // the exact per-diary state those already serialize against each
+        // other. The `.transient` "diary not known locally" outcome is
+        // INSIDE the gate too (not specialcased out): there's a real
+        // diaryId to lock on by this point, and gating it means a
+        // concurrent `sync`/`join` that's ABOUT to persist this diary's
+        // meta.enc can't race a relayed key arriving at almost the same
+        // moment. The closure never actually throws; `?? .rejected` is
+        // just a safe fallback for `withDiaryLock`'s `throws` signature.
+        let disposition = try? await withDiaryLock(payload.diaryId) { [self] () -> DiaryKeyDisposition in
+            guard let meta = readMeta(payload.diaryId) else { return .transient }
 
-        switch sender {
-        case .anonymous, .unverified:
-            return .rejected
-        case .verified(let accountId, _):
-            guard meta.members.contains(accountId) else { return .rejected }
+            switch sender {
+            case .anonymous, .unverified:
+                return .rejected
+            case .verified(let accountId, _):
+                guard meta.members.contains(accountId) else { return .rejected }
+            }
+
+            guard payload.keyEpoch == 1,
+                  let keyData = Data(base64Encoded: payload.key), keyData.count == 32,
+                  let metaCipherData = Data(base64Encoded: meta.metaCipher)
+            else { return .rejected }
+
+            let key = SymmetricKey(data: keyData)
+            guard let name = try? DiaryCrypto.openMeta(metaCipherData, key: key, diaryId: payload.diaryId, keyEpoch: payload.keyEpoch) else {
+                return .rejected
+            }
+            do {
+                try keyStore.save(key: key, for: payload.diaryId)
+            } catch {
+                return .rejected
+            }
+
+            var updated = meta
+            updated.name = name
+            persistMeta(payload.diaryId, updated)
+            refreshSummary(id: payload.diaryId, meta: updated, events: states[payload.diaryId]?.events ?? [])
+            return .installed
         }
-
-        guard payload.keyEpoch == 1,
-              let keyData = Data(base64Encoded: payload.key), keyData.count == 32,
-              let metaCipherData = Data(base64Encoded: meta.metaCipher)
-        else { return .rejected }
-
-        let key = SymmetricKey(data: keyData)
-        guard let name = try? DiaryCrypto.openMeta(metaCipherData, key: key, diaryId: payload.diaryId, keyEpoch: payload.keyEpoch) else {
-            return .rejected
-        }
-        do {
-            try keyStore.save(key: key, for: payload.diaryId)
-        } catch {
-            return .rejected
-        }
-
-        var updated = meta
-        updated.name = name
-        persistMeta(payload.diaryId, updated)
-        refreshSummary(id: payload.diaryId, meta: updated, events: states[payload.diaryId]?.events ?? [])
-        return .installed
+        return disposition ?? .rejected
     }
 
     // MARK: - Report
