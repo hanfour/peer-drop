@@ -1,0 +1,825 @@
+import Foundation
+import CryptoKit
+import Security
+import PeerDropSecurity
+import PeerDropAccount
+import PeerDropNotes
+
+/// A single diary's state as the UI sees it — `meta`/`events` are exactly
+/// what is currently persisted locally (never synthesized), `isHolder`/
+/// `isOwner` are derived against the signed-in account, `hasKey` reflects
+/// `DiaryKeyStore`, and `pendingKey` is the complement of `hasKey`: true
+/// whenever this device is a legitimate member (meta/members ARE
+/// persisted) but has no working content key yet — the short-code-join
+/// "waiting for a relay" state (spec §3.2/§3.3).
+public struct DiaryState: Equatable, Sendable {
+    public var meta: DiaryMeta
+    public var events: [DiaryEvent]
+    public var isHolder: Bool
+    public var isOwner: Bool
+    public var hasKey: Bool
+    public var pendingKey: Bool
+
+    public init(meta: DiaryMeta, events: [DiaryEvent], isHolder: Bool, isOwner: Bool, hasKey: Bool, pendingKey: Bool) {
+        self.meta = meta
+        self.events = events
+        self.isHolder = isHolder
+        self.isOwner = isOwner
+        self.hasKey = hasKey
+        self.pendingKey = pendingKey
+    }
+}
+
+/// One row of `DiaryStore.diaries` — the list view's summary of a diary.
+/// Distinct from `DiaryListRow` (the raw `GET /v3/diaries` wire shape):
+/// this is derived from a diary's locally-reconciled `DiaryState`, with a
+/// decrypted `name` (nil until this device has a key and has decoded it)
+/// and the turn-order fields a list row actually needs to render.
+public struct DiarySummary: Identifiable, Equatable, Sendable {
+    public var diaryId: String
+    public var name: String?
+    public var memberCount: Int
+    public var holderAccountId: String
+    public var isMyTurn: Bool
+
+    public var id: String { diaryId }
+
+    public init(diaryId: String, name: String?, memberCount: Int, holderAccountId: String, isMyTurn: Bool) {
+        self.diaryId = diaryId
+        self.name = name
+        self.memberCount = memberCount
+        self.holderAccountId = holderAccountId
+        self.isMyTurn = isMyTurn
+    }
+}
+
+/// `@MainActor` state machine for every diary this device is a member of
+/// (spec §5.1). Owns the on-disk layout under `Documents/Diary/`:
+/// `<diaryId>/{key.enc via DiaryKeyStore, meta.enc, events.log via
+/// DiaryEventLog, pending.enc}` plus a top-level `index.enc` (spec §3.5).
+///
+/// `DiaryEventLog` itself does no locking and its `load()` is O(events) —
+/// its own doc comment warns callers not to run that on the main actor for
+/// a long-lived diary. This store never does: every event-log read/append
+/// goes through `logCoordinator`, a dedicated actor whose calls
+/// necessarily hop off the main actor's executor and are serialized end to
+/// end (no `await` inside its method bodies, so one call always finishes
+/// before the mailbox releases the next). The one intentional exception is
+/// `load()` itself, which is a plain synchronous function by design (called
+/// from `init`, before any UI is up) — it hydrates the diary list from the
+/// small `meta.enc` files only, leaving `events: []` until the first
+/// `sync(_:)` for that diary does the real (async, coordinator-routed)
+/// event reconciliation.
+@MainActor
+public final class DiaryStore: ObservableObject {
+    @Published public private(set) var diaries: [DiarySummary] = []
+    @Published public private(set) var states: [String: DiaryState] = [:]
+    @Published public private(set) var lastError: String?
+
+    private let client: DiaryClient
+    private let notesClient: NotesClient
+    private let accountManager: AccountManager
+    private let crypto: NotesCryptoContext
+    private let keyStore: DiaryKeyStore
+    private let directory: URL
+    private let encryptor: ChatDataEncryptor
+    private let directoryCache: DirectoryCache
+    private let relay: DiaryKeyRelay
+    private let logCoordinator: DiaryLogCoordinator
+    private let isMock: Bool
+
+    public init(
+        client: DiaryClient, notesClient: NotesClient, accountManager: AccountManager, crypto: NotesCryptoContext,
+        keyStore: DiaryKeyStore, directory: URL, encryptor: ChatDataEncryptor, directoryCache: DirectoryCache
+    ) {
+        self.client = client
+        self.notesClient = notesClient
+        self.accountManager = accountManager
+        self.crypto = crypto
+        self.keyStore = keyStore
+        self.directory = directory
+        self.encryptor = encryptor
+        self.directoryCache = directoryCache
+        self.relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore)
+        self.logCoordinator = DiaryLogCoordinator(encryptor: encryptor)
+        self.isMock = false
+        load()
+    }
+
+    /// Screenshot mode: fixed content, no network, no disk — mirrors
+    /// `NotesStore(mockInbox:sent:)`.
+    private struct NoopCrypto: NotesCryptoContext {
+        func recipientKeys() throws -> NoteRecipientKeys { throw DiaryError.network("no_account") }
+        func signer(accountId: String, nickname: String?) throws -> NoteSigner { throw DiaryError.network("no_account") }
+    }
+
+    public init(mock diaries: [DiarySummary], states: [String: DiaryState]) {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("DiaryStore-mock-\(UUID().uuidString)", isDirectory: true)
+        let account = AccountClient(baseURL: URL(string: "https://screenshot.invalid")!)
+        let mockEncryptor = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
+        self.client = DiaryClient(account: account)
+        self.notesClient = NotesClient(account: account)
+        self.accountManager = AccountManager(mock: Account(accountId: AccountID(raw: "PDRPDEM0")!, nickname: nil, mailboxId: "screenshot", createdAt: Date()))
+        self.crypto = NoopCrypto()
+        // Same root as `directory` — spec §3.5 lays `key.enc` out under the
+        // SAME per-diary folder as `meta.enc`/`events.log`/`pending.enc`.
+        self.keyStore = DiaryKeyStore(directory: tempDir, encryptor: mockEncryptor)
+        self.directory = tempDir
+        self.encryptor = mockEncryptor
+        self.directoryCache = DirectoryCache()
+        self.relay = DiaryKeyRelay(notesClient: self.notesClient, crypto: self.crypto, keyStore: self.keyStore)
+        self.logCoordinator = DiaryLogCoordinator(encryptor: mockEncryptor)
+        self.isMock = true
+        self.diaries = diaries
+        self.states = states
+    }
+
+    // MARK: - Load / list
+
+    /// Synchronous, disk-only hydration from `index.enc` + each known
+    /// diary's `meta.enc` (small files) — deliberately does NOT read any
+    /// `events.log` (see the type doc). Called once from the real `init`.
+    public func load() {
+        guard !isMock else { return }
+        for id in readIndex() {
+            guard let meta = readMeta(id) else { continue }
+            refreshSummary(id: id, meta: meta, events: states[id]?.events ?? [])
+        }
+    }
+
+    /// Discovers diaries this account has joined/created that aren't in the
+    /// local index yet (e.g. this device missed the `create`/`join` call
+    /// that would normally have added them) and pulls each one's full
+    /// state via `sync(_:)`. Diaries already known locally are left to
+    /// their own explicit `sync(_:)` calls.
+    public func syncList() async {
+        guard !isMock else { return }
+        do {
+            let rows = try await client.list()
+            let known = Set(readIndex())
+            for row in rows where !known.contains(row.diaryId) {
+                await sync(row.diaryId)
+            }
+            lastError = nil
+        } catch {
+            lastError = String(describing: Self.mapError(error))
+        }
+    }
+
+    // MARK: - Sync (the turn-order/content source of truth)
+
+    /// `GET /v3/diaries/:id` overwrites the local turn-order fields
+    /// (`members`/`holderIndex`/`ownerAccountId`/`state`/`seq`) — this is
+    /// the ONLY source of truth for whose turn it is (spec §5.1); events
+    /// are fetched separately and only ever upsert by `seq`, never replay
+    /// the turn order. Every event-log read/append goes through
+    /// `logCoordinator`, off the main actor. After reconciling, relays this
+    /// device's key (if it has one) to every member whose `join` event is
+    /// visible and not within the relay's own 24h dedupe window.
+    public func sync(_ id: String) async {
+        guard !isMock else { return }
+        do {
+            let meta = try await client.get(id)
+            let key = keyStore.key(for: id)
+            var localMeta = meta
+            if let key, let cipherData = Data(base64Encoded: meta.metaCipher),
+               let name = try? DiaryCrypto.openMeta(cipherData, key: key, diaryId: id, keyEpoch: meta.keyEpoch) {
+                localMeta.name = name
+            } else {
+                localMeta.name = readMeta(id)?.name
+            }
+            persistMeta(id, localMeta)
+            addToIndex(id)
+
+            let logURL = eventsLogURL(id)
+            var since = await logCoordinator.load(url: logURL).maxSeq
+            while true {
+                let (events, nextSince) = try await client.events(id: id, since: since, limit: 100)
+                for event in events {
+                    let decoded = withDecodedPayload(event, id: id, key: key)
+                    await logCoordinator.append(decoded, url: logURL)
+                }
+                guard let next = nextSince, next != since else { break }
+                since = next
+            }
+
+            let finalEvents = await logCoordinator.load(url: logURL).events
+            refreshSummary(id: id, meta: localMeta, events: finalEvents)
+            lastError = nil
+
+            if let myId = accountManager.account?.accountId.raw {
+                let myNickname = accountManager.account?.nickname
+                for event in finalEvents where event.type == .join && event.authorAccountId != myId {
+                    await relay.relayIfNeeded(
+                        diaryId: id, newMember: event.authorAccountId, metaCipher: localMeta.metaCipher,
+                        senderAccountId: myId, senderNickname: myNickname, force: false)
+                }
+            }
+        } catch {
+            lastError = String(describing: Self.mapError(error))
+        }
+    }
+
+    // MARK: - Create
+
+    /// Generates the `diaryId` (client ULID) and content key, seals the
+    /// (name-only) meta plaintext, and writes `key.enc` — ALL before the
+    /// first `POST /v3/diaries` (spec §0/§5.1). A "pending create" marker
+    /// persists that same `{diaryId, metaCipher}` pair so a transient POST
+    /// failure (network/5xx/429) can be retried with the SAME diaryId
+    /// rather than minting a new one on the next call — the worker's own
+    /// create route is idempotent by `diaryId` for exactly this reason.
+    public func create(name: String) async throws -> String {
+        guard let myId = accountManager.account?.accountId.raw else { throw DiaryError.network("no_account") }
+
+        let pending: PendingCreate
+        if let existing = readPendingCreate() {
+            pending = existing
+        } else {
+            let diaryId = DiaryULID.generate()
+            let key = SymmetricKey(size: .bits256)
+            let metaCipher: String
+            do {
+                metaCipher = try DiaryCrypto.sealMeta(name: name, key: key, diaryId: diaryId, keyEpoch: 1).base64EncodedString()
+            } catch {
+                let err = DiaryError.network("seal_failed")
+                lastError = String(describing: err)
+                throw err
+            }
+            do {
+                try keyStore.save(key: key, for: diaryId)
+                let created = PendingCreate(diaryId: diaryId, name: name, metaCipher: metaCipher)
+                try writePendingCreate(created)
+                pending = created
+            } catch {
+                let err = DiaryError.network("persist_failed")
+                lastError = String(describing: err)
+                throw err
+            }
+        }
+
+        do {
+            // `pending.diaryId` — the client-generated id `key.enc` was
+            // already saved under — is authoritative for local storage; the
+            // worker's create route is idempotent BY that same diaryId and
+            // always echoes it back unchanged (spec §2.1), so `r.diaryId`
+            // is only used as a defensive sanity check, never to re-key
+            // where this diary's files live locally.
+            let r = try await client.create(diaryId: pending.diaryId, metaCipher: pending.metaCipher)
+            let meta = DiaryMeta(
+                diaryId: pending.diaryId, ownerAccountId: myId, members: [myId], holderIndex: 0, seq: 0, state: "open",
+                keyEpoch: 1, metaCipher: pending.metaCipher, inviteCode: r.inviteCode, name: pending.name)
+            persistMeta(pending.diaryId, meta)
+            addToIndex(pending.diaryId)
+            clearPendingCreate()
+            refreshSummary(id: pending.diaryId, meta: meta, events: [])
+            lastError = nil
+            return pending.diaryId
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            if case .transient = diaryError {
+                // Leave the pending-create marker so the next `create(name:)`
+                // call resends with the SAME diaryId/metaCipher.
+            } else {
+                clearPendingCreate()
+            }
+            throw diaryError
+        }
+    }
+
+    // MARK: - Join
+
+    /// `peerdrop://diary/<diaryId>?code=<inviteCode>#k=<base64url key>`.
+    /// Persists meta+members BEFORE attempting to open the key (spec §3.2)
+    /// — a structurally malformed LINK (no `diary` host, no id, no code)
+    /// throws before any network call, but a missing/wrong KEY never
+    /// aborts the join itself: the fragment never reaches the server, so
+    /// the join API call only needs `diaryId`+`code`. A key that fails to
+    /// open `metaCipher` (or is absent) just leaves the diary in the
+    /// `pendingKey` state, eligible for a later relay (§3.3).
+    public func join(link: URL) async throws -> String {
+        let parsed = try Self.parseDiaryLink(link)
+        return try await performJoin(diaryId: parsed.diaryId, code: parsed.code, key: parsed.key)
+    }
+
+    /// Join by short code alone — no key ever accompanies this path, so the
+    /// diary always starts `pendingKey` until some other member's device
+    /// relays the key (spec §3.3).
+    public func join(code: String) async throws -> String {
+        do {
+            let meta = try await client.joinByCode(code)
+            persistMeta(meta.diaryId, meta)
+            addToIndex(meta.diaryId)
+            refreshSummary(id: meta.diaryId, meta: meta, events: [])
+            lastError = nil
+            return meta.diaryId
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    private func performJoin(diaryId: String, code: String, key keyData: Data?) async throws -> String {
+        do {
+            let meta = try await client.join(id: diaryId, code: code)
+            // Persist meta + members BEFORE validating the key — spec §3.2.
+            persistMeta(meta.diaryId, meta)
+            addToIndex(meta.diaryId)
+
+            var finalMeta = meta
+            if let keyData, keyData.count == 32, let cipherData = Data(base64Encoded: meta.metaCipher),
+               let name = try? DiaryCrypto.openMeta(cipherData, key: SymmetricKey(data: keyData), diaryId: meta.diaryId, keyEpoch: meta.keyEpoch) {
+                try? keyStore.save(key: SymmetricKey(data: keyData), for: meta.diaryId)
+                finalMeta.name = name
+                persistMeta(meta.diaryId, finalMeta)
+            }
+
+            refreshSummary(id: meta.diaryId, meta: finalMeta, events: [])
+            lastError = nil
+            return meta.diaryId
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    // MARK: - Leave / close
+
+    public func leave(_ id: String) async throws {
+        do {
+            try await client.leave(id)
+            removeFromIndex(id)
+            states[id] = nil
+            diaries.removeAll { $0.diaryId == id }
+            lastError = nil
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    public func close(_ id: String) async throws {
+        do {
+            try await client.close(id)
+            if let meta = readMeta(id) {
+                let updated = DiaryMeta(
+                    diaryId: meta.diaryId, ownerAccountId: meta.ownerAccountId, members: meta.members,
+                    holderIndex: meta.holderIndex, seq: meta.seq, state: "closed", keyEpoch: meta.keyEpoch,
+                    metaCipher: meta.metaCipher, inviteCode: meta.inviteCode, name: meta.name)
+                persistMeta(id, updated)
+                refreshSummary(id: id, meta: updated, events: states[id]?.events ?? [])
+            }
+            lastError = nil
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    // MARK: - Writing (entry / pass / skip / comment / like)
+
+    /// Requires a working local key — an entry can't be sealed without one.
+    public func writeEntry(_ id: String, text: String) async throws {
+        guard let key = keyStore.key(for: id) else { throw DiaryError.noKey }
+        guard let myId = accountManager.account?.accountId.raw else { throw DiaryError.network("no_account") }
+        try await performWrite(id: id, type: .entry, refSeq: nil) { eventId in
+            try DiaryCrypto.seal(payload: DiaryPayload(kind: .entry, text: text), key: key, diaryId: id,
+                                  authorAccountId: myId, eventId: eventId, maxScalars: DiaryCrypto.maxEntryScalars).base64EncodedString()
+        }
+    }
+
+    public func pass(_ id: String) async throws {
+        try await performWrite(id: id, type: .pass, refSeq: nil, seal: nil)
+    }
+
+    public func skip(_ id: String) async throws {
+        try await performWrite(id: id, type: .skip, refSeq: nil, seal: nil)
+    }
+
+    public func comment(_ id: String, seq: Int, text: String) async throws {
+        guard let key = keyStore.key(for: id) else { throw DiaryError.noKey }
+        guard let myId = accountManager.account?.accountId.raw else { throw DiaryError.network("no_account") }
+        try await performWrite(id: id, type: .comment, refSeq: seq) { eventId in
+            try DiaryCrypto.seal(payload: DiaryPayload(kind: .comment, text: text), key: key, diaryId: id,
+                                  authorAccountId: myId, eventId: eventId, maxScalars: DiaryCrypto.maxCommentScalars).base64EncodedString()
+        }
+    }
+
+    public func like(_ id: String, seq: Int) async throws {
+        try await performWrite(id: id, type: .like, refSeq: seq, seal: nil)
+    }
+
+    /// Shared write path for every `POST /events` type (spec §5.1): write
+    /// `pending.enc` (fixed `eventId`) → POST → on success, fetch the event
+    /// back from the server (never synthesize it locally) → append to the
+    /// log → clear pending. A previous unresolved pending event (only
+    /// possible after a `.transient` failure — anything else clears it
+    /// immediately) is always resent FIRST, ahead of the newly-requested
+    /// write, since only one pending event is ever kept per diary and the
+    /// worker's `POST /events` idempotency-by-`eventId` is exactly what
+    /// makes resending it safe (a prior attempt may have partially
+    /// succeeded server-side despite the client seeing a 5xx — spec §2.2:
+    /// "D1 寫入必須成功才回 2xx").
+    @discardableResult
+    private func performWrite(id: String, type: DiaryEventType, refSeq: Int?, seal: ((String) throws -> String)? = nil) async throws -> DiaryEvent {
+        guard readMeta(id) != nil else { throw DiaryError.notFound }
+
+        let toSend: PendingEvent
+        if let existing = readPendingEvent(id) {
+            toSend = existing
+        } else {
+            let eventId = DiaryULID.generate()
+            var payloadCipher: String?
+            if let seal {
+                do {
+                    payloadCipher = try seal(eventId)
+                } catch DiaryCryptoError.oversized {
+                    let err = DiaryError.tooLarge
+                    lastError = String(describing: err)
+                    throw err
+                } catch {
+                    let err = DiaryError.network(String(describing: error))
+                    lastError = String(describing: err)
+                    throw err
+                }
+            }
+            let fresh = PendingEvent(eventId: eventId, type: type, refSeq: refSeq, payloadCipher: payloadCipher)
+            do {
+                try writePendingEvent(id, fresh)
+            } catch {
+                let err = DiaryError.network("persist_failed")
+                lastError = String(describing: err)
+                throw err
+            }
+            toSend = fresh
+        }
+
+        do {
+            let r = try await client.postEvent(id: id, eventId: toSend.eventId, type: toSend.type, refSeq: toSend.refSeq, payloadCipher: toSend.payloadCipher)
+            let fetched = try await client.event(id: id, seq: r.seq)
+            let decoded = withDecodedPayload(fetched, id: id, key: keyStore.key(for: id))
+            await logCoordinator.append(decoded, url: eventsLogURL(id))
+            clearPendingEvent(id)
+
+            var events = states[id]?.events ?? []
+            events.removeAll { $0.seq == decoded.seq }
+            events.append(decoded)
+            events.sort { $0.seq < $1.seq }
+
+            if let updatedMeta = applyPostResult(id: id, seq: r.seq, holderIndex: r.holderIndex) {
+                refreshSummary(id: id, meta: updatedMeta, events: events)
+            }
+            lastError = nil
+            return decoded
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            if case .transient = diaryError {
+                throw diaryError   // keep pending.enc — resend next call
+            } else {
+                clearPendingEvent(id)
+                throw diaryError
+            }
+        }
+    }
+
+    // MARK: - Key request / relay hookup
+
+    public func requestKey(_ id: String) async throws {
+        do {
+            try await client.requestKey(id)
+            lastError = nil
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    /// Called for every diary push (spec §4): always re-syncs; a
+    /// `diaryKeyRequest` push additionally force-relays to every member the
+    /// currently-known `join` events name, bypassing the relay's 24h
+    /// dedupe (the requester explicitly asked again). The push payload
+    /// itself doesn't need to (and per this store's interface doesn't)
+    /// carry which member asked — a forced re-relay to everyone is a safe,
+    /// bounded superset (≤ 11 other members).
+    public func handlePush(kind: String, diaryId: String) async {
+        await sync(diaryId)
+        guard kind == "diaryKeyRequest", let myId = accountManager.account?.accountId.raw,
+              let meta = readMeta(diaryId) else { return }
+        let myNickname = accountManager.account?.nickname
+        let events = states[diaryId]?.events ?? []
+        for event in events where event.type == .join && event.authorAccountId != myId {
+            await relay.relayIfNeeded(
+                diaryId: diaryId, newMember: event.authorAccountId, metaCipher: meta.metaCipher,
+                senderAccountId: myId, senderNickname: myNickname, force: true)
+        }
+    }
+
+    /// The `NotesStore.diaryKeyHandler` hookup (spec §3.3 step 5/§3.4),
+    /// called with an already-decoded `diaryKey` plaintext and its
+    /// verified-sender state:
+    /// - the diary isn't known locally at all (no `meta.enc`) → `.transient`
+    ///   (retry on a later inbox sync; `NotesStore` won't advance its
+    ///   cursor past this item for a transient disposition);
+    /// - an anonymous or merely-`.unverified` sender, or a verified sender
+    ///   who isn't in the diary's persisted member list → `.rejected`;
+    /// - a `keyEpoch` other than 1, a malformed key, or a key that fails
+    ///   to open the diary's persisted `metaCipher` → `.rejected`;
+    /// - otherwise: save the key, refresh local state, → `.installed`.
+    public func acceptRelayedKey(_ plaintext: NotePlaintext, sender: NoteSenderState) async -> DiaryKeyDisposition {
+        struct RelayPayload: Decodable { let diaryId: String; let keyEpoch: UInt32; let key: String }
+        guard let jsonData = plaintext.text.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(RelayPayload.self, from: jsonData)
+        else { return .rejected }
+
+        guard let meta = readMeta(payload.diaryId) else { return .transient }
+
+        switch sender {
+        case .anonymous, .unverified:
+            return .rejected
+        case .verified(let accountId, _):
+            guard meta.members.contains(accountId) else { return .rejected }
+        }
+
+        guard payload.keyEpoch == 1,
+              let keyData = Data(base64Encoded: payload.key), keyData.count == 32,
+              let metaCipherData = Data(base64Encoded: meta.metaCipher)
+        else { return .rejected }
+
+        let key = SymmetricKey(data: keyData)
+        guard let name = try? DiaryCrypto.openMeta(metaCipherData, key: key, diaryId: payload.diaryId, keyEpoch: payload.keyEpoch) else {
+            return .rejected
+        }
+        do {
+            try keyStore.save(key: key, for: payload.diaryId)
+        } catch {
+            return .rejected
+        }
+
+        var updated = meta
+        updated.name = name
+        persistMeta(payload.diaryId, updated)
+        refreshSummary(id: payload.diaryId, meta: updated, events: states[payload.diaryId]?.events ?? [])
+        return .installed
+    }
+
+    // MARK: - Report
+
+    public static let maxExcerptScalars = 1_000
+
+    public func report(_ id: String, seq: Int, reason: ReportReason, includeText: Bool) async throws {
+        var excerpt: String?
+        if includeText {
+            let events: [DiaryEvent] = states[id]?.events ?? []
+            let entryText: String? = events.first(where: { $0.seq == seq })?.payload?.text
+            excerpt = entryText.map(Self.truncatedExcerpt)
+        }
+        do {
+            _ = try await client.report(id: id, seq: seq, reason: reason, excerpt: excerpt)
+            lastError = nil
+        } catch {
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            throw diaryError
+        }
+    }
+
+    private static func truncatedExcerpt(_ text: String) -> String {
+        guard text.unicodeScalars.count > maxExcerptScalars else { return text }
+        return String(String.UnicodeScalarView(text.unicodeScalars.prefix(maxExcerptScalars)))
+    }
+
+    // MARK: - Shared state reconciliation
+
+    /// Rebuilds `states[id]`/`diaries` from already-known meta/events —
+    /// pure, synchronous, no I/O — so every call site can pass in whatever
+    /// it already has in hand (freshly fetched, freshly persisted, or just
+    /// an unaffected carry-over) instead of this doing its own disk/log
+    /// read.
+    private func refreshSummary(id: String, meta: DiaryMeta, events: [DiaryEvent]) {
+        let hasKey = keyStore.key(for: id) != nil
+        let myId = accountManager.account?.accountId.raw
+        let isHolder = myId != nil && meta.members.indices.contains(meta.holderIndex) && meta.members[meta.holderIndex] == myId
+        let isOwner = myId != nil && meta.ownerAccountId == myId
+        states[id] = DiaryState(meta: meta, events: events, isHolder: isHolder, isOwner: isOwner, hasKey: hasKey, pendingKey: !hasKey)
+
+        let holderId = meta.members.indices.contains(meta.holderIndex) ? meta.members[meta.holderIndex] : meta.ownerAccountId
+        let summary = DiarySummary(diaryId: id, name: meta.name, memberCount: meta.members.count, holderAccountId: holderId, isMyTurn: isHolder)
+        if let idx = diaries.firstIndex(where: { $0.diaryId == id }) {
+            diaries[idx] = summary
+        } else {
+            diaries.append(summary)
+        }
+    }
+
+    /// A `POST /events` response's `holderIndex` reflects the diary's
+    /// CURRENT turn state (spec §5.1: "冪等 200 的 holderIndex 是當下
+    /// meta") — but only if it isn't stale relative to what this device
+    /// already knows: if a fuller `sync(_:)` has already observed a higher
+    /// `seq` than this response names, applying it would regress the turn
+    /// order. Returns the meta to use afterward (updated or unchanged), or
+    /// nil if the diary has no persisted meta at all (shouldn't happen —
+    /// `performWrite` already required one).
+    private func applyPostResult(id: String, seq: Int, holderIndex: Int) -> DiaryMeta? {
+        guard let meta = readMeta(id) else { return nil }
+        guard seq > meta.seq else { return meta }
+        let updated = DiaryMeta(
+            diaryId: meta.diaryId, ownerAccountId: meta.ownerAccountId, members: meta.members,
+            holderIndex: holderIndex, seq: seq, state: meta.state, keyEpoch: meta.keyEpoch,
+            metaCipher: meta.metaCipher, inviteCode: meta.inviteCode, name: meta.name)
+        persistMeta(id, updated)
+        return updated
+    }
+
+    /// Decrypts an `entry`/`comment` event's payload when this device has
+    /// a key — leaves it (and any other event type) untouched otherwise. A
+    /// decryption failure (wrong key, tampered/oversized content) just
+    /// leaves `payload` nil; the event itself is still kept (spec §3.1:
+    /// UI shows "內容無法顯示" for that one entry, not a sync failure).
+    private func withDecodedPayload(_ event: DiaryEvent, id: String, key: SymmetricKey?) -> DiaryEvent {
+        guard let key, let cipherB64 = event.payloadCipher, event.type == .entry || event.type == .comment,
+              let data = Data(base64Encoded: cipherB64)
+        else { return event }
+        let maxScalars = event.type == .entry ? DiaryCrypto.maxEntryScalars : DiaryCrypto.maxCommentScalars
+        guard let payload = try? DiaryCrypto.open(data, key: key, diaryId: id, authorAccountId: event.authorAccountId, eventId: event.eventId, maxScalars: maxScalars) else {
+            return event
+        }
+        var updated = event
+        updated.payload = payload
+        return updated
+    }
+
+    private static func mapError(_ error: Error) -> DiaryError {
+        error as? DiaryError ?? .network(String(describing: error))
+    }
+
+    // MARK: - Deep link parsing
+
+    /// `peerdrop://diary/<diaryId>?code=<inviteCode>#k=<base64url key>`.
+    /// Throws only for a structurally invalid link (wrong host, missing
+    /// id, missing/empty code) — those are needed just to CALL the join
+    /// API. A missing or malformed key fragment resolves to `key: nil`
+    /// rather than throwing (spec: the fragment never reaches the server,
+    /// so it must never be able to block the join itself — a bad key
+    /// degrades to the `pendingKey` state instead, see `performJoin`).
+    nonisolated static func parseDiaryLink(_ url: URL) throws -> (diaryId: String, code: String, key: Data?) {
+        guard url.host == "diary" else { throw DiaryError.badId }
+        let diaryId = url.pathComponents.first { $0 != "/" } ?? ""
+        guard !diaryId.isEmpty else { throw DiaryError.badId }
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let code = comps.queryItems?.first(where: { $0.name == "code" })?.value, !code.isEmpty
+        else { throw DiaryError.badCode }
+        var key: Data?
+        if let fragment = url.fragment, fragment.hasPrefix("k=") {
+            key = Data(base64URLEncoded: String(fragment.dropFirst(2)))
+        }
+        return (diaryId, code, key)
+    }
+
+    // MARK: - Disk layout
+
+    private func diaryDir(_ id: String) -> URL { directory.appendingPathComponent(id, isDirectory: true) }
+    private func metaURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("meta.enc") }
+    private func eventsLogURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("events.log") }
+    private func pendingEventURL(_ id: String) -> URL { diaryDir(id).appendingPathComponent("pending.enc") }
+    private var indexURL: URL { directory.appendingPathComponent("index.enc") }
+    private var pendingCreateURL: URL { directory.appendingPathComponent("pending-create.enc") }
+
+    private func readMeta(_ id: String) -> DiaryMeta? {
+        guard let data = try? encryptor.readAndDecrypt(from: metaURL(id)) else { return nil }
+        return try? JSONDecoder().decode(DiaryMeta.self, from: data)
+    }
+
+    private func persistMeta(_ id: String, _ meta: DiaryMeta) {
+        do {
+            try FileManager.default.createDirectory(at: diaryDir(id), withIntermediateDirectories: true)
+            try encryptor.encryptAndWrite(JSONEncoder().encode(meta), to: metaURL(id))
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private struct IndexFile: Codable { var diaryIds: [String] }
+
+    private func readIndex() -> [String] {
+        guard let data = try? encryptor.readAndDecrypt(from: indexURL) else { return [] }
+        return (try? JSONDecoder().decode(IndexFile.self, from: data))?.diaryIds ?? []
+    }
+
+    private func writeIndex(_ ids: [String]) {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try encryptor.encryptAndWrite(JSONEncoder().encode(IndexFile(diaryIds: ids)), to: indexURL)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func addToIndex(_ id: String) {
+        var ids = readIndex()
+        guard !ids.contains(id) else { return }
+        ids.append(id)
+        writeIndex(ids)
+    }
+
+    private func removeFromIndex(_ id: String) {
+        var ids = readIndex()
+        guard ids.contains(id) else { return }
+        ids.removeAll { $0 == id }
+        writeIndex(ids)
+    }
+
+    private struct PendingCreate: Codable { let diaryId: String; let name: String; let metaCipher: String }
+
+    private func readPendingCreate() -> PendingCreate? {
+        guard let data = try? encryptor.readAndDecrypt(from: pendingCreateURL) else { return nil }
+        return try? JSONDecoder().decode(PendingCreate.self, from: data)
+    }
+
+    private func writePendingCreate(_ pending: PendingCreate) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try encryptor.encryptAndWrite(JSONEncoder().encode(pending), to: pendingCreateURL)
+    }
+
+    private func clearPendingCreate() {
+        try? FileManager.default.removeItem(at: pendingCreateURL)
+    }
+
+    private struct PendingEvent: Codable { let eventId: String; let type: DiaryEventType; let refSeq: Int?; let payloadCipher: String? }
+
+    private func readPendingEvent(_ id: String) -> PendingEvent? {
+        guard let data = try? encryptor.readAndDecrypt(from: pendingEventURL(id)) else { return nil }
+        return try? JSONDecoder().decode(PendingEvent.self, from: data)
+    }
+
+    private func writePendingEvent(_ id: String, _ pending: PendingEvent) throws {
+        try FileManager.default.createDirectory(at: diaryDir(id), withIntermediateDirectories: true)
+        try encryptor.encryptAndWrite(JSONEncoder().encode(pending), to: pendingEventURL(id))
+    }
+
+    private func clearPendingEvent(_ id: String) {
+        try? FileManager.default.removeItem(at: pendingEventURL(id))
+    }
+}
+
+/// Serializes every `DiaryEventLog` read/append issued by `DiaryStore`
+/// (across every diary — a coarser grain than "per diary", but still
+/// correct, and simple: at most 20 diaries per account, so cross-diary
+/// contention is not a real concern for the MVP) and, being an actor,
+/// necessarily runs its (synchronous, non-suspending) method bodies off
+/// whatever actor the caller was on — in particular, off `DiaryStore`'s
+/// main actor. `DiaryEventLog` itself is cheap to construct (just an URL +
+/// an encryptor reference), so a fresh instance per call is fine.
+private actor DiaryLogCoordinator {
+    private let encryptor: ChatDataEncryptor
+    init(encryptor: ChatDataEncryptor) { self.encryptor = encryptor }
+
+    @discardableResult
+    func append(_ event: DiaryEvent, url: URL) -> Int? {
+        try? DiaryEventLog(url: url, encryptor: encryptor).append(event)
+    }
+
+    func load(url: URL) -> DiaryEventLog.LoadResult {
+        DiaryEventLog(url: url, encryptor: encryptor).load()
+    }
+}
+
+/// Client-generated ULID (spec §0/§3.1/§5.1): a `diaryId` or event
+/// `eventId`, 26 chars from the worker's own alphabet (`notes.ts`'s
+/// `ULID_ALPHABET`, identical to `AccountID.alphabet`) — 10 timestamp
+/// chars (ms since epoch, big-endian base32) + 16 random chars, matching
+/// `DiaryClient`'s own `^[0-9A-HJKMNP-TV-Z]{26}$` shape check.
+enum DiaryULID {
+    private static let alphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+
+    static func generate(now: Date = Date()) -> String {
+        var t = UInt64(max(0, now.timeIntervalSince1970 * 1000))
+        var timeChars = [Character](repeating: "0", count: 10)
+        for i in stride(from: 9, through: 0, by: -1) {
+            timeChars[i] = alphabet[Int(t % 32)]
+            t /= 32
+        }
+        var randomBytes = [UInt8](repeating: 0, count: 16)
+        _ = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        let randomChars = randomBytes.map { alphabet[Int($0) % 32] }
+        return String(timeChars) + String(randomChars)
+    }
+}
+
+private extension Data {
+    /// Base64url (RFC 4648 §5) decode — the diary invite link's `#k=`
+    /// fragment uses this alphabet (URL-safe, no padding required in the
+    /// link itself).
+    init?(base64URLEncoded string: String) {
+        var base64 = string.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while base64.count % 4 != 0 { base64.append("=") }
+        guard let data = Data(base64Encoded: base64) else { return nil }
+        self = data
+    }
+}

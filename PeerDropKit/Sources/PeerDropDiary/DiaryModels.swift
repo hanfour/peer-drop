@@ -96,8 +96,13 @@ public struct DiaryMeta: Codable, Hashable, Sendable {
     public var isClosed: Bool { state == "closed" }
 }
 
-/// A row of `GET /v3/diaries` — this account's diary list.
-public struct DiarySummary: Codable, Hashable, Sendable {
+/// A row of `GET /v3/diaries` — this account's diary list, as the wire
+/// sends it (just id + join time). Named `DiaryListRow` (not `DiarySummary`)
+/// to leave `DiarySummary` for `DiaryStore`'s richer UI-facing summary
+/// (`{diaryId, name, memberCount, holderAccountId, isMyTurn}` — spec §5.1)
+/// — the two shapes share almost no fields, so reusing one name would
+/// collide.
+public struct DiaryListRow: Codable, Hashable, Sendable {
     public let diaryId: String
     public let joinedAt: Date
     public init(diaryId: String, joinedAt: Date) {

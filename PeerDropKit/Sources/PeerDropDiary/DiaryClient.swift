@@ -31,11 +31,11 @@ public actor DiaryClient {
     }
 
     /// `GET /v3/diaries` → this account's diary list (creation order).
-    public func list() async throws -> [DiarySummary] {
+    public func list() async throws -> [DiaryListRow] {
         struct R: Decodable { let diaryId: String; let joinedAt: Int }
         do {
             let rows: [R] = try await account.request("GET", "v3/diaries", body: Optional<EmptyBody>.none)
-            return rows.map { DiarySummary(diaryId: $0.diaryId, joinedAt: Date(timeIntervalSince1970: Double($0.joinedAt) / 1000)) }
+            return rows.map { DiaryListRow(diaryId: $0.diaryId, joinedAt: Date(timeIntervalSince1970: Double($0.joinedAt) / 1000)) }
         } catch { throw DiaryError.from(error) }
     }
 
