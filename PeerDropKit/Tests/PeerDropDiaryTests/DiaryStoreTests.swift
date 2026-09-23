@@ -611,24 +611,86 @@ final class DiaryStoreTests: XCTestCase {
     /// exactly that member, independent of `join` events entirely — here
     /// there are NONE (the old fan-out-over-join-events loop would do
     /// nothing), yet the targeted member still gets a relay attempt.
+    /// Review round 2, defect 3 moved the targeted relay BEFORE `sync` — so
+    /// this device now needs `meta.enc` ALREADY persisted (a realistic
+    /// precondition: `handlePush` only ever fires for a diary this device
+    /// already tracks) before the push arrives, not populated by `sync`
+    /// itself partway through this same call.
     func testHandlePushDiaryKeyRequestWithAccountIdRelaysToThatMemberEvenWithoutAJoinEvent() async throws {
         let diaryId = did("PSHTGT1")
         let key = SymmetricKey(size: .bits256)
-        try keyStore.save(key: key, for: diaryId)
         let metaCipher = try DiaryCrypto.sealMeta(name: "Diary", key: key, diaryId: diaryId, keyEpoch: 1).base64EncodedString()
         let requester = "REQSTER1"
 
+        // Seed: this device already tracks the diary but has no key yet —
+        // its own fan-out is a guaranteed no-op either way.
         TestURLProtocol.queue = [
             .init(status: 200, body: Data(#"""
             {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","\#(requester)"],"holderIndex":0,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
             """#.utf8)),
-            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),   // no join events at all
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+        try keyStore.save(key: key, for: diaryId)
+
+        // Stub order now matches the NEW call order: the targeted relay's
+        // directory lookup fires FIRST, THEN `sync`'s own GET meta/events.
+        TestURLProtocol.queue = [
             .init(status: 404, body: Data(#"{"error":"not_found"}"#.utf8)),   // GET /v3/directory/REQSTER1?bundle=1
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","\#(requester)"],"holderIndex":0,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),   // no join events at all
         ]
         await store.handlePush(kind: "diaryKeyRequest", diaryId: diaryId, accountId: requester)
 
-        XCTAssertEqual(TestURLProtocol.requests.count, 3)
-        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/directory/\(requester)")
+        XCTAssertEqual(TestURLProtocol.requests.count, 5)   // 2 (seed) + 3 (this push)
+        // The FIRST request of the push's own work is the targeted relay's
+        // directory lookup — it ran BEFORE `sync`'s own GET meta.
+        XCTAssertEqual(TestURLProtocol.requests[2].url?.path, "/v3/directory/\(requester)")
+    }
+
+    /// Review round 2, defect 3: the SAME member the push names must never
+    /// get relayed to twice — once from the targeted `force: true` call and
+    /// again from `sync`'s own un-forced fan-out — when a `join` event for
+    /// them is already known locally and no dedupe entry exists yet.
+    func testHandlePushAccountIdSendsExactlyOnceWhenAJoinEventIsAlreadyKnownAndNoDedupeExists() async throws {
+        let diaryId = did("PSHRD1")
+        let requester = try DiaryRecipientFixture()
+        let key = SymmetricKey(size: .bits256)
+        let metaCipher = try DiaryCrypto.sealMeta(name: "Diary", key: key, diaryId: diaryId, keyEpoch: 1).base64EncodedString()
+
+        // Seed: a `join` event for the requester is already known locally,
+        // but this device has NO key yet — nothing gets relayed/deduped.
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","\#(requester.accountId.raw)"],"holderIndex":0,"seq":1,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"""
+            {"events":[{"seq":1,"eventId":"JOINSEED1","type":"join","authorAccountId":"\#(requester.accountId.raw)","createdAt":1700000000000}]}
+            """#.utf8)),
+        ]
+        await store.sync(diaryId)
+        XCTAssertEqual(TestURLProtocol.requests.count, 2)
+
+        // The key arrives (e.g. via `acceptRelayedKey` elsewhere) — no
+        // dedupe entry exists for this member yet.
+        try keyStore.save(key: key, for: diaryId)
+
+        TestURLProtocol.queue = [
+            .init(status: 200, body: try requester.directoryJSON()),                        // targeted relay: lookup
+            .init(status: 200, body: Data(#"{"challenge":"Q0hBTA=="}"#.utf8)),               // targeted relay: PoW
+            .init(status: 201, body: Data(#"{"id":"01SENT0000000000000000000F"}"#.utf8)),    // targeted relay: send
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001","\#(requester.accountId.raw)"],"holderIndex":0,"seq":1,"state":"open","keyEpoch":1,"metaCipher":"\#(metaCipher)"}
+            """#.utf8)),   // handlePush's own sync: GET meta
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),   // handlePush's own sync: GET events, since=1
+        ]
+        await store.handlePush(kind: "diaryKeyRequest", diaryId: diaryId, accountId: requester.accountId.raw)
+
+        XCTAssertEqual(TestURLProtocol.requests.count, 7)   // 2 (seed) + 5 (this push)
+        let sendCount = TestURLProtocol.requests.filter { $0.url?.path == "/v3/notes/\(requester.accountId.raw)" }.count
+        XCTAssertEqual(sendCount, 1)   // exactly one send for the requester across the whole call
     }
 
     // MARK: - syncList refreshes every known diary, not only new ones (review round 1, I5)
@@ -771,5 +833,169 @@ final class DiaryStoreTests: XCTestCase {
         let pending = try XCTUnwrap(readPendingEventDirectly(diaryId))
         XCTAssertEqual(pending.type, .pass)
         XCTAssertNil(pending.payloadCipher)
+    }
+
+    // MARK: - flushPendingIfPossible via sync(_:) (review round 2, defect 1)
+
+    func testSyncFlushesAPendingEventSuccessfullyAndClearsTheSlot() async throws {
+        let diaryId = try await createDiary()
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            try await store.pass(diaryId)
+            XCTFail("expected .transient")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("http_500"))
+        }
+        XCTAssertNotNil(readPendingEventDirectly(diaryId))
+
+        TestURLProtocol.queue = [
+            .init(status: 201, body: Data(#"{"seq":1,"holderIndex":1}"#.utf8)),   // flush: resend POST
+            .init(status: 200, body: Data(#"""
+            {"events":[{"seq":1,"eventId":"FLUSHED1","type":"pass","authorAccountId":"0WNER001","createdAt":1700000000000}]}
+            """#.utf8)),   // flush: fetch the canonical event
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":1,"seq":1,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),   // sync's own GET meta
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),   // sync's own events page (since=1, nothing new)
+        ]
+        await store.sync(diaryId)
+
+        XCTAssertNil(readPendingEventDirectly(diaryId))
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(store.states[diaryId]?.events.map(\.eventId), ["FLUSHED1"])
+    }
+
+    func testSyncFlushKeepsThePendingSlotOnATransientFailureAndStillProceeds() async throws {
+        let diaryId = try await createDiary()
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            try await store.pass(diaryId)
+            XCTFail("expected .transient")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("http_500"))
+        }
+        let stuck = try XCTUnwrap(readPendingEventDirectly(diaryId))
+
+        TestURLProtocol.queue = [
+            .init(status: 500, body: Data()),   // flush's own resend ALSO fails transiently
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),   // sync's own GET meta — proceeds regardless of the flush failure
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+
+        // No error escalation beyond `lastError` — `sync` itself doesn't
+        // throw/crash, and its own (unrelated) meta/events work still runs.
+        XCTAssertEqual(store.lastError, String(describing: DiaryError.transient("http_500")))
+        let stillPending = try XCTUnwrap(readPendingEventDirectly(diaryId))
+        XCTAssertEqual(stillPending.eventId, stuck.eventId)
+        XCTAssertNotNil(store.states[diaryId])
+    }
+
+    func testSyncFlushClearsThePendingSlotOnAHardFailureAndSetsLastError() async throws {
+        let diaryId = try await createDiary()
+        TestURLProtocol.queue = [.init(status: 500, body: Data())]
+        do {
+            try await store.pass(diaryId)
+            XCTFail("expected .transient")
+        } catch {
+            XCTAssertEqual(error as? DiaryError, .transient("http_500"))
+        }
+        XCTAssertNotNil(readPendingEventDirectly(diaryId))
+
+        TestURLProtocol.queue = [
+            .init(status: 403, body: Data(#"{"error":"not_holder"}"#.utf8)),   // flush's own resend fails HARD
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":0,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),   // sync's own GET meta succeeds afterward
+            .init(status: 200, body: Data(#"{"events":[]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+
+        // A dead pending event (403 forever) must be cleared — not resent
+        // and failed identically on every future sync — and `lastError`
+        // reflects the hard failure even though sync's OWN work succeeded.
+        XCTAssertNil(readPendingEventDirectly(diaryId))
+        XCTAssertEqual(store.lastError, String(describing: DiaryError.notHolder))
+    }
+
+    // MARK: - Per-diary serial gate (review round 2, defect 2)
+
+    /// `sync` and `writeEntry` for the SAME diary, started concurrently,
+    /// must never interleave their `cursor.enc`/`pending.enc`/`meta.enc`
+    /// read-modify-writes. `sync` is declared (and so started) first, and
+    /// the gate makes its entire body run to completion before
+    /// `writeEntry`'s starts — the stub queue below is ordered to match
+    /// exactly that (sync's GET meta/events, THEN the write's POST/GET).
+    func testConcurrentSyncAndWriteEntryForTheSameDiaryDoNotRaceCursorOrPending() async throws {
+        let diaryId = did("GATE1")
+        let seedEvents = (1...10).map { seq in
+            #"{"seq":\#(seq),"eventId":"E\#(seq)","type":"pass","authorAccountId":"0WNER001","createdAt":\#(1_700_000_000_000 + seq)}"#
+        }.joined(separator: ",")
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":10,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),
+            .init(status: 200, body: Data(#"{"events":[\#(seedEvents)]}"#.utf8)),
+        ]
+        await store.sync(diaryId)
+        XCTAssertEqual(store.states[diaryId]?.events.count, 10)
+
+        let key = SymmetricKey(size: .bits256)
+        try keyStore.save(key: key, for: diaryId)
+
+        TestURLProtocol.queue = [
+            .init(status: 200, body: Data(#"""
+            {"diaryId":"\#(diaryId)","ownerAccountId":"0WNER001","members":["0WNER001"],"holderIndex":0,"seq":15,"state":"open","keyEpoch":1,"metaCipher":"bWV0YQ=="}
+            """#.utf8)),   // sync: GET meta
+            .init(status: 200, body: Data(#"""
+            {"events":[
+              {"seq":11,"eventId":"E11","type":"pass","authorAccountId":"0WNER001","createdAt":1700000011000},
+              {"seq":12,"eventId":"E12","type":"pass","authorAccountId":"0WNER001","createdAt":1700000012000},
+              {"seq":13,"eventId":"E13","type":"pass","authorAccountId":"0WNER001","createdAt":1700000013000},
+              {"seq":14,"eventId":"E14","type":"pass","authorAccountId":"0WNER001","createdAt":1700000014000},
+              {"seq":15,"eventId":"E15","type":"pass","authorAccountId":"0WNER001","createdAt":1700000015000}
+            ]}
+            """#.utf8)),   // sync: GET events since=10 → 11..15
+            .init(status: 201, body: Data(#"{"seq":16,"holderIndex":0}"#.utf8)),   // write: POST
+            .init(status: 200, body: Data(#"""
+            {"events":[{"seq":16,"eventId":"E16","type":"entry","authorAccountId":"0WNER001","payloadCipher":"cGF5","createdAt":1700000016000}]}
+            """#.utf8)),   // write: GET event
+        ]
+
+        // `async let` declaration order is NOT a reliable signal for which
+        // task actually reaches `withDiaryLock`'s (synchronous) gate
+        // registration first — empirically flaky when this test runs
+        // alongside a full suite (other queued MainActor work can let the
+        // second-declared task run first). A short real sleep after
+        // starting `sync` gives it an overwhelming margin to register
+        // itself in the gate before `writeEntry` starts, while the two
+        // still genuinely run concurrently afterward (both in flight, real
+        // `Task`s, real `await`s) — the stub queue is ordered to match
+        // this now-deterministic "sync's gated body completes fully
+        // first" outcome.
+        let syncTask = Task { await store.sync(diaryId) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let writeTask = Task<DiaryError?, Never> {
+            do {
+                try await store.writeEntry(diaryId, text: "concurrent write")
+                return nil
+            } catch {
+                return error as? DiaryError
+            }
+        }
+        let writeError = await writeTask.value
+        _ = await syncTask.value
+
+        XCTAssertNil(writeError)
+        XCTAssertNil(readPendingEventDirectly(diaryId))   // exactly one clean round trip — never stuck
+        XCTAssertEqual(store.states[diaryId]?.events.count, 16)
+
+        let cursorURL = dir.appendingPathComponent(diaryId, isDirectory: true).appendingPathComponent("cursor.enc")
+        let cursorData = try XCTUnwrap(try? encryptor.readAndDecrypt(from: cursorURL))
+        struct DirectCursorFile: Codable { let syncedThrough: Int }
+        let cursor = try JSONDecoder().decode(DirectCursorFile.self, from: cursorData)
+        XCTAssertGreaterThanOrEqual(cursor.syncedThrough, 15)
     }
 }

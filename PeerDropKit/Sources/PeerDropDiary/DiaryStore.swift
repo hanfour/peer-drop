@@ -90,8 +90,48 @@ public final class DiaryStore: ObservableObject {
     /// Per-diary reentrancy guard for `sync(_:)` (review round 1, I2) — a
     /// second concurrent `sync` call for the SAME diary returns
     /// immediately instead of racing the first (duplicate GET meta/events
-    /// pages, duplicate relay attempts).
+    /// pages, duplicate relay attempts). Checked/set OUTSIDE `withDiaryLock`
+    /// (see its doc) specifically so this short-circuit fires before ever
+    /// joining the per-diary queue, rather than after waiting a full turn
+    /// for a now-redundant pass.
     private var syncing: Set<String> = []
+
+    /// Per-diary FIFO gate (review round 2, defect 2): `sync`,
+    /// `performWrite` (covering `writeEntry`/`pass`/`skip`/`comment`/
+    /// `like`), `join`, `leave`, `close`, and `create` all read-modify-write
+    /// this diary's on-disk state (`meta.enc`/`cursor.enc`/`pending.enc`) —
+    /// running two of them concurrently for the SAME diary would race
+    /// those sequences (e.g. a write's cursor check racing a sync's cursor
+    /// advance, or two writers both reading `pending.enc` as empty and
+    /// both proceeding). See `withDiaryLock` below.
+    private var diaryGates: [String: Task<Void, Never>] = [:]
+
+    /// Chains `body` onto whatever's already queued for `id`, so bodies
+    /// for the SAME diary id always run one at a time, in call order;
+    /// different diaries are fully independent (no cross-diary
+    /// contention). `work` is the properly-typed task whose result/error
+    /// this call actually returns; the plain `Task<Void, Never>` stored in
+    /// `diaryGates` is only a completion signal for the NEXT caller to
+    /// chain onto (so a slow/failing call never blocks the dictionary on a
+    /// value only that one caller needed).
+    ///
+    /// NOT reentrant: a body must never call `withDiaryLock` again for the
+    /// SAME id it's already executing under — that would await a task
+    /// (itself) that can never finish, deadlocking forever. `handlePush`
+    /// avoids this by never wrapping its own body in the gate — it only
+    /// calls `sync(_:)` (which gates itself) and `relay.relayIfNeeded`
+    /// (which doesn't touch any of `DiaryStore`'s own per-diary files).
+    private func withDiaryLock<T>(_ id: String, _ body: @MainActor @escaping () async throws -> T) async throws -> T {
+        let previous = diaryGates[id]
+        let work = Task<T, Error> { @MainActor in
+            _ = await previous?.value
+            return try await body()
+        }
+        diaryGates[id] = Task { @MainActor in
+            _ = try? await work.value
+        }
+        return try await work.value
+    }
 
     public init(
         client: DiaryClient, notesClient: NotesClient, accountManager: AccountManager, crypto: NotesCryptoContext,
@@ -197,58 +237,63 @@ public final class DiaryStore: ObservableObject {
         syncing.insert(id)
         defer { syncing.remove(id) }
 
-        await flushPendingIfPossible(id: id)
+        try? await withDiaryLock(id) { [self] in
+            let flushedCleanly = await flushPendingIfPossible(id: id)
 
-        do {
-            let meta = try await client.get(id)
-            let key = keyStore.key(for: id)
-            var localMeta = meta
-            if let key, let cipherData = Data(base64Encoded: meta.metaCipher),
-               let name = try? DiaryCrypto.openMeta(cipherData, key: key, diaryId: id, keyEpoch: meta.keyEpoch) {
-                localMeta.name = name
-            } else {
-                localMeta.name = readMeta(id)?.name
-            }
-            persistMeta(id, localMeta)
-            addToIndex(id)
-
-            let logURL = eventsLogURL(id)
-            var since = readCursor(id)
-            while true {
-                let (events, nextSince) = try await client.events(id: id, since: since, limit: 100)
-                for event in events {
-                    let decoded = withDecodedPayload(event, id: id, key: key)
-                    await logCoordinator.append(decoded, url: logURL)
+            do {
+                let meta = try await client.get(id)
+                let key = keyStore.key(for: id)
+                var localMeta = meta
+                if let key, let cipherData = Data(base64Encoded: meta.metaCipher),
+                   let name = try? DiaryCrypto.openMeta(cipherData, key: key, diaryId: id, keyEpoch: meta.keyEpoch) {
+                    localMeta.name = name
+                } else {
+                    localMeta.name = readMeta(id)?.name
                 }
-                // The cursor only ever advances via THIS paged, contiguous
-                // fetch — never via a write's own `performWrite`/
-                // `sendPendingEvent` append, which can land arbitrarily far
-                // ahead (e.g. seq 16 while a gap of 11–15 from other
-                // members hasn't been synced yet). Advancing here, after
-                // every page, keeps a long paginated catch-up resumable
-                // even if it's interrupted partway through.
-                if let maxFetched = events.map(\.seq).max() {
-                    since = maxFetched
-                    writeCursor(id, since)
-                }
-                guard let next = nextSince, next != since else { break }
-                since = next
-            }
+                persistMeta(id, localMeta)
+                addToIndex(id)
 
-            let finalEvents = await logCoordinator.load(url: logURL).events
-            refreshSummary(id: id, meta: localMeta, events: finalEvents)
-            lastError = nil
-
-            if let myId = accountManager.account?.accountId.raw {
-                let myNickname = accountManager.account?.nickname
-                for event in finalEvents where event.type == .join && event.authorAccountId != myId {
-                    await relay.relayIfNeeded(
-                        diaryId: id, newMember: event.authorAccountId, metaCipher: localMeta.metaCipher,
-                        senderAccountId: myId, senderNickname: myNickname, force: false)
+                let logURL = eventsLogURL(id)
+                var since = readCursor(id)
+                while true {
+                    let (events, nextSince) = try await client.events(id: id, since: since, limit: 100)
+                    for event in events {
+                        let decoded = withDecodedPayload(event, id: id, key: key)
+                        await logCoordinator.append(decoded, url: logURL)
+                    }
+                    // The cursor only ever advances via THIS paged, contiguous
+                    // fetch — never via a write's own `performWrite`/
+                    // `sendPendingEvent` append, which can land arbitrarily far
+                    // ahead (e.g. seq 16 while a gap of 11–15 from other
+                    // members hasn't been synced yet). Advancing here, after
+                    // every page, keeps a long paginated catch-up resumable
+                    // even if it's interrupted partway through.
+                    if let maxFetched = events.map(\.seq).max() {
+                        since = maxFetched
+                        writeCursor(id, since)
+                    }
+                    guard let next = nextSince, next != since else { break }
+                    since = next
                 }
+
+                let finalEvents = await logCoordinator.load(url: logURL).events
+                refreshSummary(id: id, meta: localMeta, events: finalEvents)
+                // Review round 2, defect 1: don't clobber a `flushPendingIfPossible`
+                // failure's `lastError` with an unconditional nil just because
+                // the (unrelated) GET meta/events work below happened to succeed.
+                if flushedCleanly { lastError = nil }
+
+                if let myId = accountManager.account?.accountId.raw {
+                    let myNickname = accountManager.account?.nickname
+                    for event in finalEvents where event.type == .join && event.authorAccountId != myId {
+                        await relay.relayIfNeeded(
+                            diaryId: id, newMember: event.authorAccountId, metaCipher: localMeta.metaCipher,
+                            senderAccountId: myId, senderNickname: myNickname, force: false)
+                    }
+                }
+            } catch {
+                lastError = String(describing: Self.mapError(error))
             }
-        } catch {
-            lastError = String(describing: Self.mapError(error))
         }
     }
 
@@ -258,13 +303,32 @@ public final class DiaryStore: ObservableObject {
     /// to clear a `.transient` pending event. Failures here never abort
     /// the rest of `sync` — the GET-meta/events reconciliation below is
     /// still worth doing regardless of whether the flush succeeded.
-    private func flushPendingIfPossible(id: String) async {
-        guard let pending = readPendingEvent(id) else { return }
+    ///
+    /// Review round 2, defect 1: mirrors `performWrite`'s own resend-first
+    /// handling exactly — `.transient` keeps `pending.enc` in place (so
+    /// the next `sync`/write retries the SAME event); any other failure
+    /// (403/400/…) clears it, since a dead pending event would otherwise
+    /// be resent and fail identically on every future `sync` forever.
+    /// Either failure surfaces the mapped `DiaryError` in `lastError`.
+    /// Returns `true` when there was nothing to flush or the flush
+    /// succeeded — `sync` uses this to avoid immediately clobbering a
+    /// just-set failure `lastError` with an unconditional `nil` once its
+    /// own (unrelated) GET meta/events work succeeds.
+    @discardableResult
+    private func flushPendingIfPossible(id: String) async -> Bool {
+        guard let pending = readPendingEvent(id) else { return true }
         do {
             _ = try await sendPendingEvent(id: id, pending: pending)
-            lastError = nil
+            return true
         } catch {
-            lastError = String(describing: Self.mapError(error))
+            let diaryError = Self.mapError(error)
+            lastError = String(describing: diaryError)
+            if case .transient = diaryError {
+                // keep pending.enc — resend next time
+            } else {
+                clearPendingEvent(id)
+            }
+            return false
         }
     }
 
@@ -320,33 +384,37 @@ public final class DiaryStore: ObservableObject {
             }
         }
 
-        do {
-            // `pending.diaryId` — the client-generated id `key.enc` was
-            // already saved under — is authoritative for local storage; the
-            // worker's create route is idempotent BY that same diaryId and
-            // always echoes it back unchanged (spec §2.1), so `r.diaryId`
-            // is only used as a defensive sanity check, never to re-key
-            // where this diary's files live locally.
-            let r = try await client.create(diaryId: pending.diaryId, metaCipher: pending.metaCipher)
-            let meta = DiaryMeta(
-                diaryId: pending.diaryId, ownerAccountId: myId, members: [myId], holderIndex: 0, seq: 0, state: "open",
-                keyEpoch: 1, metaCipher: pending.metaCipher, inviteCode: r.inviteCode, name: pending.name)
-            persistMeta(pending.diaryId, meta)
-            addToIndex(pending.diaryId)
-            clearPendingCreate()
-            refreshSummary(id: pending.diaryId, meta: meta, events: [])
-            lastError = nil
-            return pending.diaryId
-        } catch {
-            let diaryError = Self.mapError(error)
-            lastError = String(describing: diaryError)
-            if case .transient = diaryError {
-                // Leave the pending-create marker so the next `create(name:)`
-                // call resends with the SAME diaryId/metaCipher.
-            } else {
+        // Review round 2, defect 2: gate the POST + local persist by the
+        // now-known `diaryId`, same as every other per-diary operation.
+        return try await withDiaryLock(pending.diaryId) { [self] in
+            do {
+                // `pending.diaryId` — the client-generated id `key.enc` was
+                // already saved under — is authoritative for local storage; the
+                // worker's create route is idempotent BY that same diaryId and
+                // always echoes it back unchanged (spec §2.1), so `r.diaryId`
+                // is only used as a defensive sanity check, never to re-key
+                // where this diary's files live locally.
+                let r = try await client.create(diaryId: pending.diaryId, metaCipher: pending.metaCipher)
+                let meta = DiaryMeta(
+                    diaryId: pending.diaryId, ownerAccountId: myId, members: [myId], holderIndex: 0, seq: 0, state: "open",
+                    keyEpoch: 1, metaCipher: pending.metaCipher, inviteCode: r.inviteCode, name: pending.name)
+                persistMeta(pending.diaryId, meta)
+                addToIndex(pending.diaryId)
                 clearPendingCreate()
+                refreshSummary(id: pending.diaryId, meta: meta, events: [])
+                lastError = nil
+                return pending.diaryId
+            } catch {
+                let diaryError = Self.mapError(error)
+                lastError = String(describing: diaryError)
+                if case .transient = diaryError {
+                    // Leave the pending-create marker so the next `create(name:)`
+                    // call resends with the SAME diaryId/metaCipher.
+                } else {
+                    clearPendingCreate()
+                }
+                throw diaryError
             }
-            throw diaryError
         }
     }
 
@@ -373,11 +441,15 @@ public final class DiaryStore: ObservableObject {
         guard !isMock else { throw DiaryError.network("mock") }
         do {
             let meta = try await client.joinByCode(code)
-            persistMeta(meta.diaryId, meta)
-            addToIndex(meta.diaryId)
-            refreshSummary(id: meta.diaryId, meta: meta, events: [])
-            lastError = nil
-            return meta.diaryId
+            // Review round 2, defect 2: the diaryId is only known once the
+            // response returns — gate just the local persist by it.
+            return try await withDiaryLock(meta.diaryId) { [self] in
+                persistMeta(meta.diaryId, meta)
+                addToIndex(meta.diaryId)
+                refreshSummary(id: meta.diaryId, meta: meta, events: [])
+                lastError = nil
+                return meta.diaryId
+            }
         } catch {
             let diaryError = Self.mapError(error)
             lastError = String(describing: diaryError)
@@ -388,21 +460,25 @@ public final class DiaryStore: ObservableObject {
     private func performJoin(diaryId: String, code: String, key keyData: Data?) async throws -> String {
         do {
             let meta = try await client.join(id: diaryId, code: code)
-            // Persist meta + members BEFORE validating the key — spec §3.2.
-            persistMeta(meta.diaryId, meta)
-            addToIndex(meta.diaryId)
+            // Review round 2, defect 2: gate the persist-meta/key-install
+            // sequence below by `diaryId` (known upfront for a link join).
+            return try await withDiaryLock(diaryId) { [self] in
+                // Persist meta + members BEFORE validating the key — spec §3.2.
+                persistMeta(meta.diaryId, meta)
+                addToIndex(meta.diaryId)
 
-            var finalMeta = meta
-            if let keyData, keyData.count == 32, let cipherData = Data(base64Encoded: meta.metaCipher),
-               let name = try? DiaryCrypto.openMeta(cipherData, key: SymmetricKey(data: keyData), diaryId: meta.diaryId, keyEpoch: meta.keyEpoch) {
-                try? keyStore.save(key: SymmetricKey(data: keyData), for: meta.diaryId)
-                finalMeta.name = name
-                persistMeta(meta.diaryId, finalMeta)
+                var finalMeta = meta
+                if let keyData, keyData.count == 32, let cipherData = Data(base64Encoded: meta.metaCipher),
+                   let name = try? DiaryCrypto.openMeta(cipherData, key: SymmetricKey(data: keyData), diaryId: meta.diaryId, keyEpoch: meta.keyEpoch) {
+                    try? keyStore.save(key: SymmetricKey(data: keyData), for: meta.diaryId)
+                    finalMeta.name = name
+                    persistMeta(meta.diaryId, finalMeta)
+                }
+
+                refreshSummary(id: meta.diaryId, meta: finalMeta, events: [])
+                lastError = nil
+                return meta.diaryId
             }
-
-            refreshSummary(id: meta.diaryId, meta: finalMeta, events: [])
-            lastError = nil
-            return meta.diaryId
         } catch {
             let diaryError = Self.mapError(error)
             lastError = String(describing: diaryError)
@@ -416,10 +492,12 @@ public final class DiaryStore: ObservableObject {
         guard !isMock else { throw DiaryError.network("mock") }
         do {
             try await client.leave(id)
-            removeFromIndex(id)
-            states[id] = nil
-            diaries.removeAll { $0.diaryId == id }
-            lastError = nil
+            try await withDiaryLock(id) { [self] in
+                removeFromIndex(id)
+                states[id] = nil
+                diaries.removeAll { $0.diaryId == id }
+                lastError = nil
+            }
         } catch {
             let diaryError = Self.mapError(error)
             lastError = String(describing: diaryError)
@@ -431,15 +509,17 @@ public final class DiaryStore: ObservableObject {
         guard !isMock else { throw DiaryError.network("mock") }
         do {
             try await client.close(id)
-            if let meta = readMeta(id) {
-                let updated = DiaryMeta(
-                    diaryId: meta.diaryId, ownerAccountId: meta.ownerAccountId, members: meta.members,
-                    holderIndex: meta.holderIndex, seq: meta.seq, state: "closed", keyEpoch: meta.keyEpoch,
-                    metaCipher: meta.metaCipher, inviteCode: meta.inviteCode, name: meta.name)
-                persistMeta(id, updated)
-                refreshSummary(id: id, meta: updated, events: states[id]?.events ?? [])
+            try await withDiaryLock(id) { [self] in
+                if let meta = readMeta(id) {
+                    let updated = DiaryMeta(
+                        diaryId: meta.diaryId, ownerAccountId: meta.ownerAccountId, members: meta.members,
+                        holderIndex: meta.holderIndex, seq: meta.seq, state: "closed", keyEpoch: meta.keyEpoch,
+                        metaCipher: meta.metaCipher, inviteCode: meta.inviteCode, name: meta.name)
+                    persistMeta(id, updated)
+                    refreshSummary(id: id, meta: updated, events: states[id]?.events ?? [])
+                }
+                lastError = nil
             }
-            lastError = nil
         } catch {
             let diaryError = Self.mapError(error)
             lastError = String(describing: diaryError)
@@ -516,56 +596,62 @@ public final class DiaryStore: ObservableObject {
         guard !isMock else { throw DiaryError.network("mock") }
         guard readMeta(id) != nil else { throw DiaryError.notFound }
 
-        if let existingPending = readPendingEvent(id) {
+        // Review round 2, defect 2: the whole read-modify-write sequence
+        // below (pending.enc/cursor.enc/meta.enc) is gated per-diary so it
+        // can never interleave with a concurrent `sync(_:)`/`join`/`leave`/
+        // `close`/`create` for the SAME id.
+        return try await withDiaryLock(id) { [self] in
+            if let existingPending = readPendingEvent(id) {
+                do {
+                    _ = try await sendPendingEvent(id: id, pending: existingPending)
+                    lastError = nil
+                } catch {
+                    let diaryError = Self.mapError(error)
+                    lastError = String(describing: diaryError)
+                    if case .transient = diaryError {
+                        throw DiaryError.transient("pending")
+                    }
+                    clearPendingEvent(id)
+                }
+            }
+
+            let eventId = DiaryULID.generate()
+            var payloadCipher: String?
+            if let seal {
+                do {
+                    payloadCipher = try seal(eventId)
+                } catch DiaryCryptoError.oversized {
+                    let err = DiaryError.tooLarge
+                    lastError = String(describing: err)
+                    throw err
+                } catch {
+                    let err = DiaryError.network(String(describing: error))
+                    lastError = String(describing: err)
+                    throw err
+                }
+            }
+            let fresh = PendingEvent(eventId: eventId, type: type, refSeq: refSeq, payloadCipher: payloadCipher)
             do {
-                _ = try await sendPendingEvent(id: id, pending: existingPending)
+                try writePendingEvent(id, fresh)
+            } catch {
+                let err = DiaryError.network("persist_failed")
+                lastError = String(describing: err)
+                throw err
+            }
+
+            do {
+                let event = try await sendPendingEvent(id: id, pending: fresh)
                 lastError = nil
+                return event
             } catch {
                 let diaryError = Self.mapError(error)
                 lastError = String(describing: diaryError)
                 if case .transient = diaryError {
-                    throw DiaryError.transient("pending")
+                    throw diaryError   // keep pending.enc — resend next call
+                } else {
+                    clearPendingEvent(id)
+                    throw diaryError
                 }
-                clearPendingEvent(id)
-            }
-        }
-
-        let eventId = DiaryULID.generate()
-        var payloadCipher: String?
-        if let seal {
-            do {
-                payloadCipher = try seal(eventId)
-            } catch DiaryCryptoError.oversized {
-                let err = DiaryError.tooLarge
-                lastError = String(describing: err)
-                throw err
-            } catch {
-                let err = DiaryError.network(String(describing: error))
-                lastError = String(describing: err)
-                throw err
-            }
-        }
-        let fresh = PendingEvent(eventId: eventId, type: type, refSeq: refSeq, payloadCipher: payloadCipher)
-        do {
-            try writePendingEvent(id, fresh)
-        } catch {
-            let err = DiaryError.network("persist_failed")
-            lastError = String(describing: err)
-            throw err
-        }
-
-        do {
-            let event = try await sendPendingEvent(id: id, pending: fresh)
-            lastError = nil
-            return event
-        } catch {
-            let diaryError = Self.mapError(error)
-            lastError = String(describing: diaryError)
-            if case .transient = diaryError {
-                throw diaryError   // keep pending.enc — resend next call
-            } else {
-                clearPendingEvent(id)
-                throw diaryError
             }
         }
     }
@@ -629,17 +715,36 @@ public final class DiaryStore: ObservableObject {
     /// accountId}`, spec §4) — targets the relay at exactly that member
     /// instead of force-relaying to every `join` event's author; passing
     /// `nil` keeps the previous fan-out-to-everyone behavior.
+    ///
+    /// Review round 2, defect 3: the TARGETED (`accountId != nil`) relay
+    /// now runs BEFORE `sync`, not after. `sync`'s own un-forced fan-out
+    /// (which runs as part of every sync, `force: false`) independently
+    /// relays to every `join` event author it sees — including this same
+    /// member, if `sync` happens to see their `join` event too. Running
+    /// the targeted relay first means a successful send persists the
+    /// dedupe entry immediately, so `sync`'s OWN pass then sees it and
+    /// skips — instead of both firing and burning two OPKs for one
+    /// request. The no-`accountId` fan-out deliberately still runs AFTER
+    /// `sync`, since — unlike the targeted case — it needs a FRESH event
+    /// list (whatever `join` events `sync` just fetched), not a
+    /// stale/empty one from before this push arrived.
     public func handlePush(kind: String, diaryId: String, accountId: String? = nil) async {
-        await sync(diaryId)
-        guard kind == "diaryKeyRequest", let myId = accountManager.account?.accountId.raw,
-              let meta = readMeta(diaryId) else { return }
+        guard kind == "diaryKeyRequest" else {
+            await sync(diaryId)
+            return
+        }
+        let myId = accountManager.account?.accountId.raw
         let myNickname = accountManager.account?.nickname
-        if let accountId {
+
+        if let accountId, let myId, let meta = readMeta(diaryId) {
             await relay.relayIfNeeded(
                 diaryId: diaryId, newMember: accountId, metaCipher: meta.metaCipher,
                 senderAccountId: myId, senderNickname: myNickname, force: true)
-            return
         }
+
+        await sync(diaryId)
+
+        guard accountId == nil, let myId, let meta = readMeta(diaryId) else { return }
         let events = states[diaryId]?.events ?? []
         for event in events where event.type == .join && event.authorAccountId != myId {
             await relay.relayIfNeeded(
