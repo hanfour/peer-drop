@@ -30,6 +30,18 @@ final class NotesClientTests: XCTestCase {
         XCTAssertEqual((body(1)["pow"] as? [String: Any])?["nonce"] as? Int, 4242)
         XCTAssertEqual(TestURLProtocol.requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer t")
     }
+    func testSendDefaultBodyOmitsKindAndDiaryId() async throws {
+        TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"id":"01ITEM0000000000000000000B"}"#.utf8))]
+        _ = try await client.send(to: "TESTRCPT", envelopeBase64: "ZW52", challenge: "QUJD", nonce: 1)
+        XCTAssertNil(body(0)["kind"])
+        XCTAssertNil(body(0)["diaryId"])
+    }
+    func testSendDiaryKeyBodyIncludesKindAndDiaryId() async throws {
+        TestURLProtocol.queue = [.init(status: 201, body: Data(#"{"id":"01ITEM0000000000000000000C"}"#.utf8))]
+        _ = try await client.send(to: "TESTRCPT", envelopeBase64: "ZW52", challenge: "QUJD", nonce: 1, kind: "diaryKey", diaryId: "DIARY001")
+        XCTAssertEqual(body(0)["kind"] as? String, "diaryKey")
+        XCTAssertEqual(body(0)["diaryId"] as? String, "DIARY001")
+    }
     func testInboxReadDeleteBlockReport() async throws {
         TestURLProtocol.queue = [
             .init(status: 200, body: Data(#"{"items":[{"id":"01A","kind":"note","envelope":"ZW52","createdAt":1700000000000,"readAt":null}],"nextAfter":"01A"}"#.utf8)),
@@ -63,7 +75,7 @@ final class NotesClientTests: XCTestCase {
     }
     func testErrorMapping() async {
         TestURLProtocol.queue = [.init(status: 507, body: Data(#"{"error":"inbox_full"}"#.utf8)), .init(status: 404, body: Data(#"{"error":"recipient_not_found"}"#.utf8)), .init(status: 400, body: Data(#"{"error":"bad_pow"}"#.utf8))]
-        do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .http(507)) }
+        do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .insufficientStorage("inbox_full")) }
         do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .http(404)) }
         do { _ = try await client.send(to: "X", envelopeBase64: "e", challenge: "c", nonce: 1); XCTFail() } catch { XCTAssertEqual(error as? AccountClientError, .invalid("bad_pow")) }
     }

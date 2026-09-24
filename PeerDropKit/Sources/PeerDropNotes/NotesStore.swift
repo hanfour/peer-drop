@@ -24,6 +24,18 @@ public enum NotesStoreError: Error, Equatable {
     case network(String)
 }
 
+/// What the injected `diaryKeyHandler` decided to do with one decoded
+/// `diaryKey` inbox item (spec §3.4). `installed` and `rejected` are
+/// handled identically at this layer — both are terminal for the item
+/// (server-side delete + cursor advance, no `NoteRecord`) — the
+/// distinction only matters to the handler's own bookkeeping (e.g.
+/// whether it wrote `key.enc`).
+public enum DiaryKeyDisposition {
+    case installed
+    case rejected
+    case transient
+}
+
 @MainActor
 public final class NotesStore: ObservableObject {
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "NotesStore")
@@ -41,6 +53,13 @@ public final class NotesStore: ObservableObject {
     private let directoryCache: DirectoryCache
     private let policy: SecurityPolicy
     private let isMock: Bool
+    /// Injected by the app layer (`PeerDropDiary`) so `PeerDropNotes` never
+    /// imports `PeerDropDiary` — see spec §1 row "收件匣分流". Given the
+    /// decoded `diaryKey` plaintext, the verified-sender state computed the
+    /// same way as for a note, and the inbox item id; returns how `sync()`
+    /// should dispose of the item (§3.4). `nil` (never set) is treated as
+    /// `.transient` for every `diaryKey` item.
+    public var diaryKeyHandler: ((NotePlaintext, NoteSenderState, String) async -> DiaryKeyDisposition)?
     /// Ids of inbound records whose sender block was looked up, FOUND in the
     /// directory, and did not match — a permanent mismatch, unlike a
     /// transient lookup failure. Skipped by future re-verification passes so
@@ -126,17 +145,35 @@ public final class NotesStore: ObservableObject {
                     // page: every item must sort after the cursor we requested.
                     if let last = after, item.id <= last { continue }
                     guard !known.contains(item.id) else { continue }
-                    let record = await decode(item, account: account, keys: keys)
-                    do {
-                        try storage.save(record)
-                        lastPersistedId = item.id
-                    } catch {
-                        lastError = error.localizedDescription
+                    switch await decodeItem(item, account: account, keys: keys) {
+                    case .record(let record):
+                        do {
+                            try storage.save(record)
+                            lastPersistedId = item.id
+                        } catch {
+                            lastError = error.localizedDescription
+                            inbox.append(record); known.insert(item.id)
+                            if lastPersistedId != initialCursor { storage.lastSeenInboxId = lastPersistedId }
+                            return
+                        }
                         inbox.append(record); known.insert(item.id)
+                    case .diaryKeyResolved:
+                        // §3.4 "installed"/"rejected": both delete the item and
+                        // advance the cursor past it — no `NoteRecord` either way.
+                        // Best-effort delete, same as the explicit `delete(_:)`
+                        // API below: a failed DELETE here must not re-run the
+                        // handler (and burn another OPK relay) on the next sync.
+                        try? await client.delete(id: item.id)
+                        lastPersistedId = item.id
+                    case .diaryKeyTransient:
+                        // §3.4 transient: no delete, no cursor advance, and the
+                        // cursor is a single high-water mark — abort the WHOLE
+                        // sync round now so a later item (a plain note, or a
+                        // later page) can't get persisted and jump the cursor
+                        // past this unresolved one.
                         if lastPersistedId != initialCursor { storage.lastSeenInboxId = lastPersistedId }
                         return
                     }
-                    inbox.append(record); known.insert(item.id)
                 }
                 // Paging terminates on server-controlled input: `nextAfter`
                 // is the next request cursor. Stop when the server says
@@ -158,28 +195,90 @@ public final class NotesStore: ObservableObject {
         if lastPersistedId != initialCursor { storage.lastSeenInboxId = lastPersistedId }
     }
 
-    private func decode(_ item: InboxItemDTO, account: Account, keys: NoteRecipientKeys) async -> NoteRecord {
+    /// What `decodeItem` found for one inbox item. `.record` is the existing
+    /// note path (saved via `storage.save`); the `diaryKey*` cases never
+    /// produce a `NoteRecord` — see §3.4 and `diaryKeyHandler`.
+    private enum ItemOutcome {
+        case record(NoteRecord)
+        case diaryKeyResolved
+        case diaryKeyTransient
+    }
+
+    private func decodeItem(_ item: InboxItemDTO, account: Account, keys: NoteRecipientKeys) async -> ItemOutcome {
         let receivedAt = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000)
         let readAt = item.readAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
         guard let bytes = Data(base64Encoded: item.envelope), let envelope = try? NoteEnvelope.fromWire(bytes),
               let plaintext = try? NoteCrypto.open(envelope, recipientAccountId: account.accountId.raw, keys: keys)
         else {
-            return NoteRecord(id: item.id, direction: .inbound, text: nil, sentAt: receivedAt, sender: .anonymous, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt)
+            return .record(NoteRecord(id: item.id, direction: .inbound, text: nil, sentAt: receivedAt, sender: .anonymous, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt))
         }
-        var sender: NoteSenderState = .anonymous
-        if let block = plaintext.sender {
-            sender = .unverified(accountId: block.accountId)
-            // A 404 ("not found") and a network/rate-limit failure both leave
-            // the sender `.unverified` here — the difference only matters to
-            // `reverifyUnverifiedSenders`, which must retry the latter but
-            // not waste lookups on a confirmed key mismatch.
-            if case .found(let entry) = await directoryLookup(for: block.accountId),
-               NoteCrypto.verifySender(plaintext, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
-                sender = .verified(accountId: block.accountId, nickname: entry.nickname)
-            }
+        if plaintext.kind == .diaryKey {
+            return await decodeDiaryKey(plaintext, itemId: item.id, account: account)
         }
-        return NoteRecord(id: item.id, direction: .inbound, text: plaintext.text, sentAt: Date(timeIntervalSince1970: TimeInterval(plaintext.sentAt)),
-                          sender: sender, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt, senderBlock: plaintext.sender)
+        let sender = await senderState(for: plaintext, account: account)
+        return .record(NoteRecord(id: item.id, direction: .inbound, text: plaintext.text, sentAt: Date(timeIntervalSince1970: TimeInterval(plaintext.sentAt)),
+                                  sender: sender, recipientAccountId: nil, readAt: readAt, receivedAt: receivedAt, senderBlock: plaintext.sender))
+    }
+
+    /// §3.4's three cursor rules, restricted to what `NotesStore` itself can
+    /// decide: anonymity and the same sender-verification computation used
+    /// for a note. Everything else (does this device hold the diary, does
+    /// `openMeta` succeed, is the sender on the diary's member list) is the
+    /// injected handler's call — `PeerDropDiary` owns that, not this module.
+    private func decodeDiaryKey(_ plaintext: NotePlaintext, itemId: String, account: Account) async -> ItemOutcome {
+        // Anonymous → rejected without ever invoking the handler: an
+        // unsigned `diaryKey` plaintext carries no verifiable installer.
+        guard let block = plaintext.sender else { return .diaryKeyResolved }
+        // No handler registered (e.g. `DiaryStore` not wired up yet) →
+        // transient, same as "this diary isn't local yet": retry later
+        // rather than silently dropping a key relay.
+        guard let diaryKeyHandler else { return .diaryKeyTransient }
+        // Review round 4, I3: the directory lookup is run HERE rather than
+        // inside `senderState`, because a `diaryKey` item cannot afford that
+        // helper's deliberate conflation of "the directory says no such
+        // account / a different key" with "we couldn't reach the directory
+        // right now". Both collapse to `.unverified`, and the handler maps
+        // `.unverified` → `.rejected` → this round DELETEs the inbox item and
+        // advances the cursor. For a plain note that only costs a sender
+        // badge (and `reverifyUnverifiedSenders` repairs it later); for a key
+        // relay it destroys the only copy of the key — and the sender's own
+        // 24h `relayed.enc` dedupe means no re-relay for a day.
+        //
+        // So: a transient lookup failure returns `.diaryKeyTransient`
+        // WITHOUT calling the handler — the item stays on the server, the
+        // cursor doesn't advance, and the next sync retries it. `.notFound`
+        // and a key mismatch are permanent answers and still reach the
+        // handler as `.unverified` (→ rejected), exactly as before.
+        let lookup = await directoryLookup(for: block.accountId)
+        if case .failed = lookup { return .diaryKeyTransient }
+        let sender = Self.senderState(for: plaintext, block: block, account: account, lookup: lookup)
+        switch await diaryKeyHandler(plaintext, sender, itemId) {
+        case .installed, .rejected: return .diaryKeyResolved
+        case .transient: return .diaryKeyTransient
+        }
+    }
+
+    /// Verified-sender computation shared by the note and `diaryKey` decode
+    /// paths: `.anonymous` when there's no inner sender block, else
+    /// `.unverified` unless the directory has (and signs for) a matching key.
+    /// A 404 ("not found") and a network/rate-limit failure both leave the
+    /// sender `.unverified` here — the difference only matters to
+    /// `reverifyUnverifiedSenders`, which must retry the latter but not
+    /// waste lookups on a confirmed key mismatch.
+    private func senderState(for plaintext: NotePlaintext, account: Account) async -> NoteSenderState {
+        guard let block = plaintext.sender else { return .anonymous }
+        return Self.senderState(for: plaintext, block: block, account: account, lookup: await directoryLookup(for: block.accountId))
+    }
+
+    /// The lookup-result → `NoteSenderState` half of the above, split out so
+    /// `decodeDiaryKey` can inspect the `DirectoryLookup` itself first (I3)
+    /// and still derive exactly the same state the note path would.
+    private static func senderState(for plaintext: NotePlaintext, block: NoteSenderBlock, account: Account, lookup: DirectoryLookup) -> NoteSenderState {
+        if case .found(let entry) = lookup,
+           NoteCrypto.verifySender(plaintext, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
+            return .verified(accountId: block.accountId, nickname: entry.nickname)
+        }
+        return .unverified(accountId: block.accountId)
     }
 
     /// Distinguishes "the directory definitively has no such account" from
@@ -205,8 +304,13 @@ public final class NotesStore: ObservableObject {
     /// Reconstructs just enough of the original `NotePlaintext` from a saved
     /// `NoteRecord` to re-run `NoteCrypto.verifySender` — the record never
     /// stores the whole plaintext, only the fields the signature covers.
-    private func verifySenderBlock(_ block: NoteSenderBlock, text: String?, sentAt: Date, recipientAccountId: String, directorySigningKey: Data) -> Bool {
-        let plaintext = NotePlaintext(kind: .note, text: text ?? "", sentAt: Int64(sentAt.timeIntervalSince1970), sender: block)
+    /// `kind` is carried from the caller rather than hard-coded: a `diaryKey`
+    /// plaintext is never persisted as a `NoteRecord` (§3.4), so every
+    /// record `reverifySender` re-checks today is `.note`, but this keeps
+    /// the reconstructed plaintext honest rather than silently assuming
+    /// that will always stay true.
+    private func verifySenderBlock(_ block: NoteSenderBlock, text: String?, sentAt: Date, kind: NoteKind, recipientAccountId: String, directorySigningKey: Data) -> Bool {
+        let plaintext = NotePlaintext(kind: kind, text: text ?? "", sentAt: Int64(sentAt.timeIntervalSince1970), sender: block)
         return NoteCrypto.verifySender(plaintext, recipientAccountId: recipientAccountId, directorySigningKey: directorySigningKey)
     }
 
@@ -255,7 +359,7 @@ public final class NotesStore: ObservableObject {
         // the same sender account as an earlier candidate in this same
         // pass) already promoted or confirmed-mismatched.
         guard let idx = inbox.firstIndex(where: { $0.id == id }), case .unverified = inbox[idx].sender else { return lookup }
-        if verifySenderBlock(block, text: inbox[idx].text, sentAt: inbox[idx].sentAt, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
+        if verifySenderBlock(block, text: inbox[idx].text, sentAt: inbox[idx].sentAt, kind: .note, recipientAccountId: account.accountId.raw, directorySigningKey: entry.signingKey) {
             inbox[idx].sender = .verified(accountId: block.accountId, nickname: entry.nickname)
             do { try storage.save(inbox[idx]) } catch { lastError = error.localizedDescription }
         } else {
@@ -298,7 +402,7 @@ public final class NotesStore: ObservableObject {
     private static func mapNetwork(_ error: Error) -> NotesStoreError {
         switch error {
         case AccountClientError.rateLimited: return .rateLimited
-        case AccountClientError.http(507): return .inboxFull
+        case AccountClientError.insufficientStorage: return .inboxFull
         case AccountClientError.http(404): return .recipientNotFound
         default: return .network(String(describing: error))
         }
@@ -311,7 +415,7 @@ public final class NotesStore: ObservableObject {
     private static func mapItemError(_ error: Error) -> NotesStoreError {
         switch error {
         case AccountClientError.rateLimited: return .rateLimited
-        case AccountClientError.http(507): return .inboxFull
+        case AccountClientError.insufficientStorage: return .inboxFull
         case AccountClientError.http(404): return .noteNotFound
         default: return .network(String(describing: error))
         }

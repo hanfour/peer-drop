@@ -69,6 +69,27 @@ final class NoteCryptoTests: XCTestCase {
         let b = try NoteCrypto.seal(text: "x", recipient: try r.entry(), signer: nil)
         XCTAssertNotEqual(a.ephemeralKey, b.ephemeralKey); XCTAssertNotEqual(a.ciphertext, b.ciphertext)
     }
+    func testDiaryKeySealRoundTripPreservesKindAndText() throws {
+        let r = try RecipientFixture(), s = SenderFixture()
+        let env = try NoteCrypto.seal(text: #"{"diaryId":"d1","keyEpoch":1,"key":"AAAA"}"#, recipient: try r.entry(), signer: s.signer, kind: .diaryKey)
+        let pt = try NoteCrypto.open(env, recipientAccountId: "TESTRCPT", keys: r.keys())
+        XCTAssertEqual(pt.kind, .diaryKey)
+        XCTAssertEqual(pt.text, #"{"diaryId":"d1","keyEpoch":1,"key":"AAAA"}"#)
+        XCTAssertEqual(pt.sender?.accountId, "SENDR001")
+        XCTAssertTrue(NoteCrypto.verifySender(pt, recipientAccountId: "TESTRCPT", directorySigningKey: s.signing.publicKey.rawRepresentation))
+    }
+    func testDiaryKeyWithoutSignerThrowsSignerRequired() throws {
+        let r = try RecipientFixture()
+        XCTAssertThrowsError(try NoteCrypto.seal(text: "x", recipient: try r.entry(), signer: nil, kind: .diaryKey)) {
+            XCTAssertEqual($0 as? NoteCryptoError, .signerRequired)
+        }
+    }
+    func testDefaultKindIsNote() throws {
+        let r = try RecipientFixture()
+        let env = try NoteCrypto.seal(text: "x", recipient: try r.entry(), signer: nil)
+        let pt = try NoteCrypto.open(env, recipientAccountId: "TESTRCPT", keys: r.keys())
+        XCTAssertEqual(pt.kind, .note)
+    }
     func testSenderSignatureDigestIsStable() {
         let d = NoteCrypto.senderSignatureDigest(text: "hi", sentAt: 1_700_000_000, recipientAccountId: "TESTRCPT")
         // Pinned vector: sha256("peerdrop-note-sender-v1" || "hi" || 0x0000000065 4E 10 00 || "TESTRCPT"),

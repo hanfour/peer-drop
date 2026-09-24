@@ -16,6 +16,7 @@ public enum NoteCryptoError: Error, Equatable {
     case oneTimePreKeyUnavailable
     case decryptionFailed
     case malformedPlaintext
+    case signerRequired
 }
 
 /// What a signed (non-anonymous) sender contributes. `sign` is the
@@ -68,8 +69,9 @@ public enum NoteCrypto {
         HKDF<SHA256>.deriveKey(inputKeyMaterial: agreement.rootKey, salt: Data(), info: hkdfInfo, outputByteCount: 32)
     }
 
-    public static func seal(text: String, recipient: DirectoryEntry, signer: NoteSigner?, policy: SecurityPolicy = .bundledDefault, now: Date = Date()) throws -> NoteEnvelope {
+    public static func seal(text: String, recipient: DirectoryEntry, signer: NoteSigner?, kind: NoteKind = .note, policy: SecurityPolicy = .bundledDefault, now: Date = Date()) throws -> NoteEnvelope {
         guard text.unicodeScalars.count <= maxTextScalars else { throw NoteCryptoError.textTooLong }
+        guard kind != .diaryKey || signer != nil else { throw NoteCryptoError.signerRequired }
         guard let bundle = recipient.preKeyBundle else { throw NoteCryptoError.missingPreKeyBundle }
         guard let identity = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: recipient.identityKey),
               let signingKey = try? Curve25519.Signing.PublicKey(rawRepresentation: recipient.signingKey),
@@ -104,7 +106,7 @@ public enum NoteCrypto {
             let sig = try signer.sign(senderSignatureDigest(text: text, sentAt: sentAt, recipientAccountId: recipient.accountId.raw))
             senderBlock = NoteSenderBlock(accountId: signer.accountId, nickname: signer.nickname, signingKey: signer.signingPublicKey, signature: sig)
         }
-        let plaintext = try JSONEncoder().encode(NotePlaintext(kind: .note, text: text, sentAt: sentAt, sender: senderBlock))
+        let plaintext = try JSONEncoder().encode(NotePlaintext(kind: kind, text: text, sentAt: sentAt, sender: senderBlock))
         let nonce = AES.GCM.Nonce()
         let box = try AES.GCM.seal(plaintext, using: noteKey(from: agreement), nonce: nonce,
                                    authenticating: aad(recipientAccountId: recipient.accountId.raw, version: NoteEnvelope.currentVersion))

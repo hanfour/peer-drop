@@ -68,55 +68,61 @@ export type NotesEnv = Env;
 import { normalizeAccountId } from "./account";
 import { verifyPoW } from "./pow";
 import type { sendAPNs } from "./apns";
+import { fanOutPush } from "./push";
+import type { DiaryMeta } from "./diaryRoom";
 
 export interface NotesAuth { deviceId: string; accountId: string }
 export interface PushDeps { send: typeof sendAPNs; topicFor: (platform: string) => string }
 export interface NotesRouteDeps { push: PushDeps }
 
-function json(data: unknown, status = 200): Response {
+export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 }
 const b64 = (u8: Uint8Array) => btoa(String.fromCharCode(...u8));
-const dayKey = () => new Date().toISOString().slice(0, 10);
+export const dayKey = () => new Date().toISOString().slice(0, 10);
 
-async function bumpQuota(kv: KVNamespace, key: string, limit: number, ttl: number): Promise<boolean> {
+export async function bumpQuota(kv: KVNamespace, key: string, limit: number, ttl: number): Promise<boolean> {
   const used = parseInt((await kv.get(key)) ?? "0", 10) || 0;
   if (used >= limit) return false;
   await kv.put(key, String(used + 1), { expirationTtl: ttl });
   return true;
 }
 
-/** APNs fan-out to every device bound to the recipient account. Never throws. */
+/**
+ * APNs fan-out to every device bound to the recipient account. Never
+ * throws (see fanOutPush). Thin wrapper kept for its existing callers/
+ * tests — the actual device-lookup/send loop now lives in the generic
+ * fanOutPush (shared with diary.ts's per-event pushes and this file's own
+ * kind="diaryKey" relay below).
+ */
 export async function fanOutNotePush(env: Env, recipientAccountId: string, itemId: string, deps: PushDeps): Promise<{ attempted: number }> {
-  if (!env.APNS_KEY_P8) return { attempted: 0 };
-  let attempted = 0;
-  try {
-    const devices = (await env.ACCOUNTS_DB.prepare("SELECT device_id, platform FROM account_devices WHERE account_id = ?1").bind(recipientAccountId).all<{ device_id: string; platform: string }>()).results;
-    for (const d of devices) {
-      const raw = await env.V2_STORE.get(`device:${d.device_id}`);
-      if (!raw) continue;
-      let info: { pushToken?: string; platform?: string };
-      try { info = JSON.parse(raw); } catch { continue; }
-      if (!info.pushToken) continue;
-      attempted++;
-      try {
-        await deps.send(
-          info.pushToken,
-          { alert: { "loc-key": "NOTE_RECEIVED" }, sound: "default", customData: { type: "note", inboxItemId: itemId } },
-          { keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, p8Key: env.APNS_KEY_P8, bundleId: env.APNS_BUNDLE_ID },
-          { topicOverride: deps.topicFor(info.platform ?? d.platform) },
-        );
-      } catch (e) {
-        console.error("note push failed", d.device_id, String(e));
-      }
-    }
-  } catch (e) {
-    // A D1/KV outage here must not turn an already-stored note into a 500
-    // for the sender — the note is safely in the recipient's inbox either
-    // way; the recipient just misses (or partially misses) the push nudge.
-    console.error("note push fan-out failed", String(e));
-  }
-  return { attempted };
+  return fanOutPush(env, recipientAccountId, { alert: { "loc-key": "NOTE_RECEIVED" }, sound: "default", data: { type: "note", inboxItemId: itemId } }, deps);
+}
+
+// Same 26-char ULID shape diary.ts's own DIARY_ID_RE checks (kept as a
+// separate constant, not imported, to avoid a notes.ts<->diary.ts value
+// import cycle — diary.ts already imports several of this file's helpers).
+const DIARY_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
+/**
+ * kind="diaryKey" relay (spec §3.3 step 3): resolve the diary's current DO
+ * meta, gated by the same "never wake a DO for an id nobody created" D1
+ * check diary.ts's own non-create routes use. Returns null when the diary
+ * doesn't exist (D1 or DO 404) — the caller folds that into the same 403
+ * not_member response a real member mismatch gets, rather than leaking
+ * diary existence via a distinct error. Duplicated from diary.ts's
+ * diaryExistsInD1/doCall (rather than imported) for the same reason as
+ * DIARY_ID_RE above.
+ */
+async function diaryMetaForKeyRelay(env: Env, diaryId: string): Promise<DiaryMeta | null> {
+  const row = await env.ACCOUNTS_DB.prepare(
+    "SELECT 1 AS x FROM diary_members WHERE diary_id = ?1 UNION SELECT 1 AS x FROM diary_invites WHERE diary_id = ?2 LIMIT 1",
+  ).bind(diaryId, diaryId).first();
+  if (!row) return null;
+  const stub = env.DIARY_ROOM.get(env.DIARY_ROOM.idFromName(diaryId));
+  const metaResp = await stub.fetch("https://diary/meta");
+  if (!metaResp.ok) return null;
+  return await metaResp.json() as DiaryMeta;
 }
 
 /**
@@ -140,11 +146,19 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
   if (sendMatch && request.method === "POST") {
     const raw = await request.text();
     if (raw.length > 32 * 1024) return json({ error: "too_large" }, 413);
-    let body: { envelope?: unknown; pow?: { challenge?: unknown; nonce?: unknown } } | null;
+    let body: { envelope?: unknown; pow?: { challenge?: unknown; nonce?: unknown }; kind?: unknown; diaryId?: unknown } | null;
     try { body = JSON.parse(raw); } catch { body = null; }
     if (!body || typeof body.envelope !== "string" || !body.pow || typeof body.pow.challenge !== "string" || typeof body.pow.nonce !== "number" || !Number.isSafeInteger(body.pow.nonce) || body.pow.nonce < 0) {
       return json({ error: "missing_fields" }, 400);
     }
+    if (body.kind !== undefined && body.kind !== "note" && body.kind !== "diaryKey") return json({ error: "missing_fields" }, 400);
+    const kind: "note" | "diaryKey" = body.kind === "diaryKey" ? "diaryKey" : "note";
+    // kind="diaryKey" is the key-relay envelope from spec §3.3 step 2 — a
+    // key-holding member forwarding the diary key to a newly-joined member
+    // who can't open metaCipher yet. diaryId is required and must be a
+    // 26-char ULID (same shape as a diary's own client-generated id).
+    if (kind === "diaryKey" && (typeof body.diaryId !== "string" || !DIARY_ID_RE.test(body.diaryId))) return json({ error: "missing_fields" }, 400);
+    const diaryId = kind === "diaryKey" ? body.diaryId as string : undefined;
     let handle: string;
     try { handle = decodeURIComponent(sendMatch[1]); } catch { return json({ error: "recipient_not_found" }, 404); }
     const recipientId = normalizeAccountId(handle);
@@ -160,6 +174,17 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
     if (!(await verifyPoW(msg, body.pow.nonce, NOTE_LIMITS.powDifficulty))) return json({ error: "bad_pow" }, 400);
     const recipient = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM accounts WHERE account_id = ?1").bind(recipientId).first<{ account_id: string }>();
     if (!recipient) return json({ error: "recipient_not_found" }, 404);
+    // kind="diaryKey": both the sender and the recipient must be CURRENT
+    // members of the named diary, checked before the block check below —
+    // a non-member gets this real 403, never the blocked-sender fake 201
+    // (that fake 201 stays reserved for the ordinary blocks-table check,
+    // which still runs normally afterward for a member-to-member relay).
+    if (kind === "diaryKey") {
+      const meta = await diaryMetaForKeyRelay(env, diaryId as string);
+      if (!meta || !meta.members.includes(auth.accountId) || !meta.members.includes(recipientId)) {
+        return json({ error: "not_member" }, 403);
+      }
+    }
     const day = dayKey();
     // Sender quota first (the cost of trying at all), THEN the block check —
     // a blocked send must not also burn the RECIPIENT's daily quota, since
@@ -173,10 +198,14 @@ export async function handleNotesRoute(request: Request, url: URL, path: string,
     if (!(await bumpQuota(env.V2_STORE, `note-quota:r:${recipientId}:${day}`, NOTE_LIMITS.perRecipientPerDay, 2 * 86400))) return json({ error: "rate_limited" }, 429);
     const id = ulid();
     const stub = env.ACCOUNT_INBOX.get(env.ACCOUNT_INBOX.idFromName(recipientId));
-    const doResp = await stub.fetch(new Request("https://inbox/items", { method: "PUT", body: JSON.stringify({ id, kind: "note", envelope: body.envelope, senderHash: sh, createdAt: Date.now() }) }));
+    const doResp = await stub.fetch(new Request("https://inbox/items", { method: "PUT", body: JSON.stringify({ id, kind, envelope: body.envelope, senderHash: sh, createdAt: Date.now() }) }));
     if (doResp.status === 507) return json({ error: "inbox_full" }, 507);
     if (!doResp.ok) return json({ error: "inbox_error" }, 502);
-    await fanOutNotePush(env, recipientId, id, deps.push);
+    if (kind === "diaryKey") {
+      await fanOutPush(env, recipientId, { silent: true, data: { type: "diaryKey" } }, deps.push);
+    } else {
+      await fanOutNotePush(env, recipientId, id, deps.push);
+    }
     return json({ id }, 201);
   }
 

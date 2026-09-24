@@ -133,10 +133,32 @@ public final class PushNotificationManager: NSObject, ObservableObject {
     /// The push only contains roomCode + senderName (no roomToken for security).
     /// Triggers InboxService reconnect to fetch the full invite from the DO queue.
     public func handleRemoteNotification(_ userInfo: [AnyHashable: Any], inboxService: InboxService) {
-        if case .note(let itemId) = RelayPushKind.classify(userInfo) {
+        switch RelayPushKind.classify(userInfo) {
+        case .note(let itemId):
             logger.info("Push received for a note")
             NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": itemId ?? ""])
             return
+        case .diary(let kind, let diaryId, let seq):
+            // Spec §4: diary → DiaryStore.sync(diaryId); diaryKeyRequest
+            // additionally force-relays (handled inside DiaryStore.handlePush).
+            // accountId travels straight from the raw payload — RelayPushKind
+            // itself only carries kind/diaryId/seq (spec §1/§4 interface).
+            logger.info("Push received for diary kind=\(kind, privacy: .public)")
+            var info: [String: Any] = ["kind": kind, "diaryId": diaryId]
+            if let seq { info["seq"] = seq }
+            if let accountId = userInfo["accountId"] as? String { info["accountId"] = accountId }
+            NotificationCenter.default.post(name: .didReceiveDiaryPush, object: nil, userInfo: info)
+            return
+        case .diaryKey:
+            // Spec §4: a `diaryKey` push is the silent relay-note wake-up —
+            // it must drive NotesStore.sync() (which decodes the diaryKey
+            // note and hands it to NotesStore.diaryKeyHandler), never
+            // DiaryStore directly.
+            logger.info("Push received for a diary key relay")
+            NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": ""])
+            return
+        case .chatInvite, .other:
+            break
         }
         guard let roomCode = userInfo["roomCode"] as? String else {
             logger.warning("Ignoring push without roomCode")
@@ -170,16 +192,48 @@ public extension Notification.Name {
     static let didReceiveNotePush = Notification.Name("com.hanfour.peerdrop.didReceiveNotePush")
     /// The user tapped a note notification; userInfo `["id": String]`.
     static let openNote = Notification.Name("com.hanfour.peerdrop.openNote")
+    /// A diary push arrived (spec §4: `diaryTurn`/`diaryEntry`/`diaryJoin`/
+    /// `diaryReaction`/`diaryKeyRequest`); userInfo `["kind": String,
+    /// "diaryId": String, "seq": Int?, "accountId": String?]`. Listeners
+    /// call `DiaryStore.handlePush(kind:diaryId:accountId:)`.
+    static let didReceiveDiaryPush = Notification.Name("com.hanfour.peerdrop.didReceiveDiaryPush")
+    /// The user tapped a diary notification; userInfo `["diaryId": String,
+    /// "seq": Int?]`.
+    static let openDiary = Notification.Name("com.hanfour.peerdrop.openDiary")
 }
 
 /// What kind of relay push a payload is — kept pure so it is unit-testable.
 public enum RelayPushKind: Equatable {
     case note(inboxItemId: String?)
+    /// One of the five visible diary pushes (spec §4) — `kind` is the raw
+    /// `type` string (`"diaryTurn"`/`"diaryEntry"`/`"diaryJoin"`/
+    /// `"diaryReaction"`/`"diaryKeyRequest"`), `seq` present only for
+    /// `diaryEntry`/`diaryReaction`.
+    case diary(kind: String, diaryId: String, seq: Int?)
+    /// The silent `{type:"diaryKey"}` relay-note wake-up (spec §3.3/§4) —
+    /// carries no diaryId of its own; it just means "run NotesStore.sync()".
+    case diaryKey
     case chatInvite(roomCode: String)
     case other
 
+    /// The five `type` values that fan out as a visible diary push (spec
+    /// §4's table, minus `diaryKey` which is its own case).
+    private static let diaryKinds: Set<String> = [
+        "diaryTurn", "diaryEntry", "diaryJoin", "diaryReaction", "diaryKeyRequest",
+    ]
+
+    /// Diary classification runs BEFORE the `roomCode` fallback (spec §1
+    /// row "推播分類"/§4), same precedence `note` already has — a diary
+    /// push payload must never be misread as a chat invite even if it
+    /// happened to also carry a `roomCode` key.
     public static func classify(_ userInfo: [AnyHashable: Any]) -> RelayPushKind {
         if userInfo["type"] as? String == "note" { return .note(inboxItemId: userInfo["inboxItemId"] as? String) }
+        if let type = userInfo["type"] as? String {
+            if type == "diaryKey" { return .diaryKey }
+            if diaryKinds.contains(type) {
+                return .diary(kind: type, diaryId: userInfo["diaryId"] as? String ?? "", seq: userInfo["seq"] as? Int)
+            }
+        }
         if let room = userInfo["roomCode"] as? String { return .chatInvite(roomCode: room) }
         return .other
     }

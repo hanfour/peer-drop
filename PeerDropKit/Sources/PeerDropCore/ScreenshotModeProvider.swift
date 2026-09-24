@@ -3,6 +3,7 @@ import PeerDropAccount
 import PeerDropTransport
 import PeerDropSecurity
 import PeerDropNotes
+import PeerDropDiary
 import Network
 
 /// Provides mock data for App Store screenshot capture mode.
@@ -345,6 +346,67 @@ public final class ScreenshotModeProvider {
                        sentAt: now.addingTimeInterval(-3_600), sender: .verified(accountId: "PDRPDEM0", nickname: nil), recipientAccountId: "7K3MQ2ZD", readAt: nil, receivedAt: now.addingTimeInterval(-3_600)),
         ]
         return (inbox, sent)
+    }
+
+    // MARK: - Mock Diaries (sub-project 3)
+
+    /// One diary — two members, three entries by two different authors,
+    /// with comments and likes — for the diary list/detail screens.
+    /// `holderAccountId`/`isHolder`/`isOwner` are all "me" so the
+    /// write/pass/invite-owner affordances all render in the same shot.
+    public var mockDiaries: (diaries: [DiarySummary], states: [String: DiaryState]) {
+        let now = Date()
+        let diaryId = "01MCKD00000000000000000000"
+        let myId = "PDRPDEM0"
+        // Reuses the same mock friend id/nickname as `mockNotes` — the
+        // holder-nickname lookup itself is a live directory call in the
+        // real UI (spec §5.2), not baked into this mock.
+        let friendId = "7K3MQ2ZD"
+        let diaryName = localizedName(("Our Little Notebook", "我們的小手帳", "我们的小手帐", "ふたりの手帳", "우리의 작은 수첩"))
+
+        func entry(_ seq: Int, _ id: String, _ author: String, _ ago: TimeInterval, _ text: (en: String, zhHant: String, zhHans: String, ja: String, ko: String)) -> DiaryEvent {
+            DiaryEvent(seq: seq, eventId: id, type: .entry, authorAccountId: author, refSeq: nil,
+                       payload: DiaryPayload(kind: .entry, text: localizedName(text)), createdAt: now.addingTimeInterval(-ago))
+        }
+        func comment(_ seq: Int, _ id: String, _ author: String, _ refSeq: Int, _ ago: TimeInterval, _ text: (en: String, zhHant: String, zhHans: String, ja: String, ko: String)) -> DiaryEvent {
+            DiaryEvent(seq: seq, eventId: id, type: .comment, authorAccountId: author, refSeq: refSeq,
+                       payload: DiaryPayload(kind: .comment, text: localizedName(text)), createdAt: now.addingTimeInterval(-ago))
+        }
+        func like(_ seq: Int, _ id: String, _ author: String, _ refSeq: Int, _ ago: TimeInterval) -> DiaryEvent {
+            DiaryEvent(seq: seq, eventId: id, type: .like, authorAccountId: author, refSeq: refSeq, createdAt: now.addingTimeInterval(-ago))
+        }
+        func pass(_ seq: Int, _ id: String, _ author: String, _ ago: TimeInterval) -> DiaryEvent {
+            DiaryEvent(seq: seq, eventId: id, type: .pass, authorAccountId: author, createdAt: now.addingTimeInterval(-ago))
+        }
+
+        let events: [DiaryEvent] = [
+            entry(1, "MOCKEVT001", friendId, 259_200,
+                  ("Started this so we can write to each other, even when we're far apart.",
+                   "開始寫這本，這樣就算離很遠也能寫信給彼此。", "开始写这本，这样就算离得很远也能给彼此写信。",
+                   "離れていても手紙を書けるように、これを始めたよ。", "멀리 떨어져 있어도 서로에게 편지를 쓸 수 있게 이걸 시작했어.")),
+            comment(2, "MOCKEVT002", myId, 1, 216_000,
+                    ("I love this idea!", "我超愛這個點子！", "我超爱这个点子！", "このアイデア大好き！", "이 아이디어 정말 좋아!")),
+            like(3, "MOCKEVT003", myId, 1, 216_000),
+            entry(4, "MOCKEVT004", friendId, 172_800,
+                  ("Today I tried the new bakery near the station. You'd love their croissants.",
+                   "今天去了車站附近新開的麵包店，你一定會喜歡他們的可頌。", "今天去了车站附近新开的面包店，你一定会喜欢他们的牛角包。",
+                   "今日、駅前の新しいパン屋さんに行ってきたよ。クロワッサン、絶対好きだと思う。", "오늘 역 근처 새로 생긴 빵집에 가봤어. 크루아상 분명 좋아할 거야.")),
+            like(5, "MOCKEVT005", myId, 4, 172_000),
+            pass(6, "MOCKEVT006", friendId, 129_600),
+            entry(7, "MOCKEVT007", myId, 86_400,
+                  ("Your turn inspired me — here's what happened on my end this week.",
+                   "被你啟發了，來說說我這週發生的事。", "被你启发了，来说说我这周发生的事。",
+                   "あなたの番に刺激されて、今週のことを書くね。", "네 차례에 영감을 받아서, 이번 주 내 이야기를 써볼게.")),
+            comment(8, "MOCKEVT008", friendId, 7, 43_200,
+                    ("Sounds like a good week!", "聽起來是充實的一週！", "听起来是充实的一周！", "いい一週間だったみたいだね！", "좋은 한 주였나 보다!")),
+        ]
+
+        let meta = DiaryMeta(
+            diaryId: diaryId, ownerAccountId: myId, members: [friendId, myId], holderIndex: 1,
+            seq: 8, state: "open", keyEpoch: 1, metaCipher: "", inviteCode: "MCKD1234", name: diaryName)
+        let state = DiaryState(meta: meta, events: events, isHolder: true, isOwner: true, hasKey: true, pendingKey: false)
+        let summary = DiarySummary(diaryId: diaryId, name: diaryName, memberCount: 2, holderAccountId: myId, isMyTurn: true)
+        return ([summary], [diaryId: state])
     }
 
     // MARK: - Check if a peer ID is mock

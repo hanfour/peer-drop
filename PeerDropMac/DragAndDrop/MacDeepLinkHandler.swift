@@ -3,6 +3,7 @@ import AppKit
 import Foundation
 import PeerDropCore
 import PeerDropSecurity
+import PeerDropDiary
 import os
 
 /// Routes `peerdrop://` URL-scheme deep links into the same code paths
@@ -33,7 +34,11 @@ enum MacDeepLinkHandler {
     @discardableResult
     static func handle(_ url: URL) -> Bool {
         guard url.scheme == "peerdrop" else { return false }
-        logger.info("Deep link: \(url.absoluteString, privacy: .public)")
+        // Global constraint: never log query/fragment — a diary invite
+        // link's `code`/`k=` (spec §3.2) or any other URL's query params
+        // could carry secrets. Scheme + host only, same shape as
+        // `DiaryInviteLink.logSafeDescription`.
+        logger.info("Deep link: \(url.scheme ?? "", privacy: .public)://\(url.host ?? "", privacy: .public)")
 
         guard let connectionManager else {
             logger.error("MacDeepLinkHandler.connectionManager not wired — dropping")
@@ -49,6 +54,8 @@ enum MacDeepLinkHandler {
             return handleSmart(url, connectionManager: connectionManager)
         case "invite":
             return handleInvite(url, connectionManager: connectionManager)
+        case "diary":
+            return handleDiary(url, connectionManager: connectionManager)
         default:
             logger.warning("Unknown peerdrop:// host: \(url.host ?? "<nil>", privacy: .public)")
             return false
@@ -163,6 +170,24 @@ enum MacDeepLinkHandler {
                     title: NSLocalizedString("Couldn't accept invite", comment: "Accept-failure alert title"),
                     message: error.localizedDescription
                 )
+            }
+        }
+        return true
+    }
+
+    /// `peerdrop://diary/<diaryId>?code=<code>#k=<key>` (spec §3.2). Joins
+    /// (idempotent for an already-a-member re-tap — the worker's join
+    /// route still returns 200) and, on success, posts `.openDiary` so
+    /// `MacContentView` switches the sidebar to `.diaries` and opens it —
+    /// same hand-off `PushNotificationManager` uses for a notification tap.
+    private static func handleDiary(_ url: URL, connectionManager: ConnectionManager) -> Bool {
+        guard DiaryInviteLink.parse(url) != nil else {
+            logger.warning("Invalid peerdrop://diary URL")
+            return false
+        }
+        Task { @MainActor in
+            if let diaryId = try? await connectionManager.diaryStore.join(link: url) {
+                NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: ["diaryId": diaryId])
             }
         }
         return true

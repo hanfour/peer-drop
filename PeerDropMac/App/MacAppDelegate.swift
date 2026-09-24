@@ -222,11 +222,23 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if case .note(let id) = RelayPushKind.classify(userInfo) {
+        switch RelayPushKind.classify(userInfo) {
+        case .note(let id):
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .openNote, object: nil, userInfo: ["id": id ?? ""])
                 NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": id ?? ""])
             }
+        case .diary(_, let diaryId, let seq):
+            // Mirror of iOS AppDelegate.swift: tapping any diary
+            // notification opens that diary (Mac `.diaries` sidebar
+            // section) and scrolls to `seq` when present (spec §4).
+            var info: [String: Any] = ["diaryId": diaryId]
+            if let seq { info["seq"] = seq }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: info)
+            }
+        default:
+            break
         }
         completionHandler()
     }

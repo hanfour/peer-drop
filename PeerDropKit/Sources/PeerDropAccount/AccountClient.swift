@@ -62,10 +62,12 @@ public struct EmptyBody: Codable, Sendable { public init() {} }
 
 public enum AccountClientError: Error, Equatable {
     case unauthorized
-    case forbidden
+    case forbidden(String)
     case conflict(String)
     case invalid(String)
     case rateLimited
+    /// 507 — the body's `error` code (e.g. `inbox_full`, `diary_full`).
+    case insufficientStorage(String)
     case http(Int)
     case invalidResponse
 }
@@ -211,7 +213,7 @@ public actor AccountClient {
             }
             throw AccountClientError.unauthorized
         case 403:
-            throw AccountClientError.forbidden
+            throw AccountClientError.forbidden(Self.code(data))
         case 404:
             throw AccountClientError.http(404)
         case 409:
@@ -220,6 +222,8 @@ public actor AccountClient {
             throw AccountClientError.invalid(Self.code(data))
         case 429:
             throw AccountClientError.rateLimited
+        case 507:
+            throw AccountClientError.insufficientStorage(Self.code(data))
         default:
             throw AccountClientError.http(http.statusCode)
         }

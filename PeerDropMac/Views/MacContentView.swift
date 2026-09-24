@@ -1,11 +1,15 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropNotes
+import PeerDropDiary
 
 struct MacContentView: View {
     @State private var selection: MacSidebarSection? = .notes
     @State private var notesPath: [NoteRecord] = []
     @State private var openNoteID: String?
+    @State private var diariesPath: [String] = []
+    @State private var openDiaryID: String?
+    @State private var openDiarySeq: Int?
     @AppStorage("sidebar.width") private var sidebarWidth: Double = 220
     @State private var isDropTargeted = false
 
@@ -14,7 +18,8 @@ struct MacContentView: View {
             MacSidebar(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 180, ideal: sidebarWidth, max: 360)
         } detail: {
-            MacDetailRouter(section: selection, notesPath: $notesPath, openNoteID: $openNoteID)
+            MacDetailRouter(section: selection, notesPath: $notesPath, openNoteID: $openNoteID,
+                             diariesPath: $diariesPath, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq)
                 .navigationSplitViewColumnWidth(min: 480, ideal: 600)
         }
         .navigationSplitViewStyle(.balanced)
@@ -40,11 +45,18 @@ struct MacContentView: View {
             selection = .notes
             openNoteID = id
         }
-        // A pushed note-detail path must not survive switching away from and
-        // back to the Notes section — otherwise the user lands back on a
-        // stale note instead of the inbox.
+        .onReceive(NotificationCenter.default.publisher(for: .openDiary)) { note in
+            guard let id = note.userInfo?["diaryId"] as? String else { return }
+            selection = .diaries
+            openDiaryID = id
+            openDiarySeq = note.userInfo?["seq"] as? Int
+        }
+        // A pushed note-detail/diary path must not survive switching away
+        // from and back to its own section — otherwise the user lands back
+        // on a stale note/diary instead of the inbox/list.
         .onChange(of: selection) { newValue in
             if newValue != .notes { notesPath = [] }
+            if newValue != .diaries { diariesPath = [] }
         }
     }
 }

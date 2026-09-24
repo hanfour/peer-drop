@@ -49,11 +49,16 @@ export async function solvePoW(challenge: string, recipientAccountId: string, en
   return nonce;
 }
 
-/** Full send flow: challenge → PoW → POST. Returns the raw Response. */
-export async function sendNote(headers: Record<string, string>, recipientAccountId: string, envelope = fakeEnvelope()): Promise<Response> {
+/**
+ * Full send flow: challenge → PoW → POST. Returns the raw Response.
+ * `extra` merges into the JSON body alongside `envelope`/`pow` — used by
+ * the diaryKey relay tests to add `{kind: "diaryKey", diaryId}` without
+ * every other (note) caller having to know about those fields.
+ */
+export async function sendNote(headers: Record<string, string>, recipientAccountId: string, envelope = fakeEnvelope(), extra: Record<string, unknown> = {}): Promise<Response> {
   const challenge = await getChallenge(headers);
   const nonce = await solvePoW(challenge, recipientAccountId, envelope);
-  return SELF.fetch(`https://example.com/v3/notes/${recipientAccountId}`, { method: "POST", headers, body: JSON.stringify({ envelope, pow: { challenge, nonce } }) });
+  return SELF.fetch(`https://example.com/v3/notes/${recipientAccountId}`, { method: "POST", headers, body: JSON.stringify({ envelope, pow: { challenge, nonce }, ...extra }) });
 }
 
 export async function inboxOf(a: TestAccount): Promise<{ items: { id: string; envelope: string; readAt: number | null }[]; nextAfter?: string }> {

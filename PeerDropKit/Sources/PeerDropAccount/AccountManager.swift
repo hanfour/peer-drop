@@ -215,7 +215,7 @@ public final class AccountManager: ObservableObject {
         switch error {
         case .invalid, .conflict, .forbidden, .unauthorized:
             return true
-        case .rateLimited, .http, .invalidResponse:
+        case .rateLimited, .http, .invalidResponse, .insufficientStorage:
             return false
         }
     }

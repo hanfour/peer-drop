@@ -21,6 +21,7 @@ import type { TokenPayload } from "./deviceToken";
 import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
 import { verifyPoW } from "./pow";
 import { handleNotesRoute } from "./notes";
+import { handleDiaryRoute } from "./diary";
 
 export interface Env {
   // KV
@@ -32,6 +33,7 @@ export interface Env {
   PREKEY_STORE: DurableObjectNamespace;
   DEVICE_INBOX: DurableObjectNamespace;
   ACCOUNT_INBOX: DurableObjectNamespace;
+  DIARY_ROOM: DurableObjectNamespace;
   // D1
   ACCOUNTS_DB: D1Database;
   // Secrets
@@ -1523,9 +1525,9 @@ export default {
       const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
       const limitRaw = parseInt(url.searchParams.get("limit") ?? "100", 10);
       const limit = Math.min(Math.max(Number.isNaN(limitRaw) ? 100 : limitRaw, 1), 100);
-      const rows = (await env.ACCOUNTS_DB.prepare("SELECT id, reporter_account_id, sender_hash, inbox_item_id, reason, excerpt, created_at FROM reports WHERE created_at > ?1 ORDER BY created_at ASC LIMIT ?2").bind(since, limit)
-        .all<{ id: string; reporter_account_id: string; sender_hash: string; inbox_item_id: string; reason: string; excerpt: string | null; created_at: number }>()).results;
-      return jsonResponse({ reports: rows.map((r) => ({ id: r.id, reporterAccountId: r.reporter_account_id, senderHash: r.sender_hash, inboxItemId: r.inbox_item_id, reason: r.reason, excerpt: r.excerpt, createdAt: r.created_at })) });
+      const rows = (await env.ACCOUNTS_DB.prepare("SELECT id, reporter_account_id, sender_hash, inbox_item_id, diary_id, diary_seq, reason, excerpt, created_at FROM reports WHERE created_at > ?1 ORDER BY created_at ASC LIMIT ?2").bind(since, limit)
+        .all<{ id: string; reporter_account_id: string; sender_hash: string | null; inbox_item_id: string | null; diary_id: string | null; diary_seq: number | null; reason: string; excerpt: string | null; created_at: number }>()).results;
+      return jsonResponse({ reports: rows.map((r) => ({ id: r.id, reporterAccountId: r.reporter_account_id, senderHash: r.sender_hash, inboxItemId: r.inbox_item_id, diaryId: r.diary_id, diarySeq: r.diary_seq, reason: r.reason, excerpt: r.excerpt, createdAt: r.created_at })) });
     }
 
     // /v3/* — account-scoped routes. Bearer device token, or the key lane
@@ -1719,6 +1721,9 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
   }
   const notesResp = await handleNotesRoute(request, url, path, env, auth, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) } });
   if (notesResp) return notesResp;
+
+  const diaryResp = await handleDiaryRoute(request, url, path, env, auth, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) } });
+  if (diaryResp) return diaryResp;
 
   // GET /v3/directory/:handle[?bundle=1] — resolve a normalized account id
   // or nickname to its public directory entry. Rate limited per calling
@@ -2194,3 +2199,4 @@ export class DeviceInbox {
 }
 
 export { AccountInbox } from "./accountInbox";
+export { DiaryRoom } from "./diaryRoom";

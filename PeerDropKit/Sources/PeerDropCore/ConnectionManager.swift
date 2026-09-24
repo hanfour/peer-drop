@@ -5,6 +5,7 @@ import PeerDropSecurity
 import PeerDropPlatform
 import PeerDropAccount
 import PeerDropNotes
+import PeerDropDiary
 import Network
 import Combine
 import CryptoKit
@@ -361,6 +362,84 @@ public final class ConnectionManager: ObservableObject {
             storage: NotesStorage(directory: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent(PeerDropPersistence.scopedKey("Notes"), isDirectory: true)))
     }()
+
+    // MARK: - Diary (sub-project 3)
+
+    public private(set) lazy var diaryStore: DiaryStore = {
+        if ScreenshotModeProvider.shared.isActive {
+            let mock = ScreenshotModeProvider.shared.mockDiaries
+            return DiaryStore(mock: mock.diaries, states: mock.states)
+        }
+        // Same per-diary folder layout hosts key.enc/meta.enc/events.log/
+        // pending.enc (spec §3.5) — `keyStore` and the store's own
+        // `directory` share this one root.
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(PeerDropPersistence.scopedKey("Diary"), isDirectory: true)
+        let store = DiaryStore(
+            client: DiaryClient(account: AccountClient()),
+            notesClient: NotesClient(),
+            accountManager: accountManager,
+            crypto: LiveNotesCryptoContext(preKeyStore: preKeyStore),
+            keyStore: DiaryKeyStore(directory: dir, encryptor: ChatDataEncryptor.shared),
+            directory: dir,
+            encryptor: ChatDataEncryptor.shared,
+            directoryCache: DirectoryCache())
+        // Spec §1 row "收件匣分流": PeerDropNotes never imports
+        // PeerDropDiary, so the `diaryKey` inbox-item disposition handler is
+        // injected here — the one place both stores actually get built.
+        notesStore.diaryKeyHandler = { [store] plaintext, sender, _ in
+            await store.acceptRelayedKey(plaintext, sender: sender)
+        }
+        return store
+    }()
+
+    /// The ONLY way anything outside the Notes UI should drive an inbox
+    /// sync (review round 4, I2).
+    ///
+    /// `notesStore.diaryKeyHandler` is installed as a side effect of the
+    /// `diaryStore` lazy above, so until something has touched `diaryStore`
+    /// the handler is still `nil` — and `NotesStore.decodeDiaryKey` treats a
+    /// nil handler as `.diaryKeyTransient`, which aborts the WHOLE inbox
+    /// round without advancing the cursor (spec §3.4). A silent `diaryKey`
+    /// background push arriving before the app has ever been `.active` (so
+    /// before `handleScenePhaseChange` touched `diaryStore`) would therefore
+    /// not only fail to install the key — it would also strand every plain
+    /// note queued behind it until the user next opened the app.
+    ///
+    /// `_ = diaryStore` forces the lazy (and with it the handler injection)
+    /// BEFORE the sync runs. It is deliberately not folded into
+    /// `notesStore`'s own lazy: `diaryStore` reads `notesStore` to install
+    /// the handler, so having `notesStore` build `diaryStore` would be a
+    /// lazy-initialization cycle.
+    @MainActor
+    public func syncNotes() async {
+        _ = diaryStore
+        await notesStore.sync()
+    }
+
+    /// Classifies a raw push payload and drives the diary-lane sync it
+    /// names (spec §4); a no-op for every other `RelayPushKind`. This is
+    /// what `AppDelegate.didReceiveRemoteNotification`'s bounded
+    /// background-fetch path (F2) calls so it doesn't need to duplicate
+    /// the "reclassify, read `accountId`, call the right store" glue that
+    /// `PushNotificationManager.handleRemoteNotification` already has for
+    /// the `.didReceiveDiaryPush`/`.didReceiveNotePush` notification path
+    /// (kept as-is — it's still the fallback AppDelegate uses when
+    /// `connectionManager` isn't wired yet, and its own userInfo shape by
+    /// that point is the already-parsed notification payload, not the raw
+    /// push, so it can't just call this method too).
+    @MainActor
+    public func handleDiaryPush(userInfo: [AnyHashable: Any]) async {
+        switch RelayPushKind.classify(userInfo) {
+        case .diary(let kind, let diaryId, _):
+            let accountId = userInfo["accountId"] as? String
+            await diaryStore.handlePush(kind: kind, diaryId: diaryId, accountId: accountId)
+        case .diaryKey:
+            await syncNotes()
+        case .note, .chatInvite, .other:
+            break
+        }
+    }
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
 
@@ -1609,7 +1688,12 @@ public final class ConnectionManager: ObservableObject {
             // side effects) in that mode.
             if !ScreenshotModeProvider.shared.isActive {
                 Task { await accountManager.bootstrap() }
-                Task { await notesStore.sync() }
+                // `syncNotes()`, not `notesStore.sync()` — these two Tasks
+                // are unordered, so the inbox round can otherwise start
+                // before the `diaryStore` lazy below has installed
+                // `diaryKeyHandler` (see `syncNotes`' doc).
+                Task { await syncNotes() }
+                Task { await diaryStore.syncList() }
             }
             // Restart discovery when returning to foreground
             switch state {

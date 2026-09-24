@@ -2,6 +2,7 @@ import SwiftUI
 import PeerDropCore
 import PeerDropTransport
 import PeerDropNotes
+import PeerDropDiary
 import PeerDropAccount
 
 /// Modifier to force tab bar style on iPad (iOS 18+)
@@ -62,6 +63,9 @@ struct ContentView: View {
     @State private var selectedTab = 3
     @State private var notesPath: [NoteRecord] = []
     @State private var openNoteID: String?
+    @State private var diariesPath: [String] = []
+    @State private var openDiaryID: String?
+    @State private var openDiarySeq: Int?
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var activeSheet: ContentSheet?
@@ -80,6 +84,11 @@ struct ContentView: View {
                 .tabItem { Label("Notes", systemImage: "envelope.fill") }
                 .tag(3)
                 .accessibilityLabel("Notes")
+
+            DiaryTabContent(store: connectionManager.diaryStore, accountManager: connectionManager.accountManager, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq, path: $diariesPath)
+                .tabItem { Label("Diaries", systemImage: "book.closed") }
+                .tag(4)
+                .accessibilityLabel("Diaries")
 
             NavigationStack {
                 NearbyTab(selectedTab: $selectedTab)
@@ -116,6 +125,12 @@ struct ContentView: View {
             guard let id = note.userInfo?["id"] as? String else { return }
             selectedTab = 3
             openNoteID = id
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openDiary)) { note in
+            guard let id = note.userInfo?["diaryId"] as? String else { return }
+            selectedTab = 4
+            openDiaryID = id
+            openDiarySeq = note.userInfo?["seq"] as? Int
         }
         .sheet(item: securitySheetBinding) { route in
             switch route {
@@ -372,6 +387,22 @@ private struct NotesTabContent: View {
             NotesInboxView(store: store, accountManager: accountManager, openNoteID: $openNoteID, path: $path)
         }
         .badge(store.unreadCount)
+    }
+}
+
+/// Diary tab body: owns the NavigationStack path so a notification tap can push a diary,
+/// mirroring `NotesTabContent`.
+private struct DiaryTabContent: View {
+    @ObservedObject var store: DiaryStore
+    @ObservedObject var accountManager: AccountManager
+    @Binding var openDiaryID: String?
+    @Binding var openDiarySeq: Int?
+    @Binding var path: [String]
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            DiaryListView(store: store, accountManager: accountManager, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq, path: $path)
+        }
     }
 }
 
