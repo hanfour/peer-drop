@@ -256,8 +256,23 @@ final class Phase2IntegrationTests: XCTestCase {
 
     // MARK: - ChatManager Edit/Delete Integration
 
+    /// Builds a `ChatManager` rooted in an isolated temp directory (never the
+    /// simulator's real Documents dir, which could carry stale history across
+    /// runs) with the given peer's conversation already open. Since
+    /// `160676b`, `appendMessage` only surfaces a message in `messages` when
+    /// it matches the currently-open conversation, so tests must open one
+    /// before calling `saveOutgoing`/`saveIncoming`.
+    private func makeOpenChat(peer: String) -> (ChatManager, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("p2it-\(UUID().uuidString)")
+        let chatManager = ChatManager(rootDirectory: root)
+        chatManager.loadMessages(forPeer: peer)
+        return (chatManager, root)
+    }
+
     func testApplyEditPreservesAllFields() {
-        let chatManager = ChatManager()
+        let (chatManager, root) = makeOpenChat(peer: "p1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         let original = chatManager.saveOutgoing(text: "Original", peerID: "p1", peerName: "Peer")
 
         chatManager.applyEdit(messageID: original.id, newText: "Edited", editedAt: Date(), peerID: "p1")
@@ -275,7 +290,9 @@ final class Phase2IntegrationTests: XCTestCase {
     }
 
     func testApplyDeleteMarksDeleted() {
-        let chatManager = ChatManager()
+        let (chatManager, root) = makeOpenChat(peer: "p1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         let msg = chatManager.saveOutgoing(text: "To delete", peerID: "p1", peerName: "Peer")
 
         chatManager.applyDelete(messageID: msg.id, peerID: "p1")
@@ -289,7 +306,9 @@ final class Phase2IntegrationTests: XCTestCase {
     }
 
     func testApplyEditNonexistentMessageNoOp() {
-        let chatManager = ChatManager()
+        let (chatManager, root) = makeOpenChat(peer: "p1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         _ = chatManager.saveOutgoing(text: "Existing", peerID: "p1", peerName: "Peer")
 
         // Should not crash
@@ -299,18 +318,23 @@ final class Phase2IntegrationTests: XCTestCase {
         XCTAssertEqual(chatManager.messages.first?.text, "Existing")
     }
 
-    func testApplyDeleteNonexistentMessageNoOp() {
-        let chatManager = ChatManager()
+    func testApplyDeleteNonexistentMessageNoOp() throws {
+        let (chatManager, root) = makeOpenChat(peer: "p1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         _ = chatManager.saveOutgoing(text: "Existing", peerID: "p1", peerName: "Peer")
 
         // Should not crash
         chatManager.applyDelete(messageID: "nonexistent-id", peerID: "p1")
 
-        XCTAssertFalse(chatManager.messages.first!.isDeleted)
+        let first = try XCTUnwrap(chatManager.messages.first)
+        XCTAssertFalse(first.isDeleted)
     }
 
     func testMultipleEditsPreserveLatest() {
-        let chatManager = ChatManager()
+        let (chatManager, root) = makeOpenChat(peer: "p1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         let msg = chatManager.saveOutgoing(text: "V1", peerID: "p1", peerName: "P")
 
         chatManager.applyEdit(messageID: msg.id, newText: "V2", editedAt: Date(), peerID: "p1")
@@ -320,14 +344,16 @@ final class Phase2IntegrationTests: XCTestCase {
         XCTAssertNotNil(chatManager.messages.first?.editedAt)
     }
 
-    func testEditThenDeleteShowsDeleted() {
-        let chatManager = ChatManager()
+    func testEditThenDeleteShowsDeleted() throws {
+        let (chatManager, root) = makeOpenChat(peer: "p1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         let msg = chatManager.saveOutgoing(text: "Original", peerID: "p1", peerName: "P")
 
         chatManager.applyEdit(messageID: msg.id, newText: "Edited", editedAt: Date(), peerID: "p1")
         chatManager.applyDelete(messageID: msg.id, peerID: "p1")
 
-        let final = chatManager.messages.first!
+        let final = try XCTUnwrap(chatManager.messages.first)
         XCTAssertTrue(final.isDeleted)
         XCTAssertFalse(final.canEditOrDelete, "Deleted messages should not be editable")
     }
