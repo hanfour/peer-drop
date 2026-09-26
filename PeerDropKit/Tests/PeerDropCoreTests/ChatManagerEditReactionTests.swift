@@ -32,7 +32,7 @@ final class ChatManagerEditReactionTests: XCTestCase {
         manager.activeChatPeerID = "A"
 
         let msg = manager.saveOutgoing(text: "typo", peerID: "A", peerName: "A") // queued, not on disk
-        manager.applyEdit(messageID: msg.id, newText: "fixed", editedAt: Date(), peerID: "A")
+        manager.applyEdit(messageID: msg.id, newText: "fixed", editedAt: Date(), peerID: "A", origin: .localUser)
 
         manager.flushAllPendingPersists()
         manager.loadMessages(forPeer: "A")

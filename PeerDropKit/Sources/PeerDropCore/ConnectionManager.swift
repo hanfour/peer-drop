@@ -3205,7 +3205,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MessageEditPayload")
                 return
             }
-            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: peerID)
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: peerID, origin: .remotePeer)
 
         case .messageDelete:
             guard FeatureSettings.isChatEnabled else { return }
@@ -3213,7 +3213,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MessageDeletePayload")
                 return
             }
-            chatManager.applyDelete(messageID: payload.messageID, peerID: peerID)
+            chatManager.applyDelete(messageID: payload.messageID, peerID: peerID, origin: .remotePeer)
 
         case .fileResume:
             guard let payload = try? message.decodePayload(FileResumePayload.self) else {
@@ -3578,12 +3578,12 @@ public final class ConnectionManager: ObservableObject {
         case .messageEdit:
             guard FeatureSettings.isChatEnabled else { return }
             guard let payload = try? message.decodePayload(MessageEditPayload.self) else { return }
-            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: message.senderID)
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: message.senderID, origin: .remotePeer)
 
         case .messageDelete:
             guard FeatureSettings.isChatEnabled else { return }
             guard let payload = try? message.decodePayload(MessageDeletePayload.self) else { return }
-            chatManager.applyDelete(messageID: payload.messageID, peerID: message.senderID)
+            chatManager.applyDelete(messageID: payload.messageID, peerID: message.senderID, origin: .remotePeer)
 
         case .fileResume, .fileResumeAck:
             // File resume only supported in multi-connection path
@@ -3820,7 +3820,7 @@ public final class ConnectionManager: ObservableObject {
             catch { logger.warning("Failed to send message edit: \(error.localizedDescription)") }
         }
 
-        chatManager.applyEdit(messageID: messageID, newText: newText, editedAt: Date(), peerID: peerID)
+        chatManager.applyEdit(messageID: messageID, newText: newText, editedAt: Date(), peerID: peerID, origin: .localUser)
     }
 
     public func sendMessageDelete(messageID: String, to peerID: String, groupID: String? = nil) {
@@ -3837,7 +3837,7 @@ public final class ConnectionManager: ObservableObject {
             catch { logger.warning("Failed to send message delete: \(error.localizedDescription)") }
         }
 
-        chatManager.applyDelete(messageID: messageID, peerID: peerID)
+        chatManager.applyDelete(messageID: messageID, peerID: peerID, origin: .localUser)
     }
 
     /// Forget a device completely: delete its chat history and — if it maps to a

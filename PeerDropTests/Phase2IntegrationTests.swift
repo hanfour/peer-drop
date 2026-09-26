@@ -275,7 +275,7 @@ final class Phase2IntegrationTests: XCTestCase {
 
         let original = chatManager.saveOutgoing(text: "Original", peerID: "p1", peerName: "Peer")
 
-        chatManager.applyEdit(messageID: original.id, newText: "Edited", editedAt: Date(), peerID: "p1")
+        chatManager.applyEdit(messageID: original.id, newText: "Edited", editedAt: Date(), peerID: "p1", origin: .localUser)
 
         guard let edited = chatManager.messages.first(where: { $0.id == original.id }) else {
             XCTFail("Message not found"); return
@@ -295,7 +295,7 @@ final class Phase2IntegrationTests: XCTestCase {
 
         let msg = chatManager.saveOutgoing(text: "To delete", peerID: "p1", peerName: "Peer")
 
-        chatManager.applyDelete(messageID: msg.id, peerID: "p1")
+        chatManager.applyDelete(messageID: msg.id, peerID: "p1", origin: .localUser)
 
         guard let deleted = chatManager.messages.first(where: { $0.id == msg.id }) else {
             XCTFail("Message not found"); return
@@ -312,7 +312,7 @@ final class Phase2IntegrationTests: XCTestCase {
         _ = chatManager.saveOutgoing(text: "Existing", peerID: "p1", peerName: "Peer")
 
         // Should not crash
-        chatManager.applyEdit(messageID: "nonexistent-id", newText: "Whatever", editedAt: Date(), peerID: "p1")
+        chatManager.applyEdit(messageID: "nonexistent-id", newText: "Whatever", editedAt: Date(), peerID: "p1", origin: .localUser)
 
         // Existing message unchanged
         XCTAssertEqual(chatManager.messages.first?.text, "Existing")
@@ -325,7 +325,7 @@ final class Phase2IntegrationTests: XCTestCase {
         _ = chatManager.saveOutgoing(text: "Existing", peerID: "p1", peerName: "Peer")
 
         // Should not crash
-        chatManager.applyDelete(messageID: "nonexistent-id", peerID: "p1")
+        chatManager.applyDelete(messageID: "nonexistent-id", peerID: "p1", origin: .localUser)
 
         let first = try XCTUnwrap(chatManager.messages.first)
         XCTAssertFalse(first.isDeleted)
@@ -337,8 +337,8 @@ final class Phase2IntegrationTests: XCTestCase {
 
         let msg = chatManager.saveOutgoing(text: "V1", peerID: "p1", peerName: "P")
 
-        chatManager.applyEdit(messageID: msg.id, newText: "V2", editedAt: Date(), peerID: "p1")
-        chatManager.applyEdit(messageID: msg.id, newText: "V3", editedAt: Date(), peerID: "p1")
+        chatManager.applyEdit(messageID: msg.id, newText: "V2", editedAt: Date(), peerID: "p1", origin: .localUser)
+        chatManager.applyEdit(messageID: msg.id, newText: "V3", editedAt: Date(), peerID: "p1", origin: .localUser)
 
         XCTAssertEqual(chatManager.messages.first?.text, "V3")
         XCTAssertNotNil(chatManager.messages.first?.editedAt)
@@ -350,8 +350,8 @@ final class Phase2IntegrationTests: XCTestCase {
 
         let msg = chatManager.saveOutgoing(text: "Original", peerID: "p1", peerName: "P")
 
-        chatManager.applyEdit(messageID: msg.id, newText: "Edited", editedAt: Date(), peerID: "p1")
-        chatManager.applyDelete(messageID: msg.id, peerID: "p1")
+        chatManager.applyEdit(messageID: msg.id, newText: "Edited", editedAt: Date(), peerID: "p1", origin: .localUser)
+        chatManager.applyDelete(messageID: msg.id, peerID: "p1", origin: .localUser)
 
         let final = try XCTUnwrap(chatManager.messages.first)
         XCTAssertTrue(final.isDeleted)
