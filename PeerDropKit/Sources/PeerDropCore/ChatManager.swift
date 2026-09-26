@@ -733,57 +733,75 @@ public final class ChatManager: ObservableObject {
     // MARK: - Edit / Delete
 
     public func applyEdit(messageID: String, newText: String, editedAt: Date, peerID: String) {
+        let edit: (ChatMessage) -> ChatMessage = { Self.edited($0, newText: newText, editedAt: editedAt) }
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
-            messages[idx] = ChatMessage(
-                id: messages[idx].id,
-                text: newText,
-                isMedia: messages[idx].isMedia,
-                mediaType: messages[idx].mediaType,
-                fileName: messages[idx].fileName,
-                fileSize: messages[idx].fileSize,
-                mimeType: messages[idx].mimeType,
-                duration: messages[idx].duration,
-                thumbnailData: messages[idx].thumbnailData,
-                localFileURL: messages[idx].localFileURL,
-                isOutgoing: messages[idx].isOutgoing,
-                peerName: messages[idx].peerName,
-                status: messages[idx].status,
-                timestamp: messages[idx].timestamp,
-                groupID: messages[idx].groupID,
-                senderID: messages[idx].senderID,
-                senderName: messages[idx].senderName,
-                replyToMessageID: messages[idx].replyToMessageID,
-                replyToText: messages[idx].replyToText,
-                replyToSenderName: messages[idx].replyToSenderName,
-                editedAt: editedAt,
-                isDeleted: messages[idx].isDeleted,
-                reactions: messages[idx].reactions,
-                groupReadStatus: messages[idx].groupReadStatus
-            )
+            messages[idx] = edit(messages[idx])
         }
         // Also update the full in-memory cache
         if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
-            allMessagesForCurrentPeer[idx] = messages.first(where: { $0.id == messageID }) ?? allMessagesForCurrentPeer[idx]
+            allMessagesForCurrentPeer[idx] = edit(allMessagesForCurrentPeer[idx])
         }
-        persistEditOrDelete(messageID: messageID, peerID: peerID)
+        persistEditOrDelete(messageID: messageID, peerID: peerID, change: edit)
     }
 
     public func applyDelete(messageID: String, peerID: String) {
+        let delete: (ChatMessage) -> ChatMessage = { var m = $0; m.isDeleted = true; return m }
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
-            messages[idx].isDeleted = true
+            messages[idx] = delete(messages[idx])
         }
         // Also update the full in-memory cache
         if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
-            allMessagesForCurrentPeer[idx].isDeleted = true
+            allMessagesForCurrentPeer[idx] = delete(allMessagesForCurrentPeer[idx])
         }
-        persistEditOrDelete(messageID: messageID, peerID: peerID)
+        persistEditOrDelete(messageID: messageID, peerID: peerID, change: delete)
     }
 
-    private func persistEditOrDelete(messageID: String, peerID: String) {
+    /// `text` is immutable on ChatMessage, so an edit rebuilds the message.
+    private static func edited(_ m: ChatMessage, newText: String, editedAt: Date) -> ChatMessage {
+        ChatMessage(
+            id: m.id,
+            text: newText,
+            isMedia: m.isMedia,
+            mediaType: m.mediaType,
+            fileName: m.fileName,
+            fileSize: m.fileSize,
+            mimeType: m.mimeType,
+            duration: m.duration,
+            thumbnailData: m.thumbnailData,
+            localFileURL: m.localFileURL,
+            isOutgoing: m.isOutgoing,
+            peerName: m.peerName,
+            status: m.status,
+            timestamp: m.timestamp,
+            groupID: m.groupID,
+            senderID: m.senderID,
+            senderName: m.senderName,
+            replyToMessageID: m.replyToMessageID,
+            replyToText: m.replyToText,
+            replyToSenderName: m.replyToSenderName,
+            editedAt: editedAt,
+            isDeleted: m.isDeleted,
+            reactions: m.reactions,
+            groupReadStatus: m.groupReadStatus
+        )
+    }
+
+    /// Apply `change` to the stored copy of the message. The change is applied
+    /// to the stored message itself rather than copied from `messages`, which
+    /// only holds the open conversation — copying from it silently dropped
+    /// edits/deletes for any other peer (#158).
+    private func persistEditOrDelete(messageID: String, peerID: String, change: (ChatMessage) -> ChatMessage) {
         // Flush pending writes first: an edit/delete applied inside the 500ms
         // debounce window would otherwise miss the not-yet-written message and be
         // clobbered by the debounce writing the pre-edit original.
         flushAllPendingPersists()
+        // If that flush failed, the message is still queued — patch the queued
+        // copy too so the retry doesn't write the pre-edit original.
+        if var pending = pendingMessages[peerID],
+           let idx = pending.firstIndex(where: { $0.id == messageID }) {
+            pending[idx] = change(pending[idx])
+            pendingMessages[peerID] = pending
+        }
         let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
         guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "json" {
@@ -791,10 +809,7 @@ public final class ChatManager: ObservableObject {
                   let decrypted = try? encryptor.decrypt(raw),
                   var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
             if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
-                // Find the in-memory version if available
-                if let memIdx = messages.firstIndex(where: { $0.id == messageID }) {
-                    msgs[idx] = messages[memIdx]
-                }
+                msgs[idx] = change(msgs[idx])
                 if let encoded = try? JSONEncoder().encode(msgs) {
                     try? encryptor.encryptAndWrite(encoded, to: file)
                 }
