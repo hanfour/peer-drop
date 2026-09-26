@@ -2,6 +2,7 @@
 
 日期：2026-09-14
 狀態：已核可（使用者 2026-09-14），作為四個子專案的上位規格
+產品目標（本規格的上位決策準繩）：`docs/product/product-goals.md`
 相關：`docs/plans/2026-08-11-mainactor-offload-design.md`、`docs/security/threat-model-relay.md`、`docs/plans/2026-07-05-remaining-work-roadmap.md`
 
 ---

@@ -1,6 +1,6 @@
 # PeerDrop
 
-A peer-to-peer file transfer and communication app for iOS and macOS. Direct device-to-device connections on the local network, plus an end-to-end-encrypted relay for reaching friends anywhere. Passing notes and exchange diaries are the next major features (see `docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md`).
+A peer-to-peer file transfer and communication app for iOS and macOS. Direct device-to-device connections on the local network, plus an end-to-end-encrypted relay for reaching friends anywhere. Passing notes and exchange diaries are the next major features (see `docs/superpowers/specs/2026-09-14-notes-diary-pivot-design.md`). Product goals, principles and non-goals: `docs/product/product-goals.md`.
 
 ## Features
 
