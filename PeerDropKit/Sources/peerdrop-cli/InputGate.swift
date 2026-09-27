@@ -35,11 +35,28 @@ enum InputGate {
         return facts.handshakeKeyTrusted
     }
 
+    /// The connection `peerID` currently resolves to, if and only if it passes
+    /// the gate. Callers that send to the peer must send on THIS object, in the
+    /// same main-actor turn, so a connection that takes over the peer ID later
+    /// can never receive what was approved for this one.
+    @MainActor
+    static func approvedConnection(for peerID: String, cm: ConnectionManager, store: TrustedContactStore) -> PeerConnection? {
+        guard let conn = cm.connection(for: peerID),
+              shouldForwardInput(facts(of: conn, store: store))
+        else { return nil }
+        return conn
+    }
+
     /// Gathers the facts for the connection the hook's `peerID` resolves to.
     /// Returns nil when there is no such connection (caller must fail closed).
     @MainActor
     static func facts(for peerID: String, cm: ConnectionManager, store: TrustedContactStore) -> InputAuthFacts? {
         guard let conn = cm.connection(for: peerID) else { return nil }
+        return facts(of: conn, store: store)
+    }
+
+    @MainActor
+    static func facts(of conn: PeerConnection, store: TrustedContactStore) -> InputAuthFacts {
         let handshakeKey = conn.handshakePeerIdentityKey
         var trusted = false
         if let handshakeKey, let contact = store.find(byPublicKey: handshakeKey) {

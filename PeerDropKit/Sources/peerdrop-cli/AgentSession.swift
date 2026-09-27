@@ -1,6 +1,7 @@
 import Foundation
 import PeerDropCore
 import PeerDropSecurity
+import PeerDropProtocol
 import Combine
 
 /// Owns the policy for accepting, enrolling, or rejecting inbound peer
@@ -89,8 +90,12 @@ final class AgentSession {
     /// Input/output authorisation for a hook peerID. Defaults to `InputGate`
     /// over the live ConnectionManager; injectable for tests. Main-actor only.
     private let isAuthorized: (String) -> Bool
-    /// Sends one line of process output to a peer. Defaults to `cm.sendText`.
-    private let sendToPeer: (String, String) async -> Void
+    /// Sends one line of process output to a peer. Main-actor isolated so that
+    /// calling it from the (main-actor) send queue does not hop: the gate check
+    /// and the connection the line goes out on stay in one main-actor turn.
+    /// The default re-resolves the peer through `InputGate.approvedConnection`
+    /// and sends on that exact PeerConnection object.
+    private let sendToPeer: @MainActor (String, String) async -> Void
     /// Emits whenever something that feeds the gate changes for a peer's
     /// connection (secure-channel state, pinning verdict). Defaults to the live
     /// PeerConnection's publishers; nil if there is no connection.
@@ -127,11 +132,21 @@ final class AgentSession {
         connectionManager: ConnectionManager,
         store: TrustedContactStore,
         isAuthorized: ((String) -> Bool)? = nil,
-        sendToPeer: ((String, String) async -> Void)? = nil,
+        sendToPeer: (@MainActor (String, String) async -> Void)? = nil,
         authorizationChanges: ((String) -> AnyPublisher<Void, Never>?)? = nil
     ) {
-        self.sendToPeer = sendToPeer ?? { [weak connectionManager] text, peerID in
-            try? await connectionManager?.sendText(text, to: peerID)
+        self.sendToPeer = sendToPeer ?? { @MainActor [weak connectionManager] text, peerID in
+            // Gate + resolve + build the message synchronously; the only
+            // suspension is the transport send on the approved object.
+            guard let cm = connectionManager,
+                  let conn = InputGate.approvedConnection(for: peerID, cm: cm, store: store),
+                  let message = try? PeerMessage.textMessage(
+                      TextMessagePayload(text: text,
+                                         senderName: cm.localIdentity.displayName,
+                                         messageID: UUID().uuidString),
+                      senderID: cm.localIdentity.id)
+            else { return }
+            try? await conn.sendMessage(message)
         }
         self.bridge = bridge
         self.cm = connectionManager
@@ -266,9 +281,11 @@ final class AgentSession {
         await sendTail?.value
     }
 
-    /// Appends `lines` for `peerID` to the serial send chain. The gate is
-    /// re-checked before EACH line (on the main actor, immediately before the
-    /// send resolves the peer's connection), so nothing goes to a new,
+    /// Appends `lines` for `peerID` to the serial send chain. Before EACH line
+    /// the gate is re-checked and `sendToPeer` is entered in the same
+    /// main-actor turn (both are main-actor isolated, so there is no hop in
+    /// between); the default sender resolves and sends on the approved
+    /// PeerConnection object itself. Nothing therefore goes to a new,
     /// unauthenticated connection that re-used the peer's ID mid-stream.
     @MainActor
     private func enqueueSend(_ lines: [String], to peerID: String) {

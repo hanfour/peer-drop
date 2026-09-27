@@ -4,6 +4,22 @@ import Combine
 @testable import PeerDropCore
 @testable import PeerDropProtocol
 @testable import PeerDropSecurity
+@testable import PeerDropTransport
+
+/// Transport that records every message sent through it.
+final class RecordingTransport: TransportProtocol {
+    private let lock = NSLock()
+    private var _sent: [PeerMessage] = []
+    var sent: [PeerMessage] { lock.withLock { _sent } }
+    var isReady: Bool { true }
+    var onStateChange: ((TransportState) -> Void)?
+    func send(_ message: PeerMessage) async throws { lock.withLock { _sent.append(message) } }
+    func receive() async throws -> PeerMessage {
+        try await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+        throw CancellationError()
+    }
+    func close() {}
+}
 
 /// Records every (peerID, text) the session sends back out to peers.
 @MainActor
@@ -223,19 +239,75 @@ final class AgentSessionOutputTests: XCTestCase {
     }
 }
 
+/// Review 2, item 1: with the PRODUCTION sender, the gate check and the
+/// connection the line is sent on must not be separated by other main-queue
+/// work. A job queued right before the send swaps the peer ID over to a new,
+/// unauthenticated plaintext connection; the line must not reach it.
+@MainActor
+final class AgentSessionSendRaceTests: XCTestCase {
+    func test_defaultSender_connectionSwappedJustBeforeSend_lineDoesNotReachNewConnection() async throws {
+        let cm = ConnectionManager()
+        let store = TrustedContactStore.inMemory()
+        let peer = EphemeralIdentity()
+        let peerKey = peer.publicKey.rawRepresentation
+        store.add(TrustedContact(displayName: "phone", identityPublicKey: peerKey, trustLevel: .linked))
+        let oldTransport = RecordingTransport()
+        let verified = try await makeSecuredConnection(peerID: "p", peer: peer, helloKey: peerKey,
+                                                       transport: oldTransport)
+        verified.setPinningVerdict(.matched)
+        cm._setConnectionForTesting(peerID: "p", verified)
+
+        let session = AgentSession(bridge: RecordingBridge(), connectionManager: cm, store: store)
+        session.wire()
+        cm.dispatchTextForTesting(
+            try PeerMessage.textMessage(TextMessagePayload(text: "hi", senderName: "x"), senderID: "p"),
+            from: "p")
+
+        let newTransport = RecordingTransport()
+        let intruder = PeerConnection(
+            peerID: "p", transport: newTransport,
+            peerIdentity: PeerIdentity(id: "p", displayName: "phone", identityPublicKey: peerKey,
+                                       supportsSecureChannel: false),
+            localIdentity: PeerIdentity(id: "cli", displayName: "cli"),
+            state: .connected)
+
+        session.broadcastNow("secret-output")                          // send job queued first
+        DispatchQueue.main.async { cm._setConnectionForTesting(peerID: "p", intruder) }  // then the swap
+        await session.drainSends()
+        let hop = expectation(description: "main queue drained")
+        DispatchQueue.main.async { hop.fulfill() }
+        await fulfillment(of: [hop], timeout: 2)
+        await session.drainSends()
+
+        XCTAssertFalse(newTransport.sent.contains { $0.type == .textMessage || $0.type == .secureEnvelope },
+                       "output leaked to the unauthenticated connection that took over the peer ID")
+        XCTAssertTrue(oldTransport.sent.contains { $0.type == .secureEnvelope },
+                      "the line should have gone out, encrypted, on the verified connection")
+    }
+}
+
 /// A PeerConnection secured by a real LocalSecureChannel handshake over a null
 /// transport, with in-memory identity keys.
 @MainActor
-func makeSecuredConnection(peerID: String, peer: EphemeralIdentity, helloKey: Data?) async throws -> PeerConnection {
+func makeSecuredConnection(
+    peerID: String, peer: EphemeralIdentity, helloKey: Data?,
+    transport: TransportProtocol = NullTransport()
+) async throws -> PeerConnection {
     let conn = PeerConnection(
         peerID: peerID,
-        transport: NullTransport(),
+        transport: transport,
         peerIdentity: PeerIdentity(id: peerID, displayName: "phone",
                                    identityPublicKey: helloKey, supportsSecureChannel: true),
         localIdentity: PeerIdentity(id: "cli", displayName: "cli"))
     let (bundle, _) = LocalSecureChannel.prepareHandshake(identity: peer)
+    // Make our side the ratchet initiator (lex-smaller identity key) so it has
+    // a sending chain and can encrypt immediately.
+    var me = EphemeralIdentity()
+    while !me.publicKey.rawRepresentation.lexicographicallyPrecedes(peer.publicKey.rawRepresentation) {
+        me = EphemeralIdentity()
+    }
     try await conn.handleIncomingSecureHandshake(
         try PeerMessage.secureHandshake(bundle: bundle, senderID: peerID),
-        identity: EphemeralIdentity())
+        identity: me)
     return conn
 }
