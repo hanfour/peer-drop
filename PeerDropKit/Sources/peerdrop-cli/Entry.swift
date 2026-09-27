@@ -92,13 +92,16 @@ struct PeerDropCLI {
         bridge.onMessage = { [weak session] text in session?.broadcast(text) }
         session.wire()
 
-        // Replay buffered process output to any peer that drops and reconnects.
-        // A brand-new peer (not in attachedPeerIDs) is skipped — handlePeerConnected
-        // guards on shouldReplayOnConnect. The callback fires on the main actor;
-        // wrap in Task{@MainActor} to satisfy the compiler since the closure type
-        // is not itself @MainActor.
+        // Replay buffered process output to a peer that drops and reconnects
+        // (once its new connection is authorised — see handlePeerConnected), and
+        // forget per-peer replay/queue state when a connection goes away.
+        // ConnectionManager fires both callbacks synchronously on the main actor;
+        // handling them synchronously keeps disconnect→reconnect in order.
         cm.onPeerConnected = { [weak session] peerID in
-            Task { @MainActor in session?.handlePeerConnected(peerID) }
+            MainActor.assumeIsolated { session?.handlePeerConnected(peerID) }
+        }
+        cm.onPeerDisconnected = { [weak session] peerID in
+            MainActor.assumeIsolated { session?.handlePeerDisconnected(peerID) }
         }
 
         bridge.onExit = { code in

@@ -105,10 +105,15 @@ final class AgentSession {
     /// Confined to the main actor.
     private var replayWatchers: [String: AnyCancellable] = [:]
 
-    /// Tail of the serial outbound-send chain: every send to every peer is
-    /// appended here, so lines leave in the order they were enqueued on the
-    /// main actor. Confined to the main actor.
-    private var sendTail: Task<Void, Never>?
+    /// Per-peer outbound queues. Each peer has its own FIFO of lines and at
+    /// most one sender task draining it, so a stalled link only delays that
+    /// peer. Queues are capped (drop-oldest); a reconnect replays the
+    /// scrollback, which covers dropped lines. Confined to the main actor.
+    private var outboxes: [String: [String]] = [:]
+    private var outboxSenders: [String: Task<Void, Never>] = [:]
+
+    /// Max lines waiting per peer before the oldest are dropped.
+    static let perPeerQueueCap = 1000
 
     /// Peers whose messages have been received in this session.
     /// Confined to the main actor.
@@ -191,6 +196,9 @@ final class AgentSession {
     func handlePeerConnected(_ peerID: String) {
         guard Self.shouldReplayOnConnect(peerID: peerID, known: attachedPeerIDs) else { return }
         pendingReplayPeerIDs.insert(peerID)
+        // Lines still queued for the old connection are part of the scrollback
+        // the replay will send; drop them so they are not delivered twice.
+        outboxes[peerID] = nil
         // @Published emits in willSet, so hop to the next main-queue turn to
         // evaluate the gate against the updated values.
         replayWatchers[peerID] = authorizationChanges(peerID)?
@@ -275,29 +283,71 @@ final class AgentSession {
         enqueueSend(scrollback, to: peerID)
     }
 
-    /// Waits until every send enqueued so far has finished (tests).
+    /// Call when a peer's connection goes away: forget its pending replay,
+    /// stop watching the dead connection, and drop its queued lines (a later
+    /// reconnect replays the scrollback). Must run on the main actor.
     @MainActor
-    func drainSends() async {
-        await sendTail?.value
+    func handlePeerDisconnected(_ peerID: String) {
+        pendingReplayPeerIDs.remove(peerID)
+        replayWatchers[peerID] = nil
+        outboxes[peerID] = nil
     }
 
-    /// Appends `lines` for `peerID` to the serial send chain. Before EACH line
-    /// the gate is re-checked and `sendToPeer` is entered in the same
-    /// main-actor turn (both are main-actor isolated, so there is no hop in
-    /// between); the default sender resolves and sends on the approved
-    /// PeerConnection object itself. Nothing therefore goes to a new,
-    /// unauthenticated connection that re-used the peer's ID mid-stream.
+    @MainActor
+    func hasPendingReplay(for peerID: String) -> Bool {
+        pendingReplayPeerIDs.contains(peerID)
+    }
+
+    /// Number of lines waiting (not yet handed to the sender) for `peerID`.
+    @MainActor
+    func queuedLineCount(for peerID: String) -> Int {
+        outboxes[peerID]?.count ?? 0
+    }
+
+    /// Waits until every peer's queue has drained (tests).
+    @MainActor
+    func drainSends() async {
+        while let sender = outboxSenders.values.first {
+            await sender.value
+        }
+    }
+
+    /// Appends `lines` to `peerID`'s queue (dropping the oldest beyond
+    /// `perPeerQueueCap`) and makes sure a sender task is draining it.
     @MainActor
     private func enqueueSend(_ lines: [String], to peerID: String) {
         guard !lines.isEmpty else { return }
-        let previous = sendTail
-        sendTail = Task { @MainActor [weak self] in
-            await previous?.value
-            for line in lines {
-                guard let self, self.isAuthorized(peerID) else { return }
-                await self.sendToPeer(line, peerID)
-            }
+        var queue = outboxes[peerID, default: []]
+        queue.append(contentsOf: lines)
+        if queue.count > Self.perPeerQueueCap {
+            queue.removeFirst(queue.count - Self.perPeerQueueCap)
         }
+        outboxes[peerID] = queue
+        guard outboxSenders[peerID] == nil else { return }
+        outboxSenders[peerID] = Task { @MainActor [weak self] in
+            await self?.drainOutbox(peerID)
+        }
+    }
+
+    /// Sends `peerID`'s queued lines one at a time. Before EACH line the gate
+    /// is re-checked and `sendToPeer` is entered in the same main-actor turn
+    /// (both are main-actor isolated, so there is no hop in between); the
+    /// default sender resolves and sends on the approved PeerConnection object
+    /// itself. Nothing therefore goes to a new, unauthenticated connection
+    /// that re-used the peer's ID mid-stream. Fail closed: the first refused
+    /// line drops the rest of the queue.
+    @MainActor
+    private func drainOutbox(_ peerID: String) async {
+        while let line = outboxes[peerID]?.first {
+            outboxes[peerID]?.removeFirst()
+            guard isAuthorized(peerID) else {
+                outboxes[peerID] = nil
+                break
+            }
+            await sendToPeer(line, peerID)
+        }
+        if outboxes[peerID]?.isEmpty == true { outboxes[peerID] = nil }
+        outboxSenders[peerID] = nil
     }
 
     // MARK: - Private Helpers

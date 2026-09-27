@@ -27,10 +27,30 @@ final class RecordingSender {
     var sent: [(peer: String, text: String)] = []
     /// Called after each recorded send (lets a test change auth mid-stream).
     var afterSend: (() -> Void)?
+    /// Sends to these peers never complete until `release()` (a stalled link).
+    var stalledPeers: Set<String> = []
+    private var waiters: [CheckedContinuation<Void, Never>] = []
     func texts(to peer: String) -> [String] { sent.filter { $0.peer == peer }.map(\.text) }
-    func record(_ text: String, _ peer: String) {
+    func record(_ text: String, _ peer: String) async {
         sent.append((peer, text))
         afterSend?()
+        if stalledPeers.contains(peer) {
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+    func release() {
+        stalledPeers = []
+        let w = waiters
+        waiters = []
+        w.forEach { $0.resume() }
+    }
+}
+
+@MainActor
+func waitUntil(_ timeout: TimeInterval = 2, _ condition: () -> Bool) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() && Date() < deadline {
+        try? await Task.sleep(nanoseconds: 5_000_000)
     }
 }
 
@@ -72,6 +92,14 @@ final class AgentSessionOutputTests: XCTestCase {
         cm.dispatchTextForTesting(
             try PeerMessage.textMessage(TextMessagePayload(text: text, senderName: "x"), senderID: peer),
             from: peer)
+    }
+
+    /// Lets main-queue hops (Combine `receive(on:)`) run, without draining.
+    private func hop() async {
+        for _ in 0..<3 { await Task.yield() }
+        let hop = expectation(description: "main queue hop")
+        DispatchQueue.main.async { hop.fulfill() }
+        await fulfillment(of: [hop], timeout: 2)
     }
 
     /// Lets main-queue hops (Combine `receive(on:)`) run, then drains sends.
@@ -204,6 +232,92 @@ final class AgentSessionOutputTests: XCTestCase {
         changes["a"]?.send(())
         await settle(session)
         XCTAssertEqual(sender.texts(to: "a"), ["l1", "l2"])
+    }
+
+    // MARK: - Review 2, item 2: per-peer queues, bounded
+
+    func test_stalledPeer_doesNotBlockOutputToOtherPeers() async throws {
+        let session = makeSession()
+        authorized = ["a", "b"]
+        try input("hi", from: "a")
+        try input("hi", from: "b")
+        sender.stalledPeers = ["a"]
+
+        session.broadcastNow("x")
+        session.broadcastNow("y")        // a is now certainly stuck on "x"
+        await waitUntil { self.sender.texts(to: "b") == ["x", "y"] }
+
+        XCTAssertEqual(sender.texts(to: "b"), ["x", "y"], "b must not wait behind a's stalled link")
+        sender.release()
+        await session.drainSends()
+    }
+
+    func test_perPeerQueue_isCapped_dropsOldest() async throws {
+        let session = makeSession()
+        authorized = ["a"]
+        try input("hi", from: "a")
+        sender.stalledPeers = ["a"]
+        session.broadcastNow("l0")                     // in flight, stalled
+        await waitUntil { self.sender.texts(to: "a") == ["l0"] }
+        let cap = AgentSession.perPeerQueueCap
+        for i in 1...(cap + 100) { session.broadcastNow("l\(i)") }
+
+        XCTAssertEqual(session.queuedLineCount(for: "a"), cap)
+        sender.release()
+        await session.drainSends()
+        let got = sender.texts(to: "a")
+        XCTAssertEqual(got.count, 1 + cap)
+        XCTAssertEqual(got[1], "l101")
+        XCTAssertEqual(got.last, "l\(cap + 100)")
+    }
+
+    // MARK: - Review 2, item 3: no duplicates across reconnect
+
+    func test_reconnect_dropsQueuedUnsentLines_replayDeliversThemOnce() async throws {
+        let session = makeSession()
+        authorized = ["a"]
+        try input("hi", from: "a")
+        sender.stalledPeers = ["a"]
+        session.broadcastNow("l1")                     // in flight, stalled
+        await waitUntil { self.sender.texts(to: "a") == ["l1"] }
+        session.broadcastNow("l2")                     // queued, not yet sent
+        session.broadcastNow("l3")
+
+        authorized = []
+        session.handlePeerConnected("a")               // reconnect → replay pending
+        authorized = ["a"]
+        changes["a"]?.send(())                         // new connection verified
+        await hop()                                    // (can't drain: link still stalled)
+        sender.release()
+        await settle(session)
+
+        let got = sender.texts(to: "a")
+        XCTAssertEqual(got.filter { $0 == "l2" }.count, 1, "got \(got)")
+        XCTAssertEqual(got.filter { $0 == "l3" }.count, 1, "got \(got)")
+        XCTAssertEqual(Array(got.suffix(3)), ["l1", "l2", "l3"], "replay snapshot, in order")
+    }
+
+    // MARK: - Review 2, item 4: disconnect clears pending replay + watcher
+
+    func test_disconnect_clearsPendingReplayAndWatcher() async throws {
+        let session = makeSession()
+        authorized = ["a"]
+        try input("hi", from: "a")
+        session.broadcastNow("l1")
+        await settle(session)
+        sender.sent = []
+        authorized = []
+        session.handlePeerConnected("a")
+        XCTAssertTrue(session.hasPendingReplay(for: "a"))
+
+        session.handlePeerDisconnected("a")
+        XCTAssertFalse(session.hasPendingReplay(for: "a"))
+
+        // A late state change from the dead connection must not trigger a replay.
+        authorized = ["a"]
+        changes["a"]?.send(())
+        await settle(session)
+        XCTAssertEqual(sender.sent.count, 0)
     }
 
     /// Default wiring: the production authorizer + the connection's own
