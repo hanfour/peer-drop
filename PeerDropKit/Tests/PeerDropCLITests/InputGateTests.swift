@@ -206,11 +206,80 @@ final class InputGateFactsTests: XCTestCase {
         let victimKey = EphemeralIdentity().publicKey.rawRepresentation
         store.add(TrustedContact(displayName: "victim", identityPublicKey: victimKey, trustLevel: .verified))
         let attacker = EphemeralIdentity()
+        let attackerKey = attacker.publicKey.rawRepresentation
+        // Make the attacker's handshake key trusted too, so key equality is the
+        // ONLY check that can fail here.
+        store.add(TrustedContact(displayName: "attacker", identityPublicKey: attackerKey, trustLevel: .verified))
         let conn = try await securedConnection(peerID: "p3", peer: attacker, helloKey: victimKey)
         conn.setPinningVerdict(.matched)
         cm._setConnectionForTesting(peerID: "p3", conn)
 
-        XCTAssertFalse(InputGate.shouldForwardInput(InputGate.facts(for: "p3", cm: cm, store: store)))
+        let f = try XCTUnwrap(InputGate.facts(for: "p3", cm: cm, store: store))
+        XCTAssertTrue(f.isSecured)
+        XCTAssertEqual(f.pinningVerdict, .matched)
+        XCTAssertTrue(f.handshakeKeyTrusted)
+        XCTAssertEqual(f.handshakeIdentityKey, attackerKey)
+        XCTAssertEqual(f.helloIdentityKey, victimKey)
+        XCTAssertFalse(InputGate.shouldForwardInput(f))
+    }
+
+    /// Everything else lines up, but the contact is blocked.
+    @MainActor
+    func test_facts_blockedLinkedContactWithMatchedVerdict_isNotForwarded() async throws {
+        let cm = ConnectionManager()
+        let store = TrustedContactStore.inMemory()
+        let peer = EphemeralIdentity()
+        let peerKey = peer.publicKey.rawRepresentation
+        var contact = TrustedContact(displayName: "blocked", identityPublicKey: peerKey, trustLevel: .linked)
+        contact.isBlocked = true
+        store.add(contact)
+        let conn = try await securedConnection(peerID: "p5", peer: peer, helloKey: peerKey)
+        conn.setPinningVerdict(.matched)
+        cm._setConnectionForTesting(peerID: "p5", conn)
+
+        let f = try XCTUnwrap(InputGate.facts(for: "p5", cm: cm, store: store))
+        XCTAssertFalse(f.handshakeKeyTrusted)
+        XCTAssertFalse(InputGate.shouldForwardInput(f))
+    }
+
+    /// Verdict says `.matched` but the store only has the key at `.unknown`.
+    @MainActor
+    func test_facts_unknownContactWithMatchedVerdict_isNotForwarded() async throws {
+        let cm = ConnectionManager()
+        let store = TrustedContactStore.inMemory()
+        let peer = EphemeralIdentity()
+        let peerKey = peer.publicKey.rawRepresentation
+        store.add(TrustedContact(displayName: "unverified", identityPublicKey: peerKey, trustLevel: .unknown))
+        let conn = try await securedConnection(peerID: "p6", peer: peer, helloKey: peerKey)
+        conn.setPinningVerdict(.matched)
+        cm._setConnectionForTesting(peerID: "p6", conn)
+
+        let f = try XCTUnwrap(InputGate.facts(for: "p6", cm: cm, store: store))
+        XCTAssertFalse(f.handshakeKeyTrusted)
+        XCTAssertFalse(InputGate.shouldForwardInput(f))
+    }
+
+    /// Review item 1: the PRODUCTION authorizer (default init, no injection)
+    /// forwards text from a secured, verified, key-consistent peer.
+    @MainActor
+    func test_defaultGate_securedVerifiedPeer_textReachesBridge() async throws {
+        let cm = ConnectionManager()
+        let store = TrustedContactStore.inMemory()
+        let peer = EphemeralIdentity()
+        let peerKey = peer.publicKey.rawRepresentation
+        store.add(TrustedContact(displayName: "phone", identityPublicKey: peerKey, trustLevel: .linked))
+        let conn = try await securedConnection(peerID: "p7", peer: peer, helloKey: peerKey)
+        conn.setPinningVerdict(.matched)
+        cm._setConnectionForTesting(peerID: "p7", conn)
+
+        let bridge = RecordingBridge()
+        let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
+        session.wire()
+        cm.dispatchTextForTesting(
+            try PeerMessage.textMessage(TextMessagePayload(text: "cmd", senderName: "x"), senderID: "p7"),
+            from: "p7")
+
+        XCTAssertEqual(bridge.sent, ["cmd"])
     }
 
     @MainActor
