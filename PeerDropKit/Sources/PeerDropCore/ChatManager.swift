@@ -732,74 +732,123 @@ public final class ChatManager: ObservableObject {
 
     // MARK: - Edit / Delete
 
-    public func applyEdit(messageID: String, newText: String, editedAt: Date, peerID: String) {
-        if let idx = messages.firstIndex(where: { $0.id == messageID }) {
-            messages[idx] = ChatMessage(
-                id: messages[idx].id,
-                text: newText,
-                isMedia: messages[idx].isMedia,
-                mediaType: messages[idx].mediaType,
-                fileName: messages[idx].fileName,
-                fileSize: messages[idx].fileSize,
-                mimeType: messages[idx].mimeType,
-                duration: messages[idx].duration,
-                thumbnailData: messages[idx].thumbnailData,
-                localFileURL: messages[idx].localFileURL,
-                isOutgoing: messages[idx].isOutgoing,
-                peerName: messages[idx].peerName,
-                status: messages[idx].status,
-                timestamp: messages[idx].timestamp,
-                groupID: messages[idx].groupID,
-                senderID: messages[idx].senderID,
-                senderName: messages[idx].senderName,
-                replyToMessageID: messages[idx].replyToMessageID,
-                replyToText: messages[idx].replyToText,
-                replyToSenderName: messages[idx].replyToSenderName,
-                editedAt: editedAt,
-                isDeleted: messages[idx].isDeleted,
-                reactions: messages[idx].reactions,
-                groupReadStatus: messages[idx].groupReadStatus
-            )
-        }
-        // Also update the full in-memory cache
-        if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
-            allMessagesForCurrentPeer[idx] = messages.first(where: { $0.id == messageID }) ?? allMessagesForCurrentPeer[idx]
-        }
-        persistEditOrDelete(messageID: messageID, peerID: peerID)
+    /// Who is asking for an edit/delete. Required at every call site so the
+    /// authorization rule is never picked up by default.
+    public enum MessageChangeOrigin {
+        /// The local user changing one of their own outgoing messages.
+        case localUser
+        /// A remote peer (`peerID`) changing one of the messages it sent us.
+        case remotePeer
     }
 
-    public func applyDelete(messageID: String, peerID: String) {
-        if let idx = messages.firstIndex(where: { $0.id == messageID }) {
-            messages[idx].isDeleted = true
+    public func applyEdit(messageID: String, newText: String, editedAt: Date, peerID: String, origin: MessageChangeOrigin) {
+        applyChange(messageID: messageID, peerID: peerID, origin: origin) {
+            Self.edited($0, newText: newText, editedAt: editedAt)
         }
-        // Also update the full in-memory cache
-        if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
-            allMessagesForCurrentPeer[idx].isDeleted = true
-        }
-        persistEditOrDelete(messageID: messageID, peerID: peerID)
     }
 
-    private func persistEditOrDelete(messageID: String, peerID: String) {
+    public func applyDelete(messageID: String, peerID: String, origin: MessageChangeOrigin) {
+        applyChange(messageID: messageID, peerID: peerID, origin: origin) {
+            var m = $0
+            m.isDeleted = true
+            return m
+        }
+    }
+
+    /// `text` is immutable on ChatMessage, so an edit rebuilds the message.
+    private static func edited(_ m: ChatMessage, newText: String, editedAt: Date) -> ChatMessage {
+        ChatMessage(
+            id: m.id,
+            text: newText,
+            isMedia: m.isMedia,
+            mediaType: m.mediaType,
+            fileName: m.fileName,
+            fileSize: m.fileSize,
+            mimeType: m.mimeType,
+            duration: m.duration,
+            thumbnailData: m.thumbnailData,
+            localFileURL: m.localFileURL,
+            isOutgoing: m.isOutgoing,
+            peerName: m.peerName,
+            status: m.status,
+            timestamp: m.timestamp,
+            groupID: m.groupID,
+            senderID: m.senderID,
+            senderName: m.senderName,
+            replyToMessageID: m.replyToMessageID,
+            replyToText: m.replyToText,
+            replyToSenderName: m.replyToSenderName,
+            editedAt: editedAt,
+            isDeleted: m.isDeleted,
+            reactions: m.reactions,
+            groupReadStatus: m.groupReadStatus
+        )
+    }
+
+    /// May `origin` change `message` in `peerID`'s conversation? The local user
+    /// may only change their own outgoing messages; a peer may only change a
+    /// message it sent us — never ours, and never one attributed to someone else.
+    private static func isAuthorized(_ message: ChatMessage, peerID: String, origin: MessageChangeOrigin) -> Bool {
+        switch origin {
+        case .localUser:
+            return message.isOutgoing
+        case .remotePeer:
+            return !message.isOutgoing && (message.senderID == nil || message.senderID == peerID)
+        }
+    }
+
+    /// Apply `change` to a message in `peerID`'s conversation — on disk, in the
+    /// pending write queue and, if that conversation is open, on screen. Only
+    /// `peerID`'s own file is consulted, so a peer can't reach into another
+    /// conversation; the change is applied to the stored message itself rather
+    /// than copied from `messages`, which only holds the open conversation (#158).
+    private func applyChange(messageID: String, peerID: String, origin: MessageChangeOrigin, change: (ChatMessage) -> ChatMessage) {
         // Flush pending writes first: an edit/delete applied inside the 500ms
         // debounce window would otherwise miss the not-yet-written message and be
         // clobbered by the debounce writing the pre-edit original.
         flushAllPendingPersists()
-        let messagesDir = chatDirectory.appendingPathComponent("messages", isDirectory: true)
-        guard let files = try? fileManager.contentsOfDirectory(at: messagesDir, includingPropertiesForKeys: nil) else { return }
-        for file in files where file.pathExtension == "json" {
-            guard let raw = try? Data(contentsOf: file),
-                  let decrypted = try? encryptor.decrypt(raw),
-                  var msgs = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { continue }
-            if let idx = msgs.firstIndex(where: { $0.id == messageID }) {
-                // Find the in-memory version if available
-                if let memIdx = messages.firstIndex(where: { $0.id == messageID }) {
-                    msgs[idx] = messages[memIdx]
-                }
-                if let encoded = try? JSONEncoder().encode(msgs) {
-                    try? encryptor.encryptAndWrite(encoded, to: file)
-                }
-                return
+
+        let file = messagesFile(for: peerID)
+        var stored: [ChatMessage] = []
+        if let raw = try? Data(contentsOf: file),
+           let decrypted = try? encryptor.decrypt(raw),
+           let decoded = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) {
+            stored = decoded
+        }
+        let isOpen = peerID == currentPeerID
+        // Authorize against the authoritative copy: disk, else a still-queued
+        // write (the flush above failed), else the open conversation.
+        guard let target = stored.first(where: { $0.id == messageID })
+                ?? pendingMessages[peerID]?.first(where: { $0.id == messageID })
+                ?? (isOpen ? allMessagesForCurrentPeer.first(where: { $0.id == messageID }) : nil) else {
+            logger.debug("Edit/delete for unknown message in conversation \(peerID); ignoring")
+            return
+        }
+        guard Self.isAuthorized(target, peerID: peerID, origin: origin) else {
+            logger.warning("Rejected edit/delete of a message \(peerID) may not change")
+            return
+        }
+
+        if let idx = stored.firstIndex(where: { $0.id == messageID }) {
+            stored[idx] = change(stored[idx])
+            if let encoded = try? JSONEncoder().encode(stored) {
+                try? encryptor.encryptAndWrite(encoded, to: file)
             }
+        }
+        // If the flush failed, the message is still queued — patch the queued
+        // copy too so the retry doesn't write the pre-edit original.
+        if var pending = pendingMessages[peerID],
+           let idx = pending.firstIndex(where: { $0.id == messageID }) {
+            pending[idx] = change(pending[idx])
+            pendingMessages[peerID] = pending
+        }
+        guard isOpen else { return }
+        if let idx = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[idx] = change(messages[idx])
+        }
+        // Also update the full in-memory cache
+        if let idx = allMessagesForCurrentPeer.firstIndex(where: { $0.id == messageID }) {
+            allMessagesForCurrentPeer[idx] = change(allMessagesForCurrentPeer[idx])
         }
     }
 

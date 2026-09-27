@@ -150,7 +150,7 @@ final class MessageEditDeleteTests: XCTestCase {
         let msg = chatManager.saveOutgoing(text: "Original", peerID: "peer-1", peerName: "Peer")
 
         // Apply edit
-        chatManager.applyEdit(messageID: msg.id, newText: "Edited text", editedAt: Date(), peerID: "peer-1")
+        chatManager.applyEdit(messageID: msg.id, newText: "Edited text", editedAt: Date(), peerID: "peer-1", origin: .localUser)
 
         // Verify in-memory update
         if let edited = chatManager.messages.first(where: { $0.id == msg.id }) {
@@ -167,7 +167,7 @@ final class MessageEditDeleteTests: XCTestCase {
 
         let msg = chatManager.saveOutgoing(text: "To delete", peerID: "peer-1", peerName: "Peer")
 
-        chatManager.applyDelete(messageID: msg.id, peerID: "peer-1")
+        chatManager.applyDelete(messageID: msg.id, peerID: "peer-1", origin: .localUser)
 
         if let deleted = chatManager.messages.first(where: { $0.id == msg.id }) {
             XCTAssertTrue(deleted.isDeleted)
