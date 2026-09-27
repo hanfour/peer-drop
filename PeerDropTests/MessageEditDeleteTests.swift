@@ -129,8 +129,23 @@ final class MessageEditDeleteTests: XCTestCase {
 
     // MARK: - ChatManager Edit/Delete
 
+    /// Builds a `ChatManager` rooted in an isolated temp directory (never the
+    /// simulator's real Documents dir, which could carry stale history across
+    /// runs) with the given peer's conversation already open. Since
+    /// `160676b`, `appendMessage` only surfaces a message in `messages` when
+    /// it matches the currently-open conversation, so tests must open one
+    /// before calling `saveOutgoing`/`saveIncoming`.
+    private func makeOpenChat(peer: String) -> (ChatManager, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("medt-\(UUID().uuidString)")
+        let chatManager = ChatManager(rootDirectory: root)
+        chatManager.loadMessages(forPeer: peer)
+        return (chatManager, root)
+    }
+
     func testChatManagerApplyEdit() {
-        let chatManager = ChatManager()
+        let (chatManager, root) = makeOpenChat(peer: "peer-1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         // Create and save a message
         let msg = chatManager.saveOutgoing(text: "Original", peerID: "peer-1", peerName: "Peer")
 
@@ -147,7 +162,9 @@ final class MessageEditDeleteTests: XCTestCase {
     }
 
     func testChatManagerApplyDelete() {
-        let chatManager = ChatManager()
+        let (chatManager, root) = makeOpenChat(peer: "peer-1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
         let msg = chatManager.saveOutgoing(text: "To delete", peerID: "peer-1", peerName: "Peer")
 
         chatManager.applyDelete(messageID: msg.id, peerID: "peer-1")
