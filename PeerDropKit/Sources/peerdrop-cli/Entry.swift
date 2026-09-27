@@ -53,6 +53,11 @@ struct PeerDropCLI {
 
         HeadlessPlatform.register(deviceName: opts.name)
 
+        // #166: an accepted connection is not a trusted one in the CLI, so turn
+        // off features that act on peer data outside the input gate (file
+        // transfer auto-accepts and writes to disk; calls; clipboard sync).
+        CLIFeaturePolicy.apply(to: .standard)
+
         let cm = ConnectionManager()
         let store = cm.trustedContactStore
 
