@@ -107,9 +107,14 @@ final class AgentSession {
 
     /// Per-peer outbound queues. Each peer has its own FIFO of lines and at
     /// most one sender task draining it, so a stalled link only delays that
-    /// peer. Queues are capped (drop-oldest); a reconnect replays the
-    /// scrollback, which covers dropped lines. Confined to the main actor.
+    /// peer. Queues are capped at `perPeerQueueCap` lines, dropping the
+    /// oldest; dropped lines are gone for that peer (the scrollback keeps only
+    /// the last `scrollbackCap` lines and is replayed only on reconnect), so
+    /// the peer is sent a "[… N lines dropped]" marker before the next line.
+    /// Confined to the main actor.
     private var outboxes: [String: [String]] = [:]
+    /// Lines dropped from a peer's queue since its last marker was sent.
+    private var droppedLineCounts: [String: Int] = [:]
     private var outboxSenders: [String: Task<Void, Never>] = [:]
 
     /// Max lines waiting per peer before the oldest are dropped.
@@ -196,9 +201,12 @@ final class AgentSession {
     func handlePeerConnected(_ peerID: String) {
         guard Self.shouldReplayOnConnect(peerID: peerID, known: attachedPeerIDs) else { return }
         pendingReplayPeerIDs.insert(peerID)
-        // Lines still queued for the old connection are part of the scrollback
-        // the replay will send; drop them so they are not delivered twice.
+        // Lines still queued for the old connection are the newest output, so
+        // they are in the scrollback snapshot the replay will send (which
+        // holds the last `scrollbackCap` lines); drop them so they are not
+        // delivered twice.
         outboxes[peerID] = nil
+        droppedLineCounts[peerID] = nil
         // @Published emits in willSet, so hop to the next main-queue turn to
         // evaluate the gate against the updated values.
         replayWatchers[peerID] = authorizationChanges(peerID)?
@@ -291,6 +299,7 @@ final class AgentSession {
         pendingReplayPeerIDs.remove(peerID)
         replayWatchers[peerID] = nil
         outboxes[peerID] = nil
+        droppedLineCounts[peerID] = nil
     }
 
     @MainActor
@@ -320,13 +329,19 @@ final class AgentSession {
         var queue = outboxes[peerID, default: []]
         queue.append(contentsOf: lines)
         if queue.count > Self.perPeerQueueCap {
-            queue.removeFirst(queue.count - Self.perPeerQueueCap)
+            let overflow = queue.count - Self.perPeerQueueCap
+            queue.removeFirst(overflow)
+            droppedLineCounts[peerID, default: 0] += overflow
         }
         outboxes[peerID] = queue
         guard outboxSenders[peerID] == nil else { return }
         outboxSenders[peerID] = Task { @MainActor [weak self] in
             await self?.drainOutbox(peerID)
         }
+    }
+
+    nonisolated static func droppedMarker(_ count: Int) -> String {
+        "[… \(count) line\(count == 1 ? "" : "s") dropped]"
     }
 
     /// Sends `peerID`'s queued lines one at a time. Before EACH line the gate
@@ -338,10 +353,15 @@ final class AgentSession {
     /// line drops the rest of the queue.
     @MainActor
     private func drainOutbox(_ peerID: String) async {
-        while let line = outboxes[peerID]?.first {
-            outboxes[peerID]?.removeFirst()
+        while var line = outboxes[peerID]?.first {
+            if let dropped = droppedLineCounts.removeValue(forKey: peerID) {
+                line = Self.droppedMarker(dropped)      // send the marker first
+            } else {
+                outboxes[peerID]?.removeFirst()
+            }
             guard isAuthorized(peerID) else {
                 outboxes[peerID] = nil
+                droppedLineCounts[peerID] = nil
                 break
             }
             await sendToPeer(line, peerID)

@@ -266,8 +266,9 @@ final class AgentSessionOutputTests: XCTestCase {
         sender.release()
         await session.drainSends()
         let got = sender.texts(to: "a")
-        XCTAssertEqual(got.count, 1 + cap)
-        XCTAssertEqual(got[1], "l101")
+        XCTAssertEqual(got.count, 1 + 1 + cap)
+        XCTAssertEqual(got[1], "[… 100 lines dropped]", "the peer is told output was dropped")
+        XCTAssertEqual(got[2], "l101")
         XCTAssertEqual(got.last, "l\(cap + 100)")
     }
 
