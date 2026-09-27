@@ -64,7 +64,7 @@ final class TerminalSanitizerTests: XCTestCase {
 
     /// A 200-char padded name used to push a fake "SAS:" onto what looks like
     /// its own terminal line by soft-wrapping.
-    func test_paddedNameLineWrapSpoof_isNeutralised() {
+    func test_paddedNameLineWrapSpoof_isNeutralised() throws {
         let spoofs = [
             "iPhone" + String(repeating: " ", count: 200) + "SAS: 000 000",
             "iPhone" + String(repeating: "\u{3164}", count: 200) + "SAS: 000 000",
@@ -75,8 +75,45 @@ final class TerminalSanitizerTests: XCTestCase {
             XCTAssertLessThanOrEqual(out.count, 65, out)
             XCTAssertFalse(out.contains("  "), out)
             let lines = PairingPrompt.lines(displayName: raw, sas: "123 456", fingerprint: "F", isRelay: false)
-            XCTAssertLessThan(lines[1].count, 100, "the name line must not be long enough to wrap: \(lines[1])")
+            let nameLine = try XCTUnwrap(lines.first { $0.hasPrefix("Device name:") })
+            XCTAssertLessThan(nameLine.count, 100, "the name line must not be long enough to wrap: \(nameLine)")
         }
+    }
+
+    // MARK: - Final review, item 5
+
+    func test_combiningMarks_cappedAtTwoPerGrapheme() {
+        XCTAssertEqual(TerminalSanitizer.sanitize("e\u{0301}\u{0302}\u{0303}\u{0304}x"), "e\u{0301}\u{0302}x")
+        XCTAssertEqual(TerminalSanitizer.sanitize("a\u{20DD}\u{20DE}\u{20DF}"), "a\u{20DD}\u{20DE}")   // Me
+    }
+
+    func test_zalgoInput_isBounded() {
+        let zalgo = String(repeating: "Z" + String(repeating: "\u{0336}\u{0301}", count: 25), count: 200)
+        let out = TerminalSanitizer.sanitize(zalgo)
+        XCTAssertLessThanOrEqual(out.unicodeScalars.count, TerminalSanitizer.maxScalars + 1)
+        XCTAssertLessThanOrEqual(out.count, TerminalSanitizer.maxLength + 1)
+        XCTAssertTrue(out.hasSuffix("…"))
+    }
+
+    func test_scalarCap_appliesBeforeCharacterCap() {
+        // 60 characters of 3 scalars each = 180 scalars (under the 64-char cap).
+        let out = TerminalSanitizer.sanitize(String(repeating: "e\u{0301}\u{0302}", count: 60))
+        XCTAssertLessThanOrEqual(out.unicodeScalars.count, TerminalSanitizer.maxScalars + 1)
+        XCTAssertTrue(out.hasSuffix("…"))
+    }
+
+    func test_prompt_nameLineComesAfterSASAndFingerprintLines() throws {
+        let lines = PairingPrompt.lines(
+            displayName: "iPhone", sas: "123 456", fingerprint: "F", isRelay: false,
+            peerKeyFingerprint: "1111 2222 3333 4444 5555", ownFingerprint: "AAAA BBBB CCCC DDDD EEEE")
+        let nameIdx = try XCTUnwrap(lines.firstIndex { $0.hasPrefix("Device name:") })
+        let sasIdx = try XCTUnwrap(lines.firstIndex { $0.hasPrefix("SAS:") })
+        let peerFpIdx = try XCTUnwrap(lines.firstIndex { $0.contains("1111 2222 3333 4444 5555") })
+        let ownFpIdx = try XCTUnwrap(lines.firstIndex { $0.contains("AAAA BBBB CCCC DDDD EEEE") })
+        XCTAssertGreaterThan(nameIdx, sasIdx)
+        XCTAssertGreaterThan(nameIdx, peerFpIdx)
+        XCTAssertGreaterThan(nameIdx, ownFpIdx)
+        XCTAssertFalse(lines[..<nameIdx].joined().contains("iPhone"), "name must not appear above the SAS/fingerprints")
     }
 
     // MARK: - SAS prompt

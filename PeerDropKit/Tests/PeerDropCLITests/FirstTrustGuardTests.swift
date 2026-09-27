@@ -113,36 +113,135 @@ final class FirstTrustGuardTests: XCTestCase {
         XCTAssertNotNil(cm.connection(for: "B"))
     }
 
-    // MARK: (b) full fingerprint of the HANDSHAKE key
+    // MARK: Final review, item 1: rejection message
 
-    func test_keyFingerprint_isFullGroupedSHA256Hex() {
-        let key = Data(repeating: 0x42, count: 32)
-        let hex = SHA256.hash(data: key).map { String(format: "%02X", $0) }.joined()
-        let fp = FirstTrustGuard.keyFingerprint(key)
-        XCTAssertEqual(fp.replacingOccurrences(of: " ", with: ""), hex)
-        XCTAssertEqual(fp.split(separator: " ").count, 16)
-        XCTAssertTrue(fp.split(separator: " ").allSatisfy { $0.count == 4 })
+    func test_rejectionMessage_showsRejectedFingerprint_andDoesNotSayAnswerN() async throws {
+        let first = try await firstTrustConnection("A", peer: EphemeralIdentity())
+        cm.pendingLocalFirstTrust = pending(for: first)
+        let intruder = EphemeralIdentity()
+        _ = try await firstTrustConnection("B", peer: intruder)
+
+        makeGuard().evaluate("B")
+        await settle()
+
+        let text = logged.joined(separator: "\n")
+        XCTAssertTrue(text.contains(FirstTrustGuard.phoneFingerprint(intruder.publicKey.rawRepresentation)), text)
+        XCTAssertTrue(text.contains("Security"), text)
+        XCTAssertFalse(text.lowercased().contains("answer n"), text)
     }
 
-    func test_promptFingerprint_isDerivedFromHandshakeKey_notHelloKey() async throws {
+    // MARK: Final review, item 1: "n" dismisses without blocking
+
+    /// Adds a throwaway contact to the manager's store and removes it afterwards.
+    private func withContact(key: Data, _ body: () async throws -> Void) async rethrows {
+        let contact = TrustedContact(displayName: "t", identityPublicKey: key, trustLevel: .unknown)
+        cm.trustedContactStore.add(contact)
+        defer { cm.trustedContactStore.remove(contact.id) }
+        try await body()
+    }
+
+    func test_answerNo_dismissesAndDisconnects_withoutBlocking() async throws {
+        let peer = EphemeralIdentity()
+        let conn = try await firstTrustConnection("A", peer: peer)
+        let prompt = pending(for: conn)
+        cm.pendingLocalFirstTrust = prompt
+        try await withContact(key: peer.publicKey.rawRepresentation) {
+            makeGuard().handleAnswer("n", for: prompt)
+            await settle()
+
+            XCTAssertNil(cm.pendingLocalFirstTrust)
+            XCTAssertNil(cm.connection(for: "A"), "the unapproved device is disconnected")
+            let stored = cm.trustedContactStore.find(byPublicKey: peer.publicKey.rawRepresentation)
+            XCTAssertEqual(stored?.isBlocked, false, "\"n\" must not block the key")
+        }
+    }
+
+    func test_emptyAnswer_isTreatedAsNo_withoutBlocking() async throws {
+        let peer = EphemeralIdentity()
+        let conn = try await firstTrustConnection("A", peer: peer)
+        let prompt = pending(for: conn)
+        cm.pendingLocalFirstTrust = prompt
+        try await withContact(key: peer.publicKey.rawRepresentation) {
+            makeGuard().handleAnswer(nil, for: prompt)
+            await settle()
+            XCTAssertNil(cm.pendingLocalFirstTrust)
+            XCTAssertEqual(cm.trustedContactStore.find(byPublicKey: peer.publicKey.rawRepresentation)?.isBlocked, false)
+        }
+    }
+
+    func test_answerYes_approves() async throws {
+        let peer = EphemeralIdentity()
+        let conn = try await firstTrustConnection("A", peer: peer)
+        let prompt = pending(for: conn)
+        cm.pendingLocalFirstTrust = prompt
+        try await withContact(key: peer.publicKey.rawRepresentation) {
+            makeGuard().handleAnswer("y", for: prompt)
+            XCTAssertEqual(conn.pinningVerdict, .matched)
+            XCTAssertNil(cm.pendingLocalFirstTrust)
+        }
+    }
+
+    func test_answerForClosedPrompt_isIgnored() async throws {
+        let conn = try await firstTrustConnection("A", peer: EphemeralIdentity())
+        let prompt = pending(for: conn)
+        cm.pendingLocalFirstTrust = nil          // already closed
+
+        makeGuard().handleAnswer("y", for: prompt)
+
+        XCTAssertEqual(conn.pinningVerdict, .firstTrust)
+        XCTAssertTrue(logged.contains { $0.contains("ignored") }, "\(logged)")
+    }
+
+    // MARK: Final review, item 3: stale prompt when its device leaves
+
+    func test_promptOwnerDisconnects_promptIsClosed() async throws {
+        let conn = try await firstTrustConnection("A", peer: EphemeralIdentity())
+        cm.pendingLocalFirstTrust = pending(for: conn)
+        let guardian = makeGuard()
+
+        await cm.disconnect(from: "A")
+        guardian.stopWatching("A")
+
+        XCTAssertNil(cm.pendingLocalFirstTrust)
+        XCTAssertTrue(logged.contains { $0.contains("left") }, "\(logged)")
+    }
+
+    func test_otherPeerDisconnects_promptStays() async throws {
+        let conn = try await firstTrustConnection("A", peer: EphemeralIdentity())
+        _ = try await firstTrustConnection("B", peer: EphemeralIdentity())
+        let prompt = pending(for: conn)
+        cm.pendingLocalFirstTrust = prompt
+        let guardian = makeGuard()
+
+        await cm.disconnect(from: "B")
+        guardian.stopWatching("B")
+
+        XCTAssertEqual(cm.pendingLocalFirstTrust, prompt)
+    }
+
+    // MARK: Final review, item 2: phone-format fingerprints
+
+    func test_phoneFingerprint_matchesThePhonesAlgorithm() {
+        let key = EphemeralIdentity().publicKey.rawRepresentation
+        let expected = TrustedContact(displayName: "x", identityPublicKey: key, trustLevel: .unknown).keyFingerprint
+        XCTAssertEqual(FirstTrustGuard.phoneFingerprint(key), expected)
+        XCTAssertEqual(FirstTrustGuard.phoneFingerprint(key).split(separator: " ").count, 5)
+    }
+
+    func test_prompt_showsHandshakeKeyPhoneFingerprint_notHelloKey_andOwnFingerprint() async throws {
         let helloKey = EphemeralIdentity().publicKey.rawRepresentation
         let actual = EphemeralIdentity()
         let conn = try await firstTrustConnection("A", peer: actual, helloKey: helloKey)
         let handshakeKey = actual.publicKey.rawRepresentation
         XCTAssertNotEqual(handshakeKey, helloKey)
 
-        let lines = FirstTrustGuard.promptLines(for: pending(for: conn), cm: cm)
+        let lines = FirstTrustGuard.promptLines(for: pending(for: conn), cm: cm, ownFingerprint: "AAAA BBBB CCCC DDDD EEEE")
         let text = lines.joined(separator: "\n")
-        let expected = FirstTrustGuard.keyFingerprint(handshakeKey).split(separator: " ")
-        let wrong = FirstTrustGuard.keyFingerprint(helloKey).split(separator: " ")
-        guard expected.count == 16, wrong.count == 16 else {
-            return XCTFail("fingerprint must be 16 groups of 4 hex chars")
-        }
-        // Printed on two lines of 8 groups.
-        XCTAssertTrue(text.contains(expected[0..<8].joined(separator: " ")), text)
-        XCTAssertTrue(text.contains(expected[8..<16].joined(separator: " ")), text)
-        XCTAssertFalse(text.contains(wrong[0..<8].joined(separator: " ")), text)
+        let expected = FirstTrustGuard.phoneFingerprint(handshakeKey)
+        XCTAssertTrue(text.contains("On the phone, open Security (the shield screen) and check that its own fingerprint equals: \(expected)"), text)
+        XCTAssertFalse(text.contains(FirstTrustGuard.phoneFingerprint(helloKey)), text)
+        XCTAssertTrue(text.contains("The 6-digit code alone can be forged"), text)
+        XCTAssertTrue(text.contains("pairing sheet should show: AAAA BBBB CCCC DDDD EEEE"), text)
         XCTAssertTrue(text.contains("SAS: 123 456"))
-        XCTAssertTrue(text.lowercased().contains("fingerprint shown on the phone"), text)
     }
 }

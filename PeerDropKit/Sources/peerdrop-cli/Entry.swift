@@ -174,25 +174,20 @@ struct PeerDropCLI {
             .store(in: &bag)
 
         // One-time SAS enrollment prompt for new local-Wi-Fi peers.
+        // The text is built now, on the main actor, while the connection the
+        // prompt is about is certainly registered (#173: fingerprint of the
+        // handshake key). "n" dismisses without blocking (see FirstTrustGuard).
         cm.$pendingLocalFirstTrust
             .compactMap { $0 }
             .sink { pending in
-                // Built now, on the main actor, while the connection the prompt
-                // is about is certainly still registered (#173: full handshake-
-                // key fingerprint).
-                let promptLines = FirstTrustGuard.promptLines(for: pending, cm: cm)
+                let promptLines = FirstTrustGuard.promptLines(
+                    for: pending, cm: cm, ownFingerprint: IdentityKeyManager.shared.fingerprint)
                 Task.detached {
                     promptLines.forEach { print($0) }
                     print("Approve? [y/N] ", terminator: "")
-                    let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
+                    let answer = readLine()
                     await MainActor.run {
-                        if answer == "y" {
-                            cm.approveLocalFirstTrust(fingerprint: pending.fingerprint)
-                            print("paired ✓ — future connections auto-accept")
-                        } else {
-                            cm.blockLocalFirstTrust(fingerprint: pending.fingerprint)
-                            print("rejected")
-                        }
+                        firstTrustGuard.handleAnswer(answer, for: pending)
                     }
                 }
             }
