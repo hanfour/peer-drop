@@ -14,7 +14,8 @@ import Network
 @testable import PeerDropCore
 @testable import PeerDropTransport
 import PeerDropProtocol
-import PeerDropSecurity
+@testable import PeerDropSecurity
+import CryptoKit
 
 /// Thread-safe flag set when the client's socket sees the far end close.
 private final class CloseObserver: @unchecked Sendable {
@@ -24,14 +25,40 @@ private final class CloseObserver: @unchecked Sendable {
     func markClosed() { lock.lock(); _closed = true; lock.unlock() }
 }
 
+/// Frame types a fake acceptor received.
+private final class Recorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _types: [MessageType] = []
+    var types: [MessageType] { lock.lock(); defer { lock.unlock() }; return _types }
+    func append(_ t: MessageType) { lock.lock(); _types.append(t); lock.unlock() }
+}
+
+/// Server-side sockets accepted by test listeners, cancelled in tearDown.
+private final class SocketBag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var conns: [NWConnection] = []
+    func add(_ c: NWConnection) { lock.lock(); conns.append(c); lock.unlock() }
+    func cancelAll() { lock.lock(); let cs = conns; conns = []; lock.unlock(); cs.forEach { $0.cancel() } }
+}
+
+/// In-memory LocalSecureChannel identity for the test-side client.
+private struct EphemeralChannelIdentity: LocalChannelIdentity {
+    let priv = Curve25519.KeyAgreement.PrivateKey()
+    var publicKey: Curve25519.KeyAgreement.PublicKey { priv.publicKey }
+    func deriveSharedSecret(with peerPublicKey: Curve25519.KeyAgreement.PublicKey) throws -> SharedSecret {
+        try priv.sharedSecretFromKeyAgreement(with: peerPublicKey)
+    }
+}
+
 @MainActor
 final class ConnectionManagerSenderBindingTests: XCTestCase {
     private var cm: ConnectionManager!
-    private var listener: NWListener?
+    private var listeners: [NWListener] = []
     private var clients: [NWConnection] = []
     private var keyDir: URL!
     private var touchedPeers: [String] = []
     private var hookCalls: [(peerID: String, text: String)] = []
+    private let socketBag = SocketBag()
 
     override func setUp() async throws {
         try await super.setUp()
@@ -50,8 +77,9 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
     override func tearDown() async throws {
         for c in clients { c.cancel() }
         clients = []
-        listener?.cancel()
-        listener = nil
+        socketBag.cancelAll()
+        for l in listeners { l.cancel() }
+        listeners = []
         for peer in touchedPeers { cm.chatManager.deleteMessages(forPeer: peer) }
         touchedPeers = []
         cm = nil
@@ -106,6 +134,17 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         return condition()
     }
 
+    /// Start `connection` and wait for `.ready`. The handler is installed
+    /// BEFORE start: NWConnection+Async's `waitReady` installs it afterwards
+    /// and can miss a fast loopback transition (pre-existing race, not #161).
+    private func startAndWaitReady(_ connection: NWConnection) async throws {
+        let ready = ServerSocketBox()
+        connection.stateUpdateHandler = { if case .ready = $0 { ready.set(connection) } }
+        connection.start(queue: .global(qos: .userInitiated))
+        let ok = await poll(timeout: 5) { ready.connection != nil }
+        guard ok else { throw NWConnectionError.timeout }
+    }
+
     private func startListener(onConnection: @escaping @Sendable (NWConnection) -> Void) async throws -> UInt16 {
         let l = try NWListener(using: .peerDrop(), on: .any)
         l.newConnectionHandler = onConnection
@@ -113,7 +152,7 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         l.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
         l.start(queue: .global(qos: .userInitiated))
         await fulfillment(of: [ready], timeout: 5)
-        listener = l
+        listeners.append(l)
         return try XCTUnwrap(l.port?.rawValue)
     }
 
@@ -136,8 +175,7 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         }
         let client = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .peerDrop())
         clients.append(client)
-        client.start(queue: .global(qos: .userInitiated))
-        try await client.waitReady()
+        try await startAndWaitReady(client)
         return client
     }
 
@@ -451,19 +489,41 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
     // MARK: - (d) initiator with an existing connection dials a second peer
 
-    /// Plays a minimal acceptor: reads HELLO + request, replies accept + hello(`reply`).
-    private func startFakeAcceptor(replyingAs reply: PeerIdentity) async throws -> UInt16 {
-        try await startListener { conn in
+    enum FakeAcceptorScript { case accept, disconnectBeforeAccept }
+
+    /// Plays a minimal acceptor: reads HELLO + request, then (per `script`)
+    /// replies accept + hello(`reply`) or hangs up with `.disconnect`. Every
+    /// later frame type it receives is recorded.
+    private func startFakeAcceptor(
+        replyingAs reply: PeerIdentity,
+        script: FakeAcceptorScript = .accept,
+        recorder: Recorder? = nil
+    ) async throws -> UInt16 {
+        let bag = socketBag
+        return try await startListener { conn in
+            bag.add(conn)
+            let ready = ServerSocketBox()
+            conn.stateUpdateHandler = { if case .ready = $0 { ready.set(conn) } }
             conn.start(queue: .global(qos: .userInitiated))
             Task {
                 do {
-                    try await conn.waitReady()
-                    _ = try await conn.receiveMessage(timeout: 5) // hello
-                    _ = try await conn.receiveMessage(timeout: 5) // connectionRequest
-                    try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
-                    try await conn.sendMessage(try PeerMessage.hello(identity: reply))
-                    // Keep the socket open for the rest of the test.
-                    _ = try? await conn.receiveMessage(timeout: 30)
+                    let deadline = Date().addingTimeInterval(5)
+                    while ready.connection == nil && Date() < deadline {
+                        try await Task.sleep(nanoseconds: 10_000_000)
+                    }
+                    recorder?.append(try await conn.receiveMessage(timeout: 5).type) // hello
+                    recorder?.append(try await conn.receiveMessage(timeout: 5).type) // connectionRequest
+                    switch script {
+                    case .accept:
+                        try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
+                        try await conn.sendMessage(try PeerMessage.hello(identity: reply))
+                    case .disconnectBeforeAccept:
+                        try await conn.sendMessage(PeerMessage.disconnect(senderID: reply.id))
+                    }
+                    while true {
+                        let m = try await conn.receiveMessage(timeout: 30)
+                        recorder?.append(m.type)
+                    }
                 } catch {}
             }
         }
@@ -505,4 +565,303 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         XCTAssertTrue(cm.connections[carol.id] === carolPC, "existing connection was replaced")
         XCTAssertEqual(carolPC.peerIdentity.displayName, "Carol", "existing connection's identity was re-pointed")
     }
+
+    // MARK: - Review round (#161 I-1..I-3, M-1..M-3)
+
+    /// A connected loopback pair: (server-side socket, client socket), both ready.
+    private func rawPair() async throws -> (server: NWConnection, client: NWConnection) {
+        let serverBox = ServerSocketBox()
+        let bag = socketBag
+        let port = try await startListener { conn in
+            bag.add(conn)
+            conn.stateUpdateHandler = { state in
+                if case .ready = state {
+                    conn.stateUpdateHandler = nil
+                    serverBox.set(conn)
+                }
+            }
+            conn.start(queue: .global(qos: .userInitiated))
+        }
+        let client = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .peerDrop())
+        clients.append(client)
+        try await startAndWaitReady(client)
+        let got = await poll { serverBox.connection != nil }
+        XCTAssertTrue(got, "server side never became ready")
+        return (try XCTUnwrap(serverBox.connection), client)
+    }
+
+    /// Send a sentinel text and wait until `key`'s unread count moves.
+    private func drain(_ client: NWConnection, unreadKey key: String) async throws {
+        let before = cm.chatManager.unreadCounts[key] ?? 0
+        try await client.sendMessage(try text("sentinel", senderID: key))
+        let drained = await poll { (self.cm.chatManager.unreadCounts[key] ?? 0) > before }
+        XCTAssertTrue(drained, "sentinel never arrived on \(key)")
+    }
+
+    private func dial(_ port: UInt16, id: String) {
+        cm.requestConnection(to: DiscoveredPeer(
+            id: id, displayName: id,
+            endpoint: .manual(host: "127.0.0.1", port: port), source: .manual
+        ))
+    }
+
+    // I-1: relay placeholder status is structural, not a string prefix.
+
+    func test_I1_localHelloWithRelayPrefixedID_isRefused() async throws {
+        let evil = PeerIdentity(id: "relay-evil", displayName: "Friendly", supportsSecureChannel: false)
+        let client = try await dialManager()
+        let closed = observeClose(client)
+        try await client.sendMessage(try PeerMessage.hello(identity: evil))
+        try await client.sendMessage(PeerMessage.connectionRequest(senderID: evil.id))
+
+        let didClose = await poll { closed.closed }
+        XCTAssertTrue(didClose, "a local peer claiming a relay-* id must be hung up on")
+        XCTAssertNil(cm.pendingIncomingRequest)
+        XCTAssertNil(cm.connections["relay-evil"])
+    }
+
+    func test_I1_initiatorHelloWithRelayPrefixedID_isRefused() async throws {
+        let evil = PeerIdentity(id: "relay-evil2", displayName: "Friendly", supportsSecureChannel: false)
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: evil, recorder: recorder)
+        dial(port, id: "manual-evil")
+        let reached = await poll { recorder.types.contains(.connectionRequest) }
+        XCTAssertTrue(reached, "dial never reached the fake acceptor")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertNil(cm.connections["relay-evil2"], "dialed peer installed under a relay-* id")
+    }
+
+    func test_I1_relayPlaceholder_swapsIdentityExactlyOnce() async throws {
+        let (server, client) = try await rawPair()
+        let pc = cm._installRelayPlaceholderForTesting(roomCode: "R1\(UUID().uuidString.prefix(4))", connection: server)
+        touchedPeers.append(pc.id)
+        let real = identity("Rita")
+        try await client.sendMessage(try PeerMessage.hello(identity: real))
+        let swapped = await poll { pc.peerIdentity.id == real.id }
+        XCTAssertTrue(swapped, "relay placeholder should take the peer's real identity")
+
+        let other = identity("Other")
+        try await client.sendMessage(try PeerMessage.hello(identity: other))
+        try await drain(client, unreadKey: pc.id)
+        XCTAssertEqual(pc.peerIdentity.id, real.id, "second HELLO re-pointed the relay connection")
+    }
+
+    func test_I1_relayPlaceholder_swapToIDInUse_isRejected() async throws {
+        let carol = identity("Carol")
+        let carolPC = installVictim(carol)
+        let (server, client) = try await rawPair()
+        let pc = cm._installRelayPlaceholderForTesting(roomCode: "R2\(UUID().uuidString.prefix(4))", connection: server)
+        touchedPeers.append(pc.id)
+        let placeholderID = pc.peerIdentity.id
+
+        let asCarol = PeerIdentity(id: carol.id, displayName: "Carol", supportsSecureChannel: false)
+        try await client.sendMessage(try PeerMessage.hello(identity: asCarol))
+        try await drain(client, unreadKey: pc.id)
+
+        XCTAssertEqual(pc.peerIdentity.id, placeholderID, "relay connection took over C's id")
+        XCTAssertTrue(cm.connection(for: carol.id) === carolPC)
+    }
+
+    // I-2: per-connection consent handoff.
+
+    func test_I2_backToBackAccepts_bothDeliverTheirFirstFrame() async throws {
+        let alice = identity("Alice")
+        let a = try await connectedPeer(alice)
+        let bob = identity("Bob")
+        let b = try await connectedPeer(bob)
+
+        try await a.sendMessage(try text("A1", senderID: alice.id))
+        try await b.sendMessage(try text("B1", senderID: bob.id))
+
+        let both = await poll {
+            self.cm.chatManager.unreadCounts[alice.id] == 1 && self.cm.chatManager.unreadCounts[bob.id] == 1
+        }
+        XCTAssertTrue(both, "first frames: A=\(String(describing: cm.chatManager.unreadCounts[alice.id])) B=\(String(describing: cm.chatManager.unreadCounts[bob.id]))")
+    }
+
+    func test_I2_frameArrivingBeforeInstall_isBufferedThenDelivered() async throws {
+        cm._acceptInstallDelayNanosForTesting = 400_000_000
+        let bob = identity("Bob")
+        touchedPeers.append(bob.id)
+        let client = try await pendingStranger(bob)
+        cm.acceptConnection()
+        let accept = try await client.receiveMessage(timeout: 5)
+        XCTAssertEqual(accept.type, .connectionAccept)
+        // Sent before the acceptor has installed B's PeerConnection.
+        try await client.sendMessage(try text("early", senderID: bob.id))
+        XCTAssertNil(cm.connections[bob.id], "precondition: not installed yet")
+
+        let delivered = await poll { self.cm.chatManager.unreadCounts[bob.id] == 1 }
+        XCTAssertTrue(delivered, "frame that beat the install was lost")
+        XCTAssertEqual(cm._consentHandoffCountForTesting, 0)
+    }
+
+    func test_I2_noHandoffLeftAfterMonitorExits() async throws {
+        let bob = identity("Bob")
+        let b = try await connectedPeer(bob)
+        try await b.sendMessage(try text("hi", senderID: bob.id))
+        _ = await poll { self.cm.chatManager.unreadCounts[bob.id] == 1 }
+        let clearedAfterDelivery = await poll { self.cm._consentHandoffCountForTesting == 0 }
+        XCTAssertTrue(clearedAfterDelivery, "handoff kept after its frame was delivered")
+
+        let carol = identity("Carol")
+        let c = try await connectedPeer(carol)
+        c.cancel() // hang up without ever sending
+        let clearedAfterClose = await poll { self.cm._consentHandoffCountForTesting == 0 }
+        XCTAssertTrue(clearedAfterClose, "handoff kept after the socket closed")
+
+        let mallory = identity("Mallory")
+        _ = try await pendingStranger(mallory)
+        cm.rejectConnection()
+        let clearedAfterReject = await poll { self.cm._consentHandoffCountForTesting == 0 }
+        XCTAssertTrue(clearedAfterReject)
+    }
+
+    // I-3 / M-1: dialing a second peer from the real `.connected` state.
+
+    func test_I3_secondDialWhileConnected_keepsFirstConnection_andSendsNoCancel() async throws {
+        let carol = identity("Carol")
+        let carolClient = try await connectedAndWarm(carol)
+        XCTAssertEqual(cm.state, .connected)
+        let carolClosed = observeClose(carolClient)
+
+        let dave = identity("Dave")
+        touchedPeers.append(dave.id)
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: dave, recorder: recorder)
+        dial(port, id: "manual-dave")
+
+        let installed = await poll(timeout: 5) { self.cm.connections[dave.id] != nil }
+        XCTAssertTrue(installed, "second dialed peer never installed (state=\(cm.state))")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertFalse(recorder.types.contains(.connectionCancel), "acceptor was sent connectionCancel: \(recorder.types)")
+        XCTAssertFalse(carolClosed.closed, "dialing a second peer killed the first peer's socket")
+        XCTAssertNotNil(cm.connections[carol.id])
+        XCTAssertEqual(cm.connections[carol.id]?.state, .connected)
+        XCTAssertEqual(cm.state, .connected)
+    }
+
+    func test_M1_dialedPeerDisconnectBeforeAccept_leavesExistingConnectionAlone() async throws {
+        let carol = identity("Carol")
+        let carolClient = try await connectedAndWarm(carol)
+        XCTAssertEqual(cm.state, .connected)
+        let carolClosed = observeClose(carolClient)
+
+        let dave = identity("Dave")
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: dave, script: .disconnectBeforeAccept, recorder: recorder)
+        dial(port, id: "manual-dave")
+        let reached = await poll { recorder.types.contains(.connectionRequest) }
+        XCTAssertTrue(reached, "dial never reached the fake acceptor")
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertEqual(cm.state, .connected, "a dialed peer's pre-accept disconnect failed the whole session")
+        XCTAssertNotNil(cm.connections[carol.id])
+        XCTAssertFalse(carolClosed.closed)
+        XCTAssertNil(cm.connections[dave.id])
+    }
+
+    // M-2: duplicate checks cover aliases (`connection(for:)`).
+
+    private func installAliasedRelay(for ident: PeerIdentity) -> PeerConnection {
+        let pc = PeerConnection(
+            peerID: "relay-ABC\(UUID().uuidString.prefix(4))",
+            connection: NWConnection(host: "127.0.0.1", port: 1, using: .tcp),
+            peerIdentity: ident, localIdentity: cm.localIdentity, state: .connected
+        )
+        cm._setConnectionForTesting(peerID: pc.id, pc)
+        touchedPeers.append(pc.id)
+        return pc
+    }
+
+    func test_M2_accept_refusesIDAliasedByAnotherConnection() async throws {
+        let carol = identity("Carol")
+        let relayPC = installAliasedRelay(for: carol)
+        XCTAssertTrue(cm.connection(for: carol.id) === relayPC)
+
+        let fake = PeerIdentity(id: carol.id, displayName: "Carol", supportsSecureChannel: false)
+        let client = try await pendingStranger(fake)
+        let closed = observeClose(client)
+        cm.acceptConnection()
+        let didClose = await poll { closed.closed }
+
+        XCTAssertTrue(didClose, "duplicate of an aliased id should be refused")
+        XCTAssertNil(cm.connections[carol.id])
+        XCTAssertTrue(cm.connection(for: carol.id) === relayPC, "stranger hijacked connection(for:)")
+    }
+
+    func test_M2_initiator_refusesIDAliasedByAnotherConnection() async throws {
+        let carol = identity("Carol")
+        let relayPC = installAliasedRelay(for: carol)
+        let fake = PeerIdentity(id: carol.id, displayName: "Carol", supportsSecureChannel: false)
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: fake, recorder: recorder)
+        dial(port, id: "manual-fake")
+        let reached = await poll { recorder.types.contains(.connectionRequest) }
+        XCTAssertTrue(reached, "dial never reached the fake acceptor")
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertNil(cm.connections[carol.id])
+        XCTAssertTrue(cm.connection(for: carol.id) === relayPC)
+    }
+
+    // M-3: a real `.secureHandshake` as the first post-accept frame, with the
+    // first envelope sent the instant the client side is secured.
+
+    func test_M3_secureHandshakeFirstFrame_securesAndDeliversImmediateEnvelope() async throws {
+        var failures: [String] = []
+        for i in 0..<8 {
+            let key = EphemeralChannelIdentity()
+            let me = PeerIdentity(id: UUID().uuidString, displayName: "Sec\(i)",
+                                  identityPublicKey: key.publicKey.rawRepresentation,
+                                  supportsSecureChannel: true)
+            touchedPeers.append(me.id)
+            let c = try await pendingStranger(me)
+            cm.acceptConnection()
+            _ = try await c.receiveMessage(timeout: 5) // accept
+            let helloMsg = try await c.receiveMessage(timeout: 5)
+            let serverIdent = try JSONDecoder().decode(PeerIdentity.self, from: try XCTUnwrap(helloMsg.payload))
+            let clientPC = PeerConnection(peerID: serverIdent.id, connection: c, peerIdentity: serverIdent,
+                                          localIdentity: me, state: .connected)
+            clientPC.onMessageReceived = { _ in }
+            // Our handshake is the first frame after accept.
+            await clientPC.startSecureChannelNegotiation(peerSupportsSecureChannel: true, identity: key)
+            let reader = Task { @MainActor in
+                while let m = try? await c.receiveMessage(timeout: 10) {
+                    if m.type == .secureHandshake {
+                        try? await clientPC.handleIncomingSecureHandshake(m, identity: key)
+                    } else {
+                        try? await clientPC.handleIncomingMessage(m) // decrypts the bootstrap
+                    }
+                }
+            }
+            let secured = await poll(timeout: 5) { clientPC.secureChannelState == .secured }
+            var sent = false
+            if secured {
+                // The Double-Ratchet initiator can send at once; the responder
+                // must first receive the server's bootstrap envelope.
+                let deadline = Date().addingTimeInterval(3)
+                while !sent && Date() < deadline {
+                    do { try await clientPC.sendMessage(try text("enc-\(i)", senderID: me.id)); sent = true }
+                    catch { try await Task.sleep(nanoseconds: 20_000_000) }
+                }
+            }
+            let got = await poll(timeout: 3) { (self.cm.chatManager.unreadCounts[me.id] ?? 0) >= 1 }
+            let serverState = cm.connections[me.id]?.secureChannelState
+            if !(secured && sent && got && serverState == .secured) {
+                failures.append("i=\(i) initiator=\(String(describing: clientPC.secureChannel?.isInitiator)) sent=\(sent) client=\(clientPC.secureChannelState) server=\(String(describing: serverState)) got=\(got)")
+            }
+            await cm.disconnect(from: me.id)
+            reader.cancel()
+            c.cancel()
+        }
+        XCTAssertEqual(failures, [], "secure first-frame runs failed")
+    }
+}
+
+private final class ServerSocketBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _c: NWConnection?
+    var connection: NWConnection? { lock.lock(); defer { lock.unlock() }; return _c }
+    func set(_ c: NWConnection) { lock.lock(); _c = c; lock.unlock() }
 }
