@@ -145,10 +145,10 @@ struct PeerDropCLI {
                     switch action {
                     case .reject:
                         let why = decision == .reject ? "blocked" : "no secure channel"
-                        print("rejecting peer \(req.peerIdentity.displayName) (\(why))")
+                        print("rejecting peer \(TerminalSanitizer.sanitize(req.peerIdentity.displayName)) (\(why))")
                         cm.rejectConnection()
                     case .acceptPendingSAS:
-                        print("new peer \(req.peerIdentity.displayName) — input ignored until you confirm the SAS")
+                        print("new peer \(TerminalSanitizer.sanitize(req.peerIdentity.displayName)) — input ignored until you confirm the SAS")
                         cm.acceptConnection()
                     case .acceptTrusted:
                         cm.acceptConnection()
@@ -162,8 +162,12 @@ struct PeerDropCLI {
             .compactMap { $0 }
             .sink { pending in
                 Task.detached {
-                    print("\nPair with \(pending.senderDisplayName)?")
-                    print("SAS: \(pending.sas ?? "n/a")  (verify it matches the phone)")
+                    PairingPrompt.lines(
+                        displayName: pending.senderDisplayName,
+                        sas: pending.sas ?? "n/a",
+                        fingerprint: pending.fingerprint,
+                        isRelay: false
+                    ).forEach { print($0) }
                     print("Approve? [y/N] ", terminator: "")
                     let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
                     await MainActor.run {
@@ -185,12 +189,12 @@ struct PeerDropCLI {
             .compactMap { $0 }
             .sink { pending in
                 Task.detached {
-                    print("\nPair with \(pending.senderDisplayName) (relay)?")
-                    if let sas = pending.sas {
-                        print("SAS: \(sas)  (verify it matches the phone)")
-                    } else {
-                        print("Verify this fingerprint matches the phone:\n  \(pending.fingerprint)")
-                    }
+                    PairingPrompt.lines(
+                        displayName: pending.senderDisplayName,
+                        sas: pending.sas,
+                        fingerprint: pending.fingerprint,
+                        isRelay: true
+                    ).forEach { print($0) }
                     print("Approve? [y/N] ", terminator: "")
                     let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
                     await MainActor.run {

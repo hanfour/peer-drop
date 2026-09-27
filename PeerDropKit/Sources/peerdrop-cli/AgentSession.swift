@@ -165,7 +165,7 @@ final class AgentSession {
     @MainActor
     private func handleInboundText(peerID: String, text: String) {
         guard isAuthorized(peerID) else {
-            print("dropped \(text.utf8.count)-byte input from unauthenticated peer \(peerID.prefix(8))")
+            print("dropped \(text.utf8.count)-byte input from unauthenticated peer \(TerminalSanitizer.sanitize(String(peerID.prefix(8))))")
             return
         }
         attachedPeerIDs.insert(peerID)
