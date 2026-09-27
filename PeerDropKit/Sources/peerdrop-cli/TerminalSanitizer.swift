@@ -51,11 +51,26 @@ enum TerminalSanitizer {
 
 /// Text of the one-time pairing prompt. Pure so it can be unit-tested.
 enum PairingPrompt {
-    static func lines(displayName: String, sas: String?, fingerprint: String, isRelay: Bool) -> [String] {
+    /// `keyFingerprint`: full SHA-256 fingerprint (16 groups of 4) of the
+    /// handshake identity key, printed on two lines (#173 mitigation).
+    static func lines(
+        displayName: String, sas: String?, fingerprint: String, isRelay: Bool,
+        keyFingerprint: String? = nil
+    ) -> [String] {
         let name = TerminalSanitizer.sanitize(displayName)
         var lines = ["", "Pair with \"\(name)\"\(isRelay ? " (relay)" : "")?"]
         if let sas {
             lines.append("SAS: \(sas)  (verify it matches the phone)")
+            if let keyFingerprint {
+                let groups = keyFingerprint.split(separator: " ")
+                lines.append("Key fingerprint (SHA-256):")
+                lines.append("  " + groups.prefix(8).joined(separator: " "))
+                lines.append("  " + groups.dropFirst(8).joined(separator: " "))
+                lines.append("If the phone shows a key fingerprint, compare it with this one too; "
+                             + "the fingerprint shown on the phone must match. The 6-digit SAS alone can be forged.")
+            } else {
+                lines.append("(full key fingerprint unavailable for this connection — be extra careful)")
+            }
         } else {
             lines.append("Verify this fingerprint matches the phone:")
             lines.append("  \(fingerprint)")

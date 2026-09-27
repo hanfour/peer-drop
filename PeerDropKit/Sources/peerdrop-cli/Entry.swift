@@ -97,11 +97,19 @@ struct PeerDropCLI {
         // forget per-peer replay/queue state when a connection goes away.
         // ConnectionManager fires both callbacks synchronously on the main actor;
         // handling them synchronously keeps disconnect→reconnect in order.
+        // #173 mitigation: only one new device may pair at a time.
+        let firstTrustGuard = FirstTrustGuard(connectionManager: cm)
         cm.onPeerConnected = { [weak session] peerID in
-            MainActor.assumeIsolated { session?.handlePeerConnected(peerID) }
+            MainActor.assumeIsolated {
+                session?.handlePeerConnected(peerID)
+                firstTrustGuard.watch(peerID)
+            }
         }
         cm.onPeerDisconnected = { [weak session] peerID in
-            MainActor.assumeIsolated { session?.handlePeerDisconnected(peerID) }
+            MainActor.assumeIsolated {
+                session?.handlePeerDisconnected(peerID)
+                firstTrustGuard.stopWatching(peerID)
+            }
         }
 
         bridge.onExit = { code in
@@ -169,13 +177,12 @@ struct PeerDropCLI {
         cm.$pendingLocalFirstTrust
             .compactMap { $0 }
             .sink { pending in
+                // Built now, on the main actor, while the connection the prompt
+                // is about is certainly still registered (#173: full handshake-
+                // key fingerprint).
+                let promptLines = FirstTrustGuard.promptLines(for: pending, cm: cm)
                 Task.detached {
-                    PairingPrompt.lines(
-                        displayName: pending.senderDisplayName,
-                        sas: pending.sas ?? "n/a",
-                        fingerprint: pending.fingerprint,
-                        isRelay: false
-                    ).forEach { print($0) }
+                    promptLines.forEach { print($0) }
                     print("Approve? [y/N] ", terminator: "")
                     let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
                     await MainActor.run {
