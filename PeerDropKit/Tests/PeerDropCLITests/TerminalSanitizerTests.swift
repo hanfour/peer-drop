@@ -32,6 +32,53 @@ final class TerminalSanitizerTests: XCTestCase {
         XCTAssertEqual(TerminalSanitizer.sanitize(raw), "xyzwv")
     }
 
+    // MARK: - Review 2, item 5
+
+    func test_formatCharactersAreRemoved() {
+        // ZWSP, ZWNJ, ZWJ, WORD JOINER, BOM, SOFT HYPHEN, MONGOLIAN VS, TAG chars
+        let raw = "a\u{200B}b\u{200C}c\u{200D}d\u{2060}e\u{FEFF}f\u{00AD}g\u{180E}h\u{E0041}\u{E007F}i"
+        XCTAssertEqual(TerminalSanitizer.sanitize(raw), "abcdefghi")
+    }
+
+    func test_variationSelectorsAreRemoved() {
+        XCTAssertEqual(TerminalSanitizer.sanitize("a\u{FE00}b\u{FE0F}c\u{E0100}d\u{E01EF}e"), "abcde")
+    }
+
+    func test_blankLookingFillersAreRemoved() {
+        XCTAssertEqual(TerminalSanitizer.sanitize("a\u{3164}b\u{115F}c\u{1160}d\u{FFA0}e"), "abcde")
+    }
+
+    func test_whitespaceRunsCollapse_andEndsAreTrimmed() {
+        XCTAssertEqual(TerminalSanitizer.sanitize("  my \u{00A0}\u{2003}\u{3000}  phone  "), "my phone")
+    }
+
+    func test_longNameIsCappedAt64Characters() {
+        let out = TerminalSanitizer.sanitize(String(repeating: "A", count: 200))
+        XCTAssertEqual(out, String(repeating: "A", count: 64) + "…")
+    }
+
+    func test_nameExactly64Characters_isNotTruncated() {
+        let name = String(repeating: "B", count: 64)
+        XCTAssertEqual(TerminalSanitizer.sanitize(name), name)
+    }
+
+    /// A 200-char padded name used to push a fake "SAS:" onto what looks like
+    /// its own terminal line by soft-wrapping.
+    func test_paddedNameLineWrapSpoof_isNeutralised() {
+        let spoofs = [
+            "iPhone" + String(repeating: " ", count: 200) + "SAS: 000 000",
+            "iPhone" + String(repeating: "\u{3164}", count: 200) + "SAS: 000 000",
+            "iPhone" + String(repeating: "\u{2800}", count: 0) + String(repeating: "\u{200B}", count: 200) + "SAS: 000 000",
+        ]
+        for raw in spoofs {
+            let out = TerminalSanitizer.sanitize(raw)
+            XCTAssertLessThanOrEqual(out.count, 65, out)
+            XCTAssertFalse(out.contains("  "), out)
+            let lines = PairingPrompt.lines(displayName: raw, sas: "123 456", fingerprint: "F", isRelay: false)
+            XCTAssertLessThan(lines[1].count, 100, "the name line must not be long enough to wrap: \(lines[1])")
+        }
+    }
+
     // MARK: - SAS prompt
 
     func test_localPairPrompt_sanitizesNameAndWarnsAboutShellAccess() {
