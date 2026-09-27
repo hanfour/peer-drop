@@ -1,6 +1,7 @@
 import Foundation
 import PeerDropCore
 import PeerDropSecurity
+import Combine
 
 /// Owns the policy for accepting, enrolling, or rejecting inbound peer
 /// identities, and routes messages between the ProcessBridge and attached peers.
@@ -9,10 +10,12 @@ import PeerDropSecurity
 /// `decideTrust` is a pure `nonisolated static` — the unit tests call it
 /// synchronously off the main actor.
 ///
-/// All mutable state (`attachedPeerIDs`, `scrollback`) is confined to the
-/// main actor via `@MainActor Task` blocks, eliminating data races between:
-/// - the main-actor `onTextMessageReceived` write path, and
-/// - the ProcessBridge segmenter background-queue `broadcast` call path.
+/// All mutable state (`attachedPeerIDs`, `scrollback`, pending replays, the
+/// send chain) is confined to the main actor:
+/// - the `onTextMessageReceived` hook runs on the main actor, and
+/// - the ProcessBridge's background-queue `broadcast` hops to the main queue.
+/// Outbound sends are serialised through one chain and re-check the input
+/// gate before each line (#166).
 final class AgentSession {
 
     // MARK: - Trust Decision
@@ -86,6 +89,21 @@ final class AgentSession {
     /// Input/output authorisation for a hook peerID. Defaults to `InputGate`
     /// over the live ConnectionManager; injectable for tests. Main-actor only.
     private let isAuthorized: (String) -> Bool
+    /// Sends one line of process output to a peer. Defaults to `cm.sendText`.
+    private let sendToPeer: (String, String) async -> Void
+    /// Emits whenever something that feeds the gate changes for a peer's
+    /// connection (secure-channel state, pinning verdict). Defaults to the live
+    /// PeerConnection's publishers; nil if there is no connection.
+    private let authorizationChanges: (String) -> AnyPublisher<Void, Never>?
+
+    /// Watches for a reconnecting peer's connection becoming authorised.
+    /// Confined to the main actor.
+    private var replayWatchers: [String: AnyCancellable] = [:]
+
+    /// Tail of the serial outbound-send chain: every send to every peer is
+    /// appended here, so lines leave in the order they were enqueued on the
+    /// main actor. Confined to the main actor.
+    private var sendTail: Task<Void, Never>?
 
     /// Peers whose messages have been received in this session.
     /// Confined to the main actor.
@@ -108,11 +126,25 @@ final class AgentSession {
         bridge: MessageBridge,
         connectionManager: ConnectionManager,
         store: TrustedContactStore,
-        isAuthorized: ((String) -> Bool)? = nil
+        isAuthorized: ((String) -> Bool)? = nil,
+        sendToPeer: ((String, String) async -> Void)? = nil,
+        authorizationChanges: ((String) -> AnyPublisher<Void, Never>?)? = nil
     ) {
+        self.sendToPeer = sendToPeer ?? { [weak connectionManager] text, peerID in
+            try? await connectionManager?.sendText(text, to: peerID)
+        }
         self.bridge = bridge
         self.cm = connectionManager
         self.store = store
+        self.authorizationChanges = authorizationChanges ?? { [weak connectionManager] peerID in
+            MainActor.assumeIsolated {
+                guard let conn = connectionManager?.connection(for: peerID) else { return nil }
+                return Publishers.Merge(
+                    conn.$secureChannelState.map { _ in () },
+                    conn.$pinningVerdict.map { _ in () }
+                ).eraseToAnyPublisher()
+            }
+        }
         if let isAuthorized {
             self.isAuthorized = isAuthorized
         } else {
@@ -134,14 +166,24 @@ final class AgentSession {
         known.contains(peerID)
     }
 
-    /// Call when a peer (re)connects. Marks reconnecting peers for a scrollback
-    /// replay, which happens once the connection is authorised (see
-    /// `flushPendingReplay`). Must run on the main actor.
+    /// Call when a peer (re)connects. A reconnecting peer (one that sent
+    /// authorised input earlier) gets the scrollback replayed — but only once
+    /// its NEW connection passes the gate. At connect time the channel is never
+    /// secured yet, so we watch the connection's state and flush when it
+    /// becomes authorised (or on its next authorised input/output). Fail
+    /// closed: no authorisation, no replay. Must run on the main actor.
     @MainActor
     func handlePeerConnected(_ peerID: String) {
-        if Self.shouldReplayOnConnect(peerID: peerID, known: attachedPeerIDs) {
-            pendingReplayPeerIDs.insert(peerID)
-        }
+        guard Self.shouldReplayOnConnect(peerID: peerID, known: attachedPeerIDs) else { return }
+        pendingReplayPeerIDs.insert(peerID)
+        // @Published emits in willSet, so hop to the next main-queue turn to
+        // evaluate the gate against the updated values.
+        replayWatchers[peerID] = authorizationChanges(peerID)?
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                MainActor.assumeIsolated { self?.flushPendingReplayIfAuthorized(peerID) }
+            }
+        flushPendingReplayIfAuthorized(peerID)
     }
 
     // MARK: - Wiring
@@ -169,45 +211,74 @@ final class AgentSession {
             return
         }
         attachedPeerIDs.insert(peerID)
-        flushPendingReplay(for: peerID)
+        flushPendingReplayIfAuthorized(peerID)
         // bridge.send is thread-safe (internal writeQueue).
         bridge.send(text)
     }
 
+    /// Replays the scrollback to a reconnected peer once it is authorised.
+    /// The snapshot is taken here, synchronously on the main actor, and joins
+    /// the serial send chain, so lines are neither duplicated nor reordered
+    /// relative to later output.
     @MainActor
-    private func flushPendingReplay(for peerID: String) {
-        guard pendingReplayPeerIDs.remove(peerID) != nil else { return }
+    private func flushPendingReplayIfAuthorized(_ peerID: String) {
+        guard pendingReplayPeerIDs.contains(peerID), isAuthorized(peerID) else { return }
+        pendingReplayPeerIDs.remove(peerID)
+        replayWatchers[peerID] = nil
         replayScrollback(to: peerID)
     }
 
     // MARK: - Broadcast
 
-    /// Called by the ProcessBridge `onMessage` closure (runs on a background queue).
-    /// State access and peer sends are hopped to the main actor to avoid races.
+    /// Called by the ProcessBridge `onMessage` closure (runs on a background
+    /// queue). `DispatchQueue.main.async` is FIFO, so output keeps its order.
     func broadcast(_ text: String) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.appendScrollback(text)
-            let recipients = Self.outputRecipients(attached: self.attachedPeerIDs, isAuthorized: self.isAuthorized)
-            for peerID in recipients {
-                if self.pendingReplayPeerIDs.contains(peerID) {
-                    // Reconnected peer now authorised: the replay already
-                    // includes `text` (just appended above).
-                    self.flushPendingReplay(for: peerID)
-                } else {
-                    try? await self.cm.sendText(text, to: peerID)
-                }
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.broadcastNow(text) }
+        }
+    }
+
+    /// Appends `text` to the scrollback and sends it to every attached peer
+    /// that currently passes the gate.
+    @MainActor
+    func broadcastNow(_ text: String) {
+        appendScrollback(text)
+        for peerID in Self.outputRecipients(attached: attachedPeerIDs, isAuthorized: isAuthorized) {
+            if pendingReplayPeerIDs.contains(peerID) {
+                // Reconnected peer just became authorised: its replay snapshot
+                // already includes `text`.
+                flushPendingReplayIfAuthorized(peerID)
+            } else {
+                enqueueSend([text], to: peerID)
             }
         }
     }
 
-    /// Replays the bounded scrollback to a newly (re)attached peer.
-    /// State access and sends are confined to the main actor.
+    /// Replays a snapshot of the bounded scrollback to `peerID`.
+    @MainActor
     func replayScrollback(to peerID: String) {
-        Task { @MainActor [weak self] in
-            guard let self, self.isAuthorized(peerID) else { return }
-            for line in self.scrollback {
-                try? await self.cm.sendText(line, to: peerID)
+        enqueueSend(scrollback, to: peerID)
+    }
+
+    /// Waits until every send enqueued so far has finished (tests).
+    @MainActor
+    func drainSends() async {
+        await sendTail?.value
+    }
+
+    /// Appends `lines` for `peerID` to the serial send chain. The gate is
+    /// re-checked before EACH line (on the main actor, immediately before the
+    /// send resolves the peer's connection), so nothing goes to a new,
+    /// unauthenticated connection that re-used the peer's ID mid-stream.
+    @MainActor
+    private func enqueueSend(_ lines: [String], to peerID: String) {
+        guard !lines.isEmpty else { return }
+        let previous = sendTail
+        sendTail = Task { @MainActor [weak self] in
+            await previous?.value
+            for line in lines {
+                guard let self, self.isAuthorized(peerID) else { return }
+                await self.sendToPeer(line, peerID)
             }
         }
     }
