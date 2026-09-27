@@ -38,15 +38,63 @@ final class AgentSession {
         return contact.trustLevel == .unknown ? .enroll : .autoAccept
     }
 
+    // MARK: - Connection-Accept Action
+
+    /// What the CLI does with an inbound connection request.
+    /// - `acceptTrusted`: known, verified contact. Input still has to pass
+    ///   `InputGate` (secured channel, handshake key == hello key, `.matched`).
+    /// - `acceptPendingSAS`: unknown peer. The connection is accepted ONLY so the
+    ///   secure handshake can run and the SAS prompt can appear; the peer is not
+    ///   trusted and its input is dropped until the user answers "y".
+    /// - `reject`: blocked, or a peer that cannot do the secure channel (it could
+    ///   never be authenticated, so there is no point keeping it connected).
+    enum ConnectionAction: Equatable {
+        case acceptTrusted
+        case acceptPendingSAS
+        case reject
+    }
+
+    nonisolated static func connectionAction(
+        for decision: TrustDecision,
+        peerSupportsSecureChannel: Bool
+    ) -> ConnectionAction {
+        guard peerSupportsSecureChannel else { return .reject }
+        switch decision {
+        case .reject: return .reject
+        case .enroll: return .acceptPendingSAS
+        case .autoAccept: return .acceptTrusted
+        }
+    }
+
+    /// Peers that may receive process output: attached (they sent authorised
+    /// input this session) AND still passing the gate right now — so a later
+    /// connection that re-uses an attached peer's ID but fails the gate gets
+    /// nothing.
+    nonisolated static func outputRecipients(
+        attached: Set<String>,
+        isAuthorized: (String) -> Bool
+    ) -> Set<String> {
+        attached.filter(isAuthorized)
+    }
+
     // MARK: - Properties
 
     private let bridge: MessageBridge
     private let cm: ConnectionManager
     private let store: TrustedContactStore
 
+    /// Input/output authorisation for a hook peerID. Defaults to `InputGate`
+    /// over the live ConnectionManager; injectable for tests. Main-actor only.
+    private let isAuthorized: (String) -> Bool
+
     /// Peers whose messages have been received in this session.
     /// Confined to the main actor.
-    private var attachedPeerIDs = Set<String>()
+    private(set) var attachedPeerIDs = Set<String>()
+
+    /// Known peers that reconnected; their scrollback replay is deferred until
+    /// the new connection passes the gate (it is never secured yet at connect
+    /// time). Confined to the main actor.
+    private var pendingReplayPeerIDs = Set<String>()
 
     /// Bounded scrollback of outgoing (bridge→peers) messages.
     /// Confined to the main actor.
@@ -59,11 +107,22 @@ final class AgentSession {
     init(
         bridge: MessageBridge,
         connectionManager: ConnectionManager,
-        store: TrustedContactStore
+        store: TrustedContactStore,
+        isAuthorized: ((String) -> Bool)? = nil
     ) {
         self.bridge = bridge
         self.cm = connectionManager
         self.store = store
+        if let isAuthorized {
+            self.isAuthorized = isAuthorized
+        } else {
+            self.isAuthorized = { [weak connectionManager] peerID in
+                guard let cm = connectionManager else { return false }
+                return MainActor.assumeIsolated {
+                    InputGate.shouldForwardInput(InputGate.facts(for: peerID, cm: cm, store: store))
+                }
+            }
+        }
     }
 
     // MARK: - Reconnect Detection
@@ -75,12 +134,13 @@ final class AgentSession {
         known.contains(peerID)
     }
 
-    /// Call when a peer (re)connects. Replays the buffered process output only to
-    /// reconnecting peers. Must run on the main actor (attachedPeerIDs/scrollback are main-confined).
+    /// Call when a peer (re)connects. Marks reconnecting peers for a scrollback
+    /// replay, which happens once the connection is authorised (see
+    /// `flushPendingReplay`). Must run on the main actor.
     @MainActor
     func handlePeerConnected(_ peerID: String) {
         if Self.shouldReplayOnConnect(peerID: peerID, known: attachedPeerIDs) {
-            replayScrollback(to: peerID)
+            pendingReplayPeerIDs.insert(peerID)
         }
     }
 
@@ -88,18 +148,36 @@ final class AgentSession {
 
     /// Installs the `onTextMessageReceived` hook on the ConnectionManager.
     /// Must be called from the main actor (ConnectionManager is main-actor bound).
+    ///
+    /// Security (#166): text is written into the wrapped process ONLY when the
+    /// sender's connection passes `InputGate`. Everything else is dropped — not
+    /// buffered — and logged without its content.
     @MainActor
     func wire() {
         cm.onTextMessageReceived = { [weak self] peerID, text in
-            // Confine the attachedPeerIDs mutation explicitly to the main actor so
-            // this code remains correct even if the call-site actor context ever
-            // changes (e.g. ConnectionManager loses its @MainActor annotation).
-            // bridge.send is thread-safe (internal writeQueue) and stays outside the hop.
-            Task { @MainActor [weak self] in
-                self?.attachedPeerIDs.insert(peerID)
+            // ConnectionManager fires this hook from its main-actor handleMessage.
+            MainActor.assumeIsolated {
+                self?.handleInboundText(peerID: peerID, text: text)
             }
-            self?.bridge.send(text)
         }
+    }
+
+    @MainActor
+    private func handleInboundText(peerID: String, text: String) {
+        guard isAuthorized(peerID) else {
+            print("dropped \(text.utf8.count)-byte input from unauthenticated peer \(peerID.prefix(8))")
+            return
+        }
+        attachedPeerIDs.insert(peerID)
+        flushPendingReplay(for: peerID)
+        // bridge.send is thread-safe (internal writeQueue).
+        bridge.send(text)
+    }
+
+    @MainActor
+    private func flushPendingReplay(for peerID: String) {
+        guard pendingReplayPeerIDs.remove(peerID) != nil else { return }
+        replayScrollback(to: peerID)
     }
 
     // MARK: - Broadcast
@@ -110,8 +188,15 @@ final class AgentSession {
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.appendScrollback(text)
-            for peerID in self.attachedPeerIDs {
-                try? await self.cm.sendText(text, to: peerID)
+            let recipients = Self.outputRecipients(attached: self.attachedPeerIDs, isAuthorized: self.isAuthorized)
+            for peerID in recipients {
+                if self.pendingReplayPeerIDs.contains(peerID) {
+                    // Reconnected peer now authorised: the replay already
+                    // includes `text` (just appended above).
+                    self.flushPendingReplay(for: peerID)
+                } else {
+                    try? await self.cm.sendText(text, to: peerID)
+                }
             }
         }
     }
@@ -120,7 +205,7 @@ final class AgentSession {
     /// State access and sends are confined to the main actor.
     func replayScrollback(to peerID: String) {
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.isAuthorized(peerID) else { return }
             for line in self.scrollback {
                 try? await self.cm.sendText(line, to: peerID)
             }

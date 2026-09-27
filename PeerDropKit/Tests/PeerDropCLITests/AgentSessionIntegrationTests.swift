@@ -17,7 +17,11 @@ final class AgentSessionIntegrationTests: XCTestCase {
         // `cat` echoes its stdin to stdout (PTY echo is disabled, so this is cat's
         // own output, not terminal echo).
         let bridge = ProcessBridge(command: ["/bin/cat"], idle: .milliseconds(80))
-        let session = AgentSession(bridge: bridge, connectionManager: cm, store: store)
+        // #166: only a peer passing the input gate may reach the child. The gate's
+        // real facts need a secured, verified connection (covered by
+        // InputGateFactsTests); here we authorise peer-1 so the round trip runs.
+        let session = AgentSession(bridge: bridge, connectionManager: cm, store: store,
+                                   isAuthorized: { $0 == "peer-1" })
         bridge.onMessage = { [weak session] text in
             lock.lock()
             got += text

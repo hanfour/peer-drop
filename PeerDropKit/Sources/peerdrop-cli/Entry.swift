@@ -128,6 +128,13 @@ struct PeerDropCLI {
             .sink { req in
                 let key = req.peerIdentity.identityPublicKey ?? Data()
                 let decision = AgentSession.decideTrust(identityKey: key, store: store)
+                // #166: an unknown peer is accepted only so the secure handshake
+                // and SAS prompt can run — it is NOT trusted, and AgentSession's
+                // InputGate drops its input until the user confirms the SAS.
+                // Peers without a secure channel can never be authenticated.
+                let action = AgentSession.connectionAction(
+                    for: decision,
+                    peerSupportsSecureChannel: req.peerIdentity.supportsSecureChannel)
                 // `pendingIncomingRequest` is published via @Published's `willSet`, so the
                 // stored property is still nil while this sink runs synchronously.
                 // `acceptConnection()`/`rejectConnection()` re-read that property and bail
@@ -135,11 +142,15 @@ struct PeerDropCLI {
                 // by which point the assignment has completed. The app path is immune: a
                 // human taps the consent sheet long after the property is set.
                 Task { @MainActor in
-                    switch decision {
+                    switch action {
                     case .reject:
-                        print("rejecting blocked peer \(req.peerIdentity.displayName)")
+                        let why = decision == .reject ? "blocked" : "no secure channel"
+                        print("rejecting peer \(req.peerIdentity.displayName) (\(why))")
                         cm.rejectConnection()
-                    case .autoAccept, .enroll:
+                    case .acceptPendingSAS:
+                        print("new peer \(req.peerIdentity.displayName) — input ignored until you confirm the SAS")
+                        cm.acceptConnection()
+                    case .acceptTrusted:
                         cm.acceptConnection()
                     }
                 }
