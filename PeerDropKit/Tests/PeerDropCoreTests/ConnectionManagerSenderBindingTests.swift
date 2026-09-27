@@ -31,6 +31,10 @@ private final class Recorder: @unchecked Sendable {
     private var _types: [MessageType] = []
     var types: [MessageType] { lock.lock(); defer { lock.unlock() }; return _types }
     func append(_ t: MessageType) { lock.lock(); _types.append(t); lock.unlock() }
+    private var _closed = false
+    /// The fake acceptor's socket was closed (by us or the manager).
+    var closed: Bool { lock.lock(); defer { lock.unlock() }; return _closed }
+    func markClosed() { lock.lock(); _closed = true; lock.unlock() }
 }
 
 /// Server-side sockets accepted by test listeners, cancelled in tearDown.
@@ -134,15 +138,16 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         return condition()
     }
 
-    /// Start `connection` and wait for `.ready`. The handler is installed
-    /// BEFORE start: NWConnection+Async's `waitReady` installs it afterwards
-    /// and can miss a fast loopback transition (pre-existing race, not #161).
+    /// Every test socket gets its own SERIAL queue: on the concurrent
+    /// `.global()` queue Network can deliver `.preparing`/`.ready` out of
+    /// order and leave `state` stuck at `.preparing` (see WaitReadyHandlerTests).
+    nonisolated private static func socketQueue() -> DispatchQueue {
+        DispatchQueue(label: "test.cmbind.socket", qos: .userInitiated)
+    }
+
     private func startAndWaitReady(_ connection: NWConnection) async throws {
-        let ready = ServerSocketBox()
-        connection.stateUpdateHandler = { if case .ready = $0 { ready.set(connection) } }
-        connection.start(queue: .global(qos: .userInitiated))
-        let ok = await poll(timeout: 5) { ready.connection != nil }
-        guard ok else { throw NWConnectionError.timeout }
+        connection.start(queue: Self.socketQueue())
+        try await connection.waitReady(timeout: 5)
     }
 
     private func startListener(onConnection: @escaping @Sendable (NWConnection) -> Void) async throws -> UInt16 {
@@ -150,7 +155,7 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         l.newConnectionHandler = onConnection
         let ready = expectation(description: "listener ready")
         l.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
-        l.start(queue: .global(qos: .userInitiated))
+        l.start(queue: Self.socketQueue())
         await fulfillment(of: [ready], timeout: 5)
         listeners.append(l)
         return try XCTUnwrap(l.port?.rawValue)
@@ -159,19 +164,10 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
     /// A listener whose inbound connections go through ConnectionManager's
     /// real acceptor path; returns a connected client socket.
     private func dialManager() async throws -> NWConnection {
-        // Hand the socket over only once it is ready. NWConnection+Async's
-        // `waitReady` can miss the ready transition when the connection is
-        // still in `.setup` at call time on loopback (pre-existing race, not
-        // part of #161), which made the acceptor path hang intermittently.
-        // `handleIncomingConnection`'s own start() is then a no-op.
+        // The unstarted inbound socket goes straight to the production
+        // acceptor path, exactly as the Bonjour listener hands it over.
         let port = try await startListener { [cm] conn in
-            conn.stateUpdateHandler = { state in
-                if case .ready = state {
-                    conn.stateUpdateHandler = nil
-                    Task { @MainActor in cm?._handleIncomingConnectionForTesting(conn) }
-                }
-            }
-            conn.start(queue: .global(qos: .userInitiated))
+            Task { @MainActor in cm?._handleIncomingConnectionForTesting(conn) }
         }
         let client = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .peerDrop())
         clients.append(client)
@@ -330,8 +326,12 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         let mallory = identity("Mallory")
         let client = try await pendingStranger(mallory)
         try await client.sendMessage(PeerMessage.ping(senderID: mallory.id))
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(cm.pendingIncomingRequest?.peerIdentity.id, mallory.id, "ping must not dismiss the request")
+        // Frames are handled in order: the cancel below is only processed (and
+        // produces this toast) if the ping left the request pending.
+        try await client.sendMessage(PeerMessage.connectionCancel(senderID: mallory.id))
+        let dismissed = await poll { self.cm.pendingIncomingRequest == nil }
+        XCTAssertTrue(dismissed)
+        XCTAssertEqual(cm.statusToast, "Connection request was cancelled", "ping must not dismiss the request")
     }
 
     // MARK: - (c) connected peer B claiming senderID = C
@@ -502,21 +502,20 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         let bag = socketBag
         return try await startListener { conn in
             bag.add(conn)
-            let ready = ServerSocketBox()
-            conn.stateUpdateHandler = { if case .ready = $0 { ready.set(conn) } }
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: Self.socketQueue())
             Task {
+                defer { recorder?.markClosed() }
                 do {
-                    let deadline = Date().addingTimeInterval(5)
-                    while ready.connection == nil && Date() < deadline {
-                        try await Task.sleep(nanoseconds: 10_000_000)
-                    }
+                    try await conn.waitReady(timeout: 5)
                     recorder?.append(try await conn.receiveMessage(timeout: 5).type) // hello
                     recorder?.append(try await conn.receiveMessage(timeout: 5).type) // connectionRequest
                     switch script {
                     case .accept:
                         try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
                         try await conn.sendMessage(try PeerMessage.hello(identity: reply))
+                        // Sync point: the pong comes back from the installed
+                        // PeerConnection, after anything sent before install.
+                        try await conn.sendMessage(PeerMessage.ping(senderID: reply.id))
                     case .disconnectBeforeAccept:
                         try await conn.sendMessage(PeerMessage.disconnect(senderID: reply.id))
                     }
@@ -554,14 +553,16 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
         // The dialed peer answers with C's id.
         let impostor = PeerIdentity(id: carol.id, displayName: "Impostor", supportsSecureChannel: false)
-        let port = try await startFakeAcceptor(replyingAs: impostor)
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: impostor, recorder: recorder)
         cm.requestConnection(to: DiscoveredPeer(
             id: "manual-imp", displayName: "Imp",
             endpoint: .manual(host: "127.0.0.1", port: port), source: .manual
         ))
 
-        _ = await poll(timeout: 2) { self.cm.state == .connected }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        // The refusal hangs up on the impostor.
+        let refused = await poll(timeout: 5) { recorder.closed }
+        XCTAssertTrue(refused, "impostor dial was never refused: \(recorder.types)")
         XCTAssertTrue(cm.connections[carol.id] === carolPC, "existing connection was replaced")
         XCTAssertEqual(carolPC.peerIdentity.displayName, "Carol", "existing connection's identity was re-pointed")
     }
@@ -575,12 +576,9 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         let port = try await startListener { conn in
             bag.add(conn)
             conn.stateUpdateHandler = { state in
-                if case .ready = state {
-                    conn.stateUpdateHandler = nil
-                    serverBox.set(conn)
-                }
+                if case .ready = state { serverBox.set(conn) }
             }
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: Self.socketQueue())
         }
         let client = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .peerDrop())
         clients.append(client)
@@ -625,9 +623,9 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         let recorder = Recorder()
         let port = try await startFakeAcceptor(replyingAs: evil, recorder: recorder)
         dial(port, id: "manual-evil")
-        let reached = await poll { recorder.types.contains(.connectionRequest) }
-        XCTAssertTrue(reached, "dial never reached the fake acceptor")
-        try await Task.sleep(nanoseconds: 500_000_000)
+        // The refusal hangs up on the dialed peer.
+        let refused = await poll(timeout: 5) { recorder.closed }
+        XCTAssertTrue(refused, "relay-id dial was never refused: \(recorder.types)")
         XCTAssertNil(cm.connections["relay-evil2"], "dialed peer installed under a relay-* id")
     }
 
@@ -733,8 +731,13 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
         let installed = await poll(timeout: 5) { self.cm.connections[dave.id] != nil }
         XCTAssertTrue(installed, "second dialed peer never installed (state=\(cm.state))")
-        try await Task.sleep(nanoseconds: 500_000_000)
+        // Sync: Dave's installed PeerConnection answers the acceptor's ping;
+        // anything sent to Dave before install precedes that pong.
+        let ponged = await poll(timeout: 5) { recorder.types.contains(.pong) }
+        XCTAssertTrue(ponged, "no pong from Dave's PeerConnection: \(recorder.types)")
         XCTAssertFalse(recorder.types.contains(.connectionCancel), "acceptor was sent connectionCancel: \(recorder.types)")
+        // Carol's socket still carries traffic after the dial.
+        try await drain(carolClient, unreadKey: carol.id)
         XCTAssertFalse(carolClosed.closed, "dialing a second peer killed the first peer's socket")
         XCTAssertNotNil(cm.connections[carol.id])
         XCTAssertEqual(cm.connections[carol.id]?.state, .connected)
@@ -751,12 +754,13 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         let recorder = Recorder()
         let port = try await startFakeAcceptor(replyingAs: dave, script: .disconnectBeforeAccept, recorder: recorder)
         dial(port, id: "manual-dave")
-        let reached = await poll { recorder.types.contains(.connectionRequest) }
-        XCTAssertTrue(reached, "dial never reached the fake acceptor")
-        try await Task.sleep(nanoseconds: 500_000_000)
+        // The disconnect ends the dial: we hang up on Dave.
+        let ended = await poll(timeout: 5) { recorder.closed }
+        XCTAssertTrue(ended, "dial was not ended by the peer's disconnect: \(recorder.types)")
 
         XCTAssertEqual(cm.state, .connected, "a dialed peer's pre-accept disconnect failed the whole session")
         XCTAssertNotNil(cm.connections[carol.id])
+        try await drain(carolClient, unreadKey: carol.id)
         XCTAssertFalse(carolClosed.closed)
         XCTAssertNil(cm.connections[dave.id])
     }
@@ -797,9 +801,8 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         let recorder = Recorder()
         let port = try await startFakeAcceptor(replyingAs: fake, recorder: recorder)
         dial(port, id: "manual-fake")
-        let reached = await poll { recorder.types.contains(.connectionRequest) }
-        XCTAssertTrue(reached, "dial never reached the fake acceptor")
-        try await Task.sleep(nanoseconds: 500_000_000)
+        let refused = await poll(timeout: 5) { recorder.closed }
+        XCTAssertTrue(refused, "aliased-id dial was never refused: \(recorder.types)")
 
         XCTAssertNil(cm.connections[carol.id])
         XCTAssertTrue(cm.connection(for: carol.id) === relayPC)

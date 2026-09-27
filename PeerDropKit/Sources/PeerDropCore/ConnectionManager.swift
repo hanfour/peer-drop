@@ -2156,7 +2156,7 @@ public final class ConnectionManager: ObservableObject {
             }
         }
 
-        connection.start(queue: .global(qos: .userInitiated))
+        connection.start(queue: Self.makeConnectionQueue())
         activeConnection = connection
         let attempt = DialAttempt(connection: connection, generation: generation)
         dialAttempt = attempt
@@ -2166,7 +2166,7 @@ public final class ConnectionManager: ObservableObject {
         Task {
             do {
                 logger.info("Waiting for connection to be ready...")
-                try await Self.waitUntilReady(connection)
+                try await connection.waitReady()
                 logger.info("Connection ready! Sending HELLO...")
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await connection.sendMessage(hello)
@@ -2234,19 +2234,18 @@ public final class ConnectionManager: ObservableObject {
         }
 
         // Start the incoming connection to receive HELLO and determine peer
-        // identity. The handler is installed first (NWConnection expects it
-        // before start), and start() runs only once: a socket handed in
-        // already started (tests pre-start loopback sockets) must not be
-        // started again — a second start re-reports state through the handler
-        // on the network queue while it is being replaced here.
+        // identity. The handler is installed first (NWConnection only
+        // reliably invokes a handler set before start), on a private serial
+        // queue (see makeConnectionQueue), and start() runs only once — a
+        // socket handed in already started is not started again.
         if case .setup = connection.state {
-            connection.start(queue: .global(qos: .userInitiated))
+            connection.start(queue: Self.makeConnectionQueue())
         }
 
         Task {
             do {
                 logger.info("Waiting for incoming connection to be ready...")
-                try await Self.waitUntilReady(connection)
+                try await connection.waitReady()
                 logger.info("Incoming connection ready! Waiting for HELLO...")
                 let helloMsg = try await connection.receiveMessage()
                 logger.info("Received message type: \(String(describing: helloMsg.type))")
@@ -2392,29 +2391,15 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// Wait for `connection` to reach `.ready` by polling its `state`.
-    ///
-    /// NWConnection+Async's `waitReady()` swaps `stateUpdateHandler` AFTER the
-    /// connection was started, then checks `state` once; a fast (loopback /
-    /// LAN) transition delivered to the old handler in between is lost, and the
-    /// dial/accept then stalls until its 15s timeout. Polling keeps the
-    /// handler this class installed before start() and cannot miss the state.
-    private nonisolated static func waitUntilReady(_ connection: NWConnection, timeout: TimeInterval = 15) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while true {
-            switch connection.state {
-            case .ready:
-                return
-            case .failed(let error):
-                throw error
-            case .cancelled:
-                throw NWConnectionError.cancelled
-            default:
-                break
-            }
-            guard Date() < deadline else { throw NWConnectionError.timeout }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
+    /// A private SERIAL queue for one peer socket. NWConnections used to be
+    /// started on the concurrent `.global()` queue, where Network can run the
+    /// `.preparing` and `.ready` callbacks concurrently: handlers then see
+    /// them out of order and `state` can stay `.preparing` forever, so an
+    /// accept or dial occasionally never saw `.ready` and stalled until its
+    /// 15s timeout (measured 8 of 600 loopback sockets; 0 of 600 on serial
+    /// queues).
+    private nonisolated static func makeConnectionQueue() -> DispatchQueue {
+        DispatchQueue(label: "com.hanfour.peerdrop.connection", qos: .userInitiated)
     }
 
     /// Read exactly one framed PeerMessage, with no timeout and no
