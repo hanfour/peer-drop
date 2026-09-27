@@ -2166,15 +2166,7 @@ public final class ConnectionManager: ObservableObject {
         Task {
             do {
                 logger.info("Waiting for connection to be ready...")
-                try await connection.waitReady()
-                // Restore stateUpdateHandler (waitReady replaces it internally)
-                connection.stateUpdateHandler = { [weak self] nwState in
-                    logger.info("NWConnection state: \(String(describing: nwState))")
-                    Task { @MainActor in
-                        guard let self, self.connectionGeneration == generation else { return }
-                        self.handleConnectionStateChange(nwState, on: connection)
-                    }
-                }
+                try await Self.waitUntilReady(connection)
                 logger.info("Connection ready! Sending HELLO...")
                 let hello = try PeerMessage.hello(identity: localIdentity)
                 try await connection.sendMessage(hello)
@@ -2254,7 +2246,7 @@ public final class ConnectionManager: ObservableObject {
         Task {
             do {
                 logger.info("Waiting for incoming connection to be ready...")
-                try await connection.waitReady()
+                try await Self.waitUntilReady(connection)
                 logger.info("Incoming connection ready! Waiting for HELLO...")
                 let helloMsg = try await connection.receiveMessage()
                 logger.info("Received message type: \(String(describing: helloMsg.type))")
@@ -2397,6 +2389,31 @@ public final class ConnectionManager: ObservableObject {
             } catch {
                 // Task cancelled - expected on accept/reject
             }
+        }
+    }
+
+    /// Wait for `connection` to reach `.ready` by polling its `state`.
+    ///
+    /// NWConnection+Async's `waitReady()` swaps `stateUpdateHandler` AFTER the
+    /// connection was started, then checks `state` once; a fast (loopback /
+    /// LAN) transition delivered to the old handler in between is lost, and the
+    /// dial/accept then stalls until its 15s timeout. Polling keeps the
+    /// handler this class installed before start() and cannot miss the state.
+    private nonisolated static func waitUntilReady(_ connection: NWConnection, timeout: TimeInterval = 15) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            switch connection.state {
+            case .ready:
+                return
+            case .failed(let error):
+                throw error
+            case .cancelled:
+                throw NWConnectionError.cancelled
+            default:
+                break
+            }
+            guard Date() < deadline else { throw NWConnectionError.timeout }
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
     }
 
