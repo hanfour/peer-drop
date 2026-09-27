@@ -295,6 +295,21 @@ public final class ConnectionManager: ObservableObject {
     private var consentTimeoutTask: Task<Void, Never>?
     private let consentTimeoutSeconds: UInt64 = 30
 
+    /// Post-accept handoff (#161). Cancelling the consent monitor's Task does
+    /// not cancel the `receiveMessage` it already has in flight, so the first
+    /// frame the peer sends after we accept (typically its `.secureHandshake`)
+    /// lands in the monitor, not in the new PeerConnection's loop. The frame
+    /// belongs to the connection it arrived on, so it is handed to that
+    /// connection's `PeerConnection` — never routed by its claimed `senderID`.
+    /// Frames that arrive before `addConnection` has installed the
+    /// PeerConnection are buffered and flushed right after install.
+    private struct ConsentHandoff {
+        let connection: NWConnection
+        let peerConnection: PeerConnection
+        var buffered: [PeerMessage] = []
+    }
+    private var consentHandoff: ConsentHandoff?
+
     // MARK: - Exponential Backoff Retry
     private let reconnectController = RetryController()
 
@@ -699,8 +714,11 @@ public final class ConnectionManager: ObservableObject {
             self?.handlePeerStateChange(peerID: peerID, newState: newState)
         }
 
-        peerConnection.onMessageReceived = { [weak self] message in
-            self?.handleMessage(message, from: peerID)
+        // Bound dispatch (#161): a frame is attributed to the connection it
+        // arrived on, never to the `senderID` it claims.
+        peerConnection.onMessageReceived = { [weak self, weak peerConnection] message in
+            guard let self, let peerConnection else { return }
+            self.dispatchBound(message, on: peerConnection)
         }
 
         peerConnection.onDisconnected = { [weak self] in
@@ -1525,6 +1543,13 @@ public final class ConnectionManager: ObservableObject {
     public func _setConnectionForTesting(peerID: String, _ peerConnection: PeerConnection) {
         connections[peerID] = peerConnection
     }
+
+    /// Test-only: feed an inbound `NWConnection` (e.g. from a loopback
+    /// `NWListener`) through the real acceptor path — HELLO, request,
+    /// consent monitor — exactly as the Bonjour listener would (#161).
+    public func _handleIncomingConnectionForTesting(_ connection: NWConnection) {
+        handleIncomingConnection(connection)
+    }
     #endif
 
     public func sendRemoteMessage(text: String, to contact: TrustedContact) async throws {
@@ -2230,20 +2255,31 @@ public final class ConnectionManager: ObservableObject {
         consentMonitorTask?.cancel()
         consentTimeoutTask?.cancel()
 
-        // Start connection monitor
+        // Start connection monitor. The peer has NOT been consented to yet, so
+        // this reader never dispatches business messages (#161): only a closed
+        // allowlist of control frames is honoured, and they act on THIS
+        // connection's pending request — never on whatever `senderID` claims.
         consentMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, self.pendingIncomingRequest != nil else { break }
+                guard let self, self.pendingIncomingRequest?.connection === connection else { break }
                 do {
-                    let message = try await connection.receiveMessage()
-                    // Process the message on the main actor
-                    await MainActor.run {
-                        self.handleMessage(message, from: message.senderID)
-                    }
+                    // Deliberately NOT `receiveMessage(timeout:)`: that wrapper
+                    // throws CancellationError when this Task is cancelled (on
+                    // accept/reject) yet still consumes the frame its pending
+                    // read later returns — silently eating the first post-accept
+                    // frame. A plain read survives cancellation, so that frame
+                    // reaches the handoff below. (Consent timeout / socket close
+                    // bound the wait.)
+                    let message = try await Self.receiveFrame(on: connection)
+                    let keepReading = await self.handleConsentMonitorFrame(message, on: connection)
+                    if !keepReading { break }
                 } catch {
                     // Read failed — connection died while consent was showing
                     await MainActor.run {
-                        if self.pendingIncomingRequest != nil {
+                        if self.consentHandoff?.connection === connection {
+                            self.consentHandoff = nil
+                        }
+                        if self.pendingIncomingRequest?.connection === connection {
                             logger.info("Consent monitor: connection lost, dismissing consent sheet")
                             self.pendingIncomingRequest = nil
                             self.activeConnection = nil
@@ -2278,6 +2314,96 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Read exactly one framed PeerMessage, with no timeout and no
+    /// task-cancellation handling (see the consent monitor for why).
+    private nonisolated static func receiveFrame(on connection: NWConnection) async throws -> PeerMessage {
+        try await withCheckedThrowingContinuation { continuation in
+            connection.receiveMessage { content, _, _, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let content {
+                    do { continuation.resume(returning: try PeerMessage.decoded(from: content)) }
+                    catch { continuation.resume(throwing: error) }
+                } else {
+                    continuation.resume(throwing: NWConnectionError.noData)
+                }
+            }
+        }
+    }
+
+    /// One frame read by the consent monitor on `connection`. Returns whether
+    /// the monitor should keep reading.
+    private func handleConsentMonitorFrame(_ message: PeerMessage, on connection: NWConnection) async -> Bool {
+        // Accepted meanwhile: the frame belongs to the accepted PeerConnection.
+        if var handoff = consentHandoff, handoff.connection === connection {
+            let pc = handoff.peerConnection
+            if connections[pc.id] === pc {
+                consentHandoff = nil
+                do { try await pc.handleIncomingMessage(message) }
+                catch { logger.error("Consent handoff frame failed: \(error.localizedDescription)") }
+            } else {
+                handoff.buffered.append(message)
+                consentHandoff = handoff
+            }
+            return false
+        }
+
+        guard let request = pendingIncomingRequest, request.connection === connection else {
+            // Stale read from a request that was rejected / expired / replaced.
+            logger.info("Consent monitor: dropping \(String(describing: message.type)) from a request that is no longer pending")
+            return false
+        }
+
+        switch message.type {
+        case .ping:
+            return true
+        case .disconnect, .connectionCancel:
+            dismissPendingRequest(request, toast: "Connection request was cancelled")
+            return false
+        default:
+            // A stranger we have not consented to must not be able to drive
+            // anything else (#161). Drop the request and hang up.
+            logger.warning("Consent monitor: unexpected \(String(describing: message.type)) before consent; dropping request")
+            dismissPendingRequest(request, toast: nil)
+            return false
+        }
+    }
+
+    /// Tear down a still-pending incoming request (initiator cancelled, hung
+    /// up, or misbehaved before consent).
+    private func dismissPendingRequest(_ request: IncomingRequest, toast: String?) {
+        guard pendingIncomingRequest?.connection === request.connection else { return }
+        pendingIncomingRequest = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
+        request.connection.cancel()
+        if activeConnection === request.connection {
+            activeConnection = nil
+        }
+        if let toast { statusToast = toast }
+        switch state {
+        case .incomingRequest, .connecting:
+            transition(to: .discovering)
+        default:
+            break
+        }
+    }
+
+    /// Deliver frames the consent monitor captured for an accepted connection
+    /// before its PeerConnection was installed.
+    private func flushConsentHandoff(for peerConnection: PeerConnection) async {
+        guard let handoff = consentHandoff, handoff.peerConnection === peerConnection else { return }
+        // Nothing buffered: the monitor's read is still in flight and will
+        // deliver straight to the (now installed) PeerConnection — keep the
+        // handoff for it. Buffered: the monitor has finished; release it.
+        guard !handoff.buffered.isEmpty else { return }
+        consentHandoff = nil
+        for message in handoff.buffered {
+            do { try await peerConnection.handleIncomingMessage(message) }
+            catch { logger.error("Consent handoff frame failed: \(error.localizedDescription)") }
+        }
+    }
+
     // MARK: - Consent Response
 
     public func acceptConnection() {
@@ -2300,6 +2426,18 @@ public final class ConnectionManager: ObservableObject {
         let peerIdentity = request.peerIdentity
         let peerID = peerIdentity.id
 
+        // Never let a second socket take over (or shadow) an existing entry for
+        // this peer ID, whatever its state (#161). The HELLO check in
+        // handleIncomingConnection ran before the consent wait; re-check now.
+        guard connections[peerID] == nil else {
+            logger.warning("acceptConnection: a connection for \(peerID.prefix(8)) already exists; refusing duplicate")
+            request.connection.cancel()
+            if activeConnection === request.connection { activeConnection = nil }
+            statusToast = "Already connected to this device"
+            if case .incomingRequest = state { transition(to: .discovering) }
+            return
+        }
+
         // Create PeerConnection for multi-connection support
         let peerConnection = PeerConnection(
             peerID: peerID,
@@ -2308,6 +2446,9 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connecting
         )
+        // The consent monitor may still have a read in flight on this socket;
+        // whatever it returns belongs to this PeerConnection.
+        consentHandoff = ConsentHandoff(connection: request.connection, peerConnection: peerConnection)
 
         // Set lastConnectedPeer by finding the matching discovered peer
         if let matchingPeer = discoveredPeers.first(where: { $0.id == peerID }) {
@@ -2355,7 +2496,11 @@ public final class ConnectionManager: ObservableObject {
                 // v5.1: peer's hello arrived inline above; capability flag
                 // is known. Kick off LocalSecureChannel handshake.
                 triggerSecureChannelNegotiation(for: peerConnection)
+
+                // Frames the consent monitor read before install (#161).
+                await flushConsentHandoff(for: peerConnection)
             } catch {
+                if consentHandoff?.peerConnection === peerConnection { consentHandoff = nil }
                 cancelTimeouts()
                 activeConnection?.cancel()
                 activeConnection = nil
@@ -2873,6 +3018,7 @@ public final class ConnectionManager: ObservableObject {
         activeConnection = nil
         consentMonitorTask?.cancel()
         consentMonitorTask = nil
+        consentHandoff = nil
         consentTimeoutTask?.cancel()
         consentTimeoutTask = nil
         pendingRelayPeerConnection = nil
@@ -2904,14 +3050,17 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Message Receive Loop
 
     /// The initiator's pre-PeerConnection reader. It reads `activeConnection` only
-    /// until the `connectionAccept` it is waiting for arrives — at which point
-    /// `handleMessageLegacy` synchronously creates the peer's `PeerConnection`
-    /// (via `addConnection`), which flips `legacyReaderActive` false so this loop
-    /// breaks before its next read and the PeerConnection's own loop becomes the
-    /// SOLE reader of the connection. (Acceptors never run this loop — they read
-    /// the HELLO/request inline.) This single-owning-reader handoff replaces the
-    /// old dual-reader race; the secure-frame forward in `handleMessageForPeer`
-    /// is now only a belt-and-suspenders safety net.
+    /// until the acceptor's HELLO arrives — at which point
+    /// `handleInitiatorControlMessage` synchronously creates the peer's
+    /// `PeerConnection` (via `addConnection`), which flips `legacyReaderActive`
+    /// false so this loop breaks before its next read and the PeerConnection's
+    /// own loop becomes the SOLE reader of the connection. (Acceptors never run
+    /// this loop — they read the HELLO/request inline.)
+    ///
+    /// #161: every frame read here is bound to `connection`; nothing is looked
+    /// up by the frame's self-reported `senderID`, and only handshake control
+    /// frames are honoured — business traffic is only ever handled by the
+    /// PeerConnection that owns the socket.
     private func startReceiving() {
         guard let connection = activeConnection else {
             logger.warning("startReceiving: no activeConnection!")
@@ -2922,16 +3071,16 @@ public final class ConnectionManager: ObservableObject {
         logger.info("Entering receive loop (gen=\(generation.uuidString.prefix(8)))")
 
         Task {
-            while activeConnection != nil && connectionGeneration == generation && legacyReaderActive {
+            while activeConnection === connection && connectionGeneration == generation && legacyReaderActive {
                 do {
                     let message = try await connection.receiveMessage()
                     // Verify this loop still owns the connection
-                    guard connectionGeneration == generation else { break }
-                    handleMessage(message, from: message.senderID)
+                    guard connectionGeneration == generation, activeConnection === connection else { break }
+                    handleInitiatorControlMessage(message, on: connection)
                 } catch {
                     logger.error("Receive loop error: \(userFriendlyErrorMessage(error))")
                     // Only handle if this loop still owns the connection
-                    guard connectionGeneration == generation, activeConnection != nil else { break }
+                    guard connectionGeneration == generation, activeConnection === connection else { break }
                     fileTransfer?.handleConnectionFailure()
                     activeConnection = nil
                     // Keep connectedPeer so UI shows who we lost connection with
@@ -2945,31 +3094,28 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func handleMessage(_ message: PeerMessage, from senderID: String) {
-        logger.info("handleMessage: \(String(describing: message.type)) from \(senderID)")
-
-        // CLI/headless hook: fire onTextMessageReceived before any connection-existence
-        // check so the callback works even when the peer is not in `connections`.
-        // The app passes nil for this closure, making this a no-op for the live UI path.
-        if message.type == .textMessage,
-           let payload = try? message.decodePayload(TextMessagePayload.self),
-           let hook = onTextMessageReceived {
-            hook(senderID, payload.text)
-        }
-
-        // Route to specific peer connection if it exists
-        if let peerConn = connections[senderID] {
-            handleMessageForPeer(message, peerConnection: peerConn)
+    /// Route a frame from an installed PeerConnection's receive loop. The
+    /// frame is attributed to `peerConnection` — the transport it arrived on —
+    /// and dropped if that PeerConnection is no longer the installed entry
+    /// (stale loop after a remove/replace).
+    private func dispatchBound(_ message: PeerMessage, on peerConnection: PeerConnection) {
+        guard connections[peerConnection.id] === peerConnection else {
+            logger.info("Dropping \(String(describing: message.type)) from a PeerConnection that is no longer installed")
             return
         }
-
-        // Fall back to legacy single-connection handling
-        handleMessageLegacy(message)
+        handleMessageForPeer(message, peerConnection: peerConnection)
     }
 
-    /// Handle message for a specific peer connection.
+    /// Handle a message that arrived on `peerConnection`'s transport.
+    ///
+    /// #161: `message.senderID` is self-reported and is NOT used to pick the
+    /// conversation, contact or call peer. Everything is attributed to the
+    /// bound connection: `peerID` (its `connections` key) and
+    /// `boundSenderID` (its identity — equal to `peerID` for local
+    /// connections, the post-HELLO real identity for `relay-*` ones).
     private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection) {
         let peerID = peerConnection.id
+        let boundSenderID = peerConnection.peerIdentity.id
 
         switch message.type {
         case .disconnect:
@@ -3031,7 +3177,7 @@ public final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            voiceCallManager?.handleCallRequest(from: message.senderID)
+            voiceCallManager?.handleCallRequest(from: peerID)
 
         case .callAccept:
             voiceCallManager?.handleCallAccept()
@@ -3047,6 +3193,12 @@ public final class ConnectionManager: ObservableObject {
             voiceCallManager?.handleSignaling(message)
 
         case .textMessage:
+            // CLI/headless hook (nil in the app). Fires only here — for a
+            // consented, installed connection — and reports the bound peer.
+            if let hook = onTextMessageReceived,
+               let payload = try? message.decodePayload(TextMessagePayload.self) {
+                hook(peerID, payload.text)
+            }
             guard FeatureSettings.isChatEnabled else {
                 let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
                 Task {
@@ -3055,7 +3207,6 @@ public final class ConnectionManager: ObservableObject {
                 }
                 return
             }
-            // Decoded again here: the onTextMessageReceived hook above is fire-and-forget; this path owns persistence + delivery receipt.
             guard let payload = try? message.decodePayload(TextMessagePayload.self) else {
                 logger.warning("Failed to decode TextMessagePayload")
                 return
@@ -3066,10 +3217,17 @@ public final class ConnectionManager: ObservableObject {
             // so other members' group messages never surfaced in the group view.
             let savedMsg: ChatMessage
             if let groupID = payload.groupID {
+                // Group broadcast is sent directly by its originator
+                // (broadcastTextMessage), so the claimed sender must be the
+                // peer on this connection — no relaying on someone's behalf.
+                guard message.senderID == boundSenderID else {
+                    logger.warning("Dropping group text claiming sender \(message.senderID.prefix(8)) on connection \(peerID.prefix(8))")
+                    return
+                }
                 savedMsg = chatManager.saveGroupIncoming(
                     text: payload.text,
                     groupID: groupID,
-                    senderID: message.senderID,
+                    senderID: boundSenderID,
                     senderName: payload.senderName ?? peerConnection.peerIdentity.displayName,
                     messageID: payload.messageID,
                     timestamp: payload.timestamp
@@ -3118,6 +3276,11 @@ public final class ConnectionManager: ObservableObject {
             }
             // Check if this is a group receipt
             if let groupID = payload.groupID, let senderID = payload.senderID {
+                // A member may only report its own delivery/read state.
+                guard senderID == boundSenderID else {
+                    logger.warning("Dropping group receipt claiming member \(senderID.prefix(8)) on connection \(peerID.prefix(8))")
+                    return
+                }
                 // Group message receipt - update per-member status
                 for msgID in payload.messageIDs {
                     if payload.receiptType == .read {
@@ -3148,9 +3311,9 @@ public final class ConnectionManager: ObservableObject {
             }
             switch payload.action {
             case .add:
-                chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
+                chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: boundSenderID)
             case .remove:
-                chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
+                chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: boundSenderID)
             }
 
         case .chatReject:
@@ -3243,7 +3406,7 @@ public final class ConnectionManager: ObservableObject {
             // placeholder PeerIdentity (supportsSecureChannel = true, no
             // public key). The post-connect hello carries the REAL identity,
             // but this per-peer handler had no .hello case, so the swap that
-            // handleMessageLegacy performs (keyed by identity.id — which
+            // the old legacy handler performed (keyed by identity.id — which
             // never matches the relay key anyway) silently never happened.
             // The trust gate then saw a secure-capable peer with no key and
             // no contact and permanently blocked outgoing chat with
@@ -3251,13 +3414,26 @@ public final class ConnectionManager: ObservableObject {
             // create the .unknown contact the gate requires (idempotent for
             // already-known peers), and (re)trigger secure-channel
             // negotiation now that capabilities are known.
-            if let payload = message.payload,
-               let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
-                peerConnection.updatePeerIdentity(identity)
-                checkPeerTrust(peerIdentity: identity)
-                triggerSecureChannelNegotiation(for: peerConnection)
-                logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
+            //
+            // #161: this is the ONLY identity update a live connection gets,
+            // and only once: the entry must be a `relay-*` connection still
+            // carrying its placeholder (id == key, no key material). A local
+            // connection's identity was fixed at HELLO/consent time; letting a
+            // later HELLO re-point it would let peer B pose as C.
+            guard let payload = message.payload,
+                  let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) else { return }
+            let current = peerConnection.peerIdentity
+            let isRelayPlaceholder = peerID.hasPrefix("relay-")
+                && current.id == peerID
+                && current.identityPublicKey == nil
+            guard isRelayPlaceholder, identity.id != peerID else {
+                logger.warning("Per-peer hello on \(peerID.prefix(12)): identity already bound; ignoring re-point attempt")
+                return
             }
+            peerConnection.updatePeerIdentity(identity)
+            checkPeerTrust(peerIdentity: identity)
+            triggerSecureChannelNegotiation(for: peerConnection)
+            logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
 
         case .secureHandshake, .secureEnvelope:
             // Safety net (should be unreachable). The single-reader handoff
@@ -3279,41 +3455,34 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// Legacy message handling for backward compatibility.
-    private func handleMessageLegacy(_ message: PeerMessage) {
+    /// Initiator-side handshake frames read by `startReceiving` on
+    /// `connection` before its PeerConnection exists (#161). Closed
+    /// allowlist; everything else is dropped — business messages are only
+    /// ever handled by the PeerConnection bound to the socket.
+    private func handleInitiatorControlMessage(_ message: PeerMessage, on connection: NWConnection) {
         switch message.type {
         case .connectionAccept:
             // Only process if we're still waiting for acceptance
             guard case .requesting = state else {
                 logger.info("Received connectionAccept but not in requesting state, sending cancel")
                 let cancel = PeerMessage.connectionCancel(senderID: localIdentity.id)
-                Task { [weak self] in
-                    do { try await self?.sendMessage(cancel) }
+                Task {
+                    do { try await connection.sendMessage(cancel) }
                     catch { logger.warning("Failed to send connection cancel: \(error.localizedDescription)") }
                 }
                 return
             }
             cancelTimeouts()
 
+            // Legacy acceptors put their identity in the accept payload; current
+            // ones send it in the HELLO that follows.
             var peerIdentity: PeerIdentity?
             if let payload = message.payload,
                let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
                 peerIdentity = identity
             }
-
-            // Create PeerConnection for the accepted connection
-            if let identity = peerIdentity, let conn = activeConnection {
-                let peerConnection = PeerConnection(
-                    peerID: identity.id,
-                    connection: conn,
-                    peerIdentity: identity,
-                    localIdentity: localIdentity,
-                    state: .connected
-                )
-                addConnection(peerConnection)
-                focusedPeerID = identity.id
-                // v5.1: capability flag is in the connectionAccept payload.
-                triggerSecureChannelNegotiation(for: peerConnection)
+            if let identity = peerIdentity {
+                guard installInitiatorPeerConnection(identity: identity, on: connection) else { return }
             }
 
             // State machine requires requesting → connecting → connected
@@ -3332,17 +3501,30 @@ public final class ConnectionManager: ObservableObject {
             }
             #endif
 
+        case .hello:
+            // The acceptor sends its HELLO right after connectionAccept. It
+            // always yields a PeerConnection for THIS socket — also when we are
+            // already connected to other peers (the old `focusedPeerID == nil`
+            // gate left a second dialed peer without one).
+            guard let payload = message.payload,
+                  let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) else {
+                logger.warning("Initiator loop: undecodable HELLO; ignoring")
+                return
+            }
+            guard installInitiatorPeerConnection(identity: identity, on: connection) else { return }
+            recordConnectedDevice()
+            resetReconnectAttempts()
+            recordConnectionSuccess(for: identity.id)
+
         case .connectionReject:
             cancelTimeouts()
-            activeConnection?.cancel()
+            connection.cancel()
             activeConnection = nil
             transition(to: .rejected)
 
         case .connectionCancel:
-            // Initiator cancelled the request — dismiss consent sheet and clean up
-            pendingIncomingRequest = nil
             cancelTimeouts()
-            activeConnection?.cancel()
+            connection.cancel()
             activeConnection = nil
             statusToast = "Connection request was cancelled"
             // Recover from any intermediate state
@@ -3360,7 +3542,7 @@ public final class ConnectionManager: ObservableObject {
             }
 
         case .disconnect:
-            activeConnection?.cancel()
+            connection.cancel()
             activeConnection = nil
             endBackgroundTask()
             fileTransfer?.handleConnectionFailure()
@@ -3372,234 +3554,53 @@ public final class ConnectionManager: ObservableObject {
                 restartDiscovery()
             }
 
-        case .fileOffer:
-            guard FeatureSettings.isFileTransferEnabled else {
-                let reject = PeerMessage.fileReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { [weak self] in
-                    do { try await self?.sendMessage(reject) }
-                    catch { logger.warning("Failed to send file reject: \(error.localizedDescription)") }
-                }
-                return
-            }
-            fileTransfer?.handleFileOffer(message)
-
-        case .fileAccept:
-            fileTransfer?.handleFileAccept()
-
-        case .fileReject:
-            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
-            fileTransfer?.handleFileReject(reason: reason)
-
-        case .fileChunk:
-            fileTransfer?.handleFileChunk(message)
-
-        case .fileComplete:
-            fileTransfer?.handleFileComplete(message)
-
-        case .callRequest:
-            guard FeatureSettings.isVoiceCallEnabled else {
-                let reject = PeerMessage.callReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { [weak self] in
-                    do { try await self?.sendMessage(reject) }
-                    catch { logger.warning("Failed to send call reject: \(error.localizedDescription)") }
-                }
-                return
-            }
-            voiceCallManager?.handleCallRequest(from: message.senderID)
-
-        case .callAccept:
-            voiceCallManager?.handleCallAccept()
-
-        case .callReject:
-            let reason = (try? message.decodePayload(RejectionPayload.self))?.reason
-            voiceCallManager?.handleCallReject(reason: reason)
-
-        case .callEnd:
-            voiceCallManager?.handleCallEnd()
-
-        case .sdpOffer, .sdpAnswer, .iceCandidate:
-            voiceCallManager?.handleSignaling(message)
-
-        case .textMessage:
-            guard FeatureSettings.isChatEnabled else {
-                let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { [weak self] in
-                    do { try await self?.sendMessage(reject) }
-                    catch { logger.warning("Failed to send chat reject: \(error.localizedDescription)") }
-                }
-                return
-            }
-            guard let payload = try? message.decodePayload(TextMessagePayload.self) else {
-                logger.warning("Failed to decode TextMessagePayload")
-                return
-            }
-            chatManager.saveIncoming(
-                text: payload.text,
-                peerID: message.senderID,
-                peerName: connectedPeer?.displayName ?? "Unknown",
-                replyToMessageID: payload.replyToMessageID,
-                replyToText: payload.replyToText,
-                replyToSenderName: payload.replyToSenderName,
-                messageID: payload.messageID,
-                timestamp: payload.timestamp
-            )
-            NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.text)
-
-        case .mediaMessage:
-            guard FeatureSettings.isChatEnabled else {
-                let reject = PeerMessage.chatReject(senderID: localIdentity.id, reason: "featureDisabled")
-                Task { [weak self] in
-                    do { try await self?.sendMessage(reject) }
-                    catch { logger.warning("Failed to send chat reject: \(error.localizedDescription)") }
-                }
-                return
-            }
-            guard let payload = try? message.decodePayload(MediaMessagePayload.self) else {
-                logger.warning("Failed to decode MediaMessagePayload")
-                return
-            }
-            chatManager.saveIncomingMedia(
-                payload: payload,
-                fileData: Data(),
-                peerID: message.senderID,
-                peerName: connectedPeer?.displayName ?? "Unknown"
-            )
-            NotificationManager.shared.postChatMessage(from: connectedPeer?.displayName ?? "Unknown", text: payload.fileName)
-
-        case .chatReject:
-            // Remote peer has chat disabled — mark last outgoing message as failed
-            if let peerID = connectedPeer?.id {
-                let reason = (try? message.decodePayload(RejectionPayload.self))?.reason // P1: rejection reason is optional, nil is acceptable
-                let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
-                chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
-            }
-
-        case .hello:
-            // During handshake, hello is handled inline. In the receive loop,
-            // the acceptor sends a second hello after connectionAccept to share identity.
-            if let payload = message.payload,
-               let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) {
-                // Update or create PeerConnection
-                if let peerConn = connections[identity.id] {
-                    peerConn.updatePeerIdentity(identity)
-                    // v5.1: relay path swaps in the real identity here
-                    // (replacing the placeholder). Now we know whether the
-                    // peer supports LocalSecureChannel — trigger.
-                    triggerSecureChannelNegotiation(for: peerConn)
-                } else if focusedPeerID == nil, let conn = activeConnection {
-                    let peerConnection = PeerConnection(
-                        peerID: identity.id,
-                        connection: conn,
-                        peerIdentity: identity,
-                        localIdentity: localIdentity,
-                        state: .connected
-                    )
-                    addConnection(peerConnection)
-                    focusedPeerID = identity.id
-                    triggerSecureChannelNegotiation(for: peerConnection)
-                }
-                recordConnectedDevice()
-                resetReconnectAttempts()
-                recordConnectionSuccess(for: identity.id)
-            }
-        case .connectionRequest:
-            // Already handled during handshake
-            break
-        case .batchStart, .batchComplete:
-            // Multi-file batch markers — handled by FileTransfer internally
-            break
-
         case .ping:
-            // Respond to keepalive ping with pong
+            // Keepalive: answer on the socket it came from.
             let pong = PeerMessage.pong(senderID: localIdentity.id)
-            Task { [weak self] in
-                do { try await self?.sendMessage(pong) }
+            Task {
+                do { try await connection.sendMessage(pong) }
                 catch { logger.warning("Failed to send pong: \(error.localizedDescription)") }
             }
 
         case .pong:
-            // Keepalive response received — connection is alive
-            logger.debug("Heartbeat pong received from \(message.senderID)")
+            logger.debug("Heartbeat pong received on initiator loop")
 
-        case .messageReceipt:
-            guard let payload = try? message.decodePayload(MessageReceiptPayload.self) else {
-                logger.warning("Failed to decode MessageReceiptPayload")
-                return
-            }
-            // Check if this is a group receipt
-            if let groupID = payload.groupID, let senderID = payload.senderID {
-                // Group message receipt - update per-member status
-                for msgID in payload.messageIDs {
-                    if payload.receiptType == .read {
-                        chatManager.markGroupMessageRead(messageID: msgID, groupID: groupID, by: senderID)
-                    } else {
-                        chatManager.markGroupMessageDelivered(messageID: msgID, groupID: groupID, to: senderID)
-                    }
-                }
-            } else {
-                // 1-to-1 message receipt
-                let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                for msgID in payload.messageIDs {
-                    chatManager.updateStatus(messageID: msgID, status: newStatus)
-                }
-            }
-
-        case .typingIndicator:
-            guard let payload = try? message.decodePayload(TypingIndicatorPayload.self) else {
-                logger.warning("Failed to decode TypingIndicatorPayload")
-                return
-            }
-            chatManager.setTyping(payload.isTyping, for: message.senderID)
-
-        case .reaction:
-            guard let payload = try? message.decodePayload(ReactionPayload.self) else {
-                logger.warning("Failed to decode ReactionPayload")
-                return
-            }
-            switch payload.action {
-            case .add:
-                chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: message.senderID)
-            case .remove:
-                chatManager.removeReaction(emoji: payload.emoji, from: payload.messageID, by: message.senderID)
-            }
-
-        case .niTokenOffer, .niTokenResponse:
-            // NI tokens in legacy path — only handled in multi-connection path
-            break
-
-        case .clipboardSync:
-            guard FeatureSettings.isClipboardSyncEnabled else { return }
-            guard let payload = try? message.decodePayload(ClipboardSyncPayload.self) else {
-                logger.warning("Failed to decode ClipboardSyncPayload")
-                return
-            }
-            clipboardSyncManager.applyReceivedClipboard(payload)
-
-        case .messageEdit:
-            guard FeatureSettings.isChatEnabled else { return }
-            guard let payload = try? message.decodePayload(MessageEditPayload.self) else { return }
-            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: message.senderID, origin: .remotePeer)
-
-        case .messageDelete:
-            guard FeatureSettings.isChatEnabled else { return }
-            guard let payload = try? message.decodePayload(MessageDeletePayload.self) else { return }
-            chatManager.applyDelete(messageID: payload.messageID, peerID: message.senderID, origin: .remotePeer)
-
-        case .fileResume, .fileResumeAck:
-            // File resume only supported in multi-connection path
-            break
-
-        case .deviceIdExchange:
-            // Legacy path — relay peers go through handleMessageForPeer, ignore here.
-            break
-
-        case .secureHandshake, .secureEnvelope:
-            // Secure-channel frames are handled inside PeerConnection's
-            // receive loop before they reach this legacy single-connection
-            // path. If one slips through here, it's already too late to
-            // act on — log + drop.
-            logger.warning("handleMessageLegacy received secure-channel frame; ignoring")
+        default:
+            logger.warning("Initiator loop: dropping \(String(describing: message.type)) before the connection is established")
         }
+    }
+
+    /// Create + install the PeerConnection for the socket this initiator
+    /// dialed. Refuses (and hangs up) if an entry for `identity.id` already
+    /// exists in any state — a dialed peer must not replace or re-point an
+    /// existing connection (#161). Returns whether it installed.
+    private func installInitiatorPeerConnection(identity: PeerIdentity, on connection: NWConnection) -> Bool {
+        if let existing = connections[identity.id] {
+            if existing.nwConnection === connection { return true } // already ours (accept payload + hello)
+            logger.warning("Initiator: dialed peer claims id \(identity.id.prefix(8)) which already has a connection; refusing")
+            cancelTimeouts()
+            connection.cancel()
+            if activeConnection === connection { activeConnection = nil }
+            statusToast = "Already connected to this device"
+            if connections.isEmpty {
+                transition(to: .failed(reason: "Duplicate connection"))
+            } else {
+                updateGlobalState()
+            }
+            return false
+        }
+        let peerConnection = PeerConnection(
+            peerID: identity.id,
+            connection: connection,
+            peerIdentity: identity,
+            localIdentity: localIdentity,
+            state: .connected
+        )
+        addConnection(peerConnection)
+        focusedPeerID = identity.id
+        // v5.1: capability flag is known from the identity — trigger.
+        triggerSecureChannelNegotiation(for: peerConnection)
+        return true
     }
 
     private func handleConnectionStateChange(_ nwState: NWConnection.State) {
@@ -4521,11 +4522,24 @@ public final class ConnectionManager: ObservableObject {
     }
 
     #if DEBUG
-    /// Test seam: routes a pre-built PeerMessage through handleMessage as if it arrived from peerID.
-    /// Allows unit tests to exercise the full decode + hook path without a live NW connection.
+    /// Test seam: handle a pre-built PeerMessage as if it arrived on the
+    /// transport bound to `peerID` — i.e. through the same bound dispatch a
+    /// consented PeerConnection uses (#161). The message's own `senderID` is
+    /// ignored for attribution, exactly as in production. Uses the installed
+    /// connection for `peerID` when there is one; otherwise a throwaway,
+    /// uninstalled stub bound to `peerID` (no socket), so hook-level tests need
+    /// no live NW connection. Pre-consent / unbound traffic is covered by the
+    /// loopback tests in ConnectionManagerSenderBindingTests.
     @MainActor
     public func dispatchTextForTesting(_ message: PeerMessage, from peerID: String) {
-        handleMessage(message, from: peerID)
+        let peerConnection = connections[peerID] ?? PeerConnection(
+            peerID: peerID,
+            connection: NWConnection(host: "127.0.0.1", port: 1, using: .tcp),
+            peerIdentity: PeerIdentity(id: peerID, displayName: peerID, supportsSecureChannel: false),
+            localIdentity: localIdentity,
+            state: .connected
+        )
+        handleMessageForPeer(message, peerConnection: peerConnection)
     }
     #endif
 }
