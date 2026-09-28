@@ -4,11 +4,36 @@ import Network
 
 extension NWConnection {
     /// Send a PeerMessage over a framed connection.
+    ///
+    /// Bounded by the connection's state: while a connection sits in
+    /// `.waiting` (e.g. the peer's port refuses, the path is gone) Network
+    /// withholds a send's `.contentProcessed` completion until the connection
+    /// is cancelled (measured 2026-09-28 on loopback — see
+    /// SendMessageBoundTests), so awaiting the completion alone could hang a
+    /// file transfer forever. The send throws as soon as the connection is
+    /// (or becomes) `.failed`, `.cancelled` or `.waiting` while outstanding.
     public func sendMessage(_ message: PeerMessage) async throws {
+        if let error = Self.terminalError(for: state) { throw error }
         let data = try message.encoded()
         let framerMessage = NWProtocolFramer.Message(peerDropMessageLength: UInt32(data.count))
 
+        let gate = SendGate()
+        let watcher = Task { [weak self] in
+            // Most sends complete within a few ms; only a withheld completion
+            // keeps this polling.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000)
+                guard let self else { return }
+                if let error = Self.terminalError(for: self.state) {
+                    gate.resume(error)
+                    return
+                }
+            }
+        }
+        defer { watcher.cancel() }
+
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            gate.bind(continuation)
             send(
                 content: data,
                 contentContext: NWConnection.ContentContext(
@@ -17,13 +42,49 @@ extension NWConnection {
                 ),
                 isComplete: true,
                 completion: .contentProcessed { error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume()
-                    }
+                    gate.resume(error)
                 }
             )
+        }
+    }
+
+    /// The error a send should fail with in `state`, or nil if it can proceed.
+    private static func terminalError(for state: NWConnection.State) -> Error? {
+        switch state {
+        case .failed(let error): return error
+        case .cancelled: return NWConnectionError.cancelled
+        case .waiting(let error): return error
+        default: return nil
+        }
+    }
+
+    /// Resumes a continuation at most once — from the send completion or the
+    /// state watcher, whichever comes first (a later call is ignored).
+    private final class SendGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+        private var settled: Error??  // .some(nil) success / .some(err) / nil pending
+
+        func bind(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            if let result = settled {
+                lock.unlock()
+                if let error = result { continuation.resume(throwing: error) } else { continuation.resume() }
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        func resume(_ error: Error?) {
+            lock.lock()
+            guard settled == nil else { lock.unlock(); return }
+            settled = .some(error)
+            let cont = continuation
+            continuation = nil
+            lock.unlock()
+            guard let cont else { return }
+            if let error { cont.resume(throwing: error) } else { cont.resume() }
         }
     }
 
@@ -107,7 +168,7 @@ extension NWConnection {
                 break
             }
             guard Date() < deadline else { throw NWConnectionError.timeout }
-            try await Task.sleep(nanoseconds: 5_000_000)
+            try await Task.sleep(nanoseconds: 20_000_000)
         }
     }
 }
