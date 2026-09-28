@@ -199,9 +199,11 @@ final class EdgeCaseTests: XCTestCase {
         // Give network time to propagate the disconnect
         try await Task.sleep(nanoseconds: 500_000_000)
 
-        // Sender should eventually fail when trying to send more chunks.
-        // Wrap in timeout to prevent hanging if the connection buffers indefinitely.
-        var hitError = false
+        // The sender must see a REAL send failure (the reset/closed
+        // connection), well before the 10 s guard. A timeout surfaces as
+        // CancellationError and must fail the test — the guard only exists so
+        // a regression can't hang the suite.
+        var sendError: Error?
         do {
             try await withTimeout(seconds: 10, onTimeout: { client.cancel() }) {
                 for i in 1..<chunks.count {
@@ -209,14 +211,13 @@ final class EdgeCaseTests: XCTestCase {
                 }
             }
         } catch {
-            hitError = true
+            sendError = error
         }
+        client.cancel()
 
-        // The connection may buffer some sends before failing — that's OK.
-        // The important thing is the connection is no longer usable.
-        // Either we hit an error or the connection is in a failed/cancelled state.
-        let isConnectionDead = hitError || client.state == .cancelled
-        XCTAssertTrue(isConnectionDead, "Connection should be dead after receiver disconnect")
+        XCTAssertNotNil(sendError, "sender never noticed the receiver disconnect")
+        XCTAssertFalse(sendError is CancellationError,
+                       "no send failure within 10 s — only the timeout fired (\(String(describing: sendError)))")
     }
 
     // MARK: - Zero-Byte File

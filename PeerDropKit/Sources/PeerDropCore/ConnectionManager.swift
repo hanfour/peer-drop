@@ -292,12 +292,15 @@ public final class ConnectionManager: ObservableObject {
         /// Bonjour peers (TXT "pid"), used by the simultaneous-connect
         /// tie-break.
         let peerID: String
+        /// The discovered entry the user dialed (for the device record).
+        let peer: DiscoveredPeer
         /// The dialed peer sent `connectionAccept` on this socket.
         var accepted = false
-        init(connection: NWConnection, generation: UUID, peerID: String) {
+        init(connection: NWConnection, generation: UUID, peer: DiscoveredPeer) {
             self.connection = connection
             self.generation = generation
-            self.peerID = peerID
+            self.peerID = peer.id
+            self.peer = peer
         }
     }
     private var dialAttempt: DialAttempt?
@@ -872,12 +875,16 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func recordConnectedDevice() {
-        guard let peer = connectedPeer else { return }
+    /// Save/refresh the device record for a connection that was just set
+    /// up. Takes the NEW connection's identity (and the discovered entry it
+    /// was dialed/matched through) explicitly — never derived from the UI
+    /// focus, which stays on the current conversation when a second peer
+    /// connects (#161 I-A).
+    private func recordConnectedDevice(identity peer: PeerIdentity, discovered: DiscoveredPeer?) {
         let sourceType: String
         let host: String?
         let port: UInt16?
-        if let lastPeer = lastConnectedPeer {
+        if let lastPeer = discovered {
             switch lastPeer.source {
             case .bonjour: sourceType = "bonjour"
             case .manual: sourceType = "manual"
@@ -893,7 +900,7 @@ public final class ConnectionManager: ObservableObject {
         } else {
             sourceType = "bonjour"; host = nil; port = nil
         }
-        let id = lastConnectedPeer?.id ?? peer.id
+        let id = discovered?.id ?? peer.id
         deviceStore.addOrUpdate(id: id, displayName: peer.displayName, sourceType: sourceType, host: host, port: port)
     }
 
@@ -1278,6 +1285,12 @@ public final class ConnectionManager: ObservableObject {
     /// Attempt to reconnect to the last connected peer with exponential backoff.
     public func reconnect() {
         guard let peer = lastConnectedPeer else { return }
+        // #161 m-d: while the consent sheet is up a dial is refused anyway —
+        // don't burn a back-off attempt on it.
+        guard pendingIncomingRequest == nil else {
+            logger.info("reconnect skipped — a connection request is awaiting consent")
+            return
+        }
 
         Task {
             guard let delay = await reconnectController.nextDelay() else {
@@ -1292,8 +1305,15 @@ public final class ConnectionManager: ObservableObject {
 
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
 
-            await MainActor.run {
+            let deferred = await MainActor.run { () -> Bool in
+                // A consent sheet came up during the back-off: skip this retry.
+                guard self.pendingIncomingRequest == nil else { return true }
                 self.requestConnection(to: peer)
+                return false
+            }
+            if deferred {
+                logger.info("reconnect retry skipped — a connection request is awaiting consent")
+                await reconnectController.refund()
             }
         }
     }
@@ -1620,6 +1640,11 @@ public final class ConnectionManager: ObservableObject {
     @discardableResult
     public func _installRelayPlaceholderForTesting(roomCode: String, connection: NWConnection) -> PeerConnection {
         installRelayPlaceholder(roomCode: roomCode, transport: TCPTransport(connection: connection), remoteFingerprint: nil)
+    }
+
+    /// Test-only: reconnect back-off attempts consumed so far.
+    public func _reconnectAttemptCountForTesting() async -> Int {
+        await reconnectController.currentAttempt
     }
 
     /// Test-only: number of consent-monitor handoff records still held.
@@ -2178,7 +2203,7 @@ public final class ConnectionManager: ObservableObject {
 
         connection.start(queue: Self.makeConnectionQueue())
         activeConnection = connection
-        let attempt = DialAttempt(connection: connection, generation: generation, peerID: peer.id)
+        let attempt = DialAttempt(connection: connection, generation: generation, peer: peer)
         dialAttempt = attempt
 
         startRequestingTimeout(for: attempt)
@@ -2334,11 +2359,9 @@ public final class ConnectionManager: ObservableObject {
                             if !isOwnedByInstalledConnection(attempt.connection) { attempt.connection.cancel() }
                         }
                         connectionGeneration = UUID()
-                        // Leave `.requesting` so the consent sheet below can show.
-                        if case .requesting = state {
-                            transition(to: .disconnected)
-                            transition(to: .discovering)
-                        }
+                        // `.requesting → .incomingRequest` is a valid edge, so the
+                        // consent sheet below shows without a spurious
+                        // `.disconnected` (#161 m-b).
                     }
                 }
 
@@ -2627,7 +2650,8 @@ public final class ConnectionManager: ObservableObject {
         session?.accepted = peerConnection
 
         // Set lastConnectedPeer by finding the matching discovered peer
-        if let matchingPeer = discoveredPeers.first(where: { $0.id == peerID }) {
+        let matchingPeer = discoveredPeers.first(where: { $0.id == peerID })
+        if let matchingPeer {
             lastConnectedPeer = matchingPeer
         }
 
@@ -2667,7 +2691,7 @@ public final class ConnectionManager: ObservableObject {
                 focusIfUnfocused(peerID)
 
                 transition(to: .connected)
-                recordConnectedDevice()
+                recordConnectedDevice(identity: peerIdentity, discovered: matchingPeer)
                 resetReconnectAttempts()
                 recordConnectionSuccess(for: peerID)
 
@@ -3698,7 +3722,9 @@ public final class ConnectionManager: ObservableObject {
             } else {
                 updateGlobalState()
             }
-            recordConnectedDevice()
+            if let identity = peerIdentity {
+                recordConnectedDevice(identity: identity, discovered: attempt.peer)
+            } // else: recorded when the HELLO below installs the connection
             resetReconnectAttempts()
             if let identity = peerIdentity {
                 recordConnectionSuccess(for: identity.id)
@@ -3726,7 +3752,7 @@ public final class ConnectionManager: ObservableObject {
             }
             guard installInitiatorPeerConnection(identity: identity, attempt: attempt) else { return }
             updateGlobalState()
-            recordConnectedDevice()
+            recordConnectedDevice(identity: identity, discovered: attempt.peer)
             resetReconnectAttempts()
             recordConnectionSuccess(for: identity.id)
 
@@ -3824,7 +3850,10 @@ public final class ConnectionManager: ObservableObject {
             state: .connected
         )
         addConnection(peerConnection)
-        focusIfUnfocused(identity.id) // never steal the UI focus (#161 m-6)
+        // A dial is user-initiated: the user chose this peer, so it gets the
+        // focus (drag-and-drop, file picker and calls then target it). Only
+        // INCOMING connections leave the focus alone (#161 m-6/m-c).
+        focusedPeerID = identity.id
         // v5.1: capability flag is known from the identity — trigger.
         triggerSecureChannelNegotiation(for: peerConnection)
         return true
@@ -4853,6 +4882,12 @@ public actor RetryController {
     /// Reset the attempt counter (call on successful connection).
     public func reset() {
         attemptCount = 0
+    }
+
+    /// Give back the attempt taken by `nextDelay()` for a retry that was
+    /// skipped without dialing.
+    public func refund() {
+        attemptCount = max(0, attemptCount - 1)
     }
 
     /// Get the current attempt count without incrementing.

@@ -92,7 +92,10 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         socketBag.cancelAll()
         for l in listeners { l.cancel() }
         listeners = []
-        for peer in touchedPeers { cm.chatManager.deleteMessages(forPeer: peer) }
+        for peer in touchedPeers {
+            cm.chatManager.deleteMessages(forPeer: peer)
+            cm.deviceStore.remove(id: peer)
+        }
         touchedPeers = []
         cm = nil
         UserDefaults.standard.removeObject(forKey: "peerDropClipboardSyncEnabled")
@@ -987,7 +990,7 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         XCTAssertEqual(cm.focusedPeerID, carol.id, "a new incoming connection stole the UI focus")
     }
 
-    func test_m6_secondDial_doesNotStealFocus() async throws {
+    func test_mc_userDial_focusesTheDialedPeer() async throws {
         let carol = identity("Carol")
         _ = try await connectedAndWarm(carol)
         XCTAssertEqual(cm.focusedPeerID, carol.id)
@@ -997,7 +1000,102 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         dial(port, id: dave.id)
         let installed = await poll(timeout: 5) { self.cm.connections[dave.id] != nil }
         XCTAssertTrue(installed)
-        XCTAssertEqual(cm.focusedPeerID, carol.id, "a new outgoing connection stole the UI focus")
+        XCTAssertEqual(cm.focusedPeerID, dave.id, "the peer the user chose to dial should get the focus")
+    }
+
+    // MARK: - Final review (I-A, m-b, m-d)
+
+    private func deviceRecord(_ id: String) -> DeviceRecord? {
+        cm.deviceStore.records.first { $0.id == id }
+    }
+
+    func test_IA_secondAccept_recordsTheNewPeerUnderItsOwnName() async throws {
+        let carol = identity("Carol")
+        _ = try await connectedPeer(carol)
+        let bob = identity("Bob")
+        _ = try await connectedPeer(bob)
+        XCTAssertEqual(cm.focusedPeerID, carol.id, "precondition: focus stays on Carol")
+        XCTAssertEqual(deviceRecord(bob.id)?.displayName, "Bob", "the second accepted peer was not recorded as itself")
+        XCTAssertEqual(deviceRecord(carol.id)?.displayName, "Carol", "Carol's record was overwritten")
+    }
+
+    func test_IA_secondDial_recordsTheNewPeerUnderItsOwnName() async throws {
+        let carol = identity("Carol")
+        _ = try await connectedAndWarm(carol)
+        let dave = identity("Dave")
+        touchedPeers.append(dave.id)
+        let port = try await startFakeAcceptor(replyingAs: dave)
+        dial(port, id: dave.id)
+        let installed = await poll(timeout: 5) { self.cm.connections[dave.id] != nil }
+        XCTAssertTrue(installed)
+        XCTAssertEqual(deviceRecord(dave.id)?.displayName, "Dave", "the dialed peer was recorded under another name")
+        XCTAssertEqual(deviceRecord(carol.id)?.displayName, "Carol", "Carol's record was overwritten")
+    }
+
+    func test_mb_simultaneousYieldFromIdle_firesNoDisconnectedTransition() async throws {
+        var states: [ConnectionState] = []
+        let sub = cm.$state.sink { states.append($0) }
+        defer { sub.cancel() }
+
+        let b = PeerIdentity(id: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF", displayName: "B", supportsSecureChannel: false)
+        touchedPeers.append(b.id)
+        let dialRecorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: b, script: .acceptWhenOpened(Gate()), recorder: dialRecorder)
+        dial(port, id: b.id)
+        let reached = await poll { dialRecorder.types.contains(.connectionRequest) }
+        XCTAssertTrue(reached)
+
+        let incoming = try await dialManager()
+        try await incoming.sendMessage(try PeerMessage.hello(identity: b))
+        try await incoming.sendMessage(PeerMessage.connectionRequest(senderID: b.id))
+        let consent = await poll { self.cm.pendingIncomingRequest?.peerIdentity.id == b.id }
+        XCTAssertTrue(consent, "we should yield to B's dial")
+        XCTAssertFalse(states.contains(.disconnected), "spurious .disconnected on the yield path: \(states)")
+        XCTAssertEqual(cm.state, .incomingRequest)
+    }
+
+    /// Dial a peer that hangs up, so `lastConnectedPeer` is set for reconnect().
+    private func primeReconnectTarget() async throws -> Recorder {
+        let dave = identity("Dave")
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: dave, script: .disconnectBeforeAccept, recorder: recorder)
+        dial(port, id: dave.id)
+        let ended = await poll(timeout: 5) { recorder.closed }
+        XCTAssertTrue(ended)
+        return recorder
+    }
+
+    func test_md_reconnectDuringConsent_doesNotConsumeABackoffAttempt() async throws {
+        let recorder = try await primeReconnectTarget()
+        _ = try await pendingStranger(identity("Mallory"))
+        let before = await cm._reconnectAttemptCountForTesting()
+
+        cm.reconnect()
+
+        var consumed = false
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if await cm._reconnectAttemptCountForTesting() != before { consumed = true; break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertFalse(consumed, "reconnect() burned a back-off attempt while the consent sheet was up")
+        XCTAssertEqual(recorder.types.filter { $0 == .hello }.count, 1, "reconnect dialed while the consent sheet was up")
+    }
+
+    func test_md_consentArrivingDuringBackoff_refundsTheAttempt() async throws {
+        let recorder = try await primeReconnectTarget()
+        let before = await cm._reconnectAttemptCountForTesting()
+
+        cm.reconnect() // first back-off delay is ~1 s
+        _ = try await pendingStranger(identity("Mallory"))
+
+        // The retry fires after its ~1 s (±10 %) back-off delay; by 2.5 s it has
+        // found the consent sheet up, skipped, and given the attempt back.
+        try await Task.sleep(nanoseconds: 2_500_000_000)
+        let after = await cm._reconnectAttemptCountForTesting()
+        XCTAssertEqual(after, before, "the skipped retry's back-off attempt was not given back")
+        XCTAssertEqual(recorder.types.filter { $0 == .hello }.count, 1, "reconnect dialed while the consent sheet was up")
+        XCTAssertNotNil(cm.pendingIncomingRequest)
     }
 }
 
