@@ -158,15 +158,33 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         try await connection.waitReady(timeout: 5)
     }
 
+    /// Listen on a random port BELOW the ephemeral range (49152+). On
+    /// loopback, a listener on a recently used ephemeral port can make a later
+    /// client's connect collide with a TIME_WAIT 4-tuple: the client then sits
+    /// in `.waiting(EADDRINUSE)` (observed ~1 in 130 connects over repeated
+    /// runs). A non-ephemeral listener port can never be a client's local port.
     private func startListener(onConnection: @escaping @Sendable (NWConnection) -> Void) async throws -> UInt16 {
-        let l = try NWListener(using: .peerDrop(), on: .any)
-        l.newConnectionHandler = onConnection
-        let ready = expectation(description: "listener ready")
-        l.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
-        l.start(queue: Self.socketQueue())
-        await fulfillment(of: [ready], timeout: 5)
-        listeners.append(l)
-        return try XCTUnwrap(l.port?.rawValue)
+        for _ in 0..<20 {
+            let port = NWEndpoint.Port(rawValue: UInt16.random(in: 20_000..<45_000))!
+            let l = try NWListener(using: .peerDrop(), on: port)
+            l.newConnectionHandler = onConnection
+            let ready = Gate(), failed = Gate()
+            l.stateUpdateHandler = { state in
+                switch state {
+                case .ready: ready.openGate()
+                case .failed, .cancelled: failed.openGate()
+                default: break
+                }
+            }
+            l.start(queue: Self.socketQueue())
+            _ = await poll(timeout: 5) { ready.isOpen || failed.isOpen }
+            if ready.isOpen {
+                listeners.append(l)
+                return port.rawValue
+            }
+            l.cancel() // port taken; try another
+        }
+        throw NWConnectionError.timeout
     }
 
     /// A listener whose inbound connections go through ConnectionManager's
