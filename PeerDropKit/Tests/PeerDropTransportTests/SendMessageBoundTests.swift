@@ -84,6 +84,33 @@ final class SendStatePolicyTests: XCTestCase {
         XCTAssertNotNil(policy.verdict(.waiting(waitingError), now: t0.addingTimeInterval(19)))
     }
 
+    /// #161 review: `.preparing` is not recovery. A connection cycling
+    /// `.waiting → .preparing → .waiting` must not restart the grace clock,
+    /// or a send could stay outstanding forever.
+    func test_waiting_preparingCycle_doesNotResetGrace() {
+        var policy = SendStatePolicy(everReady: true, waitingGrace: 10)
+        XCTAssertNil(policy.verdict(.waiting(waitingError), now: t0))
+        XCTAssertNil(policy.verdict(.preparing, now: t0.addingTimeInterval(8)))
+        XCTAssertNil(policy.verdict(.waiting(waitingError), now: t0.addingTimeInterval(9)))
+        XCTAssertNotNil(policy.verdict(.waiting(waitingError), now: t0.addingTimeInterval(10)))
+    }
+
+    func test_notReady_isCappedOverall() {
+        var policy = SendStatePolicy(everReady: true, waitingGrace: 10, notReadyCap: 30)
+        XCTAssertNil(policy.verdict(.preparing, now: t0))
+        XCTAssertNil(policy.verdict(.preparing, now: t0.addingTimeInterval(29.9)))
+        XCTAssertNotNil(policy.verdict(.preparing, now: t0.addingTimeInterval(30)))
+    }
+
+    func test_notReadyCap_resetsOnReady() {
+        var policy = SendStatePolicy(everReady: true, waitingGrace: 10, notReadyCap: 30)
+        XCTAssertNil(policy.verdict(.preparing, now: t0))
+        XCTAssertNil(policy.verdict(.ready, now: t0.addingTimeInterval(20)))
+        XCTAssertNil(policy.verdict(.preparing, now: t0.addingTimeInterval(21)))
+        XCTAssertNil(policy.verdict(.preparing, now: t0.addingTimeInterval(50)))
+        XCTAssertNotNil(policy.verdict(.preparing, now: t0.addingTimeInterval(51)))
+    }
+
     func test_readySeen_marksEverReady() {
         var policy = SendStatePolicy(everReady: false, waitingGrace: 10)
         XCTAssertNil(policy.verdict(.ready, now: t0))
@@ -148,6 +175,56 @@ final class SendMessageWaitingRecoveryTests: XCTestCase {
 
         try await send.value
         XCTAssertFalse(box.didGiveUp, "a transient .waiting must not abort the send")
+    }
+
+    /// The original hang pattern: the state flips `.waiting ↔ .preparing`
+    /// forever. The send must still give up (and cancel the connection).
+    func test_waitingPreparingCycle_sendGivesUpAndCancels() async throws {
+        let conn = NWConnection(host: "127.0.0.1", port: listener.port!, using: .peerDrop())
+        defer { conn.cancel() }
+        let box = StateBox(.waiting(.posix(.ENETDOWN)))
+        let flipper = Task {
+            var waiting = true
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                waiting.toggle()
+                box.set(waiting ? .waiting(.posix(.ENETDOWN)) : .preparing)
+            }
+        }
+        defer { flipper.cancel() }
+        let send = Task { try await conn.sendMessage(PeerMessage.ping(senderID: "x"), watch: watch(box, conn: conn, grace: 0.3)) }
+
+        let deadline = Date().addingTimeInterval(3)
+        while !box.didGiveUp && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(box.didGiveUp, "send stayed outstanding while the connection cycled .waiting/.preparing")
+        if !box.didGiveUp {
+            // Let the real connection come up so the hung send completes.
+            box.set(.ready)
+            conn.start(queue: DispatchQueue(label: "test.recovery.unblock"))
+        }
+        _ = try? await send.value
+    }
+
+    func test_notReadyPastCap_sendGivesUpAndCancels() async throws {
+        let conn = NWConnection(host: "127.0.0.1", port: listener.port!, using: .peerDrop())
+        defer { conn.cancel() }
+        let box = StateBox(.preparing)
+        var w = watch(box, conn: conn, grace: 10)
+        w.notReadyCap = 0.3
+        let send = Task { try await conn.sendMessage(PeerMessage.ping(senderID: "x"), watch: w) }
+        let deadline = Date().addingTimeInterval(3)
+        while !box.didGiveUp && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(box.didGiveUp, "send stayed outstanding past the not-ready cap")
+        if !box.didGiveUp {
+            // Let the real connection come up so the hung send completes.
+            box.set(.ready)
+            conn.start(queue: DispatchQueue(label: "test.recovery.unblock"))
+        }
+        _ = try? await send.value
     }
 
     func test_readyConnection_waitingPastGrace_failsAndCancels() async throws {

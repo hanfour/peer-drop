@@ -9,29 +9,50 @@ import ObjectiveC
 /// - `.waiting` on a connection that has NEVER been `.ready` (refused, no
 ///   route): terminal at once — it was never usable.
 /// - `.waiting` on a connection that WAS ready (path loss, AP switch) is often
-///   transient and recovers, so it is tolerated for `waitingGrace` seconds of
-///   continuous waiting; the clock resets whenever the connection is seen
-///   `.ready` / `.preparing` again.
+///   transient and recovers, so it is tolerated for `waitingGrace` seconds
+///   without the connection being seen `.ready` again. Only `.ready` resets
+///   the clock — `.preparing` is not recovery, and resetting on it let a
+///   connection cycling `.waiting → .preparing → .waiting` hold a send forever.
+/// - Overall cap: a send gives up once the connection has not been `.ready`
+///   for `notReadyCap` seconds in total (whatever mix of `.setup` /
+///   `.preparing` / `.waiting` it shows), with `NWConnectionError.timeout`.
 struct SendStatePolicy {
     static let defaultWaitingGrace: TimeInterval = 10
+    static let defaultNotReadyCap: TimeInterval = 30
     let waitingGrace: TimeInterval
+    let notReadyCap: TimeInterval
     private(set) var everReady: Bool
     private var waitingSince: Date?
+    private var notReadySince: Date?
 
-    init(everReady: Bool, waitingGrace: TimeInterval = SendStatePolicy.defaultWaitingGrace) {
+    init(everReady: Bool,
+         waitingGrace: TimeInterval = SendStatePolicy.defaultWaitingGrace,
+         notReadyCap: TimeInterval = SendStatePolicy.defaultNotReadyCap) {
         self.everReady = everReady
         self.waitingGrace = waitingGrace
+        self.notReadyCap = notReadyCap
     }
 
     /// The error the send should fail with, or nil to keep waiting.
     mutating func verdict(_ state: NWConnection.State, now: Date = Date()) -> Error? {
-        switch state {
-        case .ready:
+        if case .ready = state {
             everReady = true
             waitingSince = nil
+            notReadySince = nil
             return nil
-        case .preparing:
-            waitingSince = nil
+        }
+        switch state {
+        case .failed, .cancelled:
+            break
+        default:
+            let since = notReadySince ?? now
+            notReadySince = since
+            if now.timeIntervalSince(since) >= notReadyCap {
+                return NWConnectionError.timeout
+            }
+        }
+        switch state {
+        case .ready, .preparing, .setup:
             return nil
         case .failed(let error):
             return error
@@ -44,8 +65,6 @@ struct SendStatePolicy {
                 return nil
             }
             return now.timeIntervalSince(since) >= waitingGrace ? error : nil
-        case .setup:
-            return nil
         @unknown default:
             return nil
         }
@@ -58,6 +77,7 @@ struct SendWatch {
     var state: () -> NWConnection.State
     var everReady: Bool
     var waitingGrace: TimeInterval
+    var notReadyCap: TimeInterval = SendStatePolicy.defaultNotReadyCap
     /// Called when the watcher fails a send: makes the failure final so the
     /// abandoned data cannot still go out later.
     var giveUp: () -> Void
@@ -103,7 +123,8 @@ extension NWConnection {
     }
 
     func sendMessage(_ message: PeerMessage, watch: SendWatch) async throws {
-        var policy = SendStatePolicy(everReady: watch.everReady, waitingGrace: watch.waitingGrace)
+        var policy = SendStatePolicy(everReady: watch.everReady, waitingGrace: watch.waitingGrace,
+                                     notReadyCap: watch.notReadyCap)
         if let error = policy.verdict(watch.state()) {
             watch.giveUp()
             throw error
