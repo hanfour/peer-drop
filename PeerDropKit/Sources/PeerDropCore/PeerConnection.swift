@@ -55,6 +55,14 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// Local identity for sending messages.
     private let localIdentity: PeerIdentity
 
+    /// Still carrying the `relay-<code>` placeholder identity (#161 I-1).
+    /// Structural: set only by `ConnectionManager.installRelayPlaceholder`,
+    /// consumed by the first per-peer HELLO, and cleared when the connection
+    /// is removed or overwritten. Lives on the object (not as an
+    /// ObjectIdentifier in a set), so it can never be inherited by a later
+    /// object allocated at the same address.
+    var isRelayPlaceholder = false
+
     // MARK: - Secure channel (audit-#13 Phase 2)
 
     /// Active local-TCP secure channel, or nil if the peer hasn't completed

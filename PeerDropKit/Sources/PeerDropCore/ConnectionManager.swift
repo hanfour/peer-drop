@@ -305,11 +305,6 @@ public final class ConnectionManager: ObservableObject {
     }
     private var dialAttempt: DialAttempt?
 
-    /// Relay connections still carrying their `relay-<code>` placeholder
-    /// identity (#161 I-1). Membership is structural — set only by
-    /// `installRelayPlaceholder` — and consumed by the first per-peer HELLO.
-    private var relayPlaceholders = Set<ObjectIdentifier>()
-
     // MARK: - Network Path Monitoring
     private var pathMonitor: NWPathMonitor?
     private var lastNetworkPath: NWPath?
@@ -754,6 +749,11 @@ public final class ConnectionManager: ObservableObject {
     /// Add a new peer connection.
     private func addConnection(_ peerConnection: PeerConnection, startReceiving: Bool = true) {
         let peerID = peerConnection.id
+        // An overwritten connection loses its relay-placeholder marker: it is
+        // no longer installed, and must never regain an identity swap.
+        if let replaced = connections[peerID], replaced !== peerConnection {
+            replaced.isRelayPlaceholder = false
+        }
         connections[peerID] = peerConnection
 
         // Single-reader handoff: if this PeerConnection now owns the socket the
@@ -804,7 +804,7 @@ public final class ConnectionManager: ObservableObject {
     /// Remove a peer connection.
     private func removeConnection(peerID: String) {
         if let removed = connections.removeValue(forKey: peerID) {
-            relayPlaceholders.remove(ObjectIdentifier(removed))
+            removed.isRelayPlaceholder = false
         }
 
         // Update focused peer if needed
@@ -1640,6 +1640,12 @@ public final class ConnectionManager: ObservableObject {
     @discardableResult
     public func _installRelayPlaceholderForTesting(roomCode: String, connection: NWConnection) -> PeerConnection {
         installRelayPlaceholder(roomCode: roomCode, transport: TCPTransport(connection: connection), remoteFingerprint: nil)
+    }
+
+    /// Test-only: whether the HELLO identity swap would treat `pc` as a relay
+    /// placeholder.
+    public func _isRelayPlaceholderForTesting(_ pc: PeerConnection) -> Bool {
+        pc.isRelayPlaceholder
     }
 
     /// Test-only: reconnect back-off attempts consumed so far.
@@ -3120,7 +3126,7 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connected
         )
-        relayPlaceholders.insert(ObjectIdentifier(peerConnection))
+        peerConnection.isRelayPlaceholder = true
         addConnection(peerConnection)
         focusedPeerID = peerID
         return peerConnection
@@ -3642,10 +3648,11 @@ public final class ConnectionManager: ObservableObject {
             // peer B pose as C.
             guard let payload = message.payload,
                   let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) else { return }
-            guard relayPlaceholders.remove(ObjectIdentifier(peerConnection)) != nil else {
+            guard peerConnection.isRelayPlaceholder else {
                 logger.warning("Per-peer hello on \(peerID.prefix(12)): identity already bound; ignoring re-point attempt")
                 return
             }
+            peerConnection.isRelayPlaceholder = false
             // The real identity may not be a reserved relay id, nor one another
             // connection already holds (as key or alias) — else B could take
             // over C's attribution / `connection(for:)` (#161 I-1, M-2).

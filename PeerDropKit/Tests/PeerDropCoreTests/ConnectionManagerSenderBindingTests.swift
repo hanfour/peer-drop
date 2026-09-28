@@ -711,6 +711,30 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         XCTAssertEqual(cm.statusToast, String(localized: "Relay connection closed: this device is already connected"))
     }
 
+    // m-1: overwriting a relay key must not leave the old connection's
+    // placeholder marker behind (it was an ObjectIdentifier in a set, so a
+    // later object at the same address would inherit one identity swap).
+    func test_m1_overwrittenRelayPlaceholder_losesItsMarker() async throws {
+        let code = "R3\(UUID().uuidString.prefix(4))"
+        let (server1, _) = try await rawPair()
+        let pc1 = cm._installRelayPlaceholderForTesting(roomCode: code, connection: server1)
+        touchedPeers.append(pc1.id)
+        let (server2, client2) = try await rawPair()
+        let pc2 = cm._installRelayPlaceholderForTesting(roomCode: code, connection: server2)
+        XCTAssertTrue(cm.connections[pc2.id] === pc2)
+
+        XCTAssertFalse(cm._isRelayPlaceholderForTesting(pc1),
+                       "overwritten relay connection still carries a placeholder marker")
+        XCTAssertTrue(cm._isRelayPlaceholderForTesting(pc2))
+
+        // The installed placeholder still swaps exactly once.
+        let real = identity("Rhea")
+        try await client2.sendMessage(try PeerMessage.hello(identity: real))
+        let swapped = await poll { pc2.peerIdentity.id == real.id }
+        XCTAssertTrue(swapped)
+        XCTAssertFalse(cm._isRelayPlaceholderForTesting(pc2), "marker must be consumed by the swap")
+    }
+
     // I-2: per-connection consent handoff.
 
     func test_I2_backToBackAccepts_bothDeliverTheirFirstFrame() async throws {
