@@ -37,6 +37,14 @@ private final class Recorder: @unchecked Sendable {
     func markClosed() { lock.lock(); _closed = true; lock.unlock() }
 }
 
+/// A one-way latch the test opens to let a fake acceptor proceed.
+final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var open = false
+    var isOpen: Bool { lock.lock(); defer { lock.unlock() }; return open }
+    func openGate() { lock.lock(); open = true; lock.unlock() }
+}
+
 /// Server-side sockets accepted by test listeners, cancelled in tearDown.
 private final class SocketBag: @unchecked Sendable {
     private let lock = NSLock()
@@ -489,7 +497,11 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
     // MARK: - (d) initiator with an existing connection dials a second peer
 
-    enum FakeAcceptorScript { case accept, disconnectBeforeAccept }
+    enum FakeAcceptorScript {
+        case accept, disconnectBeforeAccept
+        /// Hold the dial (no reply) until `gate` opens, then accept.
+        case acceptWhenOpened(Gate)
+    }
 
     /// Plays a minimal acceptor: reads HELLO + request, then (per `script`)
     /// replies accept + hello(`reply`) or hangs up with `.disconnect`. Every
@@ -518,6 +530,20 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
                         try await conn.sendMessage(PeerMessage.ping(senderID: reply.id))
                     case .disconnectBeforeAccept:
                         try await conn.sendMessage(PeerMessage.disconnect(senderID: reply.id))
+                    case .acceptWhenOpened(let gate):
+                        // Nothing is expected while held; a read error means
+                        // the dialer hung up on us.
+                        let watch = Task {
+                            do { _ = try await conn.receiveMessage(timeout: 60) } catch { recorder?.markClosed() }
+                        }
+                        while !gate.isOpen {
+                            if recorder?.closed == true { throw NWConnectionError.cancelled }
+                            try await Task.sleep(nanoseconds: 20_000_000)
+                        }
+                        watch.cancel()
+                        try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
+                        try await conn.sendMessage(try PeerMessage.hello(identity: reply))
+                        try await conn.sendMessage(PeerMessage.ping(senderID: reply.id))
                     }
                     while true {
                         let m = try await conn.receiveMessage(timeout: 30)
@@ -644,20 +670,24 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         XCTAssertEqual(pc.peerIdentity.id, real.id, "second HELLO re-pointed the relay connection")
     }
 
-    func test_I1_relayPlaceholder_swapToIDInUse_isRejected() async throws {
+    func test_I1_m2_relaySwapToIDInUse_tearsDownRelayConnection() async throws {
         let carol = identity("Carol")
         let carolPC = installVictim(carol)
         let (server, client) = try await rawPair()
+        let closed = observeClose(client)
         let pc = cm._installRelayPlaceholderForTesting(roomCode: "R2\(UUID().uuidString.prefix(4))", connection: server)
         touchedPeers.append(pc.id)
         let placeholderID = pc.peerIdentity.id
 
         let asCarol = PeerIdentity(id: carol.id, displayName: "Carol", supportsSecureChannel: false)
         try await client.sendMessage(try PeerMessage.hello(identity: asCarol))
-        try await drain(client, unreadKey: pc.id)
 
+        // Not left behind as a silently degraded "Relay Peer": torn down, with a toast.
+        let tornDown = await poll { self.cm.connections[pc.id] == nil && closed.closed }
+        XCTAssertTrue(tornDown, "relay connection with a refused identity should be torn down")
         XCTAssertEqual(pc.peerIdentity.id, placeholderID, "relay connection took over C's id")
         XCTAssertTrue(cm.connection(for: carol.id) === carolPC)
+        XCTAssertEqual(cm.statusToast, String(localized: "Relay connection closed: this device is already connected"))
     }
 
     // I-2: per-connection consent handoff.
@@ -859,6 +889,97 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
             c.cancel()
         }
         XCTAssertEqual(failures, [], "secure first-frame runs failed")
+    }
+
+    // MARK: - Pre-merge minors (m-3, m-5, m-6)
+
+    func test_m3_dialWhileConsentSheetIsUp_isRefused() async throws {
+        let mallory = identity("Mallory")
+        let pending = try await pendingStranger(mallory)
+        let dave = identity("Dave")
+        let recorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: dave, recorder: recorder)
+
+        dial(port, id: dave.id)
+
+        XCTAssertEqual(cm.statusToast, String(localized: "Respond to the pending connection request first"))
+        XCTAssertEqual(cm.state, .incomingRequest)
+        XCTAssertEqual(cm.pendingIncomingRequest?.peerIdentity.id, mallory.id, "the consent request was lost")
+        // The consent sheet still works afterwards.
+        cm.acceptConnection()
+        let accept = try await pending.receiveMessage(timeout: 5)
+        XCTAssertEqual(accept.type, .connectionAccept, "the pending socket should still be alive")
+        XCTAssertFalse(recorder.types.contains(.hello), "a dial went out while the consent sheet was up")
+    }
+
+    /// While `.connected` to Carol, we dial B and B dials us at the same time.
+    /// Exactly one of the two sockets must survive, decided by id order.
+    private func simultaneousDial(peerID: String) async throws
+        -> (b: PeerIdentity, gate: Gate, dialRecorder: Recorder, incoming: NWConnection) {
+        let carol = identity("Carol")
+        _ = try await connectedAndWarm(carol)
+        XCTAssertEqual(cm.state, .connected)
+
+        let b = PeerIdentity(id: peerID, displayName: "B", supportsSecureChannel: false)
+        touchedPeers.append(b.id)
+        let gate = Gate()
+        let dialRecorder = Recorder()
+        let port = try await startFakeAcceptor(replyingAs: b, script: .acceptWhenOpened(gate), recorder: dialRecorder)
+        dial(port, id: b.id) // Bonjour publishes the identity id as the peer id
+        let reached = await poll { dialRecorder.types.contains(.connectionRequest) }
+        XCTAssertTrue(reached, "our dial never reached B")
+
+        // B's own dial arrives at us.
+        let incoming = try await dialManager()
+        try await incoming.sendMessage(try PeerMessage.hello(identity: b))
+        try await incoming.sendMessage(PeerMessage.connectionRequest(senderID: b.id))
+        return (b, gate, dialRecorder, incoming)
+    }
+
+    func test_m5_simultaneousDial_largerLocalID_keepsOutgoing() async throws {
+        // B's id sorts below ours: we are the initiator and refuse B's dial.
+        let (b, gate, dialRecorder, incoming) = try await simultaneousDial(peerID: "00000000-0000-0000-0000-000000000000")
+        let incomingClosed = observeClose(incoming)
+        let refused = await poll { incomingClosed.closed }
+        XCTAssertTrue(refused, "B's simultaneous dial should be refused")
+        XCTAssertNil(cm.pendingIncomingRequest)
+        XCTAssertFalse(dialRecorder.closed, "our own dial to B was dropped")
+
+        gate.openGate() // B accepts our dial
+        let installed = await poll(timeout: 5) { self.cm.connections[b.id] != nil }
+        XCTAssertTrue(installed, "our dial to B should complete")
+        XCTAssertEqual(cm.connections.values.filter { $0.peerIdentity.id == b.id }.count, 1)
+    }
+
+    func test_m5_simultaneousDial_smallerLocalID_yieldsToIncoming() async throws {
+        // B's id sorts above ours: B is the initiator; we drop our dial.
+        let (b, _, dialRecorder, _) = try await simultaneousDial(peerID: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")
+        let yielded = await poll { dialRecorder.closed }
+        XCTAssertTrue(yielded, "our dial should be dropped in favour of B's")
+        let consent = await poll { self.cm.pendingIncomingRequest?.peerIdentity.id == b.id }
+        XCTAssertTrue(consent, "B's dial should reach the consent sheet")
+    }
+
+    func test_m6_secondAccept_doesNotStealFocus() async throws {
+        let carol = identity("Carol")
+        _ = try await connectedPeer(carol)
+        XCTAssertEqual(cm.focusedPeerID, carol.id)
+        let bob = identity("Bob")
+        _ = try await connectedPeer(bob)
+        XCTAssertEqual(cm.focusedPeerID, carol.id, "a new incoming connection stole the UI focus")
+    }
+
+    func test_m6_secondDial_doesNotStealFocus() async throws {
+        let carol = identity("Carol")
+        _ = try await connectedAndWarm(carol)
+        XCTAssertEqual(cm.focusedPeerID, carol.id)
+        let dave = identity("Dave")
+        touchedPeers.append(dave.id)
+        let port = try await startFakeAcceptor(replyingAs: dave)
+        dial(port, id: dave.id)
+        let installed = await poll(timeout: 5) { self.cm.connections[dave.id] != nil }
+        XCTAssertTrue(installed)
+        XCTAssertEqual(cm.focusedPeerID, carol.id, "a new outgoing connection stole the UI focus")
     }
 }
 

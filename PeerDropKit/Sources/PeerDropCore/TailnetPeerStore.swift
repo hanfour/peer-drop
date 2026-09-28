@@ -118,7 +118,9 @@ extension TailnetPeerStore {
                 default: break
                 }
             }
-            conn.start(queue: .global(qos: .utility))
+            // Serial queue: on a concurrent one Network may deliver
+            // `.preparing` after `.ready` (see NWConnection.waitReady).
+            conn.start(queue: DispatchQueue(label: "com.hanfour.peerdrop.tailnet-probe", qos: .utility))
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5, execute: timeout)
         }
     }

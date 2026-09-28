@@ -288,11 +288,16 @@ public final class ConnectionManager: ObservableObject {
     private final class DialAttempt {
         let connection: NWConnection
         let generation: UUID
+        /// The dialed `DiscoveredPeer.id` — the peer's identity id for v6+
+        /// Bonjour peers (TXT "pid"), used by the simultaneous-connect
+        /// tie-break.
+        let peerID: String
         /// The dialed peer sent `connectionAccept` on this socket.
         var accepted = false
-        init(connection: NWConnection, generation: UUID) {
+        init(connection: NWConnection, generation: UUID, peerID: String) {
             self.connection = connection
             self.generation = generation
+            self.peerID = peerID
         }
     }
     private var dialAttempt: DialAttempt?
@@ -773,9 +778,7 @@ public final class ConnectionManager: ObservableObject {
         }
 
         // If no focused connection, focus on this one
-        if focusedPeerID == nil {
-            focusedPeerID = peerID
-        }
+        focusIfUnfocused(peerID)
 
         // Start receive loop (deferred by the acceptor while a consent-monitor
         // read is still in flight on this socket — see ConsentSession).
@@ -785,6 +788,14 @@ public final class ConnectionManager: ObservableObject {
 
         objectWillChange.send()
         onPeerConnected?(peerID)
+    }
+
+    /// Focus `peerID` only when nothing is focused or the focused peer is
+    /// gone — a new connection must not pull the UI away from the
+    /// conversation the user is in (#161 m-6, "slow over instant").
+    private func focusIfUnfocused(_ peerID: String) {
+        if let focused = focusedPeerID, connection(for: focused) != nil { return }
+        focusedPeerID = peerID
     }
 
     /// Remove a peer connection.
@@ -2043,6 +2054,15 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Connection Request (Outgoing)
 
     public func requestConnection(to peer: DiscoveredPeer) {
+        // #161 m-3: while the consent sheet is up, answer it first. Dialing now
+        // would cancel the pending socket (it is `activeConnection`) and leave
+        // `state` stuck at `.incomingRequest` next to a live PeerConnection.
+        guard pendingIncomingRequest == nil else {
+            logger.info("requestConnection ignored — a connection request is awaiting consent")
+            statusToast = String(localized: "Respond to the pending connection request first")
+            return
+        }
+
         // Check if already connected to this peer
         if let existingConn = connections[peer.id], existingConn.state.isConnected {
             // Just focus on this connection
@@ -2158,7 +2178,7 @@ public final class ConnectionManager: ObservableObject {
 
         connection.start(queue: Self.makeConnectionQueue())
         activeConnection = connection
-        let attempt = DialAttempt(connection: connection, generation: generation)
+        let attempt = DialAttempt(connection: connection, generation: generation, peerID: peer.id)
         dialAttempt = attempt
 
         startRequestingTimeout(for: attempt)
@@ -2203,9 +2223,6 @@ public final class ConnectionManager: ObservableObject {
             connection.cancel()
             return
         }
-
-        // Track if we have an outgoing connection attempt (for simultaneous connect handling)
-        let hadOutgoingConnection = activeConnection != nil && state == .requesting
 
         connection.stateUpdateHandler = { [weak self] nwState in
             logger.info("Incoming NWConnection state: \(String(describing: nwState))")
@@ -2283,7 +2300,18 @@ public final class ConnectionManager: ObservableObject {
                 // Handle simultaneous connection attempts using peer ID comparison
                 // The peer with the larger ID becomes the initiator (keeps outgoing)
                 // The peer with the smaller ID becomes the acceptor (accepts incoming)
-                if hadOutgoingConnection || (activeConnection != nil && state == .requesting) {
+                //
+                // #161 m-5: keyed on the in-flight dial to THIS peer, not on the
+                // global `.requesting` state — two peers already connected to
+                // others (state `.connected`) dialing each other must also end
+                // with exactly one connection. Legacy peers (whose Bonjour id is
+                // not their identity id) keep the old first-connection rule.
+                let dialingThisPeer: Bool = {
+                    guard let attempt = dialAttempt, !attempt.accepted else { return false }
+                    return attempt.peerID == peerIdentity.id
+                        || (connections.isEmpty && state == .requesting)
+                }()
+                if dialingThisPeer {
                     let localID = localIdentity.id
                     let peerID = peerIdentity.id
 
@@ -2306,6 +2334,11 @@ public final class ConnectionManager: ObservableObject {
                             if !isOwnedByInstalledConnection(attempt.connection) { attempt.connection.cancel() }
                         }
                         connectionGeneration = UUID()
+                        // Leave `.requesting` so the consent sheet below can show.
+                        if case .requesting = state {
+                            transition(to: .disconnected)
+                            transition(to: .discovering)
+                        }
                     }
                 }
 
@@ -2630,8 +2663,8 @@ public final class ConnectionManager: ObservableObject {
                 peerConnection.updateState(.connected)
                 addConnection(peerConnection, startReceiving: session == nil)
 
-                // Also maintain legacy single-connection for backward compatibility
-                focusedPeerID = peerID
+                // A new connection never steals the UI focus (#161 m-6).
+                focusIfUnfocused(peerID)
 
                 transition(to: .connected)
                 recordConnectedDevice()
@@ -3594,7 +3627,12 @@ public final class ConnectionManager: ObservableObject {
             // over C's attribution / `connection(for:)` (#161 I-1, M-2).
             guard !Self.isReservedPeerID(identity.id),
                   !isPeerIDInUse(identity.id, excluding: peerConnection) else {
-                logger.warning("Per-peer hello on \(peerID.prefix(12)): claimed id is reserved or in use; keeping placeholder")
+                // Don't leave a silently degraded "Relay Peer" behind (#161
+                // m-2): the peer is either already connected (the existing
+                // connection wins) or lying about its id. Hang up and say so.
+                logger.warning("Per-peer hello on \(peerID.prefix(12)): claimed id is reserved or in use; closing relay connection")
+                statusToast = String(localized: "Relay connection closed: this device is already connected")
+                Task { [weak self] in await self?.disconnect(from: peerID) }
                 return
             }
             peerConnection.updatePeerIdentity(identity)
@@ -3786,7 +3824,7 @@ public final class ConnectionManager: ObservableObject {
             state: .connected
         )
         addConnection(peerConnection)
-        focusedPeerID = identity.id
+        focusIfUnfocused(identity.id) // never steal the UI focus (#161 m-6)
         // v5.1: capability flag is known from the identity — trigger.
         triggerSecureChannelNegotiation(for: peerConnection)
         return true
