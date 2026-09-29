@@ -520,6 +520,9 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
     enum FakeAcceptorScript {
         case accept, disconnectBeforeAccept
+        /// Accept + HELLO, no sync ping; answer any `.ping` with a `.pong`
+        /// (like any peer's per-connection handler).
+        case acceptQuietly
         /// Hold the dial (no reply) until `gate` opens, then accept.
         case acceptWhenOpened(Gate)
     }
@@ -549,6 +552,16 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
                         // Sync point: the pong comes back from the installed
                         // PeerConnection, after anything sent before install.
                         try await conn.sendMessage(PeerMessage.ping(senderID: reply.id))
+                    case .acceptQuietly:
+                        try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
+                        try await conn.sendMessage(try PeerMessage.hello(identity: reply))
+                        while true {
+                            let m = try await conn.receiveMessage(timeout: 30)
+                            recorder?.append(m.type)
+                            if m.type == .ping {
+                                try await conn.sendMessage(PeerMessage.pong(senderID: reply.id))
+                            }
+                        }
                     case .disconnectBeforeAccept:
                         try await conn.sendMessage(PeerMessage.disconnect(senderID: reply.id))
                     case .acceptWhenOpened(let gate):
@@ -756,6 +769,54 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         try await client.sendMessage(try PeerMessage.hello(identity: old))
         let swapped = await poll { pc.peerIdentity.id == old.id }
         XCTAssertTrue(swapped, "old relay peer's plaintext HELLO was dropped after the channel came up")
+    }
+
+    // #170/#175 "Fix A": a v5.6.0 acceptor's cancelled consent monitor still
+    // has one read pending, which eats the first frame we send after its
+    // accept — our handshake bundle, stranding it in plaintext. For a v1
+    // acceptor we send one sacrificial `.ping` first.
+
+    private func dialQuietAcceptor(version: Int, recorder: Recorder) async throws -> PeerIdentity {
+        let acceptor = PeerIdentity(id: UUID().uuidString, displayName: "Acc\(version)",
+                                    supportsSecureChannel: true, secureChannelVersion: version)
+        touchedPeers.append(acceptor.id)
+        let port = try await startFakeAcceptor(replyingAs: acceptor, script: .acceptQuietly, recorder: recorder)
+        dial(port, id: "manual-\(acceptor.id)")
+        return acceptor
+    }
+
+    func test_fixA_v1Acceptor_getsPingBeforeHandshakeBundle() async throws {
+        let recorder = Recorder()
+        _ = try await dialQuietAcceptor(version: 1, recorder: recorder)
+        let got = await poll(timeout: 5) { recorder.types.count >= 4 }
+        XCTAssertTrue(got, "acceptor saw too little: \(recorder.types)")
+        XCTAssertEqual(Array(recorder.types.prefix(4)), [.hello, .connectionRequest, .ping, .secureHandshake])
+    }
+
+    func test_fixA_v2Acceptor_getsNoPing() async throws {
+        let recorder = Recorder()
+        _ = try await dialQuietAcceptor(version: 2, recorder: recorder)
+        let got = await poll(timeout: 5) { recorder.types.count >= 3 }
+        XCTAssertTrue(got, "acceptor saw too little: \(recorder.types)")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(recorder.types[2], .secureHandshake)
+        XCTAssertFalse(recorder.types.contains(.ping), "a v2 acceptor must never get the sacrificial ping")
+    }
+
+    func test_fixA_pongReply_hasNoSideEffects() async throws {
+        let recorder = Recorder()
+        let acceptor = try await dialQuietAcceptor(version: 1, recorder: recorder)
+        let installed = await poll(timeout: 5) { self.cm.connections[acceptor.id] != nil }
+        XCTAssertTrue(installed)
+        let pc = try XCTUnwrap(cm.connections[acceptor.id])
+        let sawPing = await poll(timeout: 5) { recorder.types.contains(.ping) }
+        XCTAssertTrue(sawPing, "v1 acceptor never got the sacrificial ping")
+        try await Task.sleep(nanoseconds: 500_000_000)  // pong delivered + handled
+        XCTAssertTrue(cm.connections[acceptor.id] === pc, "pong disturbed the connection")
+        XCTAssertTrue(pc.state.isConnected)
+        XCTAssertEqual(cm.chatManager.unreadCounts[acceptor.id] ?? 0, 0)
+        XCTAssertEqual(pc.plaintextDroppedCount, 0)
+        XCTAssertFalse(recorder.closed)
     }
 
     // I-2: per-connection consent handoff.

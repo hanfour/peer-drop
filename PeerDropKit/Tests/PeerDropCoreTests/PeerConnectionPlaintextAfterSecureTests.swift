@@ -459,4 +459,30 @@ final class PeerConnectionLegacyPeerPlaintextTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 1, "held send waited out the fallback after cancel()")
         XCTAssertEqual(usT.sent.map(\.type), [.secureHandshake])
     }
+
+    /// Review minor: a held send must not survive a transport swap — after
+    /// `cancel()` + `replaceTransport` it must fail, not go out on the new
+    /// transport once the hold expires.
+    func test_heldSend_failsAcrossTransportReplacement() async throws {
+        let oldT = RecordingTransport()
+        let us = PeerConnection(
+            peerID: "P", transport: oldT,
+            peerIdentity: PeerIdentity(id: "P", displayName: "Peer"),
+            localIdentity: PeerIdentity(id: "U", displayName: "Us"),
+            state: .connected)
+        us.handshakeFallbackNanoseconds = 300_000_000
+        try await us.initiateSecureHandshake(identity: MemIdentity())
+        let send = Task { try await us.sendMessage(try self.text("x")) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let newT = RecordingTransport()
+        us.cancel()
+        us.replaceTransport(newT)
+        do {
+            try await send.value
+            XCTFail("held send went out after the transport was replaced")
+        } catch {}
+        XCTAssertEqual(oldT.sent.map(\.type), [.secureHandshake])
+        XCTAssertTrue(newT.sent.isEmpty)
+    }
 }
+

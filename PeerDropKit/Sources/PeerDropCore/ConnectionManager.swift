@@ -3860,6 +3860,7 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connected
         )
+        sendSacrificialPingIfLegacyAcceptor(identity, on: connection)
         addConnection(peerConnection)
         // A dial is user-initiated: the user chose this peer, so it gets the
         // focus (drag-and-drop, file picker and calls then target it). Only
@@ -3868,6 +3869,34 @@ public final class ConnectionManager: ObservableObject {
         // v5.1: capability flag is known from the identity — trigger.
         triggerSecureChannelNegotiation(for: peerConnection)
         return true
+    }
+
+    /// #175 interop ("Fix A"): a v5.6.x acceptor cancels its consent monitor
+    /// on accept, but the monitor's timeout-wrapped read stays pending on the
+    /// socket and consumes — and discards — exactly the next frame we send.
+    /// That used to be our handshake bundle, leaving the acceptor stuck in
+    /// `.handshakeInProgress` → plaintext fallback for the whole session
+    /// (one-way traffic). So for an acceptor whose hello has no
+    /// `secureChannelVersion` (v1) we first write one sacrificial `.ping`.
+    /// An acceptor without that bug just answers `.pong` (control-allowlisted,
+    /// no side effects). Never sent to v2 peers (they read every frame).
+    ///
+    /// Enqueued synchronously on the NWConnection, before the PeerConnection
+    /// is installed and before negotiation starts, so it is the first frame
+    /// on the wire after the acceptor's HELLO — ahead of the bundle and of
+    /// anything else this side sends.
+    ///
+    /// TODO(min-supported-version): remove with the v1 legacy branch.
+    private func sendSacrificialPingIfLegacyAcceptor(_ identity: PeerIdentity, on connection: NWConnection) {
+        guard identity.secureChannelVersion < 2 else { return }
+        do {
+            try connection.enqueueMessage(PeerMessage.ping(senderID: localIdentity.id)) { error in
+                if let error { logger.warning("Legacy-acceptor ping failed: \(error.localizedDescription)") }
+            }
+            logger.info("Initiator: v1 acceptor — sent sacrificial ping ahead of the secure handshake (#175)")
+        } catch {
+            logger.warning("Legacy-acceptor ping encode failed: \(error.localizedDescription)")
+        }
     }
 
     private func handleConnectionStateChange(_ nwState: NWConnection.State, on connection: NWConnection) {

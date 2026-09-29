@@ -336,7 +336,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
             // #170: once our handshake bundle is on the wire the peer drops
             // plaintext business frames, so hold them until the channel can
             // encrypt (or the handshake falls back to plaintext).
-            await waitUntilBusinessSendable()
+            try await waitUntilBusinessSendable()
             guard state.isActive, !isClosed else {
                 throw ConnectionError.notConnected
             }
@@ -378,9 +378,12 @@ public final class PeerConnection: ObservableObject, Identifiable {
 
     /// Wait until `mustHoldBusinessSend` clears, bounded by
     /// `handshakeFallbackNanoseconds` (after which the send proceeds and
-    /// behaves as it did before #170).
-    private func waitUntilBusinessSendable() async {
+    /// behaves as it did before #170). Throws if the connection generation
+    /// changed while holding (cancel / transport replacement): the send was
+    /// meant for a transport that no longer exists.
+    private func waitUntilBusinessSendable() async throws {
         guard mustHoldBusinessSend else { return }
+        let generation = connectionGeneration
         let timeout = HoldTimeout()
         let limit = handshakeFallbackNanoseconds
         let timer = Task { [weak self] in
@@ -389,8 +392,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
             self?.signalSendReadiness()
         }
         defer { timer.cancel() }
-        while mustHoldBusinessSend && !timeout.fired {
+        while mustHoldBusinessSend && !timeout.fired && connectionGeneration == generation {
             await withCheckedContinuation { sendReadinessWaiters.append($0) }
+        }
+        guard connectionGeneration == generation else {
+            throw ConnectionError.notConnected
         }
     }
 

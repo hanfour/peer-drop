@@ -122,6 +122,26 @@ extension NWConnection {
         ))
     }
 
+    /// Enqueue a PeerMessage on the connection synchronously, without waiting
+    /// for completion. Network sends go out in the order `send` is called, so
+    /// a frame enqueued here precedes on the wire every frame whose send is
+    /// issued afterwards (the async `sendMessage` reaches `send` only after
+    /// hopping executors, so it can't give that guarantee). Fire-and-forget:
+    /// failures are only reported to `completion`.
+    public func enqueueMessage(_ message: PeerMessage, completion: (@Sendable (NWError?) -> Void)? = nil) throws {
+        let data = try message.encoded()
+        let framerMessage = NWProtocolFramer.Message(peerDropMessageLength: UInt32(data.count))
+        send(
+            content: data,
+            contentContext: NWConnection.ContentContext(
+                identifier: "PeerDropMessage",
+                metadata: [framerMessage]
+            ),
+            isComplete: true,
+            completion: .contentProcessed { error in completion?(error) }
+        )
+    }
+
     func sendMessage(_ message: PeerMessage, watch: SendWatch) async throws {
         var policy = SendStatePolicy(everReady: watch.everReady, waitingGrace: watch.waitingGrace,
                                      notReadyCap: watch.notReadyCap)
