@@ -3118,7 +3118,11 @@ public final class ConnectionManager: ObservableObject {
         remoteFingerprint: String?
     ) -> PeerConnection {
         let peerID = "relay-\(roomCode)"
-        let peerIdentity = PeerIdentity(id: peerID, displayName: "Relay Peer", certificateFingerprint: remoteFingerprint)
+        // Peer's secure-channel version is unknown until its HELLO: treat it
+        // as legacy (1) so an old peer's plaintext HELLO — sent after PIN
+        // entry, possibly after the channel came up — isn't dropped (#170).
+        let peerIdentity = PeerIdentity(id: peerID, displayName: "Relay Peer", certificateFingerprint: remoteFingerprint,
+                                        secureChannelVersion: 1)
         let peerConnection = PeerConnection(
             peerID: peerID,
             transport: transport,

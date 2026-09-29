@@ -27,8 +27,22 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
     /// spuriously claiming `true` would merely hide the local user's own
     /// send-file/call/mic buttons for that conversation — cosmetic, recoverable).
     public let isHeadless: Bool
+    /// Secure-channel protocol version the peer implements (#170).
+    /// - 1: v5.1 – v5.6.x. Absent from their hello; decodes as 1. May send
+    ///   plaintext business frames after its own channel is up (handshake
+    ///   window race, or a stranded handshake that fell back to plaintext).
+    /// - 2: this build. Never sends a plaintext business frame after its
+    ///   handshake bundle, so a receiver may drop any such frame as soon as its
+    ///   channel exists.
+    /// Self-reported: a MITM could lower it in the hello, but that only buys
+    /// legacy mode — the same acceptance a real v1 peer gets until its first
+    /// envelope — never anything a v1 connection wasn't already exposed to.
+    public let secureChannelVersion: Int
 
-    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false) {
+    /// What this build advertises in its hello.
+    public static let currentSecureChannelVersion = 2
+
+    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion) {
         self.id = UUID().uuidString
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -36,9 +50,10 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.identityFingerprint = identityFingerprint
         self.supportsSecureChannel = supportsSecureChannel
         self.isHeadless = isHeadless
+        self.secureChannelVersion = secureChannelVersion
     }
 
-    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false) {
+    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion) {
         self.id = id
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -46,6 +61,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.identityFingerprint = identityFingerprint
         self.supportsSecureChannel = supportsSecureChannel
         self.isHeadless = isHeadless
+        self.secureChannelVersion = secureChannelVersion
     }
 
     // MARK: - Codable (backward-compat decode)
@@ -55,6 +71,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         case identityPublicKey, identityFingerprint
         case supportsSecureChannel
         case isHeadless
+        case secureChannelVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -69,6 +86,9 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.supportsSecureChannel = try c.decodeIfPresent(Bool.self, forKey: .supportsSecureChannel) ?? false
         // Older peers omit this; absent ⇒ a normal (non-headless) user device.
         self.isHeadless = try c.decodeIfPresent(Bool.self, forKey: .isHeadless) ?? false
+        // v5.6.x and older omit this; absent ⇒ version 1 (legacy plaintext
+        // tolerance, see `secureChannelVersion`).
+        self.secureChannelVersion = try c.decodeIfPresent(Int.self, forKey: .secureChannelVersion) ?? 1
     }
 
     private static let localIDKey = "peerDropLocalIdentityID"

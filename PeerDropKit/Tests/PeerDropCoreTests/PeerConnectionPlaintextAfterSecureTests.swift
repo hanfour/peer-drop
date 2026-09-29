@@ -272,7 +272,13 @@ final class PeerConnectionPlaintextAfterSecureTests: XCTestCase {
         try await p.initiator.sendMessage(try text("bootstrap"))
         try await p.responder.handleIncomingMessage(p.initiatorTransport.sent.last!)
         try await send.value
-        XCTAssertEqual(p.responderTransport.sent.map(\.type), [.secureHandshake, .secureEnvelope])
+        // The held reply plus the responder's one-time no-op envelope (#170
+        // compat rule 4) — both encrypted, nothing plaintext.
+        let deadline = Date().addingTimeInterval(2)
+        while p.responderTransport.sent.count < 3 && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(p.responderTransport.sent.map(\.type), [.secureHandshake, .secureEnvelope, .secureEnvelope])
     }
 
     func test_heldSend_isReleasedPlaintextOnHandshakeFallback() async throws {
@@ -305,3 +311,152 @@ final class PeerConnectionPlaintextAfterSecureTests: XCTestCase {
     }
 }
 
+
+// MARK: - #170 compat: peers without secureChannelVersion >= 2 (v5.6.0 and older)
+
+@MainActor
+final class PeerConnectionLegacyPeerPlaintextTests: XCTestCase {
+
+    private final class Inbox { var messages: [PeerMessage] = [] }
+
+    /// A secured connection on OUR side whose peer advertised `peerVersion`.
+    /// Returns our connection (ratchet responder or initiator as asked), the
+    /// peer's connection, both transports and our inbox.
+    private func securedPair(peerVersion: Int, weAreInitiator: Bool) async throws
+        -> (us: PeerConnection, usT: RecordingTransport, peer: PeerConnection, peerT: RecordingTransport, inbox: Inbox) {
+        var id1 = MemIdentity()
+        var id2 = MemIdentity()
+        if !Array(id1.publicKey.rawRepresentation)
+            .lexicographicallyPrecedes(Array(id2.publicKey.rawRepresentation)) {
+            swap(&id1, &id2)
+        }
+        let (ourKey, peerKey) = weAreInitiator ? (id1, id2) : (id2, id1)
+        let usT = RecordingTransport()
+        let peerT = RecordingTransport()
+        let us = PeerConnection(
+            peerID: "P", transport: usT,
+            peerIdentity: PeerIdentity(id: "P", displayName: "Peer", secureChannelVersion: peerVersion),
+            localIdentity: PeerIdentity(id: "U", displayName: "Us"),
+            state: .connected)
+        let peer = PeerConnection(
+            peerID: "U", transport: peerT,
+            peerIdentity: PeerIdentity(id: "U", displayName: "Us"),
+            localIdentity: PeerIdentity(id: "P", displayName: "Peer"),
+            state: .connected)
+        let inbox = Inbox()
+        us.onMessageReceived = { inbox.messages.append($0) }
+        try await peer.initiateSecureHandshake(identity: peerKey)
+        try await us.handleIncomingSecureHandshake(peerT.sent[0], identity: ourKey)
+        try await peer.handleIncomingSecureHandshake(usT.sent[0], identity: peerKey)
+        XCTAssertNotNil(us.secureChannel)
+        XCTAssertEqual(us.secureChannel?.isInitiator, weAreInitiator)
+        return (us, usT, peer, peerT, inbox)
+    }
+
+    private func text(_ s: String) throws -> PeerMessage {
+        try PeerMessage.textMessage(TextMessagePayload(text: s), senderID: "P")
+    }
+
+    /// C-1 model: a v5.6.0 acceptor never saw our bundle, fell back to
+    /// plaintext, and sends every business frame plaintext all session.
+    func test_v1Peer_neverSentEnvelope_plaintextStillDelivered() async throws {
+        let c = try await securedPair(peerVersion: 1, weAreInitiator: true)
+        for i in 0..<3 { try await c.us.handleIncomingMessage(try text("legacy \(i)")) }
+        let offer = PeerMessage(type: .niTokenOffer, payload: Data("{}".utf8), senderID: "P")
+        try await c.us.handleIncomingMessage(offer)
+        XCTAssertEqual(c.inbox.messages.map(\.type), [.textMessage, .textMessage, .textMessage, .niTokenOffer])
+        XCTAssertEqual(c.us.plaintextAcceptedLegacyCount, 4)
+        XCTAssertEqual(c.us.plaintextDroppedCount, 0)
+    }
+
+    func test_v1Peer_afterFirstValidEnvelope_plaintextDropped() async throws {
+        let c = try await securedPair(peerVersion: 1, weAreInitiator: false)
+        try await c.us.handleIncomingMessage(try text("before"))          // legacy window
+        try await c.peer.sendMessage(try text("sealed"))                   // peer is initiator
+        try await c.us.handleIncomingMessage(try XCTUnwrap(c.peerT.sent.last))
+        try await c.us.handleIncomingMessage(try text("injected"))
+        XCTAssertEqual(c.inbox.messages.map(\.type), [.textMessage, .textMessage])
+        XCTAssertEqual(try c.inbox.messages.map { try $0.decodePayload(TextMessagePayload.self).text },
+                       ["before", "sealed"])
+        XCTAssertEqual(c.us.plaintextAcceptedLegacyCount, 1)
+        XCTAssertEqual(c.us.plaintextDroppedCount, 1)
+    }
+
+    func test_absentVersionPeer_isTreatedAsV1() async throws {
+        let legacy = #"{"id":"P","displayName":"Old","supportsSecureChannel":true}"#
+        let decoded = try JSONDecoder().decode(PeerIdentity.self, from: Data(legacy.utf8))
+        let c = try await securedPair(peerVersion: decoded.secureChannelVersion, weAreInitiator: true)
+        try await c.us.handleIncomingMessage(try text("old"))
+        XCTAssertEqual(c.inbox.messages.count, 1)
+    }
+
+    func test_v2Peer_plaintextDroppedImmediately() async throws {
+        let c = try await securedPair(peerVersion: 2, weAreInitiator: true)
+        try await c.us.handleIncomingMessage(try text("injected"))
+        XCTAssertTrue(c.inbox.messages.isEmpty)
+        XCTAssertEqual(c.us.plaintextDroppedCount, 1)
+        XCTAssertEqual(c.us.plaintextAcceptedLegacyCount, 0)
+    }
+
+    /// Rule 4: the v2 ratchet responder answers the initiator's bootstrap
+    /// envelope with a no-op envelope of its own, so the initiator sees a
+    /// valid envelope from us promptly.
+    func test_v2Responder_sendsNoOpEnvelopeAfterInitiatorBootstrap() async throws {
+        let c = try await securedPair(peerVersion: 2, weAreInitiator: false)
+        let bootstrap = try PeerMessage.typingIndicator(
+            TypingIndicatorPayload(isTyping: false, timestamp: Date()), senderID: "P")
+        try await c.peer.sendMessage(bootstrap)
+        let sentBefore = c.usT.sent.count
+        try await c.us.handleIncomingMessage(try XCTUnwrap(c.peerT.sent.last))
+        let deadline = Date().addingTimeInterval(2)
+        while c.usT.sent.count == sentBefore && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let reply = try XCTUnwrap(c.usT.sent.dropFirst(sentBefore).first, "responder sent nothing back")
+        XCTAssertEqual(reply.type, .secureEnvelope)
+        // ...which the initiator decrypts to a no-op typing indicator.
+        var got: [PeerMessage] = []
+        c.peer.onMessageReceived = { got.append($0) }
+        try await c.peer.handleIncomingMessage(reply)
+        XCTAssertEqual(got.map(\.type), [.typingIndicator])
+        XCTAssertEqual(try got[0].decodePayload(TypingIndicatorPayload.self).isTyping, false)
+        // Only once.
+        try await c.peer.sendMessage(try text("second"))
+        try await c.us.handleIncomingMessage(try XCTUnwrap(c.peerT.sent.last))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(c.usT.sent.count, sentBefore + 1)
+    }
+
+    func test_initiator_doesNotSendNoOpReply() async throws {
+        let c = try await securedPair(peerVersion: 2, weAreInitiator: true)
+        // Peer (responder) needs our envelope first to get a send chain.
+        try await c.us.sendMessage(try text("hi"))
+        try await c.peer.handleIncomingMessage(try XCTUnwrap(c.usT.sent.last))
+        let sentBefore = c.usT.sent.count
+        try await c.peer.sendMessage(try text("back"))
+        try await c.us.handleIncomingMessage(try XCTUnwrap(c.peerT.sent.last))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(c.usT.sent.count, sentBefore)
+    }
+
+    /// Minor (c): `cancel()` must wake a held business send.
+    func test_heldSend_wokenByCancel() async throws {
+        let usT = RecordingTransport()
+        let us = PeerConnection(
+            peerID: "P", transport: usT,
+            peerIdentity: PeerIdentity(id: "P", displayName: "Peer"),
+            localIdentity: PeerIdentity(id: "U", displayName: "Us"),
+            state: .connected)
+        try await us.initiateSecureHandshake(identity: MemIdentity())
+        let started = Date()
+        let send = Task { try await us.sendMessage(try self.text("x")) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        us.cancel()
+        do {
+            try await send.value
+            XCTFail("held send should fail after cancel()")
+        } catch {}
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1, "held send waited out the fallback after cancel()")
+        XCTAssertEqual(usT.sent.map(\.type), [.secureHandshake])
+    }
+}

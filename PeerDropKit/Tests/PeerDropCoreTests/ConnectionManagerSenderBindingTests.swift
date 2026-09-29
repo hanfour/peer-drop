@@ -735,6 +735,29 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         XCTAssertFalse(cm._isRelayPlaceholderForTesting(pc2), "marker must be consumed by the swap")
     }
 
+    // #170 compat I-2: an old (v5.6.x) relay peer that is still waiting on
+    // its PIN can complete the secure handshake with our placeholder BEFORE it
+    // sends its HELLO — plaintext, since its channel logic predates #170. The
+    // placeholder's peer version is unknown, so it must stay in legacy mode
+    // and the HELLO must still swap the identity.
+    func test_170_I2_oldRelayPeer_helloAfterSecured_stillSwapsIdentity() async throws {
+        let (server, client) = try await rawPair()
+        let pc = cm._installRelayPlaceholderForTesting(roomCode: "R4\(UUID().uuidString.prefix(4))", connection: server)
+        touchedPeers.append(pc.id)
+        XCTAssertEqual(pc.peerIdentity.secureChannelVersion, 1, "placeholder peer version must be unknown/legacy")
+
+        let key = EphemeralChannelIdentity()
+        let (bundle, _) = LocalSecureChannel.prepareHandshake(identity: key)
+        try await client.sendMessage(try PeerMessage.secureHandshake(bundle: bundle, senderID: "old-relay"))
+        let secured = await poll(timeout: 5) { pc.secureChannelState == .secured }
+        XCTAssertTrue(secured, "placeholder never completed the passive handshake")
+
+        let old = PeerIdentity(id: UUID().uuidString, displayName: "Old Relay", secureChannelVersion: 1)
+        try await client.sendMessage(try PeerMessage.hello(identity: old))
+        let swapped = await poll { pc.peerIdentity.id == old.id }
+        XCTAssertTrue(swapped, "old relay peer's plaintext HELLO was dropped after the channel came up")
+    }
+
     // I-2: per-connection consent handoff.
 
     func test_I2_backToBackAccepts_bothDeliverTheirFirstFrame() async throws {
