@@ -129,6 +129,41 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "目前離線，稍後會自動重試。" } }
       }
     },
+    "Respond to the pending connection request first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respond to the pending connection request first"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先に保留中の接続リクエストに応答してください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "먼저 대기 중인 연결 요청에 응답하세요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先回应待处理的连接请求"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先回應待處理的連線請求"
+          }
+        }
+      }
+    },
     "Retry" : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "再試行" } },
@@ -7210,6 +7245,41 @@
           "stringUnit": {
             "state": "translated",
             "value": "Relay 連線"
+          }
+        }
+      }
+    },
+    "Relay connection closed: this device is already connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relay connection closed: this device is already connected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リレー接続を閉じました：このデバイスとはすでに接続されています"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "릴레이 연결을 종료했습니다: 이 기기와 이미 연결되어 있습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭中继连接：已与此设备连接"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已關閉 Relay 連線：已與此裝置連線"
           }
         }
       }

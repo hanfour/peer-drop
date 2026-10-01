@@ -25,14 +25,14 @@ final class FileTransferIntegrationTests: XCTestCase {
 
         listener.newConnectionHandler = { [weak self] conn in
             self?.serverConnection = conn
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         }
 
         let started = expectation(description: "listener ready")
         listener.stateUpdateHandler = { state in
             if case .ready = state { started.fulfill() }
         }
-        listener.start(queue: .global(qos: .userInitiated))
+        listener.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
 
         await fulfillment(of: [started], timeout: 10)
         listenerPort = listener.port?.rawValue
@@ -59,7 +59,7 @@ final class FileTransferIntegrationTests: XCTestCase {
     /// Helper: connect client and wait for the server to accept.
     private func connectPair() async throws -> (client: NWConnection, server: NWConnection) {
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
         try await Task.sleep(nanoseconds: 200_000_000)
         guard let server = serverConnection else {

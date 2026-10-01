@@ -21,9 +21,9 @@ final class WaitReadyRaceTests: XCTestCase {
         var inbound: [NWConnection] = []
         listener.newConnectionHandler = { conn in
             inbound.append(conn)
-            conn.start(queue: .global())
+            conn.start(queue: DispatchQueue(label: "test.inbound"))
         }
-        listener.start(queue: .global())
+        listener.start(queue: DispatchQueue(label: "test.listener"))
         defer { listener.cancel(); inbound.forEach { $0.cancel() } }
 
         // Wait for the listener port.
@@ -39,7 +39,7 @@ final class WaitReadyRaceTests: XCTestCase {
             port: boundPort,
             using: NWParameters.peerDrop()
         )
-        connection.start(queue: .global())
+        connection.start(queue: DispatchQueue(label: "test.client"))
         defer { connection.cancel() }
 
         // Poll until the connection is ALREADY ready — i.e. the state

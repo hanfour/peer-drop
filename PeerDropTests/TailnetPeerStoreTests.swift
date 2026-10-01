@@ -47,8 +47,8 @@ final class TailnetPeerStoreTests: XCTestCase {
         listener.stateUpdateHandler = { state in
             if case .ready = state, let port = listener.port { boundPort = port; group.leave() }
         }
-        listener.newConnectionHandler = { conn in conn.start(queue: .global()) }
-        listener.start(queue: .global())
+        listener.newConnectionHandler = { conn in conn.start(queue: DispatchQueue(label: "test.peerdrop.socket")) }
+        listener.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         group.wait()
 
         let store = TailnetPeerStore()

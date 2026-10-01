@@ -6,16 +6,42 @@ import CryptoKit
 import PeerDropSecurity
 @testable import PeerDrop
 
-private func withTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask { try await operation() }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            throw CancellationError()
+private final class TimeoutOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func claim() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+}
+
+/// Run `operation`, failing with `CancellationError` after `seconds`.
+///
+/// Must not be built on a task group: a group always awaits its children,
+/// so an `operation` stuck on a callback that never fires (e.g. an
+/// NWConnection send completion) turned the "timeout" into an 18-hour hang.
+/// Here the caller is resumed by whichever finishes first; on timeout the
+/// operation task is cancelled and `onTimeout` (e.g. cancelling the socket)
+/// runs so the stuck work can unwind.
+private func withTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    onTimeout: (@Sendable () -> Void)? = nil,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let once = TimeoutOnce()
+    return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, Error>) in
+        let work = Task {
+            do {
+                let value = try await operation()
+                if once.claim() { continuation.resume(returning: value) }
+            } catch {
+                if once.claim() { continuation.resume(throwing: error) }
+            }
         }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard once.claim() else { return }
+            work.cancel()
+            onTimeout?()
+            continuation.resume(throwing: CancellationError())
+        }
     }
 }
 
@@ -37,14 +63,14 @@ final class EdgeCaseTests: XCTestCase {
 
         listener.newConnectionHandler = { [weak self] conn in
             self?.serverConnection = conn
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         }
 
         let started = expectation(description: "listener ready")
         listener.stateUpdateHandler = { state in
             if case .ready = state { started.fulfill() }
         }
-        listener.start(queue: .global(qos: .userInitiated))
+        listener.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
 
         await fulfillment(of: [started], timeout: 10)
         listenerPort = listener.port?.rawValue
@@ -70,7 +96,7 @@ final class EdgeCaseTests: XCTestCase {
 
     private func connectPair() async throws -> (client: NWConnection, server: NWConnection) {
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
         try await Task.sleep(nanoseconds: 200_000_000)
         guard let server = serverConnection else {
@@ -124,6 +150,24 @@ final class EdgeCaseTests: XCTestCase {
         }
     }
 
+    // MARK: - Test helper guard
+
+    /// `withTimeout` must return even if the operation never completes (the
+    /// task-group version awaited the stuck child and hung for 18 hours).
+    func testWithTimeoutReturnsWhenOperationNeverCompletes() async throws {
+        let started = Date()
+        do {
+            try await withTimeout(seconds: 0.3) {
+                // A callback-based wait whose callback never fires.
+                await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+            }
+            XCTFail("expected a timeout")
+        } catch is CancellationError {
+            // expected
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3)
+    }
+
     // MARK: - Mid-Transfer Disconnect (Receiver Cancels)
 
     /// Verify that cancelling the receiver mid-transfer causes sender to fail.
@@ -155,24 +199,25 @@ final class EdgeCaseTests: XCTestCase {
         // Give network time to propagate the disconnect
         try await Task.sleep(nanoseconds: 500_000_000)
 
-        // Sender should eventually fail when trying to send more chunks.
-        // Wrap in timeout to prevent hanging if the connection buffers indefinitely.
-        var hitError = false
+        // The sender must see a REAL send failure (the reset/closed
+        // connection), well before the 10 s guard. A timeout surfaces as
+        // CancellationError and must fail the test — the guard only exists so
+        // a regression can't hang the suite.
+        var sendError: Error?
         do {
-            try await withTimeout(seconds: 10) {
+            try await withTimeout(seconds: 10, onTimeout: { client.cancel() }) {
                 for i in 1..<chunks.count {
                     try await client.sendMessage(PeerMessage.fileChunk(chunks[i], senderID: "sender"))
                 }
             }
         } catch {
-            hitError = true
+            sendError = error
         }
+        client.cancel()
 
-        // The connection may buffer some sends before failing — that's OK.
-        // The important thing is the connection is no longer usable.
-        // Either we hit an error or the connection is in a failed/cancelled state.
-        let isConnectionDead = hitError || client.state == .cancelled
-        XCTAssertTrue(isConnectionDead, "Connection should be dead after receiver disconnect")
+        XCTAssertNotNil(sendError, "sender never noticed the receiver disconnect")
+        XCTAssertFalse(sendError is CancellationError,
+                       "no send failure within 10 s — only the timeout fired (\(String(describing: sendError)))")
     }
 
     // MARK: - Zero-Byte File

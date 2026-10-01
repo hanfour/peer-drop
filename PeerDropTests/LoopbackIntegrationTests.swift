@@ -20,14 +20,14 @@ final class LoopbackIntegrationTests: XCTestCase {
         // Set handler BEFORE starting (required by Network.framework)
         listener.newConnectionHandler = { [weak self] conn in
             self?.serverConnection = conn
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         }
 
         let started = expectation(description: "listener ready")
         listener.stateUpdateHandler = { state in
             if case .ready = state { started.fulfill() }
         }
-        listener.start(queue: .global(qos: .userInitiated))
+        listener.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
 
         await fulfillment(of: [started], timeout: 10)
         listenerPort = listener.port?.rawValue
@@ -58,7 +58,7 @@ final class LoopbackIntegrationTests: XCTestCase {
         let received = expectation(description: "message received")
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         // Wait briefly for server to accept
@@ -88,7 +88,7 @@ final class LoopbackIntegrationTests: XCTestCase {
         var receivedTypes: [MessageType] = []
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -120,7 +120,7 @@ final class LoopbackIntegrationTests: XCTestCase {
         let chunkData = Data(repeating: 0xAB, count: 64 * 1024) // 64 KB
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -146,7 +146,7 @@ final class LoopbackIntegrationTests: XCTestCase {
     /// Verify bidirectional communication (server replies to client).
     func testBidirectionalExchange() async throws {
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)

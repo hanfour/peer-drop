@@ -31,6 +31,14 @@ final class StateMachineTests: XCTestCase {
         XCTAssertTrue(state.canTransition(to: .connecting))
     }
 
+    /// Simultaneous connect where the other peer wins the tie-break: our
+    /// dial is dropped and its request is shown, without passing through
+    /// `.disconnected` (#161 m-b).
+    func testRequestingToIncomingRequest() {
+        let state = ConnectionState.requesting
+        XCTAssertTrue(state.canTransition(to: .incomingRequest))
+    }
+
     func testRequestingToRejected() {
         let state = ConnectionState.requesting
         XCTAssertTrue(state.canTransition(to: .rejected))

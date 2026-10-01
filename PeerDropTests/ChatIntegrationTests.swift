@@ -20,14 +20,14 @@ final class ChatIntegrationTests: XCTestCase {
 
         listener.newConnectionHandler = { [weak self] conn in
             self?.serverConnection = conn
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         }
 
         let started = expectation(description: "listener ready")
         listener.stateUpdateHandler = { state in
             if case .ready = state { started.fulfill() }
         }
-        listener.start(queue: .global(qos: .userInitiated))
+        listener.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
 
         await fulfillment(of: [started], timeout: 10)
         listenerPort = listener.port?.rawValue
@@ -73,7 +73,7 @@ final class ChatIntegrationTests: XCTestCase {
         let received = expectation(description: "chat message received")
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -102,7 +102,7 @@ final class ChatIntegrationTests: XCTestCase {
     /// Test bidirectional chat conversation
     func testBidirectionalChatConversation() async throws {
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -141,7 +141,7 @@ final class ChatIntegrationTests: XCTestCase {
         var receivedMessages: [String] = []
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -177,7 +177,7 @@ final class ChatIntegrationTests: XCTestCase {
         let conversationComplete = expectation(description: "conversation complete")
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -235,7 +235,7 @@ final class ChatIntegrationTests: XCTestCase {
         let received = expectation(description: "special message received")
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -265,7 +265,7 @@ final class ChatIntegrationTests: XCTestCase {
         let received = expectation(description: "long message received")
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -297,7 +297,7 @@ final class ChatIntegrationTests: XCTestCase {
         let allDone = expectation(description: "rapid exchange complete")
 
         let client = makeClient()
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
 
         try await Task.sleep(nanoseconds: 200_000_000)

@@ -46,7 +46,9 @@ public enum ConnectionState: Equatable {
         case .peerFound:
             return [.requesting, .discovering, .incomingRequest]
         case .requesting:
-            return [.connecting, .rejected, .failed, .disconnected]
+            // `.incomingRequest`: simultaneous connect where the other peer
+            // wins the tie-break — our dial is dropped and its request shown.
+            return [.connecting, .rejected, .failed, .disconnected, .incomingRequest]
         case .incomingRequest:
             return [.connecting, .discovering, .disconnected]
         case .connecting:

@@ -23,14 +23,14 @@ final class PerformanceTests: XCTestCase {
 
         listener.newConnectionHandler = { [weak self] conn in
             self?.serverConnection = conn
-            conn.start(queue: .global(qos: .userInitiated))
+            conn.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         }
 
         let started = expectation(description: "listener ready")
         listener.stateUpdateHandler = { state in
             if case .ready = state { started.fulfill() }
         }
-        listener.start(queue: .global(qos: .userInitiated))
+        listener.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
 
         await fulfillment(of: [started], timeout: 10)
         listenerPort = listener.port?.rawValue
@@ -52,7 +52,7 @@ final class PerformanceTests: XCTestCase {
             port: NWEndpoint.Port(rawValue: listenerPort)!,
             using: params
         )
-        client.start(queue: .global(qos: .userInitiated))
+        client.start(queue: DispatchQueue(label: "test.peerdrop.socket"))
         try await client.waitReady()
         try await Task.sleep(nanoseconds: 200_000_000)
         guard let server = serverConnection else {
