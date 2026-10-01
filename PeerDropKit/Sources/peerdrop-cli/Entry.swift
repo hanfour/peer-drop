@@ -53,6 +53,11 @@ struct PeerDropCLI {
 
         HeadlessPlatform.register(deviceName: opts.name)
 
+        // #166: an accepted connection is not a trusted one in the CLI, so turn
+        // off features that act on peer data outside the input gate (file
+        // transfer auto-accepts and writes to disk; calls; clipboard sync).
+        CLIFeaturePolicy.apply(to: .standard)
+
         let cm = ConnectionManager()
         let store = cm.trustedContactStore
 
@@ -87,13 +92,24 @@ struct PeerDropCLI {
         bridge.onMessage = { [weak session] text in session?.broadcast(text) }
         session.wire()
 
-        // Replay buffered process output to any peer that drops and reconnects.
-        // A brand-new peer (not in attachedPeerIDs) is skipped — handlePeerConnected
-        // guards on shouldReplayOnConnect. The callback fires on the main actor;
-        // wrap in Task{@MainActor} to satisfy the compiler since the closure type
-        // is not itself @MainActor.
+        // Replay buffered process output to a peer that drops and reconnects
+        // (once its new connection is authorised — see handlePeerConnected), and
+        // forget per-peer replay/queue state when a connection goes away.
+        // ConnectionManager fires both callbacks synchronously on the main actor;
+        // handling them synchronously keeps disconnect→reconnect in order.
+        // #173 mitigation: only one new device may pair at a time.
+        let firstTrustGuard = FirstTrustGuard(connectionManager: cm)
         cm.onPeerConnected = { [weak session] peerID in
-            Task { @MainActor in session?.handlePeerConnected(peerID) }
+            MainActor.assumeIsolated {
+                session?.handlePeerConnected(peerID)
+                firstTrustGuard.watch(peerID)
+            }
+        }
+        cm.onPeerDisconnected = { [weak session] peerID in
+            MainActor.assumeIsolated {
+                session?.handlePeerDisconnected(peerID)
+                firstTrustGuard.stopWatching(peerID)
+            }
         }
 
         bridge.onExit = { code in
@@ -128,6 +144,13 @@ struct PeerDropCLI {
             .sink { req in
                 let key = req.peerIdentity.identityPublicKey ?? Data()
                 let decision = AgentSession.decideTrust(identityKey: key, store: store)
+                // #166: an unknown peer is accepted only so the secure handshake
+                // and SAS prompt can run — it is NOT trusted, and AgentSession's
+                // InputGate drops its input until the user confirms the SAS.
+                // Peers without a secure channel can never be authenticated.
+                let action = AgentSession.connectionAction(
+                    for: decision,
+                    peerSupportsSecureChannel: req.peerIdentity.supportsSecureChannel)
                 // `pendingIncomingRequest` is published via @Published's `willSet`, so the
                 // stored property is still nil while this sink runs synchronously.
                 // `acceptConnection()`/`rejectConnection()` re-read that property and bail
@@ -135,11 +158,15 @@ struct PeerDropCLI {
                 // by which point the assignment has completed. The app path is immune: a
                 // human taps the consent sheet long after the property is set.
                 Task { @MainActor in
-                    switch decision {
+                    switch action {
                     case .reject:
-                        print("rejecting blocked peer \(req.peerIdentity.displayName)")
+                        let why = decision == .reject ? "blocked" : "no secure channel"
+                        print("rejecting peer \(TerminalSanitizer.sanitize(req.peerIdentity.displayName)) (\(why))")
                         cm.rejectConnection()
-                    case .autoAccept, .enroll:
+                    case .acceptPendingSAS:
+                        print("new peer \(TerminalSanitizer.sanitize(req.peerIdentity.displayName)) — input ignored until you confirm the SAS")
+                        cm.acceptConnection()
+                    case .acceptTrusted:
                         cm.acceptConnection()
                     }
                 }
@@ -147,22 +174,20 @@ struct PeerDropCLI {
             .store(in: &bag)
 
         // One-time SAS enrollment prompt for new local-Wi-Fi peers.
+        // The text is built now, on the main actor, while the connection the
+        // prompt is about is certainly registered (#173: fingerprint of the
+        // handshake key). "n" dismisses without blocking (see FirstTrustGuard).
         cm.$pendingLocalFirstTrust
             .compactMap { $0 }
             .sink { pending in
+                let promptLines = FirstTrustGuard.promptLines(
+                    for: pending, cm: cm, ownFingerprint: IdentityKeyManager.shared.fingerprint)
                 Task.detached {
-                    print("\nPair with \(pending.senderDisplayName)?")
-                    print("SAS: \(pending.sas ?? "n/a")  (verify it matches the phone)")
+                    promptLines.forEach { print($0) }
                     print("Approve? [y/N] ", terminator: "")
-                    let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
+                    let answer = readLine()
                     await MainActor.run {
-                        if answer == "y" {
-                            cm.approveLocalFirstTrust(fingerprint: pending.fingerprint)
-                            print("paired ✓ — future connections auto-accept")
-                        } else {
-                            cm.blockLocalFirstTrust(fingerprint: pending.fingerprint)
-                            print("rejected")
-                        }
+                        firstTrustGuard.handleAnswer(answer, for: pending)
                     }
                 }
             }
@@ -174,12 +199,12 @@ struct PeerDropCLI {
             .compactMap { $0 }
             .sink { pending in
                 Task.detached {
-                    print("\nPair with \(pending.senderDisplayName) (relay)?")
-                    if let sas = pending.sas {
-                        print("SAS: \(sas)  (verify it matches the phone)")
-                    } else {
-                        print("Verify this fingerprint matches the phone:\n  \(pending.fingerprint)")
-                    }
+                    PairingPrompt.lines(
+                        displayName: pending.senderDisplayName,
+                        sas: pending.sas,
+                        fingerprint: pending.fingerprint,
+                        isRelay: true
+                    ).forEach { print($0) }
                     print("Approve? [y/N] ", terminator: "")
                     let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
                     await MainActor.run {
