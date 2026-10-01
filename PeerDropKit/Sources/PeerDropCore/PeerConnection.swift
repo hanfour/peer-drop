@@ -55,6 +55,14 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// Local identity for sending messages.
     private let localIdentity: PeerIdentity
 
+    /// Still carrying the `relay-<code>` placeholder identity (#161 I-1).
+    /// Structural: set only by `ConnectionManager.installRelayPlaceholder`,
+    /// consumed by the first per-peer HELLO, and cleared when the connection
+    /// is removed or overwritten. Lives on the object (not as an
+    /// ObjectIdentifier in a set), so it can never be inherited by a later
+    /// object allocated at the same address.
+    var isRelayPlaceholder = false
+
     // MARK: - Secure channel (audit-#13 Phase 2)
 
     /// Active local-TCP secure channel, or nil if the peer hasn't completed
@@ -75,7 +83,9 @@ public final class PeerConnection: ObservableObject, Identifiable {
         case secured               // both bundles exchanged, channel ready
         case fallbackPlaintext     // peer didn't respond in time; staying plaintext
     }
-    @Published public private(set) var secureChannelState: SecureChannelState = .disabled
+    @Published public private(set) var secureChannelState: SecureChannelState = .disabled {
+        didSet { signalSendReadiness() }
+    }
 
     /// Fingerprint-pinning verdict from the most recent handshake. Exposed
     /// for the UI so the connected-peers list can surface a lock icon for
@@ -110,14 +120,64 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// enough that a slow-launching peer can still complete.
     public static let handshakeFallbackSeconds: UInt64 = 5
 
-    /// MessageTypes that bypass encryption even when a secureChannel exists.
-    /// These are either the handshake itself or low-cost keepalive — wrapping
-    /// would either chicken-and-egg the handshake or waste crypto on
-    /// 50-byte ping/pong frames.
-    private static let secureChannelBypassTypes: Set<MessageType> = [
+    /// Fallback timer length (tests shorten it). Also bounds how long a
+    /// business send is held waiting for the channel (see `sendMessage`).
+    var handshakeFallbackNanoseconds: UInt64 = PeerConnection.handshakeFallbackSeconds * 1_000_000_000
+
+    /// The ONLY message types that travel unwrapped once a secure channel
+    /// exists — used by BOTH directions (#170), so they cannot drift apart:
+    ///
+    /// - send: `sendMessage` does not wrap these; `disconnect()` writes
+    ///   `.disconnect` straight to the transport; the handshake writes
+    ///   `.secureHandshake` (bundle / passive reply) straight to the transport.
+    /// - receive: once `secureChannel != nil`, `handleIncomingMessage` drops
+    ///   every plaintext frame whose type is not in this set.
+    ///
+    /// Derivation (every raw `transport.send` / NWConnection send that can
+    /// follow our handshake bundle on the same socket):
+    /// - `.secureHandshake` — chicken-and-egg; a duplicate on a live channel
+    ///   is a logged no-op (`handleIncomingSecureHandshake`).
+    /// - `.ping` / `.pong` — keepalive (PeerConnection heartbeat, and the
+    ///   ConnectionManager pong reply); not worth ratchet steps.
+    /// - `.disconnect` — `disconnect()` and ConnectionManager's legacy
+    ///   `activeConnection` teardown write it raw, and peers built before
+    ///   #170 always send it raw. Dropping it would leave zombie
+    ///   connections; an on-path attacker able to inject it can already tear
+    ///   the TCP stream down with a RST, so accepting it grants nothing new.
+    /// Everything else ConnectionManager sends raw (`hello`,
+    /// `connectionRequest/Accept/Reject`, pre-consent pong) goes out before the
+    /// PeerConnection exists, i.e. before either handshake bundle.
+    static let unwrappedControlTypes: Set<MessageType> = [
         .secureHandshake,
         .ping, .pong,
+        .disconnect,
     ]
+
+    /// Ratchet responders have no sending chain until the first inbound
+    /// envelope; tracked so business sends can wait for it (#170).
+    private var hasReceivedEnvelope = false {
+        didSet { signalSendReadiness() }
+    }
+
+    /// Plaintext non-control frames dropped on the secured channel (strict).
+    private(set) var plaintextDroppedCount = 0
+    /// Plaintext non-control frames delivered on the secured channel because
+    /// the peer is legacy (secureChannelVersion 1) and hasn't yet sent an
+    /// envelope on this connection.
+    private(set) var plaintextAcceptedLegacyCount = 0
+
+    /// Set by `cancel()` / `disconnect()`; cleared by `replaceTransport`.
+    /// Wakes and fails any held business send.
+    private var isClosed = false {
+        didSet { signalSendReadiness() }
+    }
+
+    /// Whether we already answered the initiator's bootstrap envelope with our
+    /// own no-op envelope (ratchet responder only, once per connection).
+    private var sentResponderNoOp = false
+
+    /// Business sends parked until the channel can carry them (#170).
+    private var sendReadinessWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// Backward-compatible accessor for the underlying NWConnection (TCP transport only).
     var nwConnection: NWConnection? {
@@ -171,6 +231,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
         guard state != newState else { return }
         logger.info("PeerConnection[\(self.id.prefix(8))] state: \(String(describing: self.state)) → \(String(describing: newState))")
         state = newState
+        signalSendReadiness()
         onStateChange?(newState)
 
         switch newState {
@@ -192,6 +253,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
 
     public func replaceTransport(_ newTransport: TransportProtocol) {
         transport = newTransport
+        isClosed = false
         connectionGeneration = UUID()
     }
 
@@ -269,12 +331,21 @@ public final class PeerConnection: ObservableObject, Identifiable {
         guard state.isActive else {
             throw ConnectionError.notConnected
         }
-        // If we have a secured channel and this message isn't a bypass
-        // type (handshake / ping / pong), wrap it before hitting the
-        // wire. Wrapping fails closed — if encrypt throws, the message
-        // does NOT fall through to plaintext.
-        if let channel = secureChannel,
-           !Self.secureChannelBypassTypes.contains(message.type) {
+        let isControl = Self.unwrappedControlTypes.contains(message.type)
+        if !isControl {
+            // #170: once our handshake bundle is on the wire the peer drops
+            // plaintext business frames, so hold them until the channel can
+            // encrypt (or the handshake falls back to plaintext).
+            try await waitUntilBusinessSendable()
+            guard state.isActive, !isClosed else {
+                throw ConnectionError.notConnected
+            }
+        }
+        // If we have a secured channel and this message isn't an unwrapped
+        // control type, wrap it before hitting the wire. Wrapping fails
+        // closed — if encrypt throws, the message does NOT fall through to
+        // plaintext.
+        if let channel = secureChannel, !isControl {
             let plaintext = try message.encoded()
             let frame = try channel.encrypt(plaintext)
             let envelope = PeerMessage.secureEnvelope(frame: frame, senderID: localIdentity.id)
@@ -282,6 +353,58 @@ public final class PeerConnection: ObservableObject, Identifiable {
             return
         }
         try await transport.send(message)
+    }
+
+    /// Whether a business (non-control) send must wait right now (#170):
+    /// - `.handshakeInProgress`: our bundle is on the wire; the peer is (or
+    ///   will be, by the time it reads this frame) secured and would drop a
+    ///   plaintext business frame.
+    /// - `.secured` as ratchet responder before the first inbound envelope:
+    ///   `encrypt` would throw `noSendChain`. The initiator sends a no-op
+    ///   envelope right after establishing (ConnectionManager bootstrap).
+    private var mustHoldBusinessSend: Bool {
+        guard state.isActive, !isClosed else { return false }
+        switch secureChannelState {
+        case .handshakeInProgress:
+            return true
+        case .secured:
+            return secureChannel?.isInitiator == false && !hasReceivedEnvelope
+        case .disabled, .fallbackPlaintext:
+            return false
+        }
+    }
+
+    private final class HoldTimeout { var fired = false }
+
+    /// Wait until `mustHoldBusinessSend` clears, bounded by
+    /// `handshakeFallbackNanoseconds` (after which the send proceeds and
+    /// behaves as it did before #170). Throws if the connection generation
+    /// changed while holding (cancel / transport replacement): the send was
+    /// meant for a transport that no longer exists.
+    private func waitUntilBusinessSendable() async throws {
+        guard mustHoldBusinessSend else { return }
+        let generation = connectionGeneration
+        let timeout = HoldTimeout()
+        let limit = handshakeFallbackNanoseconds
+        let timer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: limit)
+            timeout.fired = true
+            self?.signalSendReadiness()
+        }
+        defer { timer.cancel() }
+        while mustHoldBusinessSend && !timeout.fired && connectionGeneration == generation {
+            await withCheckedContinuation { sendReadinessWaiters.append($0) }
+        }
+        guard connectionGeneration == generation else {
+            throw ConnectionError.notConnected
+        }
+    }
+
+    private func signalSendReadiness() {
+        guard !sendReadinessWaiters.isEmpty else { return }
+        let waiters = sendReadinessWaiters
+        sendReadinessWaiters = []
+        waiters.forEach { $0.resume() }
     }
 
     // MARK: - Secure Channel (audit-#13 Phase 2)
@@ -338,11 +461,12 @@ public final class PeerConnection: ObservableObject, Identifiable {
     private func scheduleHandshakeFallback() {
         handshakeFallbackTask?.cancel()
         let generation = connectionGeneration
+        let delay = handshakeFallbackNanoseconds
         handshakeFallbackTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: Self.handshakeFallbackSeconds * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
             guard let self, !Task.isCancelled, self.connectionGeneration == generation else { return }
             if self.secureChannelState == .handshakeInProgress {
-                logger.warning("PeerConnection[\(self.id.prefix(8))] handshake fallback fired after \(Self.handshakeFallbackSeconds)s — peer didn't respond")
+                logger.warning("PeerConnection[\(self.id.prefix(8))] handshake fallback fired after \(delay / 1_000_000)ms — peer didn't respond")
                 self.secureChannelState = .fallbackPlaintext
                 self.pendingRatchetPrivateKey = nil
             }
@@ -449,11 +573,68 @@ public final class PeerConnection: ObservableObject, Identifiable {
             }
             guard let frame = message.payload else { return }
             let plaintext = try channel.decrypt(frame)
+            if !hasReceivedEnvelope { hasReceivedEnvelope = true }
+            sendResponderNoOpIfNeeded(channel)
             let inner = try PeerMessage.decoded(from: plaintext)
             onMessageReceived?(inner)
 
         default:
+            // #170: on a secured channel, plaintext business frames are only
+            // honest from a legacy peer (see `requiresEnvelopes`). Otherwise
+            // it's an injection (TLS accepts any cert, #167): drop it, keep
+            // the connection (tearing down hands an injector nothing it lacks
+            // — it can RST — and would cut off honest peers on a benign race).
+            // Log the type only — never the payload.
+            if secureChannel != nil, !Self.unwrappedControlTypes.contains(message.type) {
+                if requiresEnvelopes {
+                    plaintextDroppedCount += 1
+                    logger.warning("PeerConnection[\(self.id.prefix(8))] plaintext dropped (strict): \(message.type.rawValue, privacy: .public) [dropped=\(self.plaintextDroppedCount)]")
+                    return
+                }
+                plaintextAcceptedLegacyCount += 1
+                logger.notice("PeerConnection[\(self.id.prefix(8))] plaintext accepted (legacy mode): \(message.type.rawValue, privacy: .public) [accepted=\(self.plaintextAcceptedLegacyCount)]")
+            }
             onMessageReceived?(message)
+        }
+    }
+
+    /// Whether a plaintext business frame on the secured channel must be
+    /// dropped (#170).
+    /// - Peer `secureChannelVersion >= 2`: always — it holds business sends
+    ///   until its channel can encrypt, so it never emits one after its bundle.
+    /// - Peer version 1 / absent (v5.1 – v5.6.x): only once that peer has sent
+    ///   a valid envelope on THIS connection. Before that it may legitimately
+    ///   send plaintext: its own handshake-window race (~1 RTT, e.g. an
+    ///   acceptor's NI token offer), a relay HELLO sent after PIN entry, or a
+    ///   whole session when a v5.6.0 acceptor never read our bundle (its
+    ///   consent monitor ate the frame, #175) and fell back to plaintext.
+    ///   After its first envelope, its channel is up on its side too, so every
+    ///   later business frame from it is an envelope.
+    ///
+    /// TODO(min-supported-version): once v5.6.x is below the minimum
+    /// supported peer version, drop the legacy branch (and the
+    /// `plaintextAcceptedLegacyCount` counter) so every secured channel is
+    /// strict as soon as `secureChannel != nil`.
+    private var requiresEnvelopes: Bool {
+        peerIdentity.secureChannelVersion >= 2 || hasReceivedEnvelope
+    }
+
+    /// Ratchet responder: answer the initiator's bootstrap envelope with a
+    /// no-op envelope of our own (once), so the initiator promptly sees a
+    /// valid envelope from us. `typingIndicator(false)` is a no-op on receipt
+    /// (it only clears typing state), and v5.6.x decodes it.
+    private func sendResponderNoOpIfNeeded(_ channel: LocalSecureChannel) {
+        guard !channel.isInitiator, !sentResponderNoOp else { return }
+        sentResponderNoOp = true
+        let senderID = localIdentity.id
+        Task { [weak self] in
+            guard let self,
+                  let msg = try? PeerMessage.typingIndicator(
+                    TypingIndicatorPayload(isTyping: false, timestamp: Date()),
+                    senderID: senderID)
+            else { return }
+            do { try await self.sendMessage(msg) }
+            catch { logger.warning("PeerConnection[\(self.id.prefix(8))] responder no-op envelope failed: \(error.localizedDescription)") }
         }
     }
 
@@ -462,10 +643,12 @@ public final class PeerConnection: ObservableObject, Identifiable {
     public func disconnect(sendMessage: Bool = true) async {
         logger.info("PeerConnection[\(self.id.prefix(8))] disconnecting")
         connectionGeneration = UUID()
+        isClosed = true
         heartbeatTask?.cancel()
         heartbeatTask = nil
 
         if sendMessage {
+            // Unwrapped on purpose — `.disconnect` is in `unwrappedControlTypes`.
             let msg = PeerMessage.disconnect(senderID: localIdentity.id)
             try? await transport.send(msg)
         }
@@ -476,6 +659,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
 
     public func cancel() {
         connectionGeneration = UUID()
+        isClosed = true
         transport.close()
     }
 }

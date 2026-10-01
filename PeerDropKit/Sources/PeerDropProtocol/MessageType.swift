@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MessageType: String, Codable {
+public enum MessageType: String, Codable, CaseIterable {
     // Handshake
     case hello
     case connectionRequest

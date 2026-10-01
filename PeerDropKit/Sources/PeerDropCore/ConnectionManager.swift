@@ -305,11 +305,6 @@ public final class ConnectionManager: ObservableObject {
     }
     private var dialAttempt: DialAttempt?
 
-    /// Relay connections still carrying their `relay-<code>` placeholder
-    /// identity (#161 I-1). Membership is structural — set only by
-    /// `installRelayPlaceholder` — and consumed by the first per-peer HELLO.
-    private var relayPlaceholders = Set<ObjectIdentifier>()
-
     // MARK: - Network Path Monitoring
     private var pathMonitor: NWPathMonitor?
     private var lastNetworkPath: NWPath?
@@ -754,6 +749,11 @@ public final class ConnectionManager: ObservableObject {
     /// Add a new peer connection.
     private func addConnection(_ peerConnection: PeerConnection, startReceiving: Bool = true) {
         let peerID = peerConnection.id
+        // An overwritten connection loses its relay-placeholder marker: it is
+        // no longer installed, and must never regain an identity swap.
+        if let replaced = connections[peerID], replaced !== peerConnection {
+            replaced.isRelayPlaceholder = false
+        }
         connections[peerID] = peerConnection
 
         // Single-reader handoff: if this PeerConnection now owns the socket the
@@ -804,7 +804,7 @@ public final class ConnectionManager: ObservableObject {
     /// Remove a peer connection.
     private func removeConnection(peerID: String) {
         if let removed = connections.removeValue(forKey: peerID) {
-            relayPlaceholders.remove(ObjectIdentifier(removed))
+            removed.isRelayPlaceholder = false
         }
 
         // Update focused peer if needed
@@ -1640,6 +1640,12 @@ public final class ConnectionManager: ObservableObject {
     @discardableResult
     public func _installRelayPlaceholderForTesting(roomCode: String, connection: NWConnection) -> PeerConnection {
         installRelayPlaceholder(roomCode: roomCode, transport: TCPTransport(connection: connection), remoteFingerprint: nil)
+    }
+
+    /// Test-only: whether the HELLO identity swap would treat `pc` as a relay
+    /// placeholder.
+    public func _isRelayPlaceholderForTesting(_ pc: PeerConnection) -> Bool {
+        pc.isRelayPlaceholder
     }
 
     /// Test-only: reconnect back-off attempts consumed so far.
@@ -3112,7 +3118,11 @@ public final class ConnectionManager: ObservableObject {
         remoteFingerprint: String?
     ) -> PeerConnection {
         let peerID = "relay-\(roomCode)"
-        let peerIdentity = PeerIdentity(id: peerID, displayName: "Relay Peer", certificateFingerprint: remoteFingerprint)
+        // Peer's secure-channel version is unknown until its HELLO: treat it
+        // as legacy (1) so an old peer's plaintext HELLO — sent after PIN
+        // entry, possibly after the channel came up — isn't dropped (#170).
+        let peerIdentity = PeerIdentity(id: peerID, displayName: "Relay Peer", certificateFingerprint: remoteFingerprint,
+                                        secureChannelVersion: 1)
         let peerConnection = PeerConnection(
             peerID: peerID,
             transport: transport,
@@ -3120,7 +3130,7 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connected
         )
-        relayPlaceholders.insert(ObjectIdentifier(peerConnection))
+        peerConnection.isRelayPlaceholder = true
         addConnection(peerConnection)
         focusedPeerID = peerID
         return peerConnection
@@ -3642,10 +3652,11 @@ public final class ConnectionManager: ObservableObject {
             // peer B pose as C.
             guard let payload = message.payload,
                   let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) else { return }
-            guard relayPlaceholders.remove(ObjectIdentifier(peerConnection)) != nil else {
+            guard peerConnection.isRelayPlaceholder else {
                 logger.warning("Per-peer hello on \(peerID.prefix(12)): identity already bound; ignoring re-point attempt")
                 return
             }
+            peerConnection.isRelayPlaceholder = false
             // The real identity may not be a reserved relay id, nor one another
             // connection already holds (as key or alias) — else B could take
             // over C's attribution / `connection(for:)` (#161 I-1, M-2).
@@ -3849,6 +3860,7 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connected
         )
+        sendSacrificialPingIfLegacyAcceptor(identity, on: connection)
         addConnection(peerConnection)
         // A dial is user-initiated: the user chose this peer, so it gets the
         // focus (drag-and-drop, file picker and calls then target it). Only
@@ -3857,6 +3869,34 @@ public final class ConnectionManager: ObservableObject {
         // v5.1: capability flag is known from the identity — trigger.
         triggerSecureChannelNegotiation(for: peerConnection)
         return true
+    }
+
+    /// #175 interop ("Fix A"): a v5.6.x acceptor cancels its consent monitor
+    /// on accept, but the monitor's timeout-wrapped read stays pending on the
+    /// socket and consumes — and discards — exactly the next frame we send.
+    /// That used to be our handshake bundle, leaving the acceptor stuck in
+    /// `.handshakeInProgress` → plaintext fallback for the whole session
+    /// (one-way traffic). So for an acceptor whose hello has no
+    /// `secureChannelVersion` (v1) we first write one sacrificial `.ping`.
+    /// An acceptor without that bug just answers `.pong` (control-allowlisted,
+    /// no side effects). Never sent to v2 peers (they read every frame).
+    ///
+    /// Enqueued synchronously on the NWConnection, before the PeerConnection
+    /// is installed and before negotiation starts, so it is the first frame
+    /// on the wire after the acceptor's HELLO — ahead of the bundle and of
+    /// anything else this side sends.
+    ///
+    /// TODO(min-supported-version): remove with the v1 legacy branch.
+    private func sendSacrificialPingIfLegacyAcceptor(_ identity: PeerIdentity, on connection: NWConnection) {
+        guard identity.secureChannelVersion < 2 else { return }
+        do {
+            try connection.enqueueMessage(PeerMessage.ping(senderID: localIdentity.id)) { error in
+                if let error { logger.warning("Legacy-acceptor ping failed: \(error.localizedDescription)") }
+            }
+            logger.info("Initiator: v1 acceptor — sent sacrificial ping ahead of the secure handshake (#175)")
+        } catch {
+            logger.warning("Legacy-acceptor ping encode failed: \(error.localizedDescription)")
+        }
     }
 
     private func handleConnectionStateChange(_ nwState: NWConnection.State, on connection: NWConnection) {

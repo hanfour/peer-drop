@@ -520,6 +520,9 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
     enum FakeAcceptorScript {
         case accept, disconnectBeforeAccept
+        /// Accept + HELLO, no sync ping; answer any `.ping` with a `.pong`
+        /// (like any peer's per-connection handler).
+        case acceptQuietly
         /// Hold the dial (no reply) until `gate` opens, then accept.
         case acceptWhenOpened(Gate)
     }
@@ -549,6 +552,16 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
                         // Sync point: the pong comes back from the installed
                         // PeerConnection, after anything sent before install.
                         try await conn.sendMessage(PeerMessage.ping(senderID: reply.id))
+                    case .acceptQuietly:
+                        try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
+                        try await conn.sendMessage(try PeerMessage.hello(identity: reply))
+                        while true {
+                            let m = try await conn.receiveMessage(timeout: 30)
+                            recorder?.append(m.type)
+                            if m.type == .ping {
+                                try await conn.sendMessage(PeerMessage.pong(senderID: reply.id))
+                            }
+                        }
                     case .disconnectBeforeAccept:
                         try await conn.sendMessage(PeerMessage.disconnect(senderID: reply.id))
                     case .acceptWhenOpened(let gate):
@@ -709,6 +722,101 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
         XCTAssertEqual(pc.peerIdentity.id, placeholderID, "relay connection took over C's id")
         XCTAssertTrue(cm.connection(for: carol.id) === carolPC)
         XCTAssertEqual(cm.statusToast, String(localized: "Relay connection closed: this device is already connected"))
+    }
+
+    // m-1: overwriting a relay key must not leave the old connection's
+    // placeholder marker behind (it was an ObjectIdentifier in a set, so a
+    // later object at the same address would inherit one identity swap).
+    func test_m1_overwrittenRelayPlaceholder_losesItsMarker() async throws {
+        let code = "R3\(UUID().uuidString.prefix(4))"
+        let (server1, _) = try await rawPair()
+        let pc1 = cm._installRelayPlaceholderForTesting(roomCode: code, connection: server1)
+        touchedPeers.append(pc1.id)
+        let (server2, client2) = try await rawPair()
+        let pc2 = cm._installRelayPlaceholderForTesting(roomCode: code, connection: server2)
+        XCTAssertTrue(cm.connections[pc2.id] === pc2)
+
+        XCTAssertFalse(cm._isRelayPlaceholderForTesting(pc1),
+                       "overwritten relay connection still carries a placeholder marker")
+        XCTAssertTrue(cm._isRelayPlaceholderForTesting(pc2))
+
+        // The installed placeholder still swaps exactly once.
+        let real = identity("Rhea")
+        try await client2.sendMessage(try PeerMessage.hello(identity: real))
+        let swapped = await poll { pc2.peerIdentity.id == real.id }
+        XCTAssertTrue(swapped)
+        XCTAssertFalse(cm._isRelayPlaceholderForTesting(pc2), "marker must be consumed by the swap")
+    }
+
+    // #170 compat I-2: an old (v5.6.x) relay peer that is still waiting on
+    // its PIN can complete the secure handshake with our placeholder BEFORE it
+    // sends its HELLO — plaintext, since its channel logic predates #170. The
+    // placeholder's peer version is unknown, so it must stay in legacy mode
+    // and the HELLO must still swap the identity.
+    func test_170_I2_oldRelayPeer_helloAfterSecured_stillSwapsIdentity() async throws {
+        let (server, client) = try await rawPair()
+        let pc = cm._installRelayPlaceholderForTesting(roomCode: "R4\(UUID().uuidString.prefix(4))", connection: server)
+        touchedPeers.append(pc.id)
+        XCTAssertEqual(pc.peerIdentity.secureChannelVersion, 1, "placeholder peer version must be unknown/legacy")
+
+        let key = EphemeralChannelIdentity()
+        let (bundle, _) = LocalSecureChannel.prepareHandshake(identity: key)
+        try await client.sendMessage(try PeerMessage.secureHandshake(bundle: bundle, senderID: "old-relay"))
+        let secured = await poll(timeout: 5) { pc.secureChannelState == .secured }
+        XCTAssertTrue(secured, "placeholder never completed the passive handshake")
+
+        let old = PeerIdentity(id: UUID().uuidString, displayName: "Old Relay", secureChannelVersion: 1)
+        try await client.sendMessage(try PeerMessage.hello(identity: old))
+        let swapped = await poll { pc.peerIdentity.id == old.id }
+        XCTAssertTrue(swapped, "old relay peer's plaintext HELLO was dropped after the channel came up")
+    }
+
+    // #170/#175 "Fix A": a v5.6.0 acceptor's cancelled consent monitor still
+    // has one read pending, which eats the first frame we send after its
+    // accept — our handshake bundle, stranding it in plaintext. For a v1
+    // acceptor we send one sacrificial `.ping` first.
+
+    private func dialQuietAcceptor(version: Int, recorder: Recorder) async throws -> PeerIdentity {
+        let acceptor = PeerIdentity(id: UUID().uuidString, displayName: "Acc\(version)",
+                                    supportsSecureChannel: true, secureChannelVersion: version)
+        touchedPeers.append(acceptor.id)
+        let port = try await startFakeAcceptor(replyingAs: acceptor, script: .acceptQuietly, recorder: recorder)
+        dial(port, id: "manual-\(acceptor.id)")
+        return acceptor
+    }
+
+    func test_fixA_v1Acceptor_getsPingBeforeHandshakeBundle() async throws {
+        let recorder = Recorder()
+        _ = try await dialQuietAcceptor(version: 1, recorder: recorder)
+        let got = await poll(timeout: 5) { recorder.types.count >= 4 }
+        XCTAssertTrue(got, "acceptor saw too little: \(recorder.types)")
+        XCTAssertEqual(Array(recorder.types.prefix(4)), [.hello, .connectionRequest, .ping, .secureHandshake])
+    }
+
+    func test_fixA_v2Acceptor_getsNoPing() async throws {
+        let recorder = Recorder()
+        _ = try await dialQuietAcceptor(version: 2, recorder: recorder)
+        let got = await poll(timeout: 5) { recorder.types.count >= 3 }
+        XCTAssertTrue(got, "acceptor saw too little: \(recorder.types)")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(recorder.types[2], .secureHandshake)
+        XCTAssertFalse(recorder.types.contains(.ping), "a v2 acceptor must never get the sacrificial ping")
+    }
+
+    func test_fixA_pongReply_hasNoSideEffects() async throws {
+        let recorder = Recorder()
+        let acceptor = try await dialQuietAcceptor(version: 1, recorder: recorder)
+        let installed = await poll(timeout: 5) { self.cm.connections[acceptor.id] != nil }
+        XCTAssertTrue(installed)
+        let pc = try XCTUnwrap(cm.connections[acceptor.id])
+        let sawPing = await poll(timeout: 5) { recorder.types.contains(.ping) }
+        XCTAssertTrue(sawPing, "v1 acceptor never got the sacrificial ping")
+        try await Task.sleep(nanoseconds: 500_000_000)  // pong delivered + handled
+        XCTAssertTrue(cm.connections[acceptor.id] === pc, "pong disturbed the connection")
+        XCTAssertTrue(pc.state.isConnected)
+        XCTAssertEqual(cm.chatManager.unreadCounts[acceptor.id] ?? 0, 0)
+        XCTAssertEqual(pc.plaintextDroppedCount, 0)
+        XCTAssertFalse(recorder.closed)
     }
 
     // I-2: per-connection consent handoff.
