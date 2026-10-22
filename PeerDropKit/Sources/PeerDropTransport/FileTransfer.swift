@@ -134,8 +134,8 @@ public final class FileTransfer: ObservableObject {
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let fileSize = (attrs[.size] as? Int64) ?? 0
 
-        // Stream hash computation from disk
-        let hash = try HashVerifier.sha256(fileAt: url, chunkSize: chunkSize)
+        // Stream hash computation from disk, off the main actor
+        let hash = try await HashVerifier.sha256Async(fileAt: url, chunkSize: chunkSize)
 
         let metadata = TransferMetadata(
             fileName: fileName,
@@ -209,8 +209,8 @@ public final class FileTransfer: ObservableObject {
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let fileSize = (attrs[.size] as? Int64) ?? 0
 
-        // Stream hash computation from disk
-        let hash = try HashVerifier.sha256(fileAt: url, chunkSize: chunkSize)
+        // Stream hash computation from disk, off the main actor
+        let hash = try await HashVerifier.sha256Async(fileAt: url, chunkSize: chunkSize)
 
         let metadata = TransferMetadata(
             fileName: fileName,

@@ -572,7 +572,7 @@ public final class FileTransferSession: ObservableObject {
 
         guard !isCancelled else { throw FileTransferError.cancelled }
 
-        let hash = try HashVerifier.sha256(fileAt: url, chunkSize: chunkSize)
+        let hash = try await HashVerifier.sha256Async(fileAt: url, chunkSize: chunkSize)
         let complete = try PeerMessage.fileComplete(hash: hash, senderID: peerID)
         try await sendMessage(complete)
         progress = 1.0
