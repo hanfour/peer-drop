@@ -3,7 +3,8 @@ import CryptoKit
 import Security
 import os.log
 
-public final class ChatDataEncryptor {
+// Safe to share across threads: the only mutable state (`cachedKey`) is guarded by `lock`.
+public final class ChatDataEncryptor: @unchecked Sendable {
     public static let shared = ChatDataEncryptor()
 
     private static let magic: [UInt8] = [0x50, 0x44, 0x45, 0x4B] // "PDEK"

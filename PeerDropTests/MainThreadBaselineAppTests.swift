@@ -52,4 +52,26 @@ final class MainThreadBaselineAppTests: XCTestCase {
         XCTAssertGreaterThan(snap[.chatPersist]?.count ?? 0, 0)
         print("[perf-baseline-app] chat 300 msgs\n" + PerfSignpost.report())
     }
+
+    /// The real-world path: messages arrive, the 500 ms debounce fires, the write
+    /// runs on the background persist queue. After phase 3 none of it is on main.
+    func testChatDebouncedPersistRunsOffMain() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("baseline-chat-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let chat = ChatManager(rootDirectory: root)
+        chat.persistDebounceNanoseconds = 1_000_000
+
+        for i in 0..<300 {
+            _ = chat.saveIncoming(text: "message \(i) " + String(repeating: "x", count: 200), peerID: "baseline-peer", peerName: "Peer")
+            try await Task.sleep(nanoseconds: 3_000_000)   // let the debounce fire between arrivals
+        }
+        // Sample before the explicit (synchronous, on-main by design) final flush.
+        let s = PerfSignpost.snapshot()[.chatPersist]
+        print("[perf-baseline-app] chat 300 msgs, debounced\n" + PerfSignpost.report())
+        XCTAssertGreaterThan(s?.count ?? 0, 0)
+        XCTAssertEqual(s?.mainThreadCount, 0, "debounced persists must stay off main")
+        chat.flushAllPendingPersists()
+        chat.loadMessages(forPeer: "baseline-peer")
+        XCTAssertEqual(chat.messages.count, 50)   // first page
+    }
 }
