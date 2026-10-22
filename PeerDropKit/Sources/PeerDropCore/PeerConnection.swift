@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 import PeerDropTransport
 import PeerDropProtocol
 import PeerDropSecurity
@@ -346,9 +347,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
         // closed — if encrypt throws, the message does NOT fall through to
         // plaintext.
         if let channel = secureChannel, !isControl {
-            let plaintext = try message.encoded()
-            let frame = try channel.encrypt(plaintext)
-            let envelope = PeerMessage.secureEnvelope(frame: frame, senderID: localIdentity.id)
+            let plaintext = try PerfSignpost.measure(.messageEncode) { try message.encoded() }
+            let frame = try PerfSignpost.measure(.ratchetEncrypt) { try channel.encrypt(plaintext) }
+            let envelope = PerfSignpost.measure(.messageEncode) {
+                PeerMessage.secureEnvelope(frame: frame, senderID: localIdentity.id)
+            }
             try await transport.send(envelope)
             return
         }
@@ -572,10 +575,10 @@ public final class PeerConnection: ObservableObject, Identifiable {
                 return
             }
             guard let frame = message.payload else { return }
-            let plaintext = try channel.decrypt(frame)
+            let plaintext = try PerfSignpost.measure(.ratchetDecrypt) { try channel.decrypt(frame) }
             if !hasReceivedEnvelope { hasReceivedEnvelope = true }
             sendResponderNoOpIfNeeded(channel)
-            let inner = try PeerMessage.decoded(from: plaintext)
+            let inner = try PerfSignpost.measure(.messageDecode) { try PeerMessage.decoded(from: plaintext) }
             onMessageReceived?(inner)
 
         default:

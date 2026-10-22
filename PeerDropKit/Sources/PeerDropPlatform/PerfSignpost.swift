@@ -15,6 +15,10 @@ public enum PerfSignpost {
         case fileHash
         case fileChunkReceive
         case fileChunkSend
+        case messageEncode      // PeerMessage -> JSON (+ secure envelope wrapping)
+        case messageDecode      // JSON -> PeerMessage
+        case ratchetEncrypt     // LocalSecureChannel.encrypt (stateful, order-critical)
+        case ratchetDecrypt     // LocalSecureChannel.decrypt (stateful, order-critical)
         case chatLoad
         case chatPersist
         case chatUpdateStatus
