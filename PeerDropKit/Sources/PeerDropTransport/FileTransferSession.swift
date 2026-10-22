@@ -154,7 +154,7 @@ public final class FileTransferSession: ObservableObject {
 
         for chunk in FileChunkIterator(handle: handle, chunkSize: chunkSize, totalSize: fileSize) {
             guard !isCancelled else { throw FileTransferError.cancelled }
-            let chunkMsg = PeerMessage.fileChunk(chunk, senderID: peerID)
+            let chunkMsg = PerfSignpost.measure(.fileChunkSend) { PeerMessage.fileChunk(chunk, senderID: peerID) }
             try await sendMessage(chunkMsg)
             chunkIndex += 1
             progress = Double(chunkIndex) / Double(totalChunks)
@@ -328,6 +328,10 @@ public final class FileTransferSession: ObservableObject {
     static let maxTotalBytesPerTransfer: Int64 = 2_147_483_648  // 2 GB
 
     public func handleFileChunk(_ message: PeerMessage) {
+        PerfSignpost.measure(.fileChunkReceive) { handleFileChunkImpl(message) }
+    }
+
+    private func handleFileChunkImpl(_ message: PeerMessage) {
         guard let data = message.payload, let metadata = receiveMetadata else { return }
 
         // 1) Per-chunk size cap — a single oversized frame should never be

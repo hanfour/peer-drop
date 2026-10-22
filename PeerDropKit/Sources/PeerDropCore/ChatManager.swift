@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 import PeerDropProtocol
 import PeerDropSecurity
 import os
@@ -133,6 +134,10 @@ public final class ChatManager: ObservableObject {
     }
 
     public func loadMessages(forPeer peerID: String) {
+        PerfSignpost.measure(.chatLoad) { loadMessagesImpl(forPeer: peerID) }
+    }
+
+    private func loadMessagesImpl(forPeer peerID: String) {
         // Flush any pending writes so disk is up to date
         flushPendingPersist(for: peerID)
         currentPeerID = peerID
@@ -293,6 +298,11 @@ public final class ChatManager: ObservableObject {
     }
 
     public func updateStatus(messageID: String, status: MessageStatus) {
+        // Includes the nested flush (which is also counted under .chatPersist).
+        PerfSignpost.measure(.chatUpdateStatus) { updateStatusImpl(messageID: messageID, status: status) }
+    }
+
+    private func updateStatusImpl(messageID: String, status: MessageStatus) {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx].status = status
         }
@@ -577,6 +587,10 @@ public final class ChatManager: ObservableObject {
     }
 
     private func persistMessages(peerID: String) {
+        PerfSignpost.measure(.chatPersist) { persistMessagesImpl(peerID: peerID) }
+    }
+
+    private func persistMessagesImpl(peerID: String) {
         guard let pending = pendingMessages[peerID], !pending.isEmpty else { return }
         // NOTE: do NOT clear pendingMessages here — only after a durable write
         // succeeds (below). Clearing up-front means any failure on the risky
