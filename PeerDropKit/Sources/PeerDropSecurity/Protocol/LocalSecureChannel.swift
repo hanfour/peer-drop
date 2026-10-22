@@ -45,7 +45,12 @@ extension IdentityKeyManager: LocalChannelIdentity {}
 /// This is Phase 1 — the cryptographic core. PeerConnection integration
 /// (handshake state machine, wire-level negotiation, fallback to plaintext
 /// for v5.0.x peers) lands in Phase 2.
-public final class LocalSecureChannel {
+public final class LocalSecureChannel: @unchecked Sendable {
+
+    /// Serialises ratchet access. Send-side encrypt may run on a background
+    /// executor while receive-side decrypt runs on the main actor, and a DH
+    /// ratchet step on receive mutates state the sender chain also reads.
+    private let ratchetLock = NSLock()
 
     /// Wire frame for an encrypted message. Wraps a `RatchetMessage` with
     /// a version byte so we can roll the format forward.
@@ -272,6 +277,8 @@ public final class LocalSecureChannel {
     /// into a wire frame. Each call advances the sender chain — repeated
     /// encryption of the same input produces different ciphertext.
     public func encrypt(_ plaintext: Data) throws -> Data {
+        ratchetLock.lock()
+        defer { ratchetLock.unlock() }
         let ratchetMessage = try ratchet.encrypt(plaintext)
         let frame = Frame(version: Frame.currentVersion, message: ratchetMessage)
         return try JSONEncoder().encode(frame)
@@ -292,6 +299,8 @@ public final class LocalSecureChannel {
         guard frame.version == Frame.currentVersion else {
             throw ChannelError.wrongVersion(frame.version)
         }
+        ratchetLock.lock()
+        defer { ratchetLock.unlock() }
         return try ratchet.decrypt(frame.message)
     }
 
