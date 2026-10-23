@@ -1,6 +1,7 @@
 import SwiftUI
 
-struct TypingIndicatorView: View {
+struct TypingIndicatorView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let peerName: String
     @State private var animationPhase = 0
 
@@ -9,7 +10,7 @@ struct TypingIndicatorView: View {
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(PaperTheme.color(.typingDot))
+                        .fill(paper(.typingDot))
                         .frame(width: 6, height: 6)
                         .offset(y: animationOffset(for: index))
                 }
@@ -18,11 +19,11 @@ struct TypingIndicatorView: View {
 
             Text("\(peerName) is typing...")
                 .font(.caption)
-                .foregroundStyle(PaperTheme.color(.datePillText))
+                .foregroundStyle(paper(.datePillText))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(PaperTheme.color(.datePillFill))
+        .background(paper(.datePillFill))
         .clipShape(Capsule())
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

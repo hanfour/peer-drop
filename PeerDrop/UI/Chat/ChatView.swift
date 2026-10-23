@@ -11,7 +11,7 @@ import PhotosUI
 
 private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "ChatView")
 
-struct ChatView: View {
+struct ChatView: View, PaperThemed {
     @ObservedObject var chatManager: ChatManager
     let peerID: String
     let peerName: String
@@ -90,7 +90,26 @@ struct ChatView: View {
         return nil
     }
 
+    /// Presence of this peer, resolved over every id alias (connection key / identity id).
+    private var peerPresence: PeerPresence {
+        PeerPresenceResolver.presence(ids: [peerID], sources: connectionManager.presenceSources())
+    }
+
+    /// Live only while the peer is online; nearby / offline fall back to the paper-note look.
+    /// Also forced to note while the connection is known to be down.
+    var paperMode: PaperMode {
+        isPeerDisconnected ? .note : ChatPresenceMode.mode(for: peerPresence)
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
+        chatContent
+            .paperMode(paperMode)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: paperMode)
+    }
+
+    private var chatContent: some View {
         VStack(spacing: 0) {
             // Messages
             ScrollViewReader { proxy in
@@ -212,7 +231,7 @@ struct ChatView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.exclamationmark")
                             .foregroundStyle(.orange)
-                        Text(disconnectReason ?? String(localized: "Connection to \(displayName) lost"))
+                        Text(String(localized: "\(displayName) is offline. Chat again when they're back."))
                             .font(.subheadline.weight(.medium))
                     }
 
@@ -226,7 +245,7 @@ struct ChatView: View {
                                 .font(.system(.subheadline, design: .rounded).weight(.medium))
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(PaperTheme.color(.actionFill))
+                        .tint(paper(.actionFill))
 
                         Button {
                             // Navigate back and return to discovery
@@ -234,11 +253,11 @@ struct ChatView: View {
                         } label: {
                             Text("Back to Nearby")
                                 .font(.system(.subheadline, design: .rounded).weight(.medium))
-                                .foregroundStyle(PaperTheme.color(.incomingText))
+                                .foregroundStyle(paper(.incomingText))
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(PaperTheme.color(.datePillFill), in: Capsule())
-                                .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+                                .background(paper(.datePillFill), in: Capsule())
+                                .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -246,9 +265,9 @@ struct ChatView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
-                .background(PaperTheme.color(.background))
+                .background(paper(.background))
                 .overlay(alignment: .top) {
-                    Rectangle().fill(PaperTheme.color(.border)).frame(height: 1)
+                    Rectangle().fill(paper(.border)).frame(height: 1)
                 }
             }
 
@@ -262,9 +281,9 @@ struct ChatView: View {
                 .disabled(!isPeerConnected)
                 .opacity(isPeerConnected ? 1.0 : 0.5)
         }
-        .background(PaperTheme.color(.background))
+        .background(paper(.background))
         // Local accent for the chat screen only; the app-wide tint is untouched.
-        .tint(PaperTheme.color(.accent))
+        .tint(paper(.accent))
         .navigationTitle(displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -274,10 +293,14 @@ struct ChatView: View {
             // Rounded title face; the system navigation bar itself is kept.
             // (macOS keeps the system window title from navigationTitle.)
             ToolbarItem(placement: .principal) {
-                Text(verbatim: displayName)
-                    .font(.system(.headline, design: .rounded))
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
+                HStack(spacing: 8) {
+                    PeerAvatar(name: displayName, size: 30, presence: peerPresence)
+                    Text(verbatim: displayName)
+                        .font(.system(.headline, design: .rounded))
+                        .lineLimit(1)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
             }
             #endif
             ToolbarItem(placement: .confirmationAction) {
@@ -369,13 +392,13 @@ struct ChatView: View {
     private func replyPreviewBar(for message: ChatMessage) -> some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(PaperTheme.color(.quoteBar))
+                .fill(paper(.quoteBar))
                 .frame(width: 4)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
                     .font(.caption.bold())
-                    .foregroundStyle(PaperTheme.color(.datePillText))
+                    .foregroundStyle(paper(.datePillText))
 
                 Text(message.text ?? message.fileName ?? "Media")
                     .font(.caption)
@@ -390,7 +413,7 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(PaperTheme.color(.inputPlaceholder))
+                    .foregroundStyle(paper(.inputPlaceholder))
             }
         }
         // The accent bar is a shape with no intrinsic height and would otherwise grow to fill
@@ -398,7 +421,7 @@ struct ChatView: View {
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(PaperTheme.color(.datePillFill))
+        .background(paper(.datePillFill))
     }
 
     // MARK: - Input Bar
@@ -432,7 +455,7 @@ struct ChatView: View {
                         voiceRecorder.cancelRecording()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(PaperTheme.color(.inputPlaceholder))
+                            .foregroundStyle(paper(.inputPlaceholder))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -448,23 +471,23 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(PaperTheme.color(.inputPlaceholder))
+                            .foregroundStyle(paper(.inputPlaceholder))
                     }
                     .paperIconButton()
                     .accessibilityLabel("Attach")
                 }
 
                 // Text field
-                TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
+                TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(paper(.inputPlaceholder))) {
                     Text("Message")
                 }
                     .textFieldStyle(.plain)
                     .font(.system(.body, design: .rounded))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(PaperTheme.color(.inputFill))
+                    .background(paper(.inputFill))
                     .clipShape(Capsule())
-                    .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+                    .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
                     .accessibilityLabel("Message")
                     // Return/Enter sends. Without this the only affordance
                     // was the arrow button — on the Mac, Enter in a chat
@@ -492,7 +515,7 @@ struct ChatView: View {
                         } label: {
                             Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                                 .font(.title2)
-                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : PaperTheme.color(.inputPlaceholder))
+                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : paper(.inputPlaceholder))
                         }
                         .paperIconButton()
                         .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
@@ -503,7 +526,7 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(PaperTheme.color(.sendButton))
+                            .foregroundStyle(paper(.sendButton))
                     }
                     .paperIconButton()
                     .accessibilityLabel("Send")
@@ -740,7 +763,8 @@ struct DocumentPickerView: UIViewControllerRepresentable {
 
 // MARK: - iMessage-style Attachment Menu
 
-struct AttachmentMenuSheet: View {
+struct AttachmentMenuSheet: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let onCamera: () -> Void
     let onPhotos: () -> Void
     let onFiles: () -> Void
@@ -752,14 +776,14 @@ struct AttachmentMenuSheet: View {
                     HStack(spacing: 16) {
                         Image(systemName: item.icon)
                             .font(.title3)
-                            .foregroundStyle(PaperTheme.color(.outgoingText))
+                            .foregroundStyle(paper(.outgoingText))
                             .frame(width: 40, height: 40)
                             .background(item.color)
                             .clipShape(Circle())
 
                         Text(item.label)
                             .font(.body)
-                            .foregroundStyle(PaperTheme.color(.incomingText))
+                            .foregroundStyle(paper(.incomingText))
 
                         Spacer()
                     }
@@ -773,16 +797,16 @@ struct AttachmentMenuSheet: View {
             }
         }
         .padding(.top, 8)
-        .background(PaperTheme.color(.background))
+        .background(paper(.background))
     }
 
     private var menuItems: [MenuItem] {
         var items: [MenuItem] = []
         #if os(iOS)
-        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: PaperTheme.color(.quoteBar), action: onCamera))
-        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: PaperTheme.color(.outgoingBubble), action: onPhotos))
+        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: paper(.quoteBar), action: onCamera))
+        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: paper(.outgoingBubble), action: onPhotos))
         #endif
-        items.append(MenuItem(icon: "doc.fill", label: "Files", color: PaperTheme.color(.sendButton), action: onFiles))
+        items.append(MenuItem(icon: "doc.fill", label: "Files", color: paper(.sendButton), action: onFiles))
         return items
     }
 

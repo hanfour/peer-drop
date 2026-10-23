@@ -7,7 +7,8 @@ import PeerDropCore
 /// them to verify the fingerprint out-of-band before trusting further
 /// messages. Both actions clear the banner; "Dismiss" also resets the
 /// per-peer failure counter so we don't immediately re-nag.
-struct DecryptFailureBannerView: View {
+struct DecryptFailureBannerView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let displayName: String
     let onVerify: () -> Void
     let onDismiss: () -> Void
@@ -23,7 +24,7 @@ struct DecryptFailureBannerView: View {
     var body: some View {
         HStack(alignment: .top, spacing: rowSpacing) {
             Image(systemName: "exclamationmark.shield.fill")
-                .foregroundStyle(PaperTheme.color(.warning))
+                .foregroundStyle(paper(.warning))
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: contentSpacing) {
@@ -42,7 +43,7 @@ struct DecryptFailureBannerView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(PaperTheme.color(.actionFill))
+                    .tint(paper(.actionFill))
                 }
                 .padding(.top, actionRowTopPadding)
             }
@@ -59,10 +60,10 @@ struct DecryptFailureBannerView: View {
             .accessibilityLabel(Text("Dismiss"))
         }
         .padding(bannerPadding)
-        .background(PaperTheme.color(.datePillFill), in: RoundedRectangle(cornerRadius: 10))
+        .background(paper(.datePillFill), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(PaperTheme.color(.border), lineWidth: 1)
+                .stroke(paper(.border), lineWidth: 1)
         )
         .padding(.horizontal, outerHPadding)
         .padding(.top, outerTopPadding)

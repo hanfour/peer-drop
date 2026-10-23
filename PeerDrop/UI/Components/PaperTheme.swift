@@ -195,3 +195,19 @@ extension View {
         environment(\.paperMode, m)
     }
 }
+
+/// Lets a view call `paper(.token)` with the mode it reads from `@Environment(\.paperMode)`.
+protocol PaperThemed {
+    var paperMode: PaperMode { get }
+}
+
+extension PaperThemed {
+    func paper(_ token: PaperToken) -> Color { PaperTheme.color(token, mode: paperMode) }
+}
+
+/// Chat screen mode from peer presence: only an online peer gets the live look.
+enum ChatPresenceMode {
+    static func mode(for presence: PeerPresence) -> PaperMode {
+        presence == .online ? .live : .note
+    }
+}

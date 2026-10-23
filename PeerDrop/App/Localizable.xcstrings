@@ -2212,6 +2212,40 @@
         }
       }
     },
+    "%@ is offline. Chat again when they're back.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is offline. Chat again when they're back."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@はオフラインです。オンラインに戻ったらまたチャットしましょう"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@님이 오프라인이에요. 다시 접속하면 대화해요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ 下线了，上线后再聊"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 下線了，上線後再聊"
+          }
+        }
+      }
+    },
     "Connection to %@ lost": {
       "localizations": {
         "ja": {

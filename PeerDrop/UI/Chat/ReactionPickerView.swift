@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Quick emoji reaction picker.
-struct ReactionPickerView: View {
+struct ReactionPickerView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let onSelect: (String) -> Void
     let onDismiss: () -> Void
 
@@ -32,8 +33,8 @@ struct ReactionPickerView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(PaperTheme.color(.incomingBubble), in: Capsule())
-        .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+        .background(paper(.incomingBubble), in: Capsule())
+        .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
     }
 }
@@ -47,7 +48,8 @@ private struct ReactionButtonStyle: ButtonStyle {
 }
 
 /// Displays reactions on a message bubble.
-struct ReactionsView: View {
+struct ReactionsView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let reactions: [String: Set<String>]  // emoji -> senderIDs
     let isOutgoing: Bool
 
@@ -61,14 +63,14 @@ struct ReactionsView: View {
                         if item.count > 1 {
                             Text("\(item.count)")
                                 .font(.system(.caption2, design: .rounded))
-                                .foregroundStyle(PaperTheme.color(isOutgoing ? .outgoingText : .incomingText).opacity(0.7))
+                                .foregroundStyle(paper(isOutgoing ? .outgoingText : .incomingText).opacity(0.7))
                         }
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(
                         Capsule()
-                            .fill(isOutgoing ? PaperTheme.color(.outgoingText).opacity(0.10) : PaperTheme.color(.incomingText).opacity(0.10))
+                            .fill(isOutgoing ? paper(.outgoingText).opacity(0.10) : paper(.incomingText).opacity(0.10))
                     )
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(ReactionPickerView.emojiNames[item.emoji] ?? item.emoji), \(item.count)")
