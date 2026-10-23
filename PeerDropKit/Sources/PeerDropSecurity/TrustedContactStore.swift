@@ -9,7 +9,8 @@ public final class TrustedContactStore: ObservableObject {
     @Published public private(set) var contacts: [TrustedContact] = []
 
     private let storageKey: String
-    private let encryptor = ChatDataEncryptor.shared
+    private let encryptor: ChatDataEncryptor
+    private let directory: URL?
     private var pendingSave: DispatchWorkItem?
 
     /// Maximum number of key-rotation audit entries kept per contact.
@@ -22,14 +23,27 @@ public final class TrustedContactStore: ObservableObject {
         contacts.filter { !$0.isBlocked }
     }
 
-    public init(storageKey: String = "trusted-contacts") {
+    public init(
+        storageKey: String = "trusted-contacts",
+        directory: URL? = nil,
+        encryptor: ChatDataEncryptor = .shared
+    ) {
         self.storageKey = storageKey
+        self.directory = directory
+        self.encryptor = encryptor
         self.contacts = load()
     }
 
     // MARK: - CRUD
 
+    /// An account maps to at most one contact, so adding a contact that carries
+    /// an `accountId` clears that same `accountId` from every other contact.
     public func add(_ contact: TrustedContact) {
+        if let accountId = contact.accountId {
+            for i in contacts.indices where contacts[i].accountId == accountId {
+                contacts[i].accountId = nil
+            }
+        }
         contacts.append(contact)
         scheduleSave()
     }
@@ -76,6 +90,7 @@ public final class TrustedContactStore: ObservableObject {
         contacts.first { $0.mailboxId == mailboxId }
     }
 
+    /// `accountId` must be the `AccountID.raw` string (the form stored on contacts).
     public func find(byAccountId accountId: String) -> TrustedContact? {
         contacts.first { $0.accountId == accountId }
     }
@@ -192,7 +207,7 @@ public final class TrustedContactStore: ObservableObject {
     // MARK: - Persistence (Encrypted)
 
     private var storageURL: URL {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = directory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Security", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("\(storageKey).enc")
