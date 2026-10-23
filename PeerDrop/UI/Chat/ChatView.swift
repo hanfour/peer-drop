@@ -56,23 +56,13 @@ struct ChatView: View {
             && (connectionManager.connectedPeer?.isHeadless ?? false)
     }
 
-    /// Check if this peer is disconnected.
+    /// Check if this peer is disconnected. A dropped peer's connection is removed
+    /// from the manager (and the global state falls back to discovering), so a
+    /// missing connection counts as disconnected unless a dial is in progress.
     private var isPeerDisconnected: Bool {
-        if let peerConn = connectionManager.connection(for: peerID) {
-            switch peerConn.state {
-            case .disconnected, .failed:
-                return true
-            default:
-                return false
-            }
-        }
-        // Fallback to global state
-        switch connectionManager.state {
-        case .failed, .disconnected:
-            return true
-        default:
-            return false
-        }
+        ChatPeerPresence.isDisconnected(
+            connectionState: connectionManager.connection(for: peerID)?.state,
+            globalState: connectionManager.state)
     }
 
     /// Get disconnect reason for this peer.
@@ -289,6 +279,14 @@ struct ChatView: View {
                 for url in urls {
                     sendFile(url)
                 }
+            }
+        }
+        #else
+        // The iOS document picker is UIKit; on macOS the "Files" option set
+        // `showDocumentPicker` but nothing ever presented, so it did nothing.
+        .fileImporter(isPresented: $showDocumentPicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result {
+                for url in urls { sendFile(url) }
             }
         }
         #endif
