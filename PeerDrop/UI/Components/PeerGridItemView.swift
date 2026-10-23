@@ -2,7 +2,8 @@ import SwiftUI
 import PeerDropTransport
 import PeerDropCore
 
-struct PeerGridItemView: View {
+struct PeerGridItemView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let peer: DiscoveredPeer
     let onTap: () -> Void
     var presence: PeerPresence = .nearby
@@ -15,13 +16,14 @@ struct PeerGridItemView: View {
 
                 Text(peer.displayName)
                     .font(.caption)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(paper(.incomingText))
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+            .background(paper(.incomingBubble), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(paper(.border), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(peer.displayName), \(presence.accessibilityLabel)")

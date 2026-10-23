@@ -16,6 +16,9 @@ private enum NearbyTabSheet: Identifiable {
     case connectionQR
     case relayConnect
     case options
+    #if os(macOS)
+    case transferHistory
+    #endif
 
     var id: String {
         switch self {
@@ -24,6 +27,9 @@ private enum NearbyTabSheet: Identifiable {
         case .connectionQR:     return "connectionQR"
         case .relayConnect:     return "relayConnect"
         case .options:          return "options"
+        #if os(macOS)
+        case .transferHistory:  return "transferHistory"
+        #endif
         }
     }
 }
@@ -124,9 +130,10 @@ struct NearbyTab: View, PaperThemed {
         let sources = connectionManager.presenceSources()
         return ZStack {
             VStack(spacing: 0) {
-            if isOnline {
-                quickActionsBar
-            }
+            // Always shown, even offline: QR / manual / invite stay reachable.
+            // The relay entry row lives in the list; the Invite Link quick action
+            // opens the same RelayConnectView, so grid mode and the Searching state need no extra row.
+            quickActionsBar
             if shouldShowGuidance {
                 GuidanceCard(onMoreOptions: { activeSheet = .options }, onDismiss: nil)
             }
@@ -135,12 +142,13 @@ struct NearbyTab: View, PaperThemed {
                     VStack(spacing: 12) {
                         Image(systemName: "antenna.radiowaves.left.and.right.slash")
                             .font(.largeTitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(paper(.datePillText))
                         Text("You are offline")
                             .font(.headline)
+                            .foregroundStyle(paper(.incomingText))
                         Text("Tap the antenna icon to go online and discover nearby devices.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(paper(.datePillText))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
@@ -149,7 +157,7 @@ struct NearbyTab: View, PaperThemed {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Searching for nearby devices...")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(paper(.datePillText))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if isGridMode {
@@ -209,13 +217,14 @@ struct NearbyTab: View, PaperThemed {
                         } header: {
                             HStack {
                                 Label("Local Network", systemImage: "wifi")
+                                    .foregroundStyle(paper(.datePillText))
                                 Spacer()
                                 Text("\(networkPeers.count)")
                                     .font(.caption2.weight(.medium))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(.blue, in: Capsule())
+                                    .background(paper(.brand), in: Capsule())
                             }
                         }
                         }
@@ -232,19 +241,22 @@ struct NearbyTab: View, PaperThemed {
                         } header: {
                             HStack {
                                 Label("Bluetooth", systemImage: "wave.3.right")
+                                    .foregroundStyle(paper(.datePillText))
                                 Spacer()
                                 Text("\(bleOnlyPeers.count)")
                                     .font(.caption2.weight(.medium))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(.cyan, in: Capsule())
+                                    .background(paper(.brand), in: Capsule())
                             }
                         } footer: {
                             if FeatureSettings.isRelayEnabled {
                                 Text("Use Relay Connect to transfer files with this device")
+                                    .foregroundStyle(paper(.datePillText))
                             } else {
                                 Text("These devices were discovered via Bluetooth. Connect to the same WiFi network to transfer files.")
+                                    .foregroundStyle(paper(.datePillText))
                             }
                         }
                         }
@@ -268,9 +280,10 @@ struct NearbyTab: View, PaperThemed {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Security Degraded")
                                             .font(.subheadline.bold())
+                                            .foregroundStyle(paper(.incomingText))
                                         Text(error)
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(paper(.datePillText))
                                     }
                                 } icon: {
                                     Image(systemName: "exclamationmark.shield.fill")
@@ -299,7 +312,7 @@ struct NearbyTab: View, PaperThemed {
                         .scaleEffect(1.3)
                     Text(connectingLabel)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(paper(.datePillText))
                     Button("Cancel") {
                         connectionManager.disconnect()
                     }
@@ -338,6 +351,15 @@ struct NearbyTab: View, PaperThemed {
                 .accessibilityLabel(isOnline ? "Go offline" : "Go online")
             }
             ToolbarItemGroup(placement: .confirmationAction) {
+                #if os(macOS)
+                // Settings has no Mac sheet and Transfer History lives in iOS SettingsView only.
+                Button {
+                    activeSheet = .transferHistory
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .accessibilityLabel("Transfer History")
+                #endif
                 Button {
                     isGridMode.toggle()
                 } label: {
@@ -408,6 +430,13 @@ struct NearbyTab: View, PaperThemed {
             case .relayConnect:
                 RelayConnectView()
                     .environmentObject(connectionManager)
+            #if os(macOS)
+            case .transferHistory:
+                NavigationStack {
+                    TransferHistoryView()
+                        .environmentObject(connectionManager)
+                }
+            #endif
             case .options:
                 ConnectionOptionsSheet()
                     .environmentObject(connectionManager)

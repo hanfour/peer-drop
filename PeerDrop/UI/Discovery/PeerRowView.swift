@@ -69,6 +69,7 @@ struct PeerRowView: View, PaperThemed {
                         .padding(.vertical, 6)
                         .background(Capsule().fill(paper(.brand)))
                         .fixedSize()
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.vertical, 4)
