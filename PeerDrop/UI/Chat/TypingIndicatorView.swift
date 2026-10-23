@@ -9,7 +9,7 @@ struct TypingIndicatorView: View {
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(Color.gray)
+                        .fill(PaperTheme.color(.typingDot))
                         .frame(width: 6, height: 6)
                         .offset(y: animationOffset(for: index))
                 }
@@ -18,11 +18,11 @@ struct TypingIndicatorView: View {
 
             Text("\(peerName) is typing...")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(PaperTheme.color(.datePillText))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Color.peerDropFillTertiary)
+        .background(PaperTheme.color(.datePillFill))
         .clipShape(Capsule())
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

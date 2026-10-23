@@ -134,7 +134,7 @@ struct ChatView: View {
                                 } label: {
                                     Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
                                 }
-                                .tint(.blue)
+                                .tint(PaperTheme.color(.sendButton))
                             }
                         }
                     }
@@ -237,11 +237,21 @@ struct ChatView: View {
                 .disabled(!isPeerConnected)
                 .opacity(isPeerConnected ? 1.0 : 0.5)
         }
+        .background(PaperTheme.color(.background))
+        // Local accent for the chat screen only; the app-wide tint is untouched.
+        .tint(PaperTheme.color(.sendButton))
         .navigationTitle(peerName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            // Rounded title face; the system navigation bar itself is kept.
+            ToolbarItem(placement: .principal) {
+                Text(verbatim: peerName)
+                    .font(.system(.headline, design: .rounded))
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     showSearch = true
@@ -331,13 +341,13 @@ struct ChatView: View {
     private func replyPreviewBar(for message: ChatMessage) -> some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.blue)
+                .fill(PaperTheme.color(.quoteBar))
                 .frame(width: 4)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
                     .font(.caption.bold())
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(PaperTheme.color(.datePillText))
 
                 Text(message.text ?? message.fileName ?? "Media")
                     .font(.caption)
@@ -352,12 +362,12 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(PaperTheme.color(.inputPlaceholder))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.peerDropFillTertiary)
+        .background(PaperTheme.color(.datePillFill))
     }
 
     // MARK: - Input Bar
@@ -391,7 +401,7 @@ struct ChatView: View {
                         voiceRecorder.cancelRecording()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(PaperTheme.color(.inputPlaceholder))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -407,17 +417,21 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(PaperTheme.color(.inputPlaceholder))
                     }
                     .accessibilityLabel("Attach")
                 }
 
                 // Text field
-                TextField("Message", text: $messageText)
+                TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
+                    Text("Message")
+                }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.peerDropFillTertiary)
+                    .background(PaperTheme.color(.inputFill))
                     .clipShape(Capsule())
+                    .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+                    .accessibilityLabel("Message")
                     // Return/Enter sends. Without this the only affordance
                     // was the arrow button — on the Mac, Enter in a chat
                     // input silently doing nothing reads as broken
@@ -444,7 +458,7 @@ struct ChatView: View {
                         } label: {
                             Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                                 .font(.title2)
-                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : Color.gray)
+                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : PaperTheme.color(.inputPlaceholder))
                         }
                         .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                     }
@@ -454,7 +468,7 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(PaperTheme.color(.sendButton))
                     }
                     .accessibilityLabel("Send")
                 }
@@ -708,7 +722,7 @@ struct AttachmentMenuSheet: View {
 
                         Text(item.label)
                             .font(.body)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(PaperTheme.color(.incomingText))
 
                         Spacer()
                     }
@@ -722,15 +736,16 @@ struct AttachmentMenuSheet: View {
             }
         }
         .padding(.top, 8)
+        .background(PaperTheme.color(.background))
     }
 
     private var menuItems: [MenuItem] {
         var items: [MenuItem] = []
         #if os(iOS)
-        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: .gray, action: onCamera))
-        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: Color(red: 0.0, green: 0.68, blue: 1.0), action: onPhotos))
+        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: PaperTheme.color(.quoteBar), action: onCamera))
+        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: PaperTheme.color(.outgoingBubble), action: onPhotos))
         #endif
-        items.append(MenuItem(icon: "doc.fill", label: "Files", color: Color(red: 0.33, green: 0.33, blue: 0.98), action: onFiles))
+        items.append(MenuItem(icon: "doc.fill", label: "Files", color: PaperTheme.color(.sendButton), action: onFiles))
         return items
     }
 

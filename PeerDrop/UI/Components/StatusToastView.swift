@@ -19,10 +19,11 @@ struct StatusToastView: View {
             Text(message)
                 .font(.subheadline)
                 .lineLimit(2)
+                .foregroundStyle(PaperTheme.color(.incomingText))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(PaperTheme.color(.datePillFill), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: Color.peerDropLabel.opacity(0.12), radius: 8, y: 4)
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
