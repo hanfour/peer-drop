@@ -335,6 +335,7 @@ struct ChatBubbleView: View {
         switch message.status {
         case .sending:
             ProgressView()
+                .tint(textColor)
                 .scaleEffect(0.4)
                 .frame(width: 10, height: 10)
         case .sent:
@@ -476,7 +477,9 @@ struct ChatBubbleView: View {
                     }
                 }
             }
-            .frame(width: 60, height: 20)
+            // 20 bars x 2pt + 19 gaps x 2pt = 78pt; reserve exactly that so the bars never
+            // reach the duration label.
+            .frame(width: 78, height: 20)
 
             // Duration/Current time
             if isVoicePlaying {
