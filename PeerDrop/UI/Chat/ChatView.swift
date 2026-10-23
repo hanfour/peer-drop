@@ -1,5 +1,6 @@
 import SwiftUI
 import PeerDropCore
+import PeerDropProtocol
 import PeerDropTransport
 import PeerDropPlatform
 import UniformTypeIdentifiers
@@ -194,7 +195,9 @@ struct ChatView: View {
 
                     HStack(spacing: 16) {
                         Button {
-                            connectionManager.reconnect(to: peerID)
+                            if !connectionManager.reconnect(to: peerID) {
+                                connectionManager.statusToast = String(localized: "Device not found nearby")
+                            }
                         } label: {
                             Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
                                 .font(.subheadline.weight(.medium))
@@ -514,6 +517,13 @@ struct ChatView: View {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
 
+        // Check before reading: the file rides inline in the message, so there is a
+        // cap, and loading a huge file into memory just to refuse it is wasteful.
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           size > MediaMessagePayload.maxInlineFileSize {
+            connectionManager.statusToast = String(localized: "File too large to send in chat")
+            return
+        }
         guard let data = try? Data(contentsOf: url) else { return }
         let fileName = url.lastPathComponent
         let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"

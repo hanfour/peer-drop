@@ -242,6 +242,62 @@
         }
       }
     },
+    "Device not found nearby": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "近くにこのデバイスが見つかりません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "근처에서 이 기기를 찾을 수 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附近找不到这台设备"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附近找不到這台裝置"
+          }
+        }
+      }
+    },
+    "File too large to send in chat": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイルが大きすぎるため、チャットで送信できません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일이 너무 커서 채팅으로 보낼 수 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件太大，无法通过聊天发送"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案太大，無法透過聊天傳送"
+          }
+        }
+      }
+    },
     "Recording too short": {
       "localizations": {
         "ja": {
