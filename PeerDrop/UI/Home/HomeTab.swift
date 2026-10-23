@@ -3,7 +3,7 @@ import PeerDropCore
 
 /// 主頁: self row, connected / friends / groups, invite. Uses the `.live` look.
 /// Expects to be hosted in a NavigationStack (the container owns it).
-/// It declares its own `navigationDestination(for: ChatTarget.self)` on iOS, so the container must NOT add one.
+/// It registers the `ChatTarget` destination itself (`.chatTargetDestination()`), so the container must NOT add one.
 struct HomeTab: View, PaperThemed {
     @EnvironmentObject var connectionManager: ConnectionManager
     /// Home is always the live look; children read it through the environment.
@@ -105,11 +105,8 @@ struct HomeTab: View, PaperThemed {
         .sheet(isPresented: $showProfile) { UserProfileView() }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(connectionManager) }
         .navigationDestination(isPresented: $showConnection) { ConnectionView().environmentObject(connectionManager) }
-        .navigationDestination(for: ChatTarget.self) { target in
-            ChatView(chatManager: connectionManager.chatManager, peerID: target.peerID, peerName: target.name)
-                .environmentObject(connectionManager)
-        }
         #endif
+        .chatTargetDestination()
     }
 
     // MARK: - Toolbar
