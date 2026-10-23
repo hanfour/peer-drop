@@ -3,9 +3,11 @@ import os
 
 /// What the app currently knows about a contact's notes binding.
 public enum OutboxBindingLookup: Equatable {
-    case verified(accountId: String)
+    case verified(accountId: String, identityKey: Data)
     /// A (re-)exchange is in progress; wait, neither send nor fail.
     case pending
+    /// The contact is blocked: nothing may be sent.
+    case blocked
     /// No account bound (cleared) or the contact no longer exists.
     case none
 }
@@ -32,22 +34,26 @@ public final class NoteOutboxSender {
     private let baseDelay: TimeInterval
     private let clock: () -> Date
     private let wakeScheduling: Bool
+    private let networkSatisfied: () -> Bool
 
     private var flushing = false
     private var flushRequested = false
     private var wakeTask: Task<Void, Never>?
 
     public init(store: NoteOutboxStore, send: @escaping SendFunction, binding: @escaping (UUID) -> OutboxBindingLookup,
-                baseDelay: TimeInterval = 30, clock: @escaping () -> Date = { Date() }, wakeScheduling: Bool = false) {
+                baseDelay: TimeInterval = 30, clock: @escaping () -> Date = { Date() }, wakeScheduling: Bool = false,
+                networkSatisfied: @escaping () -> Bool = { true }) {
+        self.networkSatisfied = networkSatisfied
         self.store = store; self.send = send; self.binding = binding
         self.baseDelay = baseDelay; self.clock = clock; self.wakeScheduling = wakeScheduling
     }
 
     public convenience init(store: NoteOutboxStore, notesStore: NotesStore, binding: @escaping (UUID) -> OutboxBindingLookup,
-                            baseDelay: TimeInterval = 30, clock: @escaping () -> Date = { Date() }, wakeScheduling: Bool = false) {
+                            baseDelay: TimeInterval = 30, clock: @escaping () -> Date = { Date() }, wakeScheduling: Bool = false,
+                            networkSatisfied: @escaping () -> Bool = { true }) {
         self.init(store: store, send: { [notesStore] text, account, key in
             try await notesStore.sendToBound(text: text, accountId: account, expectedIdentityKey: key)
-        }, binding: binding, baseDelay: baseDelay, clock: clock, wakeScheduling: wakeScheduling)
+        }, binding: binding, baseDelay: baseDelay, clock: clock, wakeScheduling: wakeScheduling, networkSatisfied: networkSatisfied)
     }
 
     /// Delay after the n-th failed attempt (n >= 1): base, 4x, 16x ...
@@ -66,49 +72,91 @@ public final class NoteOutboxSender {
     }
 
     private func pass(now fixedNow: Date?) async {
+        store.reloadIfNeeded()
+        store.retrySaveIfNeeded()
+        guard !store.isLoadFailed else { return }   // outbox unreadable: send nothing, retry load next trigger
         // Snapshot ids: only entries that were queued when the pass started are considered.
         let ids = store.all.filter { $0.state == .queued }.map(\.id)
         for id in ids {
             let now = fixedNow ?? clock()
             guard let entry = store.all.first(where: { $0.id == id }), entry.state == .queued else { continue }
 
+            // Attempts are persisted before the await, so reaching the cap here
+            // means earlier launches died mid-send: stop instead of looping.
+            if entry.attempts >= Self.maxAttempts {
+                store.markFailed(id: id, reason: Self.exhaustedReason(nil)); continue
+            }
             if now.timeIntervalSince(entry.createdAt) > Self.maxAge {
                 store.markFailed(id: id, reason: "超過 24 小時仍未寄出"); continue
             }
             switch binding(entry.contactID) {
             case .pending: continue
             case .none: store.markFailed(id: id, reason: Self.boundCancelledReason); continue
-            case .verified(let current):
-                if current != entry.accountId { store.markFailed(id: id, reason: Self.boundCancelledReason); continue }
+            case .blocked: store.markFailed(id: id, reason: "已封鎖此聯絡人，未寄出"); continue
+            case .verified(let current, let currentKey):
+                // Same account with a different key (re-bound after a key change) must not
+                // send either: sendToBound would burn one of the recipient's OPKs first.
+                if current != entry.accountId || currentKey != entry.expectedIdentityKey {
+                    store.markFailed(id: id, reason: Self.boundCancelledReason); continue
+                }
             }
             if let next = entry.nextAttemptAt, now < next { continue }
 
+            let prior = (attempts: entry.attempts, next: entry.nextAttemptAt)
+            store.beginAttempt(id: id, nextAttemptAt: now.addingTimeInterval(backoff(afterAttempts: prior.attempts + 1)))
             do {
                 _ = try await send(entry.text, entry.accountId, entry.expectedIdentityKey)
                 store.remove(id: id)
-            } catch NotesStoreError.noAccount {
-                return // account not ready: wait, no attempt consumed; all other entries would hit the same
-            } catch is CancellationError {
-                return
             } catch {
-                handle(error, entry: entry, now: fixedNow ?? clock())
+                store.endSending(id: id)
+                if error as? NotesStoreError == .noAccount || Self.isCancellation(error) || Task.isCancelled {
+                    store.setAttemptState(id: id, attempts: prior.attempts, nextAttemptAt: prior.next)
+                    return   // wait: no attempt consumed
+                }
+                handle(error, entry: entry, prior: prior, now: fixedNow ?? clock())
             }
         }
     }
 
-    private func handle(_ error: Error, entry: NoteOutboxEntry, now: Date) {
+    private func handle(_ error: Error, entry: NoteOutboxEntry, prior: (attempts: Int, next: Date?), now: Date) {
         if let reason = Self.terminalReason(error) {
+            store.setAttemptState(id: entry.id, attempts: prior.attempts, nextAttemptAt: nil)
             store.markFailed(id: entry.id, reason: reason); return
         }
-        let attempts = entry.attempts + 1
+        if Self.isNetworkError(error) && !networkSatisfied() {
+            // Offline: the attempt never had a chance; do not burn the budget.
+            store.setAttemptState(id: entry.id, attempts: prior.attempts, nextAttemptAt: prior.next)
+            return
+        }
+        let attempts = prior.attempts + 1
         if attempts >= Self.maxAttempts {
-            store.recordAttempt(id: entry.id, nextAttemptAt: nil) // keep the count honest for the UI
-            store.markFailed(id: entry.id, reason: "多次嘗試後仍無法寄出，請稍後重試")
+            store.markFailed(id: entry.id, reason: Self.exhaustedReason(error))
         } else if now.timeIntervalSince(entry.createdAt) > Self.maxAge {
             store.markFailed(id: entry.id, reason: "超過 24 小時仍未寄出")
         } else {
-            store.recordAttempt(id: entry.id, nextAttemptAt: now.addingTimeInterval(backoff(afterAttempts: attempts)))
+            store.setAttemptState(id: entry.id, attempts: attempts, nextAttemptAt: now.addingTimeInterval(backoff(afterAttempts: attempts)))
         }
+    }
+
+    static func exhaustedReason(_ error: Error?) -> String {
+        if (error as? NotesStoreError) == .inboxFull { return "對方信箱已滿" }
+        return "多次嘗試後仍無法寄出，請稍後重試"
+    }
+
+    /// The real NotesStore maps URLError to `.network(String(describing:))`, so a
+    /// cancelled request is recognised both structurally and by its description.
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if (error as? URLError)?.code == .cancelled { return true }
+        if case .network(let d)? = error as? NotesStoreError {
+            return d.contains("Code=-999") || d.contains("CancellationError") || d.contains("NSURLErrorCancelled")
+        }
+        return false
+    }
+
+    static func isNetworkError(_ error: Error) -> Bool {
+        if case .network? = error as? NotesStoreError { return true }
+        return !(error is NotesStoreError)
     }
 
     /// Human-readable reason for permanent failures; nil = retryable.
@@ -120,7 +168,7 @@ public final class NoteOutboxSender {
         case .recipientMismatch: return "對方的帳號或金鑰已變更，請重新交換紙條帳號後再試"
         case .textTooLong: return "紙條太長"
         case .noteNotFound: return "紙條不存在"
-        case .noAccount, .network, .rateLimited, .proofOfWorkFailed, .opkExhausted, .inboxFull: return nil
+        case .noAccount, .network, .rateLimited, .proofOfWorkFailed, .opkExhausted, .inboxFull: return nil // .inboxFull: retryable
         }
     }
 

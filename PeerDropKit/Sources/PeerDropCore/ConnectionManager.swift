@@ -436,28 +436,45 @@ public final class ConnectionManager: ObservableObject {
 
     // MARK: - Notes outbox (Project C)
 
-    public private(set) lazy var noteOutbox: NoteOutboxStore = NoteOutboxStore()
+    public internal(set) lazy var noteOutbox: NoteOutboxStore = NoteOutboxStore()
 
-    public private(set) lazy var noteOutboxSender: NoteOutboxSender = NoteOutboxSender(
+    public internal(set) lazy var noteOutboxSender: NoteOutboxSender = NoteOutboxSender(
         store: noteOutbox, notesStore: notesStore,
         binding: { [weak self] contactID in
-            guard let c = self?.trustedContactStore.contacts.first(where: { $0.id == contactID }) else { return .none }
-            if c.pendingAccountBinding != nil { return .pending }
-            guard let accountId = c.accountId else { return .none }
-            return .verified(accountId: accountId)
+            Self.outboxBinding(for: self?.trustedContactStore.contacts.first(where: { $0.id == contactID }))
         },
-        wakeScheduling: true)
+        wakeScheduling: true,
+        // Unknown (no path seen yet) counts as satisfied.
+        networkSatisfied: { [weak self] in self?.lastNetworkPath?.status != .unsatisfied })
+
+    /// What the outbox may do for a contact right now. Blocked wins over everything.
+    nonisolated static func outboxBinding(for contact: TrustedContact?) -> OutboxBindingLookup {
+        guard let c = contact else { return .none }
+        if c.isBlocked { return .blocked }
+        if c.pendingAccountBinding != nil { return .pending }
+        guard let accountId = c.accountId else { return .none }
+        return .verified(accountId: accountId, identityKey: c.identityPublicKey)
+    }
+
+    public enum QueueNoteError: Error, Equatable { case contactNotFound, blocked, notBound, bindingPending, unavailable }
 
     /// Queues a note the user explicitly sent from a friend thread and makes
-    /// one immediate delivery attempt. Returns nil when the contact has no
-    /// verified account binding (nothing is queued). Never called for text
-    /// that is merely sitting in the input field.
+    /// one immediate delivery attempt. Throws (queueing nothing) when the
+    /// contact is blocked or has no verified account binding. Never called for
+    /// text that is merely sitting in the input field.
     @MainActor @discardableResult
-    public func queueNote(text: String, toContact contactID: UUID) -> NoteOutboxEntry? {
-        guard !ScreenshotModeProvider.shared.isActive,
-              let c = trustedContactStore.contacts.first(where: { $0.id == contactID }),
-              c.pendingAccountBinding == nil, let accountId = c.accountId else { return nil }
-        let entry = noteOutbox.enqueue(contactID: c.id, accountId: accountId, expectedIdentityKey: c.identityPublicKey, text: text)
+    public func queueNote(text: String, toContact contactID: UUID) throws -> NoteOutboxEntry {
+        guard !ScreenshotModeProvider.shared.isActive else { throw QueueNoteError.unavailable }
+        let contact = trustedContactStore.contacts.first(where: { $0.id == contactID })
+        guard let c = contact else { throw QueueNoteError.contactNotFound }
+        guard case .verified(let accountId, let key) = Self.outboxBinding(for: c) else {
+            switch Self.outboxBinding(for: c) {
+            case .blocked: throw QueueNoteError.blocked
+            case .pending: throw QueueNoteError.bindingPending
+            default: throw QueueNoteError.notBound
+            }
+        }
+        let entry = noteOutbox.enqueue(contactID: c.id, accountId: accountId, expectedIdentityKey: key, text: text)
         Task { await flushNoteOutbox() }
         return entry
     }
@@ -4306,6 +4323,7 @@ public final class ConnectionManager: ObservableObject {
         let deviceIdCandidates = [record?.peerDeviceId, id].compactMap { $0 }
         if let contact = deviceIdCandidates.lazy.compactMap({ self.trustedContactStore.find(byDeviceId: $0) }).first {
             remoteSessionManager.deleteSession(for: contact.id.uuidString)
+            noteOutbox.failQueuedEntries(forContact: contact.id, reason: NoteOutboxSender.boundCancelledReason)
             trustedContactStore.remove(contact.id)
         }
         chatManager.deleteMessages(forPeer: id)

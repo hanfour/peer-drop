@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropNotes
 import Network
 import Combine
 import CryptoKit
@@ -118,6 +119,7 @@ extension ConnectionManager {
         let pending = contact.pendingAccountBinding
         trustedContactStore.setAccountBinding(for: contactID, accountId: nil)
         trustedContactStore.setPendingBinding(for: contactID, nil)
+        noteOutbox.failQueuedEntries(forContact: contactID, reason: NoteOutboxSender.boundCancelledReason)
         let matches: (Data) -> Bool = { k in
             k == key || (pending.map { Data(SHA256.hash(data: k)) == $0.handshakeKeyHash } ?? false)
         }

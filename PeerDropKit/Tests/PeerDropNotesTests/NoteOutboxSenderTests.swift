@@ -14,14 +14,16 @@ final class NoteOutboxSenderTests: XCTestCase {
     private var now = Date(timeIntervalSince1970: 1_000_000)
     private var sent: [String] = []
     private var results: [Result<Void, Error>] = []
-    private var lookup: OutboxBindingLookup = .verified(accountId: "TESTRCPT")
+    private var lookup: OutboxBindingLookup = .verified(accountId: "TESTRCPT", identityKey: Data(repeating: 7, count: 32))
     private var delay: UInt64 = 0
+    private var online = true
+    private let encForTests = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
 
     override func setUp() { reset() }
     private func reset() {
-        sent = []; results = []; lookup = .verified(accountId: "TESTRCPT")
+        sent = []; results = []; online = true; lookup = .verified(accountId: "TESTRCPT", identityKey: Data(repeating: 7, count: 32))
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("outbox-s-\(UUID().uuidString)", isDirectory: true)
-        store = NoteOutboxStore(directory: dir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)))
+        store = NoteOutboxStore(directory: dir, encryptor: encForTests)
         TestURLProtocol.reset()
     }
     override func tearDown() { try? FileManager.default.removeItem(at: dir) }
@@ -35,7 +37,7 @@ final class NoteOutboxSenderTests: XCTestCase {
             if self.delay > 0 { try await Task.sleep(nanoseconds: self.delay) }
             if !self.results.isEmpty, case .failure(let e) = self.results.removeFirst() { throw e }
             return self.record()
-        }, binding: { [unowned self] _ in self.lookup }, baseDelay: 30, clock: { [unowned self] in self.now })
+        }, binding: { [unowned self] _ in self.lookup }, baseDelay: 30, clock: { [unowned self] in self.now }, networkSatisfied: { [unowned self] in self.online })
     }
     @discardableResult private func queue(_ text: String = "hello") -> NoteOutboxEntry {
         store.enqueue(contactID: contact, accountId: acct, expectedIdentityKey: key, text: text, now: now)
@@ -114,7 +116,7 @@ final class NoteOutboxSenderTests: XCTestCase {
         await makeSender().flush()
         XCTAssertEqual(store.all[0].state, .failed); XCTAssertEqual(store.all[0].failReason, "綁定已取消")
         XCTAssertTrue(sent.isEmpty)
-        reset(); queue(); lookup = .verified(accountId: "OTHR2345")
+        reset(); queue(); lookup = .verified(accountId: "OTHR2345", identityKey: key)
         await makeSender().flush()
         XCTAssertEqual(store.all[0].failReason, "綁定已取消"); XCTAssertTrue(sent.isEmpty)
         XCTAssertEqual(store.all.count, 1)  // never auto-deleted
@@ -165,6 +167,90 @@ final class NoteOutboxSenderTests: XCTestCase {
         XCTAssertEqual(store.all[0].state, .failed)
     }
 
+    func testBlockedContactEntryFailsWithoutNetwork() async {
+        queue(); lookup = .blocked
+        await makeSender().flush()
+        XCTAssertEqual(store.all[0].state, .failed); XCTAssertTrue(store.all[0].failReason!.contains("封鎖"))
+        XCTAssertTrue(sent.isEmpty)
+    }
+
+    func testSameAccountDifferentKeyFailsWithoutNetwork() async {
+        queue(); lookup = .verified(accountId: acct, identityKey: Data(repeating: 1, count: 32))
+        await makeSender().flush()
+        XCTAssertEqual(store.all[0].failReason, "綁定已取消"); XCTAssertTrue(sent.isEmpty)
+    }
+
+    func testAttemptIsPersistedBeforeNetworkAwait() async throws {
+        queue(); delay = 300_000_000
+        let s = makeSender()
+        let t = Task { await s.flush() }
+        while sent.isEmpty { await Task.yield() }
+        XCTAssertTrue(store.isSending(store.all[0].id))
+        let reread = NoteOutboxStore(directory: dir, encryptor: encForTests)
+        XCTAssertEqual(reread.all[0].attempts, 1)
+        await t.value
+        XCTAssertTrue(store.all.isEmpty); XCTAssertFalse(store.isSending(UUID()))
+    }
+
+    func testRelaunchesMidSendAreBoundedByAttemptCap() async {
+        let e = queue()
+        store.setAttemptState(id: e.id, attempts: NoteOutboxSender.maxAttempts, nextAttemptAt: nil)  // three killed launches
+        await makeSender().flush()
+        XCTAssertTrue(sent.isEmpty); XCTAssertEqual(store.all[0].state, .failed)
+    }
+
+    func testNoAccountDoesNotConsumeAttemptEvenThoughPersistedFirst() async {
+        queue(); results = [.failure(NotesStoreError.noAccount)]
+        await makeSender().flush()
+        XCTAssertEqual(NoteOutboxStore(directory: dir, encryptor: encForTests).all[0].attempts, 0)
+    }
+
+    func testCancellationDoesNotConsumeAttempt() async {
+        let errs: [Error] = [CancellationError(), URLError(.cancelled),
+                             NotesStoreError.network("URLError(_nsError: Error Domain=NSURLErrorDomain Code=-999 \"cancelled\")")]
+        for err in errs {
+            reset(); queue(); results = [.failure(err)]
+            await makeSender().flush()
+            XCTAssertEqual(store.all[0].attempts, 0, "\(err)"); XCTAssertEqual(store.all[0].state, .queued)
+            XCTAssertNil(store.all[0].nextAttemptAt)
+        }
+    }
+
+    func testOfflineNetworkErrorDoesNotConsumeAttempt() async {
+        queue(); results = [.failure(NotesStoreError.network("offline")), .failure(URLError(.notConnectedToInternet))]
+        online = false
+        let s = makeSender()
+        await s.flush(); await s.flush()
+        XCTAssertEqual(store.all[0].attempts, 0); XCTAssertEqual(store.all[0].state, .queued)
+        online = true; results = [.failure(NotesStoreError.network("x"))]
+        await s.flush()
+        XCTAssertEqual(store.all[0].attempts, 1)
+    }
+
+    func testInboxFullHasSpecificReasonWhenExhausted() async {
+        queue(); results = Array(repeating: .failure(NotesStoreError.inboxFull), count: 5)
+        let s = makeSender()
+        for _ in 0..<5 { now = now.addingTimeInterval(1000); await s.flush() }
+        XCTAssertEqual(store.all[0].state, .failed); XCTAssertEqual(store.all[0].failReason, "對方信箱已滿")
+    }
+
+    func testFailedSaveAfterSuccessIsRetriedOnNextFlush() async throws {
+        queue(); results = [.success(())]
+        // make the directory unwritable for the removal save
+        let file = dir.appendingPathComponent("outbox.enc")
+        let backup = try Data(contentsOf: file)
+        try FileManager.default.removeItem(at: dir)
+        try Data().write(to: dir)   // a FILE where the directory should be: saves fail
+        await makeSender().flush()
+        XCTAssertTrue(store.all.isEmpty)   // in-memory removal kept
+        XCTAssertNotNil(store.lastError)
+        try FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try backup.write(to: file)
+        await makeSender().flush()          // next trigger retries the save
+        XCTAssertTrue(NoteOutboxStore(directory: dir, encryptor: encForTests).all.isEmpty)
+    }
+
     // MARK: against the real NotesStore
 
     private struct Crypto: NotesCryptoContext {
@@ -192,6 +278,7 @@ final class NoteOutboxSenderTests: XCTestCase {
         TestURLProtocol.queue = [.init(status: 200, body: try directoryBody(entry)),
                                  .init(status: 200, body: Data(#"{"challenge":"Q0hBTA=="}"#.utf8)),
                                  .init(status: 201, body: Data(#"{"id":"01OUTBOX00000000000000AA"}"#.utf8))]
+        lookup = .verified(accountId: acct, identityKey: entry.identityKey)
         store.enqueue(contactID: contact, accountId: acct, expectedIdentityKey: entry.identityKey, text: "real", now: Date())
         let s = NoteOutboxSender(store: store, notesStore: ns, binding: { [unowned self] _ in self.lookup })
         await s.flush()
@@ -202,6 +289,7 @@ final class NoteOutboxSenderTests: XCTestCase {
     func testRealStoreRecipientMismatchIsPermanentAndNotRetried() async throws {
         let ns = try realStore(); let entry = try RecipientFixture().entry()
         TestURLProtocol.queue = [.init(status: 200, body: try directoryBody(entry))]
+        lookup = .verified(accountId: acct, identityKey: Data(repeating: 9, count: 32))
         store.enqueue(contactID: contact, accountId: acct, expectedIdentityKey: Data(repeating: 9, count: 32), text: "x", now: Date())
         let s = NoteOutboxSender(store: store, notesStore: ns, binding: { [unowned self] _ in self.lookup })
         await s.flush(); await s.flush()

@@ -18,7 +18,7 @@ final class NoteOutboxStoreTests: XCTestCase {
     func testPersistenceRoundTrip() throws {
         let s = NoteOutboxStore(directory: dir, encryptor: enc)
         let e = s.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data([1, 2, 3]), text: "hi", now: Date(timeIntervalSince1970: 1000))
-        s.recordAttempt(id: e.id, nextAttemptAt: Date(timeIntervalSince1970: 2000))
+        s.beginAttempt(id: e.id, nextAttemptAt: Date(timeIntervalSince1970: 2000)); s.endSending(id: e.id)
         let s2 = NoteOutboxStore(directory: dir, encryptor: enc)
         XCTAssertEqual(s2.all.count, 1)
         XCTAssertEqual(s2.all[0].text, "hi")
@@ -36,21 +36,69 @@ final class NoteOutboxStoreTests: XCTestCase {
         XCTAssertNil(raw.range(of: Data("plaintext-secret".utf8)))
     }
 
-    func testCorruptFileYieldsEmptyStoreAndRecovers() throws {
+    private func corruptFiles() -> [URL] {
+        ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix("outbox.enc.corrupt-") }
+    }
+
+    func testCorruptFileIsQuarantinedWithBytesPreserved() throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try Data("garbage".utf8).write(to: dir.appendingPathComponent("outbox.enc"))
+        let bad = Data("garbage".utf8)
+        try bad.write(to: dir.appendingPathComponent("outbox.enc"))
         let s = NoteOutboxStore(directory: dir, encryptor: enc)
         XCTAssertTrue(s.all.isEmpty)
-        XCTAssertNotNil(s.lastError)
+        XCTAssertNotNil(s.loadError); XCTAssertEqual(s.quarantinedCount, 1); XCTAssertFalse(s.isLoadFailed)
+        XCTAssertEqual(corruptFiles().count, 1)
+        XCTAssertEqual(try Data(contentsOf: corruptFiles()[0]), bad)
         s.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data(), text: "x")
         XCTAssertEqual(NoteOutboxStore(directory: dir, encryptor: enc).all.count, 1)
+        XCTAssertEqual(try Data(contentsOf: corruptFiles()[0]), bad)   // never overwritten
+    }
+
+    func testSecondCorruptionDoesNotOverwriteFirstQuarantine() throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for g in ["one", "two"] {
+            try Data(g.utf8).write(to: dir.appendingPathComponent("outbox.enc"))
+            _ = NoteOutboxStore(directory: dir, encryptor: enc)
+        }
+        XCTAssertEqual(corruptFiles().count, 2)
+    }
+
+    func testTransientFailureThenSuccessRestoresEntriesAndBlocksSaves() throws {
+        let seed = NoteOutboxStore(directory: dir, encryptor: enc)
+        let kept = seed.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data(), text: "keep", now: Date())
+        let original = try Data(contentsOf: dir.appendingPathComponent("outbox.enc"))
+        var fail = true
+        let reader: (URL) throws -> Data = { [enc] url in
+            if fail { throw ChatDataEncryptor.EncryptionError.keychainError(-25308) }
+            return try enc!.readAndDecrypt(from: url)
+        }
+        let s = NoteOutboxStore(directory: dir, encryptor: enc, reader: reader)
+        XCTAssertTrue(s.isLoadFailed); XCTAssertNotNil(s.loadError); XCTAssertTrue(corruptFiles().isEmpty)
+        // a new note while load failed is kept in memory but the file is NOT rewritten
+        let fresh = s.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data(), text: "new", now: Date())
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("outbox.enc")), original)
+        fail = false
+        s.reloadIfNeeded()
+        XCTAssertFalse(s.isLoadFailed); XCTAssertNil(s.loadError)
+        XCTAssertEqual(Set(s.all.map(\.id)), [kept.id, fresh.id])
+        XCTAssertEqual(Set(NoteOutboxStore(directory: dir, encryptor: enc).all.map(\.id)), [kept.id, fresh.id])
+    }
+
+    func testFailQueuedEntriesForContactKeepsThem() {
+        let s = NoteOutboxStore(directory: dir, encryptor: enc)
+        let a = s.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data(), text: "a")
+        let b = s.enqueue(contactID: UUID(), accountId: "ABCD2345", expectedIdentityKey: Data(), text: "b")
+        s.failQueuedEntries(forContact: contact, reason: "綁定已取消")
+        XCTAssertEqual(s.all.first { $0.id == a.id }?.state, .failed)
+        XCTAssertEqual(s.all.first { $0.id == b.id }?.state, .queued)
     }
 
     func testMarkFailedRemoveRetryAndFailedCount() {
         let s = NoteOutboxStore(directory: dir, encryptor: enc)
         let a = s.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data(), text: "a", now: Date(timeIntervalSince1970: 0))
         let b = s.enqueue(contactID: UUID(), accountId: "ABCD2345", expectedIdentityKey: Data(), text: "b")
-        s.recordAttempt(id: a.id, nextAttemptAt: nil)
+        s.beginAttempt(id: a.id, nextAttemptAt: nil)
         s.markFailed(id: a.id, reason: "r")
         XCTAssertEqual(s.failedCount(), 1)
         XCTAssertEqual(s.failedCount(forContact: contact), 1)
