@@ -44,6 +44,21 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// Callback when a message is received.
     var onMessageReceived: ((PeerMessage) -> Void)?
 
+    /// How an inbound business message reached us.
+    enum MessageOrigin: Equatable { case envelope, plaintext }
+
+    /// Origin-aware variant of `onMessageReceived`. When set it takes
+    /// precedence; the one-argument closure remains the fallback.
+    var onMessageReceivedWithOrigin: ((PeerMessage, MessageOrigin) -> Void)?
+
+    private func deliver(_ message: PeerMessage, _ origin: MessageOrigin) {
+        if let withOrigin = onMessageReceivedWithOrigin {
+            withOrigin(message, origin)
+        } else {
+            onMessageReceived?(message)
+        }
+    }
+
     /// Callback when the connection should be removed.
     var onDisconnected: (() -> Void)?
 
@@ -615,7 +630,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
             guard connectionGeneration == generation else { return }
             if !hasReceivedEnvelope { hasReceivedEnvelope = true }
             sendResponderNoOpIfNeeded(channel)
-            onMessageReceived?(inner)
+            deliver(inner, .envelope)
 
         default:
             // #170: on a secured channel, plaintext business frames are only
@@ -633,7 +648,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
                 plaintextAcceptedLegacyCount += 1
                 logger.notice("PeerConnection[\(self.id.prefix(8))] plaintext accepted (legacy mode): \(message.type.rawValue, privacy: .public) [accepted=\(self.plaintextAcceptedLegacyCount)]")
             }
-            onMessageReceived?(message)
+            deliver(message, .plaintext)
         }
     }
 

@@ -38,11 +38,17 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
     /// legacy mode — the same acceptance a real v1 peer gets until its first
     /// envelope — never anything a v1 connection wasn't already exposed to.
     public let secureChannelVersion: Int
+    /// Project C: peer understands the `.notesExchange` message (mutual,
+    /// face-to-face account exchange). Both sides must advertise it before
+    /// either sends one — older builds DROP THE CONNECTION on an unknown
+    /// `MessageType`. Never advertised over the relay (not face to face) nor by
+    /// headless CLI peers. Absent ⇒ `false`.
+    public let supportsNotesExchange: Bool
 
     /// What this build advertises in its hello.
     public static let currentSecureChannelVersion = 2
 
-    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion) {
+    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion, supportsNotesExchange: Bool = false) {
         self.id = UUID().uuidString
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -51,9 +57,10 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.supportsSecureChannel = supportsSecureChannel
         self.isHeadless = isHeadless
         self.secureChannelVersion = secureChannelVersion
+        self.supportsNotesExchange = supportsNotesExchange
     }
 
-    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion) {
+    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion, supportsNotesExchange: Bool = false) {
         self.id = id
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -62,6 +69,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.supportsSecureChannel = supportsSecureChannel
         self.isHeadless = isHeadless
         self.secureChannelVersion = secureChannelVersion
+        self.supportsNotesExchange = supportsNotesExchange
     }
 
     // MARK: - Codable (backward-compat decode)
@@ -72,6 +80,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         case supportsSecureChannel
         case isHeadless
         case secureChannelVersion
+        case supportsNotesExchange
     }
 
     public init(from decoder: Decoder) throws {
@@ -89,6 +98,15 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         // v5.6.x and older omit this; absent ⇒ version 1 (legacy plaintext
         // tolerance, see `secureChannelVersion`).
         self.secureChannelVersion = try c.decodeIfPresent(Int.self, forKey: .secureChannelVersion) ?? 1
+        self.supportsNotesExchange = try c.decodeIfPresent(Bool.self, forKey: .supportsNotesExchange) ?? false
+    }
+
+    /// Copy with the notes-exchange capability withheld (relay HELLOs).
+    public func withoutNotesExchange() -> PeerIdentity {
+        PeerIdentity(id: id, displayName: displayName, certificateFingerprint: certificateFingerprint,
+                     identityPublicKey: identityPublicKey, identityFingerprint: identityFingerprint,
+                     supportsSecureChannel: supportsSecureChannel, isHeadless: isHeadless,
+                     secureChannelVersion: secureChannelVersion, supportsNotesExchange: false)
     }
 
     private static let localIDKey = "peerDropLocalIdentityID"
@@ -141,7 +159,9 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
             // Only peerdrop-cli activates a file-store namespace; the app never
             // does. So an active file store cleanly marks this as a headless
             // terminal/agent peer rather than a real user device.
-            isHeadless: PeerDropPersistence.fileStore != nil
+            isHeadless: PeerDropPersistence.fileStore != nil,
+            // Headless CLI peers have no notes UI: never advertise.
+            supportsNotesExchange: PeerDropPersistence.fileStore == nil
         )
     }
 }

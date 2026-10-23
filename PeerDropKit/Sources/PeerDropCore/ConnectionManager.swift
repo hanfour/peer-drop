@@ -775,6 +775,10 @@ public final class ConnectionManager: ObservableObject {
             guard let self, let peerConnection else { return }
             self.dispatchBound(message, on: peerConnection)
         }
+        peerConnection.onMessageReceivedWithOrigin = { [weak self, weak peerConnection] message, origin in
+            guard let self, let peerConnection else { return }
+            self.dispatchBound(message, on: peerConnection, origin: origin)
+        }
 
         peerConnection.onDisconnected = { [weak self] in
             self?.handlePeerDisconnected(peerID: peerID)
@@ -3168,7 +3172,8 @@ public final class ConnectionManager: ObservableObject {
     private func startRelayHandshake(_ peerConnection: PeerConnection) {
         Task {
             do {
-                let hello = try PeerMessage.hello(identity: localIdentity)
+                // Relay is not face to face: never advertise notes exchange.
+                let hello = try PeerMessage.hello(identity: localIdentity.withoutNotesExchange())
                 try await peerConnection.sendMessage(hello)
                 // Exchange stable device ID so future invites can route directly.
                 let idExchange = try PeerMessage.deviceIdExchange(
@@ -3332,12 +3337,13 @@ public final class ConnectionManager: ObservableObject {
     /// frame is attributed to `peerConnection` — the transport it arrived on —
     /// and dropped if that PeerConnection is no longer the installed entry
     /// (stale loop after a remove/replace).
-    private func dispatchBound(_ message: PeerMessage, on peerConnection: PeerConnection) {
+    private func dispatchBound(_ message: PeerMessage, on peerConnection: PeerConnection,
+                               origin: PeerConnection.MessageOrigin = .plaintext) {
         guard connections[peerConnection.id] === peerConnection else {
             logger.info("Dropping \(String(describing: message.type)) from a PeerConnection that is no longer installed")
             return
         }
-        handleMessageForPeer(message, peerConnection: peerConnection)
+        handleMessageForPeer(message, peerConnection: peerConnection, origin: origin)
     }
 
     /// Handle a message that arrived on `peerConnection`'s transport.
@@ -3347,7 +3353,8 @@ public final class ConnectionManager: ObservableObject {
     /// bound connection: `peerID` (its `connections` key) and
     /// `boundSenderID` (its identity — equal to `peerID` for local
     /// connections, the post-HELLO real identity for `relay-*` ones).
-    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection) {
+    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection,
+                                      origin: PeerConnection.MessageOrigin = .plaintext) {
         let peerID = peerConnection.id
         let boundSenderID = peerConnection.peerIdentity.id
 
@@ -3686,6 +3693,14 @@ public final class ConnectionManager: ObservableObject {
             checkPeerTrust(peerIdentity: identity)
             triggerSecureChannelNegotiation(for: peerConnection)
             logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
+
+        case .notesExchange:
+            // Project C: only an encrypted envelope on a secured channel may
+            // carry this. Anything else is dropped silently (no reply, no log
+            // of content).
+            guard origin == .envelope, peerConnection.secureChannelState == .secured else { return }
+            // Task 4: handle intent/reveal/cancel/unavailable here.
+            break
 
         case .secureHandshake, .secureEnvelope:
             // Safety net (should be unreachable). The single-reader handoff
