@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MessageStatus: String, Codable {
+public enum MessageStatus: String, Codable, Sendable {
     case sending
     case sent
     case delivered
@@ -9,12 +9,12 @@ public enum MessageStatus: String, Codable {
 }
 
 /// Tracks delivery and read status for each group member.
-public struct GroupReadStatus: Codable, Equatable {
+public struct GroupReadStatus: Codable, Equatable, Sendable {
     public var deliveredTo: Set<String> = []  // Peer IDs that received the message
     public var readBy: Set<String> = []       // Peer IDs that read the message
 }
 
-public struct ChatMessage: Identifiable, Codable {
+public struct ChatMessage: Identifiable, Codable, Sendable {
     public let id: String
     public let text: String?
     public let isMedia: Bool

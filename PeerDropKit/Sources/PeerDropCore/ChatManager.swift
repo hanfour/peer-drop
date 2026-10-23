@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 import PeerDropProtocol
 import PeerDropSecurity
 import os
@@ -17,6 +18,11 @@ public final class ChatManager: ObservableObject {
 
     private var typingExpirationTasks: [String: Task<Void, Never>] = [:]
     private var persistTasks: [String: Task<Void, Never>] = [:]
+    /// Serial queue for chat-file writes, so they run off the main thread but
+    /// stay ordered. Explicit flushes `sync` onto it; see `drainBackgroundPersists`.
+    private let persistQueue = DispatchQueue(label: "com.hanfour.peerdrop.chat-persist", qos: .utility)
+    /// Debounce window before a queued message is written. Internal for tests.
+    var persistDebounceNanoseconds: UInt64 = 500_000_000
     private var pendingMessages: [String: [ChatMessage]] = [:]
     private var allMessagesForCurrentPeer: [ChatMessage] = []
     private let pageSize = 50
@@ -133,6 +139,10 @@ public final class ChatManager: ObservableObject {
     }
 
     public func loadMessages(forPeer peerID: String) {
+        PerfSignpost.measure(.chatLoad) { loadMessagesImpl(forPeer: peerID) }
+    }
+
+    private func loadMessagesImpl(forPeer peerID: String) {
         // Flush any pending writes so disk is up to date
         flushPendingPersist(for: peerID)
         currentPeerID = peerID
@@ -189,6 +199,7 @@ public final class ChatManager: ObservableObject {
     /// Load the next batch of older messages from disk when in-memory pages are exhausted.
     private func loadOlderMessagesFromDisk() {
         guard let peerID = currentPeerID else { return }
+        drainBackgroundPersists()
         let file = messagesFile(for: peerID)
         guard fileManager.fileExists(atPath: file.path) else {
             hasOlderMessagesOnDisk = false
@@ -224,6 +235,9 @@ public final class ChatManager: ObservableObject {
         persistTasks[peerID]?.cancel()
         persistTasks[peerID] = nil
         pendingMessages[peerID] = nil
+        // An already-dispatched background write must land before the delete, or
+        // it could recreate the file afterwards.
+        drainBackgroundPersists()
 
         let file = messagesFile(for: peerID)
         do {
@@ -293,6 +307,11 @@ public final class ChatManager: ObservableObject {
     }
 
     public func updateStatus(messageID: String, status: MessageStatus) {
+        // Includes the nested flush (which is also counted under .chatPersist).
+        PerfSignpost.measure(.chatUpdateStatus) { updateStatusImpl(messageID: messageID, status: status) }
+    }
+
+    private func updateStatusImpl(messageID: String, status: MessageStatus) {
         if let idx = messages.firstIndex(where: { $0.id == messageID }) {
             messages[idx].status = status
         }
@@ -550,14 +569,15 @@ public final class ChatManager: ObservableObject {
 
     private func schedulePersist(peerID: String) {
         persistTasks[peerID]?.cancel()
+        let debounce = persistDebounceNanoseconds
         persistTasks[peerID] = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 500_000_000) // 500ms debounce
+                try await Task.sleep(nanoseconds: debounce) // 500ms debounce by default
             } catch {
                 return // Task cancelled
             }
             guard let self else { return }
-            self.persistMessages(peerID: peerID)
+            self.persistMessagesInBackground(peerID: peerID)
         }
     }
 
@@ -574,21 +594,73 @@ public final class ChatManager: ObservableObject {
         for peerID in persistTasks.keys {
             flushPendingPersist(for: peerID)
         }
+        // Also wait for background writes whose snapshot has already left
+        // pendingMessages' view of "unpersisted" (in flight but not yet discarded).
+        drainBackgroundPersists()
     }
 
+    /// Synchronous persist for explicit flushes (background, load, edit, status).
+    /// Runs behind any in-flight background write on `persistQueue`, so ordering
+    /// is preserved and the caller sees a durable file when this returns.
     private func persistMessages(peerID: String) {
         guard let pending = pendingMessages[peerID], !pending.isEmpty else { return }
-        // NOTE: do NOT clear pendingMessages here — only after a durable write
-        // succeeds (below). Clearing up-front means any failure on the risky
-        // decrypt/decode/encrypt path silently drops these messages forever.
-
         let file = messagesFile(for: peerID)
+        let ok = persistQueue.sync {
+            PerfSignpost.measure(.chatPersist) {
+                Self.writePending(pending, peerID: peerID, file: file, encryptor: encryptor)
+            }
+        }
+        if ok { discardPersisted(pending, peerID: peerID) }
+    }
+
+    /// Debounced persist: the decrypt → decode → append → encode → encrypt →
+    /// write cycle runs on `persistQueue`, off the main thread. Only the pending
+    /// bookkeeping is touched on the main actor (snapshot now, discard on done).
+    private func persistMessagesInBackground(peerID: String) {
+        guard let pending = pendingMessages[peerID], !pending.isEmpty else { return }
+        let file = messagesFile(for: peerID)
+        let encryptor = self.encryptor
+        persistQueue.async { [weak self] in
+            let ok = PerfSignpost.measure(.chatPersist) {
+                Self.writePending(pending, peerID: peerID, file: file, encryptor: encryptor)
+            }
+            guard ok else { return } // keep pending queued; the next flush/schedule retries
+            Task { @MainActor in self?.discardPersisted(pending, peerID: peerID) }
+        }
+    }
+
+    /// Drop exactly the messages that reached disk. Messages appended while the
+    /// write was in flight stay queued for the next persist.
+    private func discardPersisted(_ persisted: [ChatMessage], peerID: String) {
+        guard var current = pendingMessages[peerID] else { return }
+        let ids = Set(persisted.map(\.id))
+        current.removeAll { ids.contains($0.id) }
+        pendingMessages[peerID] = current.isEmpty ? nil : current
+    }
+
+    /// Wait for every queued/in-flight background write to finish. Anything that
+    /// reads or read-modify-writes the message files must call this first.
+    private func drainBackgroundPersists() {
+        persistQueue.sync {}
+    }
+
+    /// Pure file work (no actor state), safe on any thread. Returns true only
+    /// after a durable write. Pending messages whose id is already on disk are
+    /// skipped, so a flush racing an in-flight write of the same snapshot cannot
+    /// duplicate them.
+    nonisolated private static func writePending(
+        _ pending: [ChatMessage], peerID: String, file: URL, encryptor: ChatDataEncryptor
+    ) -> Bool {
+        // NOTE: callers clear pendingMessages only after a durable write —
+        // clearing up-front means any failure on the risky decrypt/decode/encrypt
+        // path silently drops these messages forever.
+        let fileManager = FileManager.default
         let dir = file.deletingLastPathComponent()
         do {
             try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
             logger.error("Failed to create chat directory: \(error.localizedDescription)")
-            return // keep pending queued; the next flush/schedule retries
+            return false
         }
 
         // Load existing messages. If the file exists but is undecodable (e.g. the
@@ -610,14 +682,15 @@ public final class ChatManager: ObservableObject {
             }
         }
 
-        existing.append(contentsOf: pending)
+        let onDisk = Set(existing.map(\.id))
+        existing.append(contentsOf: pending.filter { !onDisk.contains($0.id) })
         do {
             let encoded = try JSONEncoder().encode(existing)
             try encryptor.encryptAndWrite(encoded, to: file)
-            pendingMessages[peerID] = nil // safe to drop only after a durable write
+            return true
         } catch {
             logger.error("Failed to persist messages: \(error.localizedDescription)")
-            // Keep `pending` so the next flush/schedule retries instead of losing data.
+            return false
         }
     }
 

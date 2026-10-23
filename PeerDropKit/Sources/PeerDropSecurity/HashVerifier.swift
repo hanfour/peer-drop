@@ -1,4 +1,5 @@
 import Foundation
+import PeerDropPlatform
 import CryptoKit
 
 /// Incremental SHA-256 hash computation and verification.
@@ -41,17 +42,19 @@ public final class HashVerifier {
 
     /// Compute SHA-256 of a file at a URL by streaming chunks.
     public static func sha256(fileAt url: URL, chunkSize: Int = 65536) throws -> String {
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { handle.closeFile() }
+        try PerfSignpost.measure(.fileHash) {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { handle.closeFile() }
 
-        var hasher = SHA256()
-        while true {
-            let chunk = handle.readData(ofLength: chunkSize)
-            guard !chunk.isEmpty else { break }
-            hasher.update(data: chunk)
+            var hasher = SHA256()
+            while true {
+                let chunk = handle.readData(ofLength: chunkSize)
+                guard !chunk.isEmpty else { break }
+                hasher.update(data: chunk)
+            }
+            let digest = hasher.finalize()
+            return digest.map { String(format: "%02x", $0) }.joined()
         }
-        let digest = hasher.finalize()
-        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     /// Async variant that streams + hashes on a background task rather than the
