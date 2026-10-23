@@ -75,6 +75,8 @@
 
 現有的顏色集中在 `PeerDrop/UI/Components/PlatformColors.swift`（`peerDropFillPrimary` 等，已適配淺色與深色）。泡泡的圓角在 `ChatBubbleView` 裡是 `cornerRadius = 18`，外送泡泡色現在是寫死的綠色 `Color(red: 0.21, green: 0.78, blue: 0.35)`。
 
+**注意：群組聊天有自己獨立的 `GroupChatBubbleView` 與輸入列**（都在 `GroupChatView.swift` 內），不與 `ChatBubbleView` 共用，只有文字，沒有媒體、反應、回覆；所以兩邊要各自改，共用的是主題與分組邏輯。
+
 Mac 與 iPhone 共用 `PeerDrop/UI` 底下的程式碼（`project.yml` 中 `PeerDropMac` 的 sources 含 `PeerDrop/UI`），所以改共用元件會同時影響兩個平台；平台專屬的部分用 `#if os(iOS)` 區隔。
 
 ## 5. 視覺規格（起始值）
