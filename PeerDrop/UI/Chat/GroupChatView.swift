@@ -35,9 +35,18 @@ struct GroupChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        let runStarts = ChatMessageRuns.firstInRunIDs(in: chatManager.groupMessages)
+                        let dayStarts = ChatMessageRuns.dayStartIDs(in: chatManager.groupMessages)
                         ForEach(chatManager.groupMessages) { message in
-                            GroupChatBubbleView(message: message, members: groupMembers)
-                                .id(message.id)
+                            if dayStarts.contains(message.id) {
+                                ChatDatePill(date: message.timestamp)
+                            }
+                            GroupChatBubbleView(
+                                message: message,
+                                members: groupMembers,
+                                runStart: runStarts.contains(message.id)
+                            )
+                            .id(message.id)
                         }
                     }
                     .padding(.horizontal, 8)
@@ -108,11 +117,15 @@ struct GroupChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
-            TextField("Message", text: $messageText)
+            TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
+                Text("Message")
+            }
+                .font(.system(.body, design: .rounded))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.peerDropFillTertiary)
+                .background(PaperTheme.color(.inputFill))
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
                 .accessibilityLabel("Message")
                 .accessibilityHint(hasConnectedMembers ? "Type a message to the group" : "Connect to members first")
 
@@ -121,7 +134,7 @@ struct GroupChatView: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .green)
+                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : PaperTheme.color(.sendButton))
             }
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityLabel("Send")
@@ -143,15 +156,26 @@ struct GroupChatView: View {
 struct GroupChatBubbleView: View {
     let message: ChatMessage
     let members: [PeerIdentity]
+    let runStart: Bool
+
+    init(message: ChatMessage, members: [PeerIdentity], runStart: Bool = true) {
+        self.message = message
+        self.members = members
+        self.runStart = runStart
+    }
+
+    private var senderDisplayName: String {
+        ChatDisplayName.trimmed(message.senderName) ?? String(localized: "Other person")
+    }
 
     @State private var showReadReceipts = false
 
     private var bubbleColor: Color {
-        message.isOutgoing ? Color.green : Color.peerDropFillSecondary
+        PaperTheme.color(message.isOutgoing ? .outgoingBubble : .incomingBubble)
     }
 
     private var textColor: Color {
-        message.isOutgoing ? .white : .primary
+        PaperTheme.color(message.isOutgoing ? .outgoingText : .incomingText)
     }
 
     var body: some View {
@@ -160,28 +184,36 @@ struct GroupChatBubbleView: View {
                 Spacer(minLength: 60)
             }
 
+            if !message.isOutgoing {
+                ChatAvatarSlot(name: senderDisplayName, visible: runStart)
+                    .frame(maxHeight: .infinity, alignment: .top)
+            }
+
             VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 4) {
-                // Sender name for incoming messages
-                if !message.isOutgoing, let senderName = message.senderName {
-                    Text(senderName)
-                        .font(.caption2.bold())
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 4)
+                // Sender name on the first message of a run
+                if !message.isOutgoing && runStart {
+                    Text(senderDisplayName)
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(PaperTheme.color(.datePillText))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.leading, 4)
+                        .accessibilityHidden(true)
                 }
 
                 // Message bubble
                 VStack(alignment: .leading, spacing: 4) {
                     if let text = message.text {
                         Text(text)
-                            .font(.body)
+                            .font(.system(.body, design: .rounded))
                             .foregroundStyle(textColor)
                     }
 
                     // Timestamp and status
                     HStack(spacing: 4) {
                         Text(formatTime(message.timestamp))
-                            .font(.caption2)
-                            .foregroundStyle(message.isOutgoing ? .white.opacity(0.7) : .secondary)
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(textColor.opacity(0.7))
 
                         if message.isOutgoing {
                             statusIcon
@@ -194,7 +226,13 @@ struct GroupChatBubbleView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(bubbleColor)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .clipShape(MessageBubbleShape(isOutgoing: message.isOutgoing))
+                .overlay {
+                    if !message.isOutgoing {
+                        MessageBubbleShape(isOutgoing: false)
+                            .stroke(PaperTheme.color(.border), lineWidth: 1)
+                    }
+                }
             }
 
             if !message.isOutgoing {
@@ -221,6 +259,7 @@ struct GroupChatBubbleView: View {
         let deliveredCount = status?.deliveredTo.count ?? 0
         let readCount = status?.readBy.count ?? 0
         let totalMembers = members.count
+        let tickColor = PaperTheme.color(PaperTheme.tick(for: readCount > 0 ? .read : .delivered))
 
         Group {
             switch message.status {
@@ -231,7 +270,7 @@ struct GroupChatBubbleView: View {
             case .sent:
                 Image(systemName: "checkmark")
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: .sent)))
             case .delivered, .read:
                 HStack(spacing: 2) {
                     HStack(spacing: -3) {
@@ -239,13 +278,13 @@ struct GroupChatBubbleView: View {
                         Image(systemName: "checkmark")
                     }
                     .font(.caption2)
-                    .foregroundStyle(readCount > 0 ? .cyan : .white.opacity(0.7))
+                    .foregroundStyle(tickColor)
 
                     // Show count indicator for group messages
                     if totalMembers > 1 {
                         Text("\(max(readCount, deliveredCount))")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(readCount > 0 ? .cyan : .white.opacity(0.7))
+                            .foregroundStyle(tickColor)
                     }
                 }
             case .failed:
