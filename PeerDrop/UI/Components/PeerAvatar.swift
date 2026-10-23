@@ -2,7 +2,8 @@ import SwiftUI
 
 struct PeerAvatar: View {
     let name: String
-    var size: CGFloat = 40
+    static let defaultSize: CGFloat = 40
+    var size: CGFloat = PeerAvatar.defaultSize
 
     var body: some View {
         ZStack {
@@ -11,11 +12,19 @@ struct PeerAvatar: View {
                 .frame(width: size, height: size)
 
             Text(initials)
-                .font(.system(size: size * 0.35, weight: .semibold))
+                .font(initialsFont)
                 .foregroundStyle(.white)
         }
         .accessibilityLabel("Avatar for \(name)")
         .accessibilityHidden(true)
+    }
+
+    /// Default size keeps the original Dynamic-Type-scaling callout font;
+    /// other sizes use a size-proportional font.
+    private var initialsFont: Font {
+        size == Self.defaultSize
+            ? .system(.callout, weight: .semibold)
+            : .system(size: size * 0.4, weight: .semibold)
     }
 
     private var initials: String {

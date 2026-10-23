@@ -126,6 +126,7 @@ struct ChatBubbleView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .padding(.leading, 4)
+                        .accessibilityHidden(true)
                 }
 
                 // Bubble content
