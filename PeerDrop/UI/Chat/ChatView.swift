@@ -393,6 +393,9 @@ struct ChatView: View {
                     .foregroundStyle(PaperTheme.color(.inputPlaceholder))
             }
         }
+        // The accent bar is a shape with no intrinsic height and would otherwise grow to fill
+        // all the space the chat offers, turning this strip into a half-screen block.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(PaperTheme.color(.datePillFill))
