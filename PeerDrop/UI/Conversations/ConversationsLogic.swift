@@ -14,7 +14,7 @@ struct ConversationRowModel: Identifiable, Equatable {
 
 /// Pure list logic for the 紙條 tab (no SwiftUI, unit-testable).
 enum ConversationsLogic {
-    /// Friends (with a `DeviceRecord`) and groups that have at least one message, newest first.
+    /// Friends (with a `DeviceRecord`) and groups that have at least one message or note, newest first.
     /// Chat files without a matching record/group are not listed. `query` matches names only.
     static func rows(
         records: [DeviceRecord],
@@ -28,7 +28,7 @@ enum ConversationsLogic {
         var result: [ConversationRowModel] = []
         for r in records where matches(name(r), needle) {
             let s = summaryForPeer(r.id)
-            guard s.lastMessage != nil else { continue }
+            guard s.lastMessage != nil || s.lastNote != nil else { continue }
             result.append(ConversationRowModel(id: "peer:\(r.id)", sourceID: r.id, isGroup: false, name: name(r), summary: s))
         }
         for g in groups where matches(g.name, needle) {

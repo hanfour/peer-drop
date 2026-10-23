@@ -1,6 +1,7 @@
 import XCTest
 @testable import PeerDropCore
 import PeerDropSecurity
+import PeerDropNotes
 
 final class ConversationSummaryTests: XCTestCase {
     private var keyDir: URL!
@@ -144,5 +145,49 @@ final class ConversationSummaryTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data("not encrypted garbage".utf8).write(to: dir.appendingPathComponent("bad.json"))
         XCTAssertNil(m.summary(forPeer: "bad").lastMessage)
+    }
+
+    // MARK: note-aware summaries
+
+    private func noteRec(_ dir: NoteDirection, sent: TimeInterval, received: TimeInterval, text: String? = "hello") -> NoteRecord {
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        return NoteRecord(id: "n", direction: dir, text: text, sentAt: t.addingTimeInterval(sent), sender: .anonymous,
+                          recipientAccountId: nil, readAt: nil, receivedAt: t.addingTimeInterval(received))
+    }
+    private func msg(_ off: TimeInterval) -> ChatMessage {
+        ChatMessage.text(text: "m", isOutgoing: false, peerName: "p", timestamp: Date(timeIntervalSince1970: 1_000_000 + off))
+    }
+
+    func testLastActivityIsNewerOfMessageAndNote() {
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertEqual(ConversationSummary(id: "a", isGroup: false, lastMessage: msg(10), lastNote: noteRec(.inbound, sent: 0, received: 50), unread: 0).lastActivity, t.addingTimeInterval(50))
+        XCTAssertEqual(ConversationSummary(id: "a", isGroup: false, lastMessage: msg(100), lastNote: noteRec(.outbound, sent: 50, received: 999), unread: 0).lastActivity, t.addingTimeInterval(100))
+        XCTAssertEqual(ConversationSummary(id: "a", isGroup: false, lastMessage: nil, lastNote: noteRec(.outbound, sent: 7, received: 999), unread: 0).lastActivity, t.addingTimeInterval(7))
+        XCTAssertNil(ConversationSummary(id: "a", isGroup: false, lastMessage: nil, lastNote: nil, unread: 0).lastActivity)
+    }
+
+    func testUnreadIsPassedThroughUnchanged() {
+        XCTAssertEqual(ConversationSummary(id: "a", isGroup: false, lastMessage: msg(1), lastNote: noteRec(.inbound, sent: 0, received: 2), unread: 3).unread, 3)
+    }
+
+    func testLegacyInitHasNoNote() {
+        let s = ConversationSummary(id: "a", isGroup: false, lastMessage: msg(1), unread: 1)
+        XCTAssertNil(s.lastNote)
+        XCTAssertEqual(s.lastActivity, msg(1).timestamp)
+    }
+
+    func testEqualityCoversNote() {
+        let a = ConversationSummary(id: "a", isGroup: false, lastMessage: nil, lastNote: noteRec(.inbound, sent: 0, received: 5), unread: 0)
+        let b = ConversationSummary(id: "a", isGroup: false, lastMessage: nil, lastNote: noteRec(.inbound, sent: 0, received: 5), unread: 0)
+        let c = ConversationSummary(id: "a", isGroup: false, lastMessage: nil, lastNote: noteRec(.inbound, sent: 0, received: 5, text: "other"), unread: 0)
+        let d = ConversationSummary(id: "a", isGroup: false, lastMessage: nil, lastNote: nil, unread: 0)
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+        XCTAssertNotEqual(a, d)
+    }
+
+    func testNotePreview() {
+        XCTAssertEqual(ConversationPreview.text(for: noteRec(.inbound, sent: 0, received: 0)), "📮 hello")
+        XCTAssertEqual(ConversationPreview.text(for: noteRec(.inbound, sent: 0, received: 0, text: nil)), "")
     }
 }

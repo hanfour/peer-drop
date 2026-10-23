@@ -1,5 +1,6 @@
 import XCTest
 import PeerDropCore
+import PeerDropNotes
 @testable import PeerDrop
 
 final class ConversationsLogicTests: XCTestCase {
@@ -84,5 +85,36 @@ final class ConversationsLogicTests: XCTestCase {
             summaryForPeer: { self.summary($0, at: 10) }, summaryForGroup: { self.summary($0, group: true, at: nil) },
             query: "amy", name: { _ in "Amy" })
         XCTAssertEqual(r.map(\.name), ["Amy"])
+    }
+
+    private func noteSummary(_ id: String, at offset: TimeInterval?, messageAt: TimeInterval? = nil) -> ConversationSummary {
+        let note = offset.map {
+            NoteRecord(id: "n-\(id)", direction: .inbound, text: "hey", sentAt: t0, sender: .anonymous,
+                       recipientAccountId: nil, readAt: nil, receivedAt: t0.addingTimeInterval($0))
+        }
+        let msg = messageAt.map { ChatMessage.text(text: "hi", isOutgoing: false, peerName: id, timestamp: t0.addingTimeInterval($0)) }
+        return ConversationSummary(id: id, isGroup: false, lastMessage: msg, lastNote: note, unread: 0)
+    }
+
+    func testNotesOnlyFriendIsListed() {
+        let r = rows(records: [rec("a", "Amy")], peers: ["a": noteSummary("a", at: 10)])
+        XCTAssertEqual(r.map(\.name), ["Amy"])
+    }
+
+    func testFriendWithNeitherMessageNorNoteIsHidden() {
+        XCTAssertTrue(rows(records: [rec("a", "Amy")], peers: ["a": noteSummary("a", at: nil)]).isEmpty)
+    }
+
+    func testNotesAndMessagesOrderedByNewestActivity() {
+        let r = rows(records: [rec("a", "Amy"), rec("b", "Bob"), rec("c", "Cat")],
+                     peers: ["a": noteSummary("a", at: 50, messageAt: 10),   // note newest: 50
+                             "b": summary("b", at: 30),
+                             "c": noteSummary("c", at: 5, messageAt: 40)])    // message newest: 40
+        XCTAssertEqual(r.map(\.name), ["Amy", "Cat", "Bob"])
+    }
+
+    func testQueryStillFiltersNotesOnlyFriends() {
+        let peers = ["a": noteSummary("a", at: 10), "b": noteSummary("b", at: 20)]
+        XCTAssertEqual(rows(records: [rec("a", "Amy"), rec("b", "Bob")], peers: peers, query: "bo").map(\.name), ["Bob"])
     }
 }
