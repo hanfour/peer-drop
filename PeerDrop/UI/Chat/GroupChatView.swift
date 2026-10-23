@@ -216,7 +216,7 @@ struct GroupChatBubbleView: View {
                     // Timestamp and status
                     HStack(spacing: 4) {
                         Text(formatTime(message.timestamp))
-                            .font(.system(size: 11, design: .rounded))
+                            .font(.system(.caption2, design: .rounded))
                             .foregroundStyle(textColor.opacity(0.7))
 
                         if message.isOutgoing {

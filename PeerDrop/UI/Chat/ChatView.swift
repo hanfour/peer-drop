@@ -142,8 +142,9 @@ struct ChatView: View {
                                     replyingToMessage = message
                                 } label: {
                                     Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                                        .foregroundStyle(PaperTheme.color(.actionLabel))
                                 }
-                                .tint(PaperTheme.color(.tickRead))
+                                .tint(PaperTheme.color(.actionFill))
                             }
                         }
                     }
@@ -215,10 +216,11 @@ struct ChatView: View {
                             }
                         } label: {
                             Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.subheadline.weight(.medium))
+                                .font(.system(.subheadline, design: .rounded).weight(.medium))
+                                .foregroundStyle(PaperTheme.color(.actionLabel))
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(.blue)
+                        .tint(PaperTheme.color(.actionFill))
 
                         Button {
                             // Navigate back and return to discovery

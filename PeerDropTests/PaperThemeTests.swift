@@ -65,6 +65,18 @@ final class PaperThemeTests: XCTestCase {
         }
     }
 
+    func testActionFillIsVisibleOnBackgroundAndLabelReadable() {
+        // Reply swipe action + Verify button: the fill must read as a shape against
+        // the chat background (>= 3:1) and carry its label at >= 4.5:1.
+        for dark in [false, true] {
+            let fill = PaperPalette.hex(.actionFill, dark: dark)
+            let shape = PaperPalette.contrastRatio(fill, PaperPalette.hex(.background, dark: dark))
+            XCTAssertGreaterThanOrEqual(shape, 3.0, "actionFill vs background dark=\(dark): \(shape)")
+            let label = PaperPalette.contrastRatio(PaperPalette.hex(.actionLabel, dark: dark), fill)
+            XCTAssertGreaterThanOrEqual(label, 4.5, "actionLabel on actionFill dark=\(dark): \(label)")
+        }
+    }
+
     func testContrastRatioKnownValues() {
         XCTAssertEqual(PaperPalette.contrastRatio(0x000000, 0xFFFFFF), 21.0, accuracy: 0.01)
         XCTAssertEqual(PaperPalette.contrastRatio(0x777777, 0xFFFFFF), 4.48, accuracy: 0.05)

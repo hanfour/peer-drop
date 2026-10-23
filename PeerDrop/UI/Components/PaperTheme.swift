@@ -19,6 +19,8 @@ enum PaperToken: CaseIterable {
     case inputFill, inputPlaceholder, sendButton
     case tickSent, tickDelivered, tickRead, tickFailed
     case quoteBar, typingDot
+    /// Fill + label for prominent action buttons (swipe Reply, Verify); visible on `background`.
+    case actionFill, actionLabel
 }
 
 enum PaperPalette {
@@ -45,6 +47,8 @@ enum PaperPalette {
         case .tickFailed:       return dark ? 0x6E0C08 : 0xB3261E
         case .quoteBar:         return dark ? 0xD89268 : 0xD9A27A
         case .typingDot:        return dark ? 0xB7A58F : 0x8A7561
+        case .actionFill:       return dark ? 0xD89268 : 0x9A3412
+        case .actionLabel:      return dark ? 0x1F1610 : 0xFFFFFF
         }
     }
 

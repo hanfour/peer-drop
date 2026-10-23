@@ -306,7 +306,7 @@ struct ChatBubbleView: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
-        .background(message.isOutgoing ? PaperTheme.color(.outgoingText).opacity(0.08) : PaperTheme.color(.border))
+        .background(textColor.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.bottom, 4)
     }
@@ -406,7 +406,7 @@ struct ChatBubbleView: View {
                     .onAppear { ImageCache.shared.setImage(platformImage, forKey: message.id) }
             } else {
                 Label(message.fileName ?? "Image", systemImage: "photo")
-                    .font(.subheadline)
+                    .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(textColor)
             }
         }
@@ -469,7 +469,7 @@ struct ChatBubbleView: View {
                         RoundedRectangle(cornerRadius: 1)
                             .fill(
                                 isPlayed
-                                    ? PaperTheme.color(.quoteBar)
+                                    ? textColor
                                     : textColor.opacity(0.3)
                             )
                             .frame(width: 2, height: waveformHeight(for: i))
@@ -481,12 +481,12 @@ struct ChatBubbleView: View {
             // Duration/Current time
             if isVoicePlaying {
                 Text(formatDuration(voicePlayer.currentTime))
-                    .font(.caption)
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(textColor.opacity(0.7))
                     .monospacedDigit()
             } else if let duration = message.duration {
                 Text(formatDuration(duration))
-                    .font(.caption)
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(textColor.opacity(0.7))
             }
         }
@@ -531,13 +531,13 @@ struct ChatBubbleView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.fileName ?? "File")
-                    .font(.subheadline)
+                    .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(textColor)
                     .lineLimit(1)
 
                 if let size = message.fileSize {
                     Text(formatFileSize(size))
-                        .font(.caption2)
+                        .font(.system(.caption2, design: .rounded))
                         .foregroundStyle(textColor.opacity(0.7))
                 }
             }

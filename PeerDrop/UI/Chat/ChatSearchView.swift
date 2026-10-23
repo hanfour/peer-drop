@@ -123,13 +123,13 @@ struct SearchResultRow: View {
             // Sender and time
             HStack {
                 Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
-                    .font(.subheadline.bold())
-                    .foregroundStyle(message.isOutgoing ? .green : .blue)
+                    .font(.system(.subheadline, design: .rounded).bold())
+                    .foregroundStyle(PaperTheme.color(message.isOutgoing ? .actionFill : .incomingText))
 
                 Spacer()
 
                 Text(message.timestamp, style: .date)
-                    .font(.caption)
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(.secondary)
             }
 
@@ -139,7 +139,7 @@ struct SearchResultRow: View {
                     .lineLimit(2)
             } else if let fileName = message.fileName {
                 Label(fileName, systemImage: iconForMediaType(message.mediaType))
-                    .font(.subheadline)
+                    .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(.secondary)
             }
         }
@@ -197,7 +197,7 @@ struct HighlightedText: View {
         let suffix = String(text.suffix(text.count - endIndex))
 
         return Text(prefix) +
-            Text(match).bold().foregroundColor(.yellow) +
+            Text(match).bold().foregroundColor(PaperTheme.color(.actionFill)) +
             Text(suffix)
     }
 }

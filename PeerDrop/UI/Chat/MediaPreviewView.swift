@@ -77,13 +77,13 @@ struct MediaPreviewView: View {
         VStack(spacing: 4) {
             if let fileName = message.fileName {
                 Text(fileName)
-                    .font(.caption)
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
             }
 
             Text(message.timestamp, style: .date) + Text(" ") + Text(message.timestamp, style: .time)
         }
-        .font(.caption2)
+        .font(.system(.caption2, design: .rounded))
         .foregroundStyle(.white.opacity(0.6))
         .padding()
         .background(.ultraThinMaterial.opacity(0.5))

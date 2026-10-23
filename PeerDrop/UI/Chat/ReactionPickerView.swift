@@ -32,7 +32,8 @@ struct ReactionPickerView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(PaperTheme.color(.incomingBubble), in: Capsule())
+        .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
     }
 }
@@ -56,18 +57,18 @@ struct ReactionsView: View {
                 ForEach(sortedReactions, id: \.emoji) { item in
                     HStack(spacing: 2) {
                         Text(item.emoji)
-                            .font(.caption)
+                            .font(.system(.caption, design: .rounded))
                         if item.count > 1 {
                             Text("\(item.count)")
-                                .font(.caption2)
-                                .foregroundStyle(isOutgoing ? .white.opacity(0.8) : .secondary)
+                                .font(.system(.caption2, design: .rounded))
+                                .foregroundStyle(PaperTheme.color(isOutgoing ? .outgoingText : .incomingText).opacity(0.7))
                         }
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(
                         Capsule()
-                            .fill(isOutgoing ? Color.white.opacity(0.2) : Color.peerDropFillTertiary)
+                            .fill(isOutgoing ? PaperTheme.color(.outgoingText).opacity(0.10) : PaperTheme.color(.border))
                     )
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(ReactionPickerView.emojiNames[item.emoji] ?? item.emoji), \(item.count)")

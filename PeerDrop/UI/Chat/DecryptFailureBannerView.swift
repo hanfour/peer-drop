@@ -39,10 +39,11 @@ struct DecryptFailureBannerView: View {
                     Button(action: onVerify) {
                         Text("Verify")
                             .font(.caption.bold())
+                            .foregroundStyle(PaperTheme.color(.actionLabel))
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(PaperTheme.color(.tickRead))
+                    .tint(PaperTheme.color(.actionFill))
                 }
                 .padding(.top, actionRowTopPadding)
             }
