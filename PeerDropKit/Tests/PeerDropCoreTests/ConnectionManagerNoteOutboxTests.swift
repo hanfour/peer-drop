@@ -193,9 +193,32 @@ final class ConnectionManagerFinalFixTests: XCTestCase {
         XCTAssertTrue(cm.noteOutbox.all.isEmpty)
     }
 
+    func testQueueNoteStillQueuesWhileAccountIsUnavailableFailed() async throws {
+        let c = bound()
+        struct FlakyDeps: AccountRegistrationDependencies {
+            var deviceId: String { "d" }
+            var platform: String { "ios" }
+            var registrationSupported: Bool { true }
+            var attestSupported: Bool { true }
+            func identityKeys() throws -> (identity: Data, signing: Data) { (Data(), Data()) }
+            func sign(_ data: Data) throws -> Data { Data() }
+            func currentMailbox() async throws -> (id: String, token: String) { throw CocoaError(.fileReadUnknown) }
+        }
+        let store = AccountStore(storageKey: "ff2-\(UUID().uuidString)", directory: keyDir.appendingPathComponent("acct2"),
+                                 encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)))
+        let manager = AccountManager(client: AccountClient(baseURL: URL(string: "https://worker.test")!), store: store,
+                                     deps: FlakyDeps(), tokenAdopter: { _, _ in }, tokenIsFresh: { true })
+        await manager.registerIfNeeded()
+        guard case .unavailable(.failed) = manager.state else { return XCTFail("expected .unavailable(.failed), got \(manager.state)") }
+        cm._setAccountManagerForTesting(manager)
+        let entry = try cm.queueNote(text: "x", toContact: c.id)
+        XCTAssertEqual(cm.noteOutbox.all.first?.id, entry.id)
+    }
+
     func testAccountPermanenceClassification() {
         XCTAssertTrue(ConnectionManager.noteAccountIsPermanentlyUnavailable(.unavailable(.attestUnsupported)))
-        XCTAssertTrue(ConnectionManager.noteAccountIsPermanentlyUnavailable(.unavailable(.failed("x"))))
+        // `.failed` also covers transient errors (5xx/429/decode) that auto-retry: it is NOT permanent.
+        XCTAssertFalse(ConnectionManager.noteAccountIsPermanentlyUnavailable(.unavailable(.failed("x"))))
         XCTAssertFalse(ConnectionManager.noteAccountIsPermanentlyUnavailable(.unavailable(.offline)))
         XCTAssertFalse(ConnectionManager.noteAccountIsPermanentlyUnavailable(.registering))
         XCTAssertFalse(ConnectionManager.noteAccountIsPermanentlyUnavailable(.idle))

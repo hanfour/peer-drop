@@ -54,6 +54,8 @@ final class ThreadModel: ObservableObject {
     @Published private(set) var contactID: UUID?
     /// The unsent-notes list could not be loaded or had to be quarantined (a banner explains it).
     @Published private(set) var outboxProblem = false
+    /// Our account is waiting only because the device is offline (queue copy says "when you're online").
+    @Published private(set) var accountOfflineWait = false
     /// False until the first decision exists, so the view shows nothing instead of a wrong composer.
     @Published private(set) var isReady = false
     /// Run / day grouping for `items`, computed once per rebuild (never per row in a view body).
@@ -77,6 +79,7 @@ final class ThreadModel: ObservableObject {
     private var presence: () -> PeerPresence = { .offline }
     private var accountReady: () -> Bool = { false }
     private var accountUnavailable: () -> Bool = { false }
+    private var accountOffline: () -> Bool = { false }
     private var throttle: TimeInterval = 0.05
     private var cancellables = Set<AnyCancellable>()
     private var attached = false
@@ -100,6 +103,7 @@ final class ThreadModel: ObservableObject {
                },
                accountReady: { [weak account] in account?.account != nil },
                accountUnavailable: { [weak account] in account.map { ConnectionManager.noteAccountIsPermanentlyUnavailable($0.state) } ?? false },
+               accountOffline: { [weak account] in account.map { $0.state == .unavailable(.offline) } ?? false },
                signals: [
                    // Presence / secure-channel changes only touch the decision, unless the resolved friend changes.
                    cm.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
@@ -114,13 +118,14 @@ final class ThreadModel: ObservableObject {
     func attach(peerID: String, chatManager: ChatManager, notesStore: NotesStore, outbox: NoteOutboxStore,
                 friend: FriendBinding, presence: @escaping () -> PeerPresence, accountReady: @escaping () -> Bool,
                 accountUnavailable: @escaping () -> Bool = { false },
+                accountOffline: @escaping () -> Bool = { false },
                 signals: [AnyPublisher<Void, Never>] = [], itemSignals: [AnyPublisher<Void, Never>] = [],
                 throttle: TimeInterval = 0.05, markRead: ((String) async -> Void)? = nil) {
         cancellables.removeAll()
         self.markRead = markRead ?? { [weak notesStore] id in await notesStore?.markRead(id) }
         self.peerID = peerID; self.chatManager = chatManager; self.notesStore = notesStore; self.outbox = outbox
         self.friend = friend; self.presence = presence; self.accountReady = accountReady
-        self.accountUnavailable = accountUnavailable; self.throttle = throttle
+        self.accountUnavailable = accountUnavailable; self.accountOffline = accountOffline; self.throttle = throttle
         attached = true
 
         // @Published publishers replay their current value on subscribe: skip it. Caller signals
@@ -164,6 +169,8 @@ final class ThreadModel: ObservableObject {
         if newBinding != binding { binding = newBinding }
         let availability: AccountAvailability = accountUnavailable() ? .unavailable : (accountReady() ? .ready : .notReady)
         let newDecision = ThreadTransport.decide(presence: presence(), binding: newBinding, account: availability)
+        let offlineWait = accountOffline()
+        if offlineWait != accountOfflineWait { accountOfflineWait = offlineWait }
         let problem = outbox.loadError != nil
         if problem != outboxProblem { outboxProblem = problem }
         if newDecision != decision { decision = newDecision }

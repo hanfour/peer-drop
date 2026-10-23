@@ -578,6 +578,19 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         XCTAssertTrue(peer.log.payloads.isEmpty)
     }
 
+    /// Accept side: the per-connection flag records what the accepted HELLO actually carried.
+    func testAcceptSideRecordsAdvertisedFlagPerConnection() async throws {
+        let direct = try await connectPeer()
+        XCTAssertEqual(cm.connections[direct.identity.id]?.advertisedNotesExchange, true)
+        XCTAssertTrue(cm.notesExchangeFacts(for: try XCTUnwrap(cm.connections[direct.identity.id])).localSupportsExchange)
+        cm.notesExchangeRemoteHostOverride = { _ in "100.101.102.103" }
+        let tail = try await connectPeer(expectFlagInHello: false)
+        let pc = try XCTUnwrap(cm.connections[tail.identity.id])
+        XCTAssertEqual(pc.advertisedNotesExchange, false)
+        XCTAssertFalse(cm.notesExchangeFacts(for: pc).localSupportsExchange)
+        XCTAssertEqual(cm.connections[direct.identity.id]?.advertisedNotesExchange, true, "other connections unaffected")
+    }
+
     func testTailnetHostClassifier() {
         for h in ["100.64.0.1", "100.127.255.254", "::ffff:100.100.1.1", "fd7a:115c:a1e0::1", "FD7A:115C:A1E0:ab::2%en0",
                   "pixel.tail1234.ts.net", "mac.tail-scale.ts.net."] {

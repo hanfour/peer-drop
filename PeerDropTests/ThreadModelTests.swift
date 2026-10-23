@@ -20,6 +20,7 @@ final class ThreadModelTests: XCTestCase {
     private var presence: PeerPresence = .offline
     private var accountReady = true
     private var accountUnavailable = false
+    private var accountOffline = false
     private var model: ThreadModel!
     private let signal = PassthroughSubject<Void, Never>()
 
@@ -63,6 +64,7 @@ final class ThreadModelTests: XCTestCase {
         model.attach(peerID: peerID, chatManager: chat, notesStore: store, outbox: outbox, friend: binding,
                      presence: { [unowned self] in self.presence }, accountReady: { [unowned self] in self.accountReady },
                      accountUnavailable: { [unowned self] in self.accountUnavailable },
+                     accountOffline: { [unowned self] in self.accountOffline },
                      signals: [signal.eraseToAnyPublisher()], throttle: throttle, markRead: markRead)
         return store
     }
@@ -269,6 +271,17 @@ final class ThreadModelTests: XCTestCase {
         presence = .online
         model.refresh()
         XCTAssertEqual(model.decision, .live)
+    }
+
+    func testQueueCopyDistinguishesOfflineFromAccountNotReady() {
+        _ = attach()
+        accountReady = false
+        model.refresh()
+        XCTAssertTrue(model.mode.queuesUntilOnline)
+        XCTAssertFalse(model.accountOfflineWait, "registering/failed: account-ready copy")
+        accountOffline = true
+        model.refresh()
+        XCTAssertTrue(model.accountOfflineWait, "device offline: online copy")
     }
 
     func testOutboxProblemFlagFollowsLoadError() {

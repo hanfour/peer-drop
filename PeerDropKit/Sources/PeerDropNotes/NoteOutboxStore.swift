@@ -136,6 +136,15 @@ public final class NoteOutboxStore: ObservableObject {
     /// Deletes every entry of a contact (contact forgotten: the plaintext must not stay on disk and
     /// nothing in the UI could show it any more).
     public func removeAll(forContact contactID: UUID) {
+        if isLoadFailed {
+            reloadIfNeeded()
+            if isLoadFailed {
+                pendingPurgeContacts.insert(contactID)
+                sendingIDs.subtract(entries.filter { $0.contactID == contactID }.map(\.id))
+                entries.removeAll { $0.contactID == contactID }
+                return
+            }
+        }
         let ids = entries.filter { $0.contactID == contactID }.map(\.id)
         guard !ids.isEmpty else { return }
         sendingIDs.subtract(ids)
@@ -183,6 +192,19 @@ public final class NoteOutboxStore: ObservableObject {
     public func reloadIfNeeded() {
         guard isLoadFailed else { return }
         load(merging: entries)
+        applyPendingPurges()
+    }
+
+    /// Contacts forgotten while the file could not be read: their on-disk entries are dropped
+    /// as soon as a load succeeds, so they cannot come back as orphans.
+    private var pendingPurgeContacts = Set<UUID>()
+
+    private func applyPendingPurges() {
+        guard !isLoadFailed, !pendingPurgeContacts.isEmpty else { return }
+        let purge = pendingPurgeContacts
+        pendingPurgeContacts = []
+        entries.removeAll { purge.contains($0.contactID) }
+        save()
     }
 
     private func update(_ id: UUID, _ change: (inout NoteOutboxEntry) -> Void) {

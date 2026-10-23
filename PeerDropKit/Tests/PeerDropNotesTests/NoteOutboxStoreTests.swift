@@ -5,6 +5,29 @@ import PeerDropSecurity
 
 @MainActor
 final class NoteOutboxStoreTests: XCTestCase {
+    func testRemoveAllForContactWhileLoadFailedIsAppliedOnNextSuccessfulLoad() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("obs-purge-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let enc = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
+        let a = UUID(), b = UUID(), key = Data(repeating: 1, count: 32)
+        let seed = NoteOutboxStore(directory: dir, encryptor: enc)
+        seed.enqueue(contactID: a, accountId: "AAAAAAAA", expectedIdentityKey: key, text: "secret-a")
+        seed.enqueue(contactID: b, accountId: "BBBBBBBB", expectedIdentityKey: key, text: "keep-b")
+        var failing = true
+        let store = NoteOutboxStore(directory: dir, encryptor: enc, reader: { url in
+            if failing { throw ChatDataEncryptor.EncryptionError.keychainError(-25308) }
+            return try enc.readAndDecrypt(from: url)
+        })
+        XCTAssertTrue(store.isLoadFailed)
+        store.removeAll(forContact: a)          // cannot be applied yet
+        failing = false
+        store.reloadIfNeeded()
+        XCTAssertFalse(store.isLoadFailed)
+        XCTAssertEqual(store.all.map(\.text), ["keep-b"], "purged contact's notes must not come back")
+        let reloaded = NoteOutboxStore(directory: dir, encryptor: enc)
+        XCTAssertEqual(reloaded.all.map(\.text), ["keep-b"])
+    }
+
     func testRemoveAllForContactDeletesOnlyThatContactsEntriesAndPersists() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("obs-rm-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

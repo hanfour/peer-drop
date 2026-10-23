@@ -562,7 +562,13 @@ struct ChatView: View, PaperThemed {
                     }
             }
             if thread.mode.queuesUntilOnline {
-                Label("Will be sent when your account is ready", systemImage: "clock")
+                Group {
+                    if thread.accountOfflineWait {
+                        Label("Will be sent when you're online", systemImage: "wifi.slash")
+                    } else {
+                        Label("Will be sent when your account is ready", systemImage: "clock")
+                    }
+                }
                     .font(.footnote)
                     .foregroundStyle(paper(.noteText).opacity(0.8))
                     .frame(maxWidth: .infinity, alignment: .leading)

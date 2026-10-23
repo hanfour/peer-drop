@@ -481,12 +481,14 @@ public final class ConnectionManager: ObservableObject {
 
     func bumpSecurityEpoch() { securityEpoch &+= 1 }
 
-    /// This device can never send notes: no way to authenticate, or registration was rejected.
-    /// `.registering`, `.idle` and `.unavailable(.offline)` are NOT permanent: those queue.
+    /// This device can never send notes: no way to authenticate at all.
+    /// Everything else (`.registering`, `.idle`, `.unavailable(.offline/.failed)`) is "not ready yet": those queue.
     public nonisolated static func noteAccountIsPermanentlyUnavailable(_ state: AccountManager.State) -> Bool {
         switch state {
-        case .unavailable(.attestUnsupported), .unavailable(.failed): return true
-        case .idle, .registering, .ready, .unavailable(.offline): return false
+        // Only "no way to authenticate at all" is permanent. `.failed` also covers transient errors
+        // (5xx, 429, decode, persistence) that auto-retry, so it queues like `.registering`/`.offline`.
+        case .unavailable(.attestUnsupported): return true
+        case .idle, .registering, .ready, .unavailable(.offline), .unavailable(.failed): return false
         }
     }
 
