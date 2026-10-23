@@ -128,6 +128,42 @@ final class ConversationsBadgeMathTests: XCTestCase {
                    recipientAccountId: nil, readAt: unread ? nil : t0, receivedAt: t0.addingTimeInterval(off))
     }
 
+    func testThreeUnreadNumbersAreDistinct() {
+        // 7 unread notes overall; 4 belong to bound friends.
+        let u = ConversationsLogic.unread(total: 7, boundUnread: 4)
+        XCTAssertEqual(u.tabBadge, 7)          // TOTAL: bound-friend notes must still raise the tab badge
+        XCTAssertEqual(u.inboxRemainder, 3)    // inbox row only
+        XCTAssertEqual(u.friendRows, 4)        // sum shown on friend rows
+        XCTAssertEqual(ConversationsLogic.unread(total: 1, boundUnread: 4).inboxRemainder, 0)
+    }
+
+    func testOutboundNotePreviewHasYouPrefixAndEqualTimestampPrefersNote() {
+        let msg = ChatMessage.text(text: "chat", isOutgoing: false, peerName: "p", timestamp: t0.addingTimeInterval(10))
+        let out = NoteRecord(id: "o", direction: .outbound, text: "mail", sentAt: t0.addingTimeInterval(10), sender: .anonymous,
+                             recipientAccountId: "B", readAt: nil, receivedAt: t0)
+        let tie = ConversationSummary(id: "p", isGroup: false, lastMessage: msg, lastNote: out, unread: 0)
+        XCTAssertEqual(ConversationsLogic.preview(tie), String(format: String(localized: "You: %@"), "📮 mail"))
+        let older = NoteRecord(id: "o2", direction: .inbound, text: "mail", sentAt: t0, sender: .anonymous,
+                               recipientAccountId: nil, readAt: nil, receivedAt: t0.addingTimeInterval(9))
+        let msgNewer = ConversationSummary(id: "p", isGroup: false, lastMessage: msg, lastNote: older, unread: 0)
+        XCTAssertEqual(ConversationsLogic.preview(msgNewer), "chat")
+    }
+
+    func testFoldPeersFoldsEachAccountIntoExactlyOneRow() {
+        let n = NoteRecord(id: "n", direction: .inbound, text: "x", sentAt: t0, sender: .verified(accountId: "ACCT", nickname: nil),
+                           recipientAccountId: nil, readAt: nil, receivedAt: t0.addingTimeInterval(5))
+        let out = ConversationsLogic.foldPeers(
+            recordIDs: ["r1", "r2", "r3"], chatKey: { $0 },
+            base: { ConversationSummary(id: $0, isGroup: false, lastMessage: nil, unread: 1) },
+            accountForRecord: ["r1": "ACCT"],            // r2 resolved to the same account but lost the tie
+            notes: { $0 == "ACCT" ? [n] : [] }, noteUnread: { $0 == "ACCT" ? 2 : 0 })
+        XCTAssertEqual(out["r1"]?.lastNote?.id, "n")
+        XCTAssertEqual(out["r1"]?.unread, 3)
+        XCTAssertNil(out["r2"]?.lastNote)
+        XCTAssertEqual(out["r2"]?.unread, 1)
+        XCTAssertEqual(out["r3"]?.unread, 1)
+    }
+
     func testInboxUnreadSubtractsBoundAndNeverNegative() {
         XCTAssertEqual(ConversationsLogic.inboxUnread(total: 5, boundUnread: 2), 3)
         XCTAssertEqual(ConversationsLogic.inboxUnread(total: 2, boundUnread: 2), 0)

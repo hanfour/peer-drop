@@ -338,6 +338,7 @@
 		DC894F35138683614F800E51 /* TransferHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC682C14084D950A4869B2CE /* TransferHistoryView.swift */; };
 		DCF611CAA4F3D0494384187B /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BCE102DDD1DEE79E0737B4 /* StateMachineTests.swift */; };
 		DD5CB1040D7599EEF72DC92B /* FullFeatureVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5B643A84D7A2E047AA8855 /* FullFeatureVerificationTests.swift */; };
+		DFAFA9AD7158467971B58E1C /* BoundFriendsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFFE4D6BE8197A1F1F33CDD1 /* BoundFriendsTests.swift */; };
 		E0126E894DE57B15A1324AF6 /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA2A4797AC8095B6EE63842 /* SnapshotHelper.swift */; };
 		E0B7A536167CE9273CBDAD99 /* ExchangeNotesButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1555C538D4C9D4167027E9EE /* ExchangeNotesButton.swift */; };
 		E0F72ADE6DB773EDF5DEA225 /* ConversationsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C26E50062E3BC52C8D9DE4 /* ConversationsLogic.swift */; };
@@ -689,6 +690,7 @@
 		FD58BEE3BF4DC02C141E6810 /* MacChatWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacChatWindow.swift; sourceTree = "<group>"; };
 		FE7D6242E4A1AA49322D058A /* ConversationsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsTab.swift; sourceTree = "<group>"; };
 		FF26DD75E9420CA07E5B83FB /* CameraPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPickerView.swift; sourceTree = "<group>"; };
+		FFFE4D6BE8197A1F1F33CDD1 /* BoundFriendsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundFriendsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -849,6 +851,7 @@
 				D95D1A1719878A98B65735FF /* AppTabTests.swift */,
 				051FD1881B74D827B86CE257 /* BLEDiscoveryTests.swift */,
 				4B6B1D2992D58BC9668FCED3 /* BLESignalingTests.swift */,
+				FFFE4D6BE8197A1F1F33CDD1 /* BoundFriendsTests.swift */,
 				B0A1BFDD59F2AD40F96D12B1 /* CanonicalJSONTests.swift */,
 				B07C0E24C95366B78FAFC44E /* CertificateManagerTests.swift */,
 				52E26A2A79E586A8C4C682EB /* ChatIntegrationTests.swift */,
@@ -1583,6 +1586,7 @@
 				9F9650ADB2D852D3EC4395CF /* AppTabTests.swift in Sources */,
 				139EE6ADA5A2F2176219517B /* BLEDiscoveryTests.swift in Sources */,
 				CF3EDCDA7F93B7D7FDCD6020 /* BLESignalingTests.swift in Sources */,
+				DFAFA9AD7158467971B58E1C /* BoundFriendsTests.swift in Sources */,
 				D26EB737C7A21B17E8752582 /* CanonicalJSONTests.swift in Sources */,
 				20790589AF70549A2AD0380D /* CertificateManagerTests.swift in Sources */,
 				5E80D5077A36825757B36CDA /* ChatIntegrationTests.swift in Sources */,

@@ -23,7 +23,9 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     @Binding var inboxRequest: Int
     /// `DeviceRecord.id` of a friend whose thread should open (note deep link for a bound friend).
     /// Consumed (reset to nil) here, like `inboxRequest`.
-    @Binding var threadRequest: String?
+    @Binding var threadRequest: ThreadRequest?
+    /// Called when the requested friend vanished: the container shows the tapped note directly.
+    var onThreadUnavailable: (String?) -> Void = { _ in }
     @ViewBuilder var inbox: () -> Inbox
     @State private var showInbox = false
     @State private var pickedGroup: DeviceGroup?
@@ -55,19 +57,18 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     }
 
     private func refreshSummaries() {
-        var peers: [String: ConversationSummary] = [:]
-        let binding = FriendBinding(connectionManager: connectionManager)
+        let peers: [String: ConversationSummary]
         let notesStore = connectionManager.notesStore
-        for r in connectionManager.deviceStore.records {
-            let key = chatKey(for: r.id)
-            var summary = chatManager.summary(forPeer: key)
-            // Only a VERIFIED binding folds notes into the thread (never pending).
-            if let account = binding.verifiedAccount(forChatPeerID: key)?.accountId {
-                summary = ConversationsLogic.fold(summary, notes: notesStore.notes(forAccount: account),
-                                                  noteUnread: notesStore.unreadCount(forAccount: account))
-            }
-            peers[r.id] = summary
-        }
+        // account -> record (first record wins), inverted: each account folds into exactly one row.
+        var accountForRecord: [String: String] = [:]
+        for (account, record) in BoundFriends.recordIDByAccount(connectionManager) { accountForRecord[record] = account }
+        peers = ConversationsLogic.foldPeers(
+            recordIDs: connectionManager.deviceStore.records.map(\.id),
+            chatKey: { chatKey(for: $0) },
+            base: { chatManager.summary(forPeer: $0) },
+            accountForRecord: accountForRecord,
+            notes: { notesStore.notes(forAccount: $0) },
+            noteUnread: { notesStore.unreadCount(forAccount: $0) })
         var groups: [String: ConversationSummary] = [:]
         for g in connectionManager.groupStore.groups {
             groups[g.id] = chatManager.summary(forGroup: g.id)
@@ -211,11 +212,13 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     /// Opens a bound friend's thread (note deep link). Dismisses the inbox or another chat first.
     /// Mac chats live in their own window, so nothing needs dismissing there.
     private func consumeThreadRequest() {
-        guard InboxDeepLink.shouldConsumeThread(pending: threadRequest), let recordID = threadRequest else { return }
+        guard InboxDeepLink.shouldConsumeThread(pending: threadRequest), let request = threadRequest else { return }
+        let recordID = request.recordID
         threadRequest = nil
         guard let record = connectionManager.deviceStore.records.first(where: { $0.id == recordID }) else {
-            // Friend vanished since the decision: fall back to the inbox.
+            // Friend vanished since the decision: open the inbox and show the tapped note itself.
             if !showInbox { showInbox = true }
+            onThreadUnavailable(request.noteID)
             return
         }
         let name = connectionManager.displayName(for: record)
@@ -449,7 +452,7 @@ enum InboxDeepLink {
     }
 
     /// A pending thread request (record id) is consumed once and reset, so it is never replayed.
-    static func shouldConsumeThread(pending: String?) -> Bool { pending != nil }
+    static func shouldConsumeThread(pending: ThreadRequest?) -> Bool { pending != nil }
 }
 
 /// Owns the Combine subscription so it is created once, not per `body` evaluation.

@@ -50,6 +50,39 @@ enum ConversationsLogic {
     /// counted by that friend's row instead, so each unread note is counted once overall. Never negative.
     static func inboxUnread(total: Int, boundUnread: Int) -> Int { max(0, total - boundUnread) }
 
+    /// The three unread numbers, kept apart on purpose:
+    /// - `tabBadge`: TOTAL unread notes (a bound friend's new note must still raise it)
+    /// - `inboxRemainder`: unread shown on the inbox row (total minus notes that live in friend threads)
+    /// - `friendRows`: unread notes shown on friend rows; `friendRows + inboxRemainder == tabBadge`
+    struct Unread: Equatable { let tabBadge: Int; let inboxRemainder: Int; let friendRows: Int }
+
+    static func unread(total: Int, boundUnread: Int) -> Unread {
+        let remainder = inboxUnread(total: total, boundUnread: boundUnread)
+        return Unread(tabBadge: total, inboxRemainder: remainder, friendRows: total - remainder)
+    }
+
+    /// Per-record summaries with notes folded in. `accountForRecord` holds ONLY records that own their
+    /// verified account (one row per account); a record absent from it gets its chat summary untouched.
+    static func foldPeers(
+        recordIDs: [String],
+        chatKey: (String) -> String,
+        base: (String) -> ConversationSummary,
+        accountForRecord: [String: String],
+        notes: (String) -> [NoteRecord],
+        noteUnread: (String) -> Int
+    ) -> [String: ConversationSummary] {
+        var out: [String: ConversationSummary] = [:]
+        for id in recordIDs {
+            let summary = base(chatKey(id))
+            if let account = accountForRecord[id] {
+                out[id] = fold(summary, notes: notes(account), noteUnread: noteUnread(account))
+            } else {
+                out[id] = summary
+            }
+        }
+        return out
+    }
+
     /// Folds a bound friend's notes into the chat summary: the newest note (by `threadDate`, ties by
     /// id) becomes `lastNote`, and the note unread count is added to the chat unread.
     static func fold(_ summary: ConversationSummary, notes: [NoteRecord], noteUnread: Int) -> ConversationSummary {

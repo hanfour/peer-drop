@@ -21,7 +21,7 @@ import PeerDropDiary
 struct MacDetailRouter: View {
     @Binding var selection: MacSidebarSection?
     @Binding var inboxRequest: Int
-    @Binding var threadRequest: String?
+    @Binding var threadRequest: ThreadRequest?
     @Binding var openNoteID: String?
     @Binding var diariesPath: [String]
     @Binding var openDiaryID: String?

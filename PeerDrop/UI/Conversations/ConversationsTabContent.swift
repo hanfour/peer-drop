@@ -14,7 +14,7 @@ struct ConversationsTabContent: View {
     @Binding var openNoteID: String?
     @Binding var inboxRequest: Int
     /// Set (to a `DeviceRecord.id`) when a note deep link should open a bound friend's thread.
-    @Binding var threadRequest: String?
+    @Binding var threadRequest: ThreadRequest?
     var onGoHome: () -> Void
     @EnvironmentObject private var connectionManager: ConnectionManager
     @StateObject private var bound = BoundFriendsModel()
@@ -22,20 +22,29 @@ struct ConversationsTabContent: View {
 
     /// Inbox/tab-badge unread: notes that live in a bound friend's thread are counted on that
     /// friend's row instead (once overall).
-    private var inboxUnread: Int {
-        ConversationsLogic.inboxUnread(total: store.unreadCount,
-                                        boundUnread: store.boundUnreadIDs(accounts: bound.accounts).count)
+    /// Before the model's first refresh, compute synchronously so no unfiltered frame is shown.
+    private var boundAccounts: Set<String> {
+        bound.isReady ? bound.accounts : Set(BoundFriends.recordIDByAccount(connectionManager).keys)
+    }
+
+    private func unread(_ accounts: Set<String>) -> ConversationsLogic.Unread {
+        ConversationsLogic.unread(total: store.unreadCount, boundUnread: store.boundUnreadIDs(accounts: accounts).count)
     }
 
     var body: some View {
-        NavigationStack {
-            ConversationsTab(inboxUnread: inboxUnread, onGoHome: onGoHome, inboxRequest: $inboxRequest,
-                             threadRequest: $threadRequest) {
-                NotesInboxHost(store: store, accountManager: accountManager, boundAccounts: bound.accounts, note: $pendingNote)
+        let accounts = boundAccounts
+        let counts = unread(accounts)
+        return NavigationStack {
+            ConversationsTab(inboxUnread: counts.inboxRemainder, onGoHome: onGoHome, inboxRequest: $inboxRequest,
+                             threadRequest: $threadRequest,
+                             onThreadUnavailable: { id in
+                                 if let id, let record = store.note(id: id) { pendingNote = record }
+                             }) {
+                NotesInboxHost(store: store, accountManager: accountManager, boundAccounts: accounts, note: $pendingNote)
             }
         }
         #if os(iOS)
-        .badge(inboxUnread)
+        .badge(counts.tabBadge)   // TOTAL unread notes, including those that live in friend threads
         #endif
         .onChange(of: openNoteID) { _ in resolve() }
         .onChange(of: store.inbox) { _ in resolve() }
@@ -48,7 +57,7 @@ struct ConversationsTabContent: View {
         // A note from a verified-bound friend belongs to that friend's thread, not the inbox.
         if case .thread(let recordID) = BoundFriends.destination(forNoteID: id, cm: connectionManager) {
             pendingNote = nil
-            threadRequest = recordID
+            threadRequest = ThreadRequest(recordID: recordID, noteID: id)
             return
         }
         if pendingNote != nil, pendingNote?.id != record.id {

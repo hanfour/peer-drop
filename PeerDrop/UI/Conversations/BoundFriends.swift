@@ -11,12 +11,20 @@ enum BoundFriends {
     /// Verified account id -> `DeviceRecord.id`. The first record wins if two ever resolve to the
     /// same account (bindings are unique per contact, so this is purely defensive).
     static func recordIDByAccount(_ cm: ConnectionManager) -> [String: String] {
-        let binding = FriendBinding(connectionManager: cm)
+        recordIDByAccount(recordIDs: cm.deviceStore.records.map(\.id),
+                          chatKey: { id in
+                              guard let r = cm.deviceStore.records.first(where: { $0.id == id }) else { return id }
+                              return cm.connection(for: r)?.peerIdentity.id ?? id
+                          },
+                          binding: FriendBinding(connectionManager: cm))
+    }
+
+    /// Pure core (testable): `recordIDs` in deterministic display order, `chatKey` maps a record to its chat peer id.
+    static func recordIDByAccount(recordIDs: [String], chatKey: (String) -> String, binding: FriendBinding) -> [String: String] {
         var result: [String: String] = [:]
-        for r in cm.deviceStore.records {
-            let key = cm.connection(for: r)?.peerIdentity.id ?? r.id
-            if let v = binding.verifiedAccount(forChatPeerID: key), result[v.accountId] == nil {
-                result[v.accountId] = r.id
+        for id in recordIDs {
+            if let v = binding.verifiedAccount(forChatPeerID: chatKey(id)), result[v.accountId] == nil {
+                result[v.accountId] = id
             }
         }
         return result
@@ -29,10 +37,19 @@ enum BoundFriends {
     }
 }
 
+/// A note deep link that targets a bound friend's thread. `noteID` lets the list still show the
+/// tapped note if the friend vanished between the decision and the push.
+struct ThreadRequest: Equatable {
+    let recordID: String
+    let noteID: String?
+}
+
 /// Keeps the set of verified-bound accounts current for views that must not recompute it in `body`.
 @MainActor
 final class BoundFriendsModel: ObservableObject {
     @Published private(set) var recordIDByAccount: [String: String] = [:]
+    /// False until the first `bind`; views use a synchronous fallback so no unfiltered frame shows.
+    private(set) var isReady = false
     var accounts: Set<String> { Set(recordIDByAccount.keys) }
     private var cancellable: AnyCancellable?
 
@@ -50,6 +67,7 @@ final class BoundFriendsModel: ObservableObject {
     }
 
     func refresh(_ cm: ConnectionManager) {
+        isReady = true
         let next = BoundFriends.recordIDByAccount(cm)
         if next != recordIDByAccount { recordIDByAccount = next }
     }

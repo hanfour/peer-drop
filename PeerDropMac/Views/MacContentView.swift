@@ -8,7 +8,7 @@ struct MacContentView: View {
     @State private var selection: MacSidebarSection? = .home
     @State private var openNoteID: String?
     /// `DeviceRecord.id` of a bound friend whose chat a note deep link should open.
-    @State private var threadRequest: String?
+    @State private var threadRequest: ThreadRequest?
     /// Bumped by the `.openNote` deep link so Notes pushes its inbox (see `ConversationsTab.inboxRequest`).
     @State private var inboxRequest = 0
     @State private var diariesPath: [String] = []
@@ -53,7 +53,7 @@ struct MacContentView: View {
             selection = MacSidebarSection(appTab: AppTab.tab(forDeepLink: .openNote) ?? .notes)
             switch BoundFriends.destination(forNoteID: id, cm: connectionManager) {
             case .thread(let recordID):
-                threadRequest = recordID
+                threadRequest = ThreadRequest(recordID: recordID, noteID: id)
             case .inbox:
                 openNoteID = id
                 inboxRequest += 1

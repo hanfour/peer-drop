@@ -45,7 +45,7 @@ final class InboxDeepLinkTests: XCTestCase {
     }
 
     func testThreadRequestConsumedOnce() {
-        XCTAssertTrue(InboxDeepLink.shouldConsumeThread(pending: "rec-1"))
+        XCTAssertTrue(InboxDeepLink.shouldConsumeThread(pending: ThreadRequest(recordID: "rec-1", noteID: "n1")))
         XCTAssertFalse(InboxDeepLink.shouldConsumeThread(pending: nil))
     }
 }

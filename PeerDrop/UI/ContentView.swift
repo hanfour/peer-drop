@@ -67,7 +67,7 @@ struct ContentView: View {
     @State private var inboxRequest = 0
     @State private var openNoteID: String?
     /// `DeviceRecord.id` of a bound friend whose thread a note deep link should open.
-    @State private var threadRequest: String?
+    @State private var threadRequest: ThreadRequest?
     @State private var diariesPath: [String] = []
     @State private var openDiaryID: String?
     @State private var openDiarySeq: Int?
@@ -129,7 +129,7 @@ struct ContentView: View {
             switch BoundFriends.destination(forNoteID: id, cm: connectionManager) {
             case .thread(let recordID):
                 // Verified-bound friend: open their thread; the note is already in the store.
-                threadRequest = recordID
+                threadRequest = ThreadRequest(recordID: recordID, noteID: id)
             case .inbox:
                 openNoteID = id
                 inboxRequest += 1
