@@ -181,6 +181,21 @@ final class PaperThemeTests: XCTestCase {
         }
     }
 
+    func testNoteGlyphOnBadgeAndPresenceOnNoteBackground() {
+        for dark in [false, true] {
+            // Glyph on the amber badge: noteText in light; dark's noteText is light-on-dark
+            // (for noteFill), so the badge glyph there is the dark outgoingText-style 0x1F1610.
+            let glyph: UInt32 = dark ? 0x1F1610 : PaperPalette.hex(.noteText, dark: false)
+            let g = PaperPalette.contrastRatio(glyph, PaperPalette.hex(.noteBadge, dark: dark))
+            XCTAssertGreaterThanOrEqual(g, 4.5, "glyph on noteBadge dark=\(dark) ratio \(g)")
+            XCTAssertEqual(PaperPalette.hex(.noteBadge, dark: dark), 0xF9A825)
+            for t in [PaperToken.online, .highlight] {
+                let r = PaperPalette.contrastRatio(PaperPalette.hex(t, dark: dark, mode: .note), PaperPalette.hex(.background, dark: dark, mode: .note))
+                XCTAssertGreaterThanOrEqual(r, 3.0, "\(t) on note background dark=\(dark) ratio \(r)")
+            }
+        }
+    }
+
     func testModeIndependentTokensAreEqualAcrossModes() {
         for token in [PaperToken.brand, .highlight, .online, .noteFill, .noteBorder, .noteText, .noteBadge] {
             for dark in [false, true] {

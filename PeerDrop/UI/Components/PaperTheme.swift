@@ -49,9 +49,9 @@ enum PaperPalette {
         case .highlight:  return dark ? 0x00A2E8 : 0x0087C8
         case .online:     return dark ? 0x80C41C : 0x4C9A0A
         case .noteFill:   return dark ? 0x4A3810 : 0xFFF1CC
-        case .noteBorder: return dark ? 0xF9A825 : 0x9A6200
+        case .noteBorder: return dark ? 0xF9A825 : 0xC77C00
         case .noteText:   return dark ? 0xFFE9B0 : 0x4A3200
-        case .noteBadge:  return dark ? 0xF9A825 : 0x9A6200
+        case .noteBadge:  return 0xF9A825
         default: break
         }
         if mode == .live { return liveHex(token, dark: dark) }
@@ -110,7 +110,8 @@ enum PaperPalette {
         case .actionFill:       return 0xB5532B
         case .warning:          return dark ? 0xF08A6A : 0xB3261E
         case .accent:           return dark ? 0xD89268 : 0xB5532B
-        default:                return 0 // mode-independent tokens are handled in `hex`
+        case .brand, .highlight, .online, .noteFill, .noteBorder, .noteText, .noteBadge:
+            preconditionFailure("mode-independent token handled in hex(_:dark:mode:)")
         }
     }
 
