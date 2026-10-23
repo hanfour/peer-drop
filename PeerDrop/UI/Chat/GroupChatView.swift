@@ -72,10 +72,24 @@ struct GroupChatView: View {
                 .disabled(!hasConnectedMembers)
                 .opacity(hasConnectedMembers ? 1.0 : 0.5)
         }
+        .background(PaperTheme.color(.background))
+        // Local accent for the chat screen only; the app-wide tint is untouched.
+        .tint(PaperTheme.color(.sendButton))
         .navigationTitle(group.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            #if os(iOS)
+            // Rounded title face; the system navigation bar itself is kept.
+            ToolbarItem(placement: .principal) {
+                Text(verbatim: group.name)
+                    .font(.system(.headline, design: .rounded))
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            #endif
+        }
         .onAppear {
             chatManager.loadGroupMessages(forGroup: group.id)
             chatManager.activeGroupID = group.id
@@ -93,8 +107,8 @@ struct GroupChatView: View {
                     .fill(.green)
                     .frame(width: 8, height: 8)
                 Text("\(connectionStatus.connected)/\(connectionStatus.total) connected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(PaperTheme.color(.datePillText))
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(connectionStatus.connected) of \(connectionStatus.total) members connected")
@@ -107,16 +121,23 @@ struct GroupChatView: View {
                     connectionManager.connectToGroup(group)
                 } label: {
                     Label("Connect More", systemImage: "link.badge.plus")
-                        .font(.caption)
+                        .font(.system(.caption, design: .rounded).weight(.medium))
+                        .foregroundStyle(PaperTheme.color(.incomingText))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(PaperTheme.color(.background), in: Capsule())
+                        .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.plain)
                 .accessibilityHint("Double tap to connect to more group members")
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.peerDropFillTertiary)
+        .background(PaperTheme.color(.datePillFill))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(PaperTheme.color(.border)).frame(height: 1)
+        }
     }
 
     private var inputBar: some View {
@@ -138,7 +159,7 @@ struct GroupChatView: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : PaperTheme.color(.sendButton))
+                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? PaperTheme.color(.inputPlaceholder) : PaperTheme.color(.sendButton))
             }
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityLabel("Send")
@@ -185,7 +206,7 @@ struct GroupChatBubbleView: View {
     var body: some View {
         HStack {
             if message.isOutgoing {
-                Spacer(minLength: 60)
+                Spacer(minLength: 50)
             }
 
             if !message.isOutgoing {
@@ -240,10 +261,11 @@ struct GroupChatBubbleView: View {
             }
 
             if !message.isOutgoing {
-                Spacer(minLength: 60)
+                Spacer(minLength: 50)
             }
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 16)
+        .padding(message.isOutgoing ? .trailing : .leading, -6)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(groupBubbleAccessibilityLabel)
         .sheet(isPresented: $showReadReceipts) {
@@ -269,6 +291,7 @@ struct GroupChatBubbleView: View {
             switch message.status {
             case .sending:
                 ProgressView()
+                    .tint(textColor)
                     .scaleEffect(0.5)
                     .frame(width: 12, height: 12)
             case .sent:

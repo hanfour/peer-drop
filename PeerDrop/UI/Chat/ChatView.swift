@@ -225,15 +225,23 @@ struct ChatView: View {
                             connectionManager.returnToDiscovery()
                         } label: {
                             Text("Back to Nearby")
-                                .font(.subheadline)
+                                .font(.system(.subheadline, design: .rounded).weight(.medium))
+                                .foregroundStyle(PaperTheme.color(.incomingText))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(PaperTheme.color(.datePillFill), in: Capsule())
+                                .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.plain)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
-                .background(Color.peerDropFillTertiary)
+                .background(PaperTheme.color(.background))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(PaperTheme.color(.border)).frame(height: 1)
+                }
             }
 
             // Reply preview bar

@@ -18,6 +18,25 @@ final class PaperThemeTests: XCTestCase {
         }
     }
 
+    func testBannerAndGroupStripPairsMeetContrast() {
+        // Disconnect banner / group strip: text on page background, pill fill and border fills.
+        let text: [(PaperToken, PaperToken)] = [
+            (.incomingText, .datePillFill),   // "Back to Nearby" label on its fill
+            (.incomingText, .border),
+            (.datePillText, .background),
+            (.datePillText, .datePillFill),   // "N/M connected" on the strip
+        ]
+        for dark in [false, true] {
+            for (fg, bg) in text {
+                let r = PaperPalette.contrastRatio(PaperPalette.hex(fg, dark: dark), PaperPalette.hex(bg, dark: dark))
+                XCTAssertGreaterThanOrEqual(r, 4.5, "\(fg) on \(bg) dark=\(dark) ratio \(r)")
+            }
+            // Disabled send arrow (inputPlaceholder) on the page background.
+            let d = PaperPalette.contrastRatio(PaperPalette.hex(.inputPlaceholder, dark: dark), PaperPalette.hex(.background, dark: dark))
+            XCTAssertGreaterThanOrEqual(d, 3.0, "disabled send dark=\(dark) ratio \(d)")
+        }
+    }
+
     func testPlaceholderMeets3to1() {
         for dark in [false, true] {
             let r = PaperPalette.contrastRatio(PaperPalette.hex(.inputPlaceholder, dark: dark), PaperPalette.hex(.inputFill, dark: dark))
