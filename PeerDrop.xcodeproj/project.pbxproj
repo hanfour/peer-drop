@@ -15,6 +15,7 @@
 		072D3D1FDB380DC436F75700 /* NSPasteboardAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 610B6BB592E702BE1B2A0EEB /* NSPasteboardAdapter.swift */; };
 		0860AFDB158802DF211AEC3F /* DecryptFailureBannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D067A433D853F7D010BEA796 /* DecryptFailureBannerTests.swift */; };
 		086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09411CC81953144963CB18 /* PeerRowView.swift */; };
+		09F596F0C3DC648623D8746B /* EmptyChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F51B1652C885D69B3C96C7 /* EmptyChatView.swift */; };
 		0B77F471E5A114C808B503AA /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5328488B4605628BD3820F15 /* PeerDropCore */; };
 		0D7CB122177AFADF9F2A6743 /* TransferProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C2478F20C10D5FB383E756 /* TransferProgressView.swift */; };
 		0E4D9CA8921067C590CDCCC8 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
@@ -108,6 +109,7 @@
 		5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */; };
 		5869553DAA2A2C0975800025 /* DisconnectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D98B7E882918091D8A90224 /* DisconnectSheet.swift */; };
 		588C4858607A127F21B93F02 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = F551826FCACD53BCDB32C130 /* PeerDropProtocol */; };
+		598F08A894347EE8F7912B9B /* PaperTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D76F7B43A202AF874940F66 /* PaperTheme.swift */; };
 		5A65DB904DE1FB857B47375D /* ChatSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */; };
 		5A6D11520661AA1683187114 /* MacPlatformDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = D636A36232F289F4FBB4271D /* MacPlatformDependencies.swift */; };
 		5B720E41674A74F8187D9D13 /* MacSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07D6C5BF9EB43DCB151AB72 /* MacSnapshotTests.swift */; };
@@ -127,10 +129,12 @@
 		6400F23A0E99EE20B5D619E4 /* NicknameEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874EFDB3754DADFB1A10EEBA /* NicknameEditorView.swift */; };
 		6691C0DC05645F5A6BB7DEC1 /* MediaPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */; };
 		66C0C687C7029C170387D36C /* VoiceCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50393228F69F31F111E2B37B /* VoiceCallView.swift */; };
+		6780702634803D2AC22D83B7 /* EmptyChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F51B1652C885D69B3C96C7 /* EmptyChatView.swift */; };
 		6846CE42A5D47F5DEF96C530 /* MockDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBCA04FC49FA5A58F002662 /* MockDiscovery.swift */; };
 		68D264EFEA63A2FC01A9B59F /* PerPeerPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC49FC1C8EF2B81B055F6F6 /* PerPeerPolicyTests.swift */; };
 		68D6FB1A56699AA70F6437CE /* TrustGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88C13753314A0B506433A46 /* TrustGateTests.swift */; };
 		68FBDD535D2217927717DFFC /* MacCallProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 942E08C41652EB6AEC201A49 /* MacCallProvider.swift */; };
+		691AB3BAA3DE965DF78EAA52 /* PeerAvatarPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 906268CA81FDDD73DD036FE6 /* PeerAvatarPaletteTests.swift */; };
 		69315F35985C9AAD85C4F0C1 /* Image+PlatformImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */; };
 		6A70994ECAD4424C661A9835 /* VoiceFeatureFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682CA2EF7E45DC8BFFCB8B9F /* VoiceFeatureFlag.swift */; };
 		6A8837F44D5DC1F207C3948F /* TEST_SPEC.md in Resources */ = {isa = PBXBuildFile; fileRef = 5F2B53349AFF1B7FB87A830E /* TEST_SPEC.md */; };
@@ -169,6 +173,8 @@
 		86D71F53B6A1CB1DAD6BD22F /* LibraryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CBB2ECC4DE15E9E2DC0E12 /* LibraryTab.swift */; };
 		873561EEB1F5EB96CFCB7183 /* MediaPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */; };
 		8760252B1B6ADF4E0FEB4D11 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E3CFE9E060C5CF123F975D8 /* MockURLProtocol.swift */; };
+		8790EACEDE973C1BF3369C6D /* ChatAvatarSlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43D2736FB31245BEE3BF1AC /* ChatAvatarSlot.swift */; };
+		88E2C2D564000F972DE0D295 /* ChatDatePill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2CB9C04057EC1078EA567A /* ChatDatePill.swift */; };
 		899E55194720BED07EBFF5D8 /* RetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D66F32C1146402F70397940 /* RetryPolicyTests.swift */; };
 		8A409F666CBF5120BF135E93 /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74BB6BFC733AA77B47140BE /* DevicePickerView.swift */; };
 		8AC1D27408D667B99802D3CF /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FEB4731FDC3D68845A758F3 /* SnapshotHelper.swift */; };
@@ -185,6 +191,7 @@
 		93BB9B20B2D081E5601CEE00 /* AcceptConnectionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB785F2E159A543F61378FB2 /* AcceptConnectionHelper.swift */; };
 		94BF945F88CA9B360A7545CD /* TimeoutReconnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9024CFE888C9CDAA47353A03 /* TimeoutReconnectTests.swift */; };
 		9587AC993E7B3CDE658040AA /* FirstContactVerificationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */; };
+		95CC1BEDEDEEE0EA48FD72A2 /* PaperTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D76F7B43A202AF874940F66 /* PaperTheme.swift */; };
 		96E695C9B0E51653498D333F /* ChatSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */; };
 		989FC36495311CECAE829D29 /* DiaryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE2200B6BCAC2D2BA19CADD1 /* DiaryListView.swift */; };
 		9943044243ED5841DD651575 /* RelaySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931B479F1EE7DDCA9BA41340 /* RelaySessionTests.swift */; };
@@ -231,6 +238,7 @@
 		B9CD3AD4FC571877C011ABC3 /* GroupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420320526B18E15D11A63B4C /* GroupDetailView.swift */; };
 		B9E1511063108B885976A05E /* NoteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 791D4E4A217AF6253793B87E /* NoteDetailView.swift */; };
 		BB0A876963F26D7D52EECB7A /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */; };
+		BB5FD2A5EA9911A111B6B2AB /* ChatAvatarSlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43D2736FB31245BEE3BF1AC /* ChatAvatarSlot.swift */; };
 		BB752D0F39B8A1562D530106 /* MacDeepLinkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C47C9BE5B30B181084B1052C /* MacDeepLinkHandler.swift */; };
 		BC6156CC6CA44233F862B5A6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */; };
 		BCA7CC236E57C9DA467866E7 /* LocalFirstTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1D13034674D26767D38013 /* LocalFirstTrustTests.swift */; };
@@ -276,9 +284,11 @@
 		D5B9A6ABF52756493DB5A9E6 /* MacRemoteNotificationRegistering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1DA20B516AD2B99CD2E205 /* MacRemoteNotificationRegistering.swift */; };
 		D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */; };
 		D71FBFD3725F1D23F522FEC8 /* KeyChangeAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3570B2CD6EE96F1948BF26 /* KeyChangeAlertView.swift */; };
+		D729754BE2441D8EC6EF8319 /* PaperThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B42F6619B2D7FEFA7935D2E /* PaperThemeTests.swift */; };
 		D7733CC25EB645F65CE1FB01 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */; };
 		D780DA9CA36DE6591EB9014D /* MacRingtonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90AC9EC97361D84B9129E3D /* MacRingtonePlayer.swift */; };
 		D7A85C61F57646A64E170080 /* GroupRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */; };
+		D8F8991CD84B1609ED6E0D41 /* ChatDatePill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2CB9C04057EC1078EA567A /* ChatDatePill.swift */; };
 		D94701A12A5E62279312EC22 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395F6F602CF93ADE6BAEE19D /* AppDelegate.swift */; };
 		DAE1076D2CA5376505BD4C11 /* DiaryInviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0895292AD074291295709154 /* DiaryInviteSheet.swift */; };
 		DAE124B52E30E223F51A6996 /* PeerDropProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 4D87F8E58A8731C9059C3ABD /* PeerDropProtocol */; };
@@ -484,9 +494,11 @@
 		874EFDB3754DADFB1A10EEBA /* NicknameEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NicknameEditorView.swift; sourceTree = "<group>"; };
 		883D84FF5E1F966F1CED7BC2 /* MockTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockTransport.swift; sourceTree = "<group>"; };
 		8895CA9BCA992CBB0102A3C7 /* MessageFramerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFramerTests.swift; sourceTree = "<group>"; };
+		8A2CB9C04057EC1078EA567A /* ChatDatePill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDatePill.swift; sourceTree = "<group>"; };
 		8B6AB944F18E05892DCECC94 /* BlockListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockListSection.swift; sourceTree = "<group>"; };
 		8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionSecureChannelTests.swift; sourceTree = "<group>"; };
 		8CF42E03015C3D6F22BB2BA9 /* ConnectionOptionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionOptionsSheet.swift; sourceTree = "<group>"; };
+		8D76F7B43A202AF874940F66 /* PaperTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperTheme.swift; sourceTree = "<group>"; };
 		8D802376EA45B7A32C1D2211 /* MacIncomingCallPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacIncomingCallPanel.swift; sourceTree = "<group>"; };
 		8DE1DA90E1627A9EC1AC5228 /* MenuBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContent.swift; sourceTree = "<group>"; };
 		8F07FA1205CD38F6F9DDE037 /* SentNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentNotesView.swift; sourceTree = "<group>"; };
@@ -494,6 +506,7 @@
 		8F73F1E9902B840A6C0AE1F0 /* GroupRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupRow.swift; sourceTree = "<group>"; };
 		9005DB16593AB05BAB95880F /* PeerDrop-Mac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "PeerDrop-Mac.entitlements"; sourceTree = "<group>"; };
 		9024CFE888C9CDAA47353A03 /* TimeoutReconnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeoutReconnectTests.swift; sourceTree = "<group>"; };
+		906268CA81FDDD73DD036FE6 /* PeerAvatarPaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerAvatarPaletteTests.swift; sourceTree = "<group>"; };
 		90A9DA5F16B00839A9012834 /* FileTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTransferTests.swift; sourceTree = "<group>"; };
 		91A372C9EE0F8B252F4EA5C6 /* AssignGroupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignGroupSheet.swift; sourceTree = "<group>"; };
 		9213B13A8B9B9DF21664EA58 /* PerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceTests.swift; sourceTree = "<group>"; };
@@ -508,6 +521,7 @@
 		9A29C2179049E0ADD341ABFE /* DiaryJoinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryJoinSheet.swift; sourceTree = "<group>"; };
 		9B1DA20B516AD2B99CD2E205 /* MacRemoteNotificationRegistering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRemoteNotificationRegistering.swift; sourceTree = "<group>"; };
 		9B335967E2F46FE4D5037176 /* VerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerificationView.swift; sourceTree = "<group>"; };
+		9B42F6619B2D7FEFA7935D2E /* PaperThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperThemeTests.swift; sourceTree = "<group>"; };
 		9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushStatusRow.swift; sourceTree = "<group>"; };
 		9C83BE80AB6146E9AFF27C6D /* PeerDropKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PeerDropKit; path = PeerDropKit; sourceTree = SOURCE_ROOT; };
 		9CF7BF9654779DD440C46692 /* MacSecuritySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSecuritySheets.swift; sourceTree = "<group>"; };
@@ -571,8 +585,10 @@
 		DCF4CCFAA125C2739B40BF9E /* MacSnapshotTestsDark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSnapshotTestsDark.swift; sourceTree = "<group>"; };
 		DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupReadReceiptView.swift; sourceTree = "<group>"; };
 		DE2200B6BCAC2D2BA19CADD1 /* DiaryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryListView.swift; sourceTree = "<group>"; };
+		E1F51B1652C885D69B3C96C7 /* EmptyChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyChatView.swift; sourceTree = "<group>"; };
 		E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCardSnapshotTests.swift; sourceTree = "<group>"; };
 		E4369D166EB133BF63C00D8C /* PreKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreKeyStoreTests.swift; sourceTree = "<group>"; };
+		E43D2736FB31245BEE3BF1AC /* ChatAvatarSlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAvatarSlot.swift; sourceTree = "<group>"; };
 		E535E0B89960D6392D1138C5 /* DiaryEntryComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryEntryComposer.swift; sourceTree = "<group>"; };
 		E6A958BCBDDF82ED395CFE24 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSearchView.swift; sourceTree = "<group>"; };
@@ -781,6 +797,8 @@
 				84ACF719D35D40517BDD7F89 /* NetworkFingerprintTests.swift */,
 				2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */,
 				043E7D352DA50757FD403C6C /* PairingPayloadTests.swift */,
+				9B42F6619B2D7FEFA7935D2E /* PaperThemeTests.swift */,
+				906268CA81FDDD73DD036FE6 /* PeerAvatarPaletteTests.swift */,
 				8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */,
 				220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */,
 				46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */,
@@ -874,6 +892,7 @@
 			children = (
 				3D03168691C8271ED0CCDFB8 /* ConnectionStatusHeaderView.swift */,
 				2795028D5F503E5526BA63F4 /* Image+PlatformImage.swift */,
+				8D76F7B43A202AF874940F66 /* PaperTheme.swift */,
 				12AF7D70A40A90533BFB6169 /* PeerActionSheet.swift */,
 				78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */,
 				B6E1809532A651DA46008F31 /* PeerGridItemView.swift */,
@@ -1019,10 +1038,13 @@
 			isa = PBXGroup;
 			children = (
 				FF26DD75E9420CA07E5B83FB /* CameraPickerView.swift */,
+				E43D2736FB31245BEE3BF1AC /* ChatAvatarSlot.swift */,
 				CAED5F8373D498D847E54328 /* ChatBubbleView.swift */,
+				8A2CB9C04057EC1078EA567A /* ChatDatePill.swift */,
 				E7309341D4AA4F781C7B7A59 /* ChatSearchView.swift */,
 				C4148097F734513B29899E4A /* ChatView.swift */,
 				15AF1A174214A6562EAAA5EE /* DecryptFailureBannerView.swift */,
+				E1F51B1652C885D69B3C96C7 /* EmptyChatView.swift */,
 				712CCBDE5A63978DD474D214 /* GroupChatView.swift */,
 				DD96D87B37D77C5FDA71EAE6 /* GroupReadReceiptView.swift */,
 				A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */,
@@ -1492,6 +1514,8 @@
 				EDD43CFF5EC727F0F3696DF5 /* NetworkFingerprintTests.swift in Sources */,
 				27E277572AD10A5381AE7884 /* OutboundRetryQueueTests.swift in Sources */,
 				EC619EE7C1A8D81571523362 /* PairingPayloadTests.swift in Sources */,
+				D729754BE2441D8EC6EF8319 /* PaperThemeTests.swift in Sources */,
+				691AB3BAA3DE965DF78EAA52 /* PeerAvatarPaletteTests.swift in Sources */,
 				27538539E3C9506E49455EF5 /* PeerConnectionSecureChannelTests.swift in Sources */,
 				06528AA9160E9CF2F6DC7F90 /* PeerIdentitySecurityTests.swift in Sources */,
 				FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */,
@@ -1541,7 +1565,9 @@
 				7972FF12E6FBC8FFA2DC764E /* BlockListSection.swift in Sources */,
 				A24D74F37BFB6B76D8365A37 /* CallKitManager.swift in Sources */,
 				A509D5F1A5F7052EA5A17B97 /* CameraPickerView.swift in Sources */,
+				8790EACEDE973C1BF3369C6D /* ChatAvatarSlot.swift in Sources */,
 				17CED2BB3D9F438376227830 /* ChatBubbleView.swift in Sources */,
+				88E2C2D564000F972DE0D295 /* ChatDatePill.swift in Sources */,
 				96E695C9B0E51653498D333F /* ChatSearchView.swift in Sources */,
 				8493F3E5C9C9CBAEA52CB0B0 /* ChatView.swift in Sources */,
 				5839437F8BE56D08943B46C8 /* ClipboardShareView.swift in Sources */,
@@ -1567,6 +1593,7 @@
 				5869553DAA2A2C0975800025 /* DisconnectSheet.swift in Sources */,
 				23049AA320595802D640748B /* DiscoveryView.swift in Sources */,
 				2B11B8027606E7A2F6423CCC /* DocumentPickerView.swift in Sources */,
+				09F596F0C3DC648623D8746B /* EmptyChatView.swift in Sources */,
 				78EF5354C89CF51473FD7D49 /* FilePickerView.swift in Sources */,
 				55354112F7209861BD1216F1 /* FirstContactVerificationSheet.swift in Sources */,
 				B79F1D2D3B47C8B62B8A269F /* GroupChatView.swift in Sources */,
@@ -1592,6 +1619,7 @@
 				F1986D27CF7A5272B1C8E0B7 /* OnboardingAccountPage.swift in Sources */,
 				F54E82F76D7531FA41807E70 /* OnboardingView.swift in Sources */,
 				1603007083612F74127C38CE /* PINVerificationView.swift in Sources */,
+				598F08A894347EE8F7912B9B /* PaperTheme.swift in Sources */,
 				1F91DF18EB139081A02E6519 /* PeerActionSheet.swift in Sources */,
 				63BE92E572C307D1C28DE737 /* PeerAvatar.swift in Sources */,
 				A838F5582EC4B71A97DE5DEE /* PeerDropApp.swift in Sources */,
@@ -1629,7 +1657,9 @@
 				5345BAC4593546B2C35AD9BD /* AssignGroupSheet.swift in Sources */,
 				4F26413A4BB07D8144F50CE0 /* BackupRecordListView.swift in Sources */,
 				6B2D6809092F4A0D98B214EE /* BlockListSection.swift in Sources */,
+				BB5FD2A5EA9911A111B6B2AB /* ChatAvatarSlot.swift in Sources */,
 				E28B49798D489839F029FB49 /* ChatBubbleView.swift in Sources */,
+				D8F8991CD84B1609ED6E0D41 /* ChatDatePill.swift in Sources */,
 				5A65DB904DE1FB857B47375D /* ChatSearchView.swift in Sources */,
 				B110D595BA1E30D2D11EADF7 /* ChatView.swift in Sources */,
 				3A278084C6B9496A5F15FF92 /* ComposeNoteView.swift in Sources */,
@@ -1651,6 +1681,7 @@
 				2B40866B86A26FAE3D24C5A8 /* DiaryView.swift in Sources */,
 				745CD45CE6664ED2C885CB1C /* DisconnectSheet.swift in Sources */,
 				6BF4CA581482AA49C7DE2A0A /* DropOverlay.swift in Sources */,
+				6780702634803D2AC22D83B7 /* EmptyChatView.swift in Sources */,
 				55DF9C0E885D6288C635F381 /* FilePickerView.swift in Sources */,
 				9587AC993E7B3CDE658040AA /* FirstContactVerificationSheet.swift in Sources */,
 				A824F5CC650F1DDDCA1B7557 /* GroupChatView.swift in Sources */,
@@ -1700,6 +1731,7 @@
 				0EF2FE8280D938D19A740879 /* OnboardingAccountPage.swift in Sources */,
 				4AA3B3C282F59BE062C67844 /* OnboardingView.swift in Sources */,
 				A4E7342F564232714C806AD3 /* PINVerificationView.swift in Sources */,
+				95CC1BEDEDEEE0EA48FD72A2 /* PaperTheme.swift in Sources */,
 				B76E95E5DFAD2FA0465F37D6 /* PeerActionSheet.swift in Sources */,
 				28F561B3CF13C1C09D82587F /* PeerAvatar.swift in Sources */,
 				20ACA25FD060857F71B1B3F0 /* PeerDropCommands.swift in Sources */,

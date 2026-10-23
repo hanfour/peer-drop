@@ -23,7 +23,7 @@ struct DecryptFailureBannerView: View {
     var body: some View {
         HStack(alignment: .top, spacing: rowSpacing) {
             Image(systemName: "exclamationmark.shield.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(PaperTheme.color(.warning))
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: contentSpacing) {
@@ -42,7 +42,7 @@ struct DecryptFailureBannerView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(.orange)
+                    .tint(PaperTheme.color(.actionFill))
                 }
                 .padding(.top, actionRowTopPadding)
             }
@@ -59,10 +59,10 @@ struct DecryptFailureBannerView: View {
             .accessibilityLabel(Text("Dismiss"))
         }
         .padding(bannerPadding)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(PaperTheme.color(.datePillFill), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                .stroke(PaperTheme.color(.border), lineWidth: 1)
         )
         .padding(.horizontal, outerHPadding)
         .padding(.top, outerTopPadding)

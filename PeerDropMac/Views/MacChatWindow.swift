@@ -26,6 +26,7 @@ struct MacChatWindow: View {
         )
         .environmentObject(connectionManager)
         .frame(minWidth: 480, minHeight: 480)
+        .background(PaperTheme.color(.background))
         .navigationTitle(peerDisplayName)
         // ConnectionManager.statusToast is only rendered by the iOS ContentView, so
         // on macOS chat errors (voice failure, file too large, reconnect) were silent.

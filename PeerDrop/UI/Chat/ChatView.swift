@@ -66,6 +66,11 @@ struct ChatView: View {
             globalState: connectionManager.state)
     }
 
+    /// Peer name for copy; a missing/blank name falls back to a neutral phrase.
+    private var displayName: String {
+        ChatDisplayName.trimmed(peerName) ?? String(localized: "Other person")
+    }
+
     /// Get disconnect reason for this peer.
     private var disconnectReason: String? {
         if let peerConn = connectionManager.connection(for: peerID) {
@@ -85,6 +90,10 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        if chatManager.messages.isEmpty {
+                            EmptyChatView(message: String(localized: "No messages yet. Say hello to \(displayName)."))
+                                .padding(.top, 80)
+                        }
                         if chatManager.hasMoreMessages {
                             Button("Load earlier messages") {
                                 chatManager.loadMoreMessages()
@@ -95,10 +104,16 @@ struct ChatView: View {
                             .frame(maxWidth: .infinity)
                         }
 
+                        let runStarts = ChatMessageRuns.firstInRunIDs(in: chatManager.messages)
+                        let dayStarts = ChatMessageRuns.dayStartIDs(in: chatManager.messages)
                         ForEach(chatManager.messages, id: \.id) { message in
+                            if dayStarts.contains(message.id) {
+                                ChatDatePill(date: message.timestamp)
+                            }
                             ChatBubbleView(
                                 message: message,
                                 chatManager: chatManager,
+                                runStart: runStarts.contains(message.id),
                                 onReaction: { emoji in
                                     connectionManager.sendReaction(
                                         emoji: emoji,
@@ -128,7 +143,7 @@ struct ChatView: View {
                                 } label: {
                                     Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
                                 }
-                                .tint(.blue)
+                                .tint(PaperTheme.color(.actionFill))
                             }
                         }
                     }
@@ -157,7 +172,7 @@ struct ChatView: View {
 
             // Typing indicator
             if chatManager.isTyping(peerID: peerID) {
-                TypingIndicatorView(peerName: peerName)
+                TypingIndicatorView(peerName: displayName)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
             }
@@ -189,36 +204,44 @@ struct ChatView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.exclamationmark")
                             .foregroundStyle(.orange)
-                        Text(disconnectReason ?? "Connection lost")
+                        Text(disconnectReason ?? String(localized: "Connection to \(displayName) lost"))
                             .font(.subheadline.weight(.medium))
                     }
 
                     HStack(spacing: 16) {
                         Button {
                             if !connectionManager.reconnect(to: peerID) {
-                                connectionManager.statusToast = String(localized: "Device not found nearby")
+                                connectionManager.statusToast = String(localized: "Can't find \(displayName) nearby. Make sure they have PeerDrop open.")
                             }
                         } label: {
                             Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.subheadline.weight(.medium))
+                                .font(.system(.subheadline, design: .rounded).weight(.medium))
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(.blue)
+                        .tint(PaperTheme.color(.actionFill))
 
                         Button {
                             // Navigate back and return to discovery
                             connectionManager.returnToDiscovery()
                         } label: {
                             Text("Back to Nearby")
-                                .font(.subheadline)
+                                .font(.system(.subheadline, design: .rounded).weight(.medium))
+                                .foregroundStyle(PaperTheme.color(.incomingText))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(PaperTheme.color(.datePillFill), in: Capsule())
+                                .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.plain)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
-                .background(Color.peerDropFillTertiary)
+                .background(PaperTheme.color(.background))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(PaperTheme.color(.border)).frame(height: 1)
+                }
             }
 
             // Reply preview bar
@@ -231,11 +254,24 @@ struct ChatView: View {
                 .disabled(!isPeerConnected)
                 .opacity(isPeerConnected ? 1.0 : 0.5)
         }
-        .navigationTitle(peerName)
+        .background(PaperTheme.color(.background))
+        // Local accent for the chat screen only; the app-wide tint is untouched.
+        .tint(PaperTheme.color(.accent))
+        .navigationTitle(displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if os(iOS)
+            // Rounded title face; the system navigation bar itself is kept.
+            // (macOS keeps the system window title from navigationTitle.)
+            ToolbarItem(placement: .principal) {
+                Text(verbatim: displayName)
+                    .font(.system(.headline, design: .rounded))
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            #endif
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     showSearch = true
@@ -325,13 +361,13 @@ struct ChatView: View {
     private func replyPreviewBar(for message: ChatMessage) -> some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.blue)
+                .fill(PaperTheme.color(.quoteBar))
                 .frame(width: 4)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
                     .font(.caption.bold())
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(PaperTheme.color(.datePillText))
 
                 Text(message.text ?? message.fileName ?? "Media")
                     .font(.caption)
@@ -346,12 +382,12 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(PaperTheme.color(.inputPlaceholder))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.peerDropFillTertiary)
+        .background(PaperTheme.color(.datePillFill))
     }
 
     // MARK: - Input Bar
@@ -385,7 +421,7 @@ struct ChatView: View {
                         voiceRecorder.cancelRecording()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(PaperTheme.color(.inputPlaceholder))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -401,17 +437,23 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(PaperTheme.color(.inputPlaceholder))
                     }
                     .accessibilityLabel("Attach")
                 }
 
                 // Text field
-                TextField("Message", text: $messageText)
+                TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
+                    Text("Message")
+                }
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .rounded))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.peerDropFillTertiary)
+                    .background(PaperTheme.color(.inputFill))
                     .clipShape(Capsule())
+                    .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+                    .accessibilityLabel("Message")
                     // Return/Enter sends. Without this the only affordance
                     // was the arrow button — on the Mac, Enter in a chat
                     // input silently doing nothing reads as broken
@@ -438,7 +480,7 @@ struct ChatView: View {
                         } label: {
                             Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                                 .font(.title2)
-                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : Color.gray)
+                                .foregroundStyle(voiceRecorder.isRecording ? Color.red : PaperTheme.color(.inputPlaceholder))
                         }
                         .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                     }
@@ -448,7 +490,7 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(PaperTheme.color(.sendButton))
                     }
                     .accessibilityLabel("Send")
                 }
@@ -521,7 +563,8 @@ struct ChatView: View {
         // cap, and loading a huge file into memory just to refuse it is wasteful.
         if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
            size > MediaMessagePayload.maxInlineFileSize {
-            connectionManager.statusToast = String(localized: "File too large to send in chat")
+            let maxMB = MediaMessagePayload.maxInlineFileSize / (1024 * 1024)
+            connectionManager.statusToast = String(localized: "File too large to send in chat (max \(maxMB) MB)")
             return
         }
         guard let data = try? Data(contentsOf: url) else { return }
@@ -695,14 +738,14 @@ struct AttachmentMenuSheet: View {
                     HStack(spacing: 16) {
                         Image(systemName: item.icon)
                             .font(.title3)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(PaperTheme.color(.outgoingText))
                             .frame(width: 40, height: 40)
                             .background(item.color)
                             .clipShape(Circle())
 
                         Text(item.label)
                             .font(.body)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(PaperTheme.color(.incomingText))
 
                         Spacer()
                     }
@@ -716,15 +759,16 @@ struct AttachmentMenuSheet: View {
             }
         }
         .padding(.top, 8)
+        .background(PaperTheme.color(.background))
     }
 
     private var menuItems: [MenuItem] {
         var items: [MenuItem] = []
         #if os(iOS)
-        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: .gray, action: onCamera))
-        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: Color(red: 0.0, green: 0.68, blue: 1.0), action: onPhotos))
+        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: PaperTheme.color(.quoteBar), action: onCamera))
+        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: PaperTheme.color(.outgoingBubble), action: onPhotos))
         #endif
-        items.append(MenuItem(icon: "doc.fill", label: "Files", color: Color(red: 0.33, green: 0.33, blue: 0.98), action: onFiles))
+        items.append(MenuItem(icon: "doc.fill", label: "Files", color: PaperTheme.color(.sendButton), action: onFiles))
         return items
     }
 

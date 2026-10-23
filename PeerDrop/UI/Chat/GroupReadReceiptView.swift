@@ -25,7 +25,7 @@ struct GroupReadReceiptView: View {
 
                     HStack {
                         Label("Read", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.cyan)
+                            .foregroundStyle(PaperTheme.color(.incomingText))
                         Spacer()
                         Text("\(readCount)/\(members.count)")
                             .foregroundStyle(.secondary)
@@ -91,7 +91,7 @@ struct GroupReadReceiptView: View {
                     Image(systemName: "checkmark")
                 }
                 .font(.caption)
-                .foregroundStyle(.cyan)
+                .foregroundStyle(PaperTheme.color(.incomingText))
             } else if status.deliveredTo.contains(memberID) {
                 // Delivered
                 HStack(spacing: -4) {
