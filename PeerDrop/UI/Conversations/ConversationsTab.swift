@@ -68,15 +68,12 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
 
     /// Builds the throttled change pipeline once (leading + trailing, so the last change always lands).
     private func bindRefreshHub() {
-        hub.bind(
-            Publishers.Merge4(
-                connectionManager.objectWillChange.map { _ in () },
-                chatManager.objectWillChange.map { _ in () },
-                connectionManager.deviceStore.objectWillChange.map { _ in () },
-                connectionManager.groupStore.objectWillChange.map { _ in () })
-                .throttle(for: .milliseconds(500), scheduler: DispatchQueue.main, latest: true)
-                .eraseToAnyPublisher()
-        ) { refreshSummaries() }
+        hub.bind(RefreshHub.pipeline([
+            connectionManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            chatManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            connectionManager.deviceStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            connectionManager.groupStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+        ])) { refreshSummaries() }
     }
 
     private func rows() -> [ConversationRowModel] {
@@ -301,8 +298,19 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
 }
 
 /// Owns the Combine subscription so it is created once, not per `body` evaluation.
+@MainActor
 final class RefreshHub: ObservableObject {
     private var cancellable: AnyCancellable?
+
+    /// Merges `objectWillChange`-style sources (which fire BEFORE the value is written),
+    /// throttles them (leading + trailing so the last change lands), then hops to the next
+    /// main-queue turn so the subscriber always reads post-mutation state.
+    nonisolated static func pipeline(_ sources: [AnyPublisher<Void, Never>]) -> AnyPublisher<Void, Never> {
+        Publishers.MergeMany(sources)
+            .throttle(for: .milliseconds(500), scheduler: DispatchQueue.main, latest: true)
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
+    }
 
     func bind(_ publisher: AnyPublisher<Void, Never>, _ action: @escaping () -> Void) {
         guard cancellable == nil else { return }
