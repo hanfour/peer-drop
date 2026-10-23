@@ -242,58 +242,142 @@
         }
       }
     },
-    "Device not found nearby": {
+    "Can't find %@ nearby. Make sure they have PeerDrop open.": {
       "localizations": {
         "ja": {
           "stringUnit": {
-            "state": "translated",
-            "value": "近くにこのデバイスが見つかりません"
+            "state": "needs_review",
+            "value": "%@が近くに見つかりません。相手がPeerDropを開いているか確認してください"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
-            "value": "근처에서 이 기기를 찾을 수 없습니다"
+            "state": "needs_review",
+            "value": "근처에서 %@님을 찾을 수 없어요. 상대방이 PeerDrop을 열어 두었는지 확인해 주세요"
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
-            "value": "附近找不到这台设备"
+            "state": "needs_review",
+            "value": "附近找不到%@，请确认对方已打开 PeerDrop"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "附近找不到這台裝置"
+            "value": "附近找不到%@，請確認對方已打開 PeerDrop"
           }
         }
       }
     },
-    "File too large to send in chat": {
+    "No messages yet. Say hello to %@.": {
       "localizations": {
         "ja": {
           "stringUnit": {
-            "state": "translated",
-            "value": "ファイルが大きすぎるため、チャットで送信できません"
+            "state": "needs_review",
+            "value": "まだメッセージはありません。%@に挨拶してみましょう"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
-            "value": "파일이 너무 커서 채팅으로 보낼 수 없습니다"
+            "state": "needs_review",
+            "value": "아직 메시지가 없어요. %@님에게 인사해 보세요"
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
-            "value": "文件太大，无法通过聊天发送"
+            "state": "needs_review",
+            "value": "还没有消息，跟%@打声招呼吧"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "檔案太大，無法透過聊天傳送"
+            "value": "還沒有訊息，跟%@打聲招呼吧"
+          }
+        }
+      }
+    },
+    "No messages yet. Say hello to everyone.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "まだメッセージはありません。みんなに挨拶してみましょう"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "아직 메시지가 없어요. 모두에게 인사해 보세요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "还没有消息，跟大家打声招呼吧"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有訊息，跟大家打聲招呼吧"
+          }
+        }
+      }
+    },
+    "Other person": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "相手"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "상대방"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "对方"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方"
+          }
+        }
+      }
+    },
+    "File too large to send in chat (max %lld MB)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ファイルが大きすぎます。チャットで送れるのは最大%lld MBまでです"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "파일이 너무 커요. 채팅에서는 최대 %lld MB까지 보낼 수 있어요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "文件太大了，聊天里最多可以发送 %lld MB"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案太大了，聊天裡最多可以傳 %lld MB"
           }
         }
       }
@@ -302,26 +386,26 @@
       "localizations": {
         "ja": {
           "stringUnit": {
-            "state": "translated",
-            "value": "録音が短すぎます"
+            "state": "needs_review",
+            "value": "録音が短すぎます。もう少し話してみましょう"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
-            "value": "녹음이 너무 짧습니다"
+            "state": "needs_review",
+            "value": "녹음이 너무 짧아요. 조금만 더 말해 보세요"
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
-            "value": "录音太短"
+            "state": "needs_review",
+            "value": "录音太短，再多说几句吧"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "錄音太短"
+            "value": "錄音太短，再多說幾句吧"
           }
         }
       }
@@ -330,26 +414,26 @@
       "localizations": {
         "ja": {
           "stringUnit": {
-            "state": "translated",
-            "value": "ボイスメッセージを送信できませんでした"
+            "state": "needs_review",
+            "value": "ボイスメッセージを送信できませんでした。もう一度お試しください"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
-            "value": "음성 메시지 전송 실패"
+            "state": "needs_review",
+            "value": "음성 메시지를 보내지 못했어요. 다시 시도해 주세요"
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
-            "value": "语音消息发送失败"
+            "state": "needs_review",
+            "value": "语音没有发送出去，再试一次吧"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "語音訊息傳送失敗"
+            "value": "語音沒有送出去，再試一次吧"
           }
         }
       }
@@ -1046,26 +1130,26 @@
         },
         "ja": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "近くに戻る"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "근처로 돌아가기"
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
-            "value": "返回附近"
+            "state": "needs_review",
+            "value": "回到附近"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "返回附近"
+            "value": "回到附近"
           }
         }
       }
@@ -2124,6 +2208,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "連線一直失敗嗎？"
+          }
+        }
+      }
+    },
+    "Connection to %@ lost": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@との接続が切れました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@님과의 연결이 끊어졌어요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "和%@的连接中断了"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "和%@的連線中斷了"
           }
         }
       }

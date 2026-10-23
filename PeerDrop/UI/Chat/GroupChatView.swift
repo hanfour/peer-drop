@@ -35,6 +35,10 @@ struct GroupChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        if chatManager.groupMessages.isEmpty {
+                            EmptyChatView(message: String(localized: "No messages yet. Say hello to everyone."))
+                                .padding(.top, 80)
+                        }
                         let runStarts = ChatMessageRuns.firstInRunIDs(in: chatManager.groupMessages)
                         let dayStarts = ChatMessageRuns.dayStartIDs(in: chatManager.groupMessages)
                         ForEach(chatManager.groupMessages) { message in

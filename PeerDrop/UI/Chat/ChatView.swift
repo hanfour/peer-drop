@@ -66,6 +66,11 @@ struct ChatView: View {
             globalState: connectionManager.state)
     }
 
+    /// Peer name for copy; a missing/blank name falls back to a neutral phrase.
+    private var displayName: String {
+        ChatDisplayName.trimmed(peerName) ?? String(localized: "Other person")
+    }
+
     /// Get disconnect reason for this peer.
     private var disconnectReason: String? {
         if let peerConn = connectionManager.connection(for: peerID) {
@@ -85,6 +90,10 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        if chatManager.messages.isEmpty {
+                            EmptyChatView(message: String(localized: "No messages yet. Say hello to \(displayName)."))
+                                .padding(.top, 80)
+                        }
                         if chatManager.hasMoreMessages {
                             Button("Load earlier messages") {
                                 chatManager.loadMoreMessages()
@@ -195,14 +204,14 @@ struct ChatView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.exclamationmark")
                             .foregroundStyle(.orange)
-                        Text(disconnectReason ?? "Connection lost")
+                        Text(disconnectReason ?? String(localized: "Connection to \(displayName) lost"))
                             .font(.subheadline.weight(.medium))
                     }
 
                     HStack(spacing: 16) {
                         Button {
                             if !connectionManager.reconnect(to: peerID) {
-                                connectionManager.statusToast = String(localized: "Device not found nearby")
+                                connectionManager.statusToast = String(localized: "Can't find \(displayName) nearby. Make sure they have PeerDrop open.")
                             }
                         } label: {
                             Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
@@ -544,7 +553,8 @@ struct ChatView: View {
         // cap, and loading a huge file into memory just to refuse it is wasteful.
         if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
            size > MediaMessagePayload.maxInlineFileSize {
-            connectionManager.statusToast = String(localized: "File too large to send in chat")
+            let maxMB = MediaMessagePayload.maxInlineFileSize / (1024 * 1024)
+            connectionManager.statusToast = String(localized: "File too large to send in chat (max \(maxMB) MB)")
             return
         }
         guard let data = try? Data(contentsOf: url) else { return }
