@@ -14,10 +14,24 @@ final class NoteOutboxFailureTests: XCTestCase {
         XCTAssertEqual(NoteOutboxFailure(reason: NoteOutboxSender.terminalReason(NotesStoreError.noteNotFound)), .noteNotFound)
     }
 
-    func testLiteralReasonsAndUnknown() {
-        XCTAssertEqual(NoteOutboxFailure(reason: "超過 24 小時仍未寄出"), .tooOld)
-        XCTAssertEqual(NoteOutboxFailure(reason: "已封鎖此聯絡人，未寄出"), .blocked)
+    func testEveryCodeRoundTripsThroughItsStoredText() {
+        for code in NoteOutboxFailure.allCases {
+            XCTAssertEqual(NoteOutboxFailure(reason: code.reasonText), code)
+        }
+        XCTAssertEqual(Set(NoteOutboxFailure.allCases.map(\.reasonText)).count, NoteOutboxFailure.allCases.count)
+    }
+
+    func testUnknownReasonMapsToNil() {
         XCTAssertNil(NoteOutboxFailure(reason: "something else"))
         XCTAssertNil(NoteOutboxFailure(reason: nil))
+    }
+
+    func testRetryability() {
+        for code in [NoteOutboxFailure.bindingCancelled, .recipientChanged, .blocked, .tooLong, .noteNotFound] {
+            XCTAssertFalse(code.isRetryable, "\(code)")
+        }
+        for code in [NoteOutboxFailure.tooOld, .inboxFull, .exhausted, .recipientNotFound, .recipientHasNoKeys] {
+            XCTAssertTrue(code.isRetryable, "\(code)")
+        }
     }
 }

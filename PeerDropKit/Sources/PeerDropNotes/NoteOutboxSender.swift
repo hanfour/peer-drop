@@ -24,7 +24,7 @@ public final class NoteOutboxSender {
 
     public static let maxAttempts = 3
     public static let maxAge: TimeInterval = 24 * 3600
-    public static let boundCancelledReason = "綁定已取消"
+    public static let boundCancelledReason = NoteOutboxFailure.bindingCancelled.reasonText
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "NoteOutboxSender")
 
@@ -93,12 +93,12 @@ public final class NoteOutboxSender {
                 store.markFailed(id: id, reason: Self.exhaustedReason(nil)); continue
             }
             if now.timeIntervalSince(entry.createdAt) > Self.maxAge {
-                store.markFailed(id: id, reason: "超過 24 小時仍未寄出"); continue
+                store.markFailed(id: id, reason: NoteOutboxFailure.tooOld.reasonText); continue
             }
             switch binding(entry.contactID) {
             case .pending: continue
             case .none: store.markFailed(id: id, reason: Self.boundCancelledReason); continue
-            case .blocked: store.markFailed(id: id, reason: "已封鎖此聯絡人，未寄出"); continue
+            case .blocked: store.markFailed(id: id, reason: NoteOutboxFailure.blocked.reasonText); continue
             case .verified(let current, let currentKey):
                 // Same account with a different key (re-bound after a key change) must not
                 // send either: sendToBound would burn one of the recipient's OPKs first.
@@ -141,15 +141,15 @@ public final class NoteOutboxSender {
         if attempts >= Self.maxAttempts {
             store.markFailed(id: entry.id, reason: Self.exhaustedReason(error))
         } else if now.timeIntervalSince(entry.createdAt) > Self.maxAge {
-            store.markFailed(id: entry.id, reason: "超過 24 小時仍未寄出")
+            store.markFailed(id: entry.id, reason: NoteOutboxFailure.tooOld.reasonText)
         } else {
             store.setAttemptState(id: entry.id, attempts: attempts, nextAttemptAt: now.addingTimeInterval(backoff(afterAttempts: attempts)))
         }
     }
 
     static func exhaustedReason(_ error: Error?) -> String {
-        if (error as? NotesStoreError) == .inboxFull { return "對方信箱已滿" }
-        return "多次嘗試後仍無法寄出，請稍後重試"
+        if (error as? NotesStoreError) == .inboxFull { return NoteOutboxFailure.inboxFull.reasonText }
+        return NoteOutboxFailure.exhausted.reasonText
     }
 
     /// The real NotesStore maps URLError to `.network(String(describing:))`, so a
@@ -172,11 +172,11 @@ public final class NoteOutboxSender {
     static func terminalReason(_ error: Error) -> String? {
         guard let e = error as? NotesStoreError else { return nil } // URLError & co: retryable
         switch e {
-        case .recipientNotFound: return "找不到對方的紙條帳號"
-        case .recipientHasNoKeys: return "對方尚未準備好接收紙條"
-        case .recipientMismatch: return "對方的帳號或金鑰已變更，請重新交換紙條帳號後再試"
-        case .textTooLong: return "紙條太長"
-        case .noteNotFound: return "紙條不存在"
+        case .recipientNotFound: return NoteOutboxFailure.recipientNotFound.reasonText
+        case .recipientHasNoKeys: return NoteOutboxFailure.recipientHasNoKeys.reasonText
+        case .recipientMismatch: return NoteOutboxFailure.recipientChanged.reasonText
+        case .textTooLong: return NoteOutboxFailure.tooLong.reasonText
+        case .noteNotFound: return NoteOutboxFailure.noteNotFound.reasonText
         case .noAccount, .network, .rateLimited, .proofOfWorkFailed, .opkExhausted, .inboxFull: return nil // .inboxFull: retryable
         }
     }
