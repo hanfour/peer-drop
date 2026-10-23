@@ -3491,7 +3491,7 @@ public final class ConnectionManager: ObservableObject {
             if payload.fileData != nil, payload.validatedFileData == nil {
                 logger.warning("Dropping media bytes whose size doesn't match the claimed fileSize (\(payload.fileSize))")
             }
-            chatManager.saveIncomingMedia(
+            let savedMedia = chatManager.saveIncomingMedia(
                 payload: payload,
                 // nil from a pre-H7 peer (or rejected bytes) keeps the old thumbnail-only behaviour.
                 fileData: payload.validatedFileData ?? Data(),
@@ -3499,6 +3499,7 @@ public final class ConnectionManager: ObservableObject {
                 peerName: peerConnection.peerIdentity.displayName
             )
             NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
+            sendDeliveryReceipt(for: savedMedia.id, to: peerConnection)
 
         case .messageReceipt:
             guard let payload = try? message.decodePayload(MessageReceiptPayload.self) else {
@@ -4294,7 +4295,10 @@ public final class ConnectionManager: ObservableObject {
             statusToast = "File too large to send in chat"
             return
         }
-        let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData, fileData: fileData)
+        // One id for the whole life of the message: it is the local message id and
+        // the wire id, so the receiver's receipts match this bubble.
+        let messageID = UUID().uuidString
+        let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData, fileData: fileData, id: messageID)
         guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for mediaMessage")
             return
@@ -4317,7 +4321,8 @@ public final class ConnectionManager: ObservableObject {
             localFileURL: localPath,
             thumbnailData: thumbnailData,
             peerID: peer.id,
-            peerName: peer.displayName
+            peerName: peer.displayName,
+            id: messageID
         )
 
         // Send over network

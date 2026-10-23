@@ -123,19 +123,30 @@ public final class ChatManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveOutgoingMedia(mediaType: MediaMessagePayload.MediaType, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, peerID: String, peerName: String) -> ChatMessage {
-        let msg = ChatMessage.media(mediaType: mediaType.rawValue, fileName: fileName, fileSize: fileSize, mimeType: mimeType, duration: duration, localFileURL: localFileURL, thumbnailData: thumbnailData, isOutgoing: true, peerName: peerName)
+    public func saveOutgoingMedia(mediaType: MediaMessagePayload.MediaType, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, peerID: String, peerName: String, id: String? = nil) -> ChatMessage {
+        let msg = ChatMessage.media(mediaType: mediaType.rawValue, fileName: fileName, fileSize: fileSize, mimeType: mimeType, duration: duration, localFileURL: localFileURL, thumbnailData: thumbnailData, isOutgoing: true, peerName: peerName, id: id)
         appendMessage(msg, peerID: peerID)
         return msg
     }
 
-    public func saveIncomingMedia(payload: MediaMessagePayload, fileData: Data, peerID: String, peerName: String) {
+    /// Stores a received media message under the sender's shared id (`payload.id`)
+    /// so receipts, edits and deletes line up on both sides. A redelivery carrying
+    /// the same id is not stored again, but the message is still returned so the
+    /// caller sends another delivery receipt.
+    @discardableResult
+    public func saveIncomingMedia(payload: MediaMessagePayload, fileData: Data, peerID: String, peerName: String) -> ChatMessage {
+        if isDuplicateIncoming(id: payload.id, peerID: peerID),
+           let existing = (pendingMessages[peerID] ?? []).first(where: { $0.id == payload.id })
+                ?? allMessagesForCurrentPeer.first(where: { $0.id == payload.id }) {
+            return existing
+        }
         let relativePath = saveMediaFile(data: fileData, fileName: payload.fileName, peerID: peerID)
-        let msg = ChatMessage.media(mediaType: payload.mediaType.rawValue, fileName: payload.fileName, fileSize: payload.fileSize, mimeType: payload.mimeType, duration: payload.duration, localFileURL: relativePath, thumbnailData: payload.thumbnailData, isOutgoing: false, peerName: peerName)
+        let msg = ChatMessage.media(mediaType: payload.mediaType.rawValue, fileName: payload.fileName, fileSize: payload.fileSize, mimeType: payload.mimeType, duration: payload.duration, localFileURL: relativePath, thumbnailData: payload.thumbnailData, isOutgoing: false, peerName: peerName, id: payload.id)
         appendMessage(msg, peerID: peerID)
         if activeChatPeerID != peerID {
             incrementUnread(peerID: peerID)
         }
+        return msg
     }
 
     public func loadMessages(forPeer peerID: String) {

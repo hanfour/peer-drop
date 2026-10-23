@@ -26,8 +26,8 @@ public struct MediaMessagePayload: Codable, Identifiable {
     /// `MessageFramer.maxMessageSize` (100 MB); 32 MB keeps clear margin.
     public static let maxInlineFileSize = 32 * 1024 * 1024
 
-    public init(mediaType: MediaType, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, thumbnailData: Data?, fileData: Data? = nil) {
-        self.id = UUID().uuidString
+    public init(mediaType: MediaType, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, thumbnailData: Data?, fileData: Data? = nil, id: String? = nil) {
+        self.id = id ?? UUID().uuidString
         self.mediaType = mediaType
         self.fileName = fileName
         self.fileSize = fileSize

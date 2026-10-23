@@ -2,6 +2,9 @@ import SwiftUI
 import PeerDropCore
 import PeerDropTransport
 import PeerDropPlatform
+#if os(iOS)
+import QuickLook
+#endif
 
 // MARK: - iMessage-style bubble shape
 
@@ -78,6 +81,7 @@ struct ChatBubbleView: View {
     let chatManager: ChatManager?
     @EnvironmentObject private var voicePlayer: VoicePlayer
     @State private var showMediaPreview = false
+    @State private var previewFileURL: URL?
     @State private var showReactionPicker = false
     @State private var showEditSheet = false
     @State private var editText = ""
@@ -195,6 +199,10 @@ struct ChatBubbleView: View {
                 MediaPreviewView(message: message, chatManager: chatManager)
             }
         }
+        // QuickLook, not a ShareSheet wrapped in .sheet: UIActivityViewController
+        // presents itself, so nesting it in a SwiftUI sheet showed a blank panel
+        // for a long time. QuickLook previews PDFs/docs/images and has its own share button.
+        .quickLookPreview($previewFileURL)
         #else
         .sheet(isPresented: $showMediaPreview) {
             if let chatManager, isPreviewableMedia {
@@ -501,6 +509,23 @@ struct ChatBubbleView: View {
                 }
             }
         }
+        .contentShape(Rectangle())
+        .accessibilityHint("Double tap to open")
+        .onTapGesture { openFile() }
+    }
+
+    /// Opens a received/sent file attachment. The stored copy is encrypted at
+    /// rest, so it is decrypted to a temp file first; macOS opens it in the
+    /// default app, iOS previews it with QuickLook (which also offers share / save to Files).
+    private func openFile() {
+        guard let chatManager, let localPath = message.localFileURL,
+              let url = chatManager.writeMediaToTempFile(relativePath: localPath),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 0 else { return }
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #else
+        previewFileURL = url
+        #endif
     }
 
     // MARK: - Accessibility
