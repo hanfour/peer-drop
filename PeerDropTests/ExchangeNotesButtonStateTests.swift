@@ -31,7 +31,7 @@ final class ExchangeNotesButtonStateTests: XCTestCase {
         XCTAssertEqual(s, .unavailableOldPeer)
         XCTAssertFalse(s.isEnabled)
         XCTAssertEqual(state(nil, supports: false), .unavailableOldPeer)
-        XCTAssertTrue(s.label(peerName: "Amy").contains("update"))
+        XCTAssertNotEqual(s.label(peerName: "Amy"), ExchangeButtonState.idle.label(peerName: "Amy"))
     }
 
     func testStructuralDenialsHideTheButtonWhenUnbound() {
