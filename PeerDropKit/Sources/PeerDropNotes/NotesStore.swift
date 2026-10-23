@@ -295,6 +295,11 @@ public final class NotesStore: ObservableObject {
         if let cached = directoryCache.get(accountId) { return .found(cached) }
         do {
             guard let entry = try await client.lookup(handle: accountId, includeBundle: false) else { return .notFound }
+            // The directory resolves a handle by account id FIRST and by
+            // NICKNAME second. A different account whose nickname equals the
+            // claimed id must never stand in for it: refuse (permanent
+            // answer, same as a 404) and never cache it under the claimed id.
+            guard entry.accountId.raw == accountId else { return .notFound }
             directoryCache.set(accountId, signingKey: entry.signingKey, nickname: entry.nickname)
             guard let cached = directoryCache.get(accountId) else { return .failed }   // TTL <= 0 edge case
             return .found(cached)

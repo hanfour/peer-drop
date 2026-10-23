@@ -36,8 +36,8 @@ final class NotesStoreTests: XCTestCase {
         let next = nextAfter.map { #","nextAfter":"\#($0)""# } ?? ""
         return Data(#"{"items":[\#(arr.joined(separator: ","))]\#(next)}"#.utf8)
     }
-    private func directoryJSON(signingKey: Data, nickname: String = "alice") -> Data {
-        Data(#"{"accountId":"SENDR001","nickname":"\#(nickname)","identityKey":"AAAA","signingKey":"\#(signingKey.base64EncodedString())","mailboxId":"m"}"#.utf8)
+    private func directoryJSON(signingKey: Data, nickname: String = "alice", accountId: String = "SENDR001") -> Data {
+        Data(#"{"accountId":"\#(accountId)","nickname":"\#(nickname)","identityKey":"AAAA","signingKey":"\#(signingKey.base64EncodedString())","mailboxId":"m"}"#.utf8)
     }
 
     /// Builds a `diaryKey` envelope with `sender == nil` — `NoteCrypto.seal`
@@ -120,6 +120,33 @@ final class NotesStoreTests: XCTestCase {
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAC", env)])), .init(status: 200, body: directoryJSON(signingKey: Data(repeating: 9, count: 32)))]
         await store.sync()
         XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+    }
+    /// Nickname-collision attack: the directory resolves handles by account id
+    /// first, NICKNAME second. A note claiming sender "SENDR001" must not be
+    /// verified against another account whose nickname is "SENDR001".
+    func testNicknameCollisionDoesNotVerifySender() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "s", recipient: try me.entry(), signer: sender.signer)
+        // The directory answers with a DIFFERENT account (WTHER001) that holds the attacker's signing key.
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAC", env)])),
+                                 .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation, nickname: "SENDR001", accountId: "WTHER001"))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+    }
+    func testNicknameCollisionIsNotCachedUnderTheClaimedId() async throws {
+        let sender = SenderFixture()
+        let env = try NoteCrypto.seal(text: "s", recipient: try me.entry(), signer: sender.signer)
+        let id = "01AAAAAAAAAAAAAAAAAAAAAAAC"
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)])),
+                                 .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation, nickname: "SENDR001", accountId: "WTHER001"))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .unverified(accountId: "SENDR001"))
+        // Poisoning check: a later lookup for the claimed id must hit the directory again, and the genuine
+        // account then verifies.
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([(id, env)])),
+                                 .init(status: 200, body: directoryJSON(signingKey: sender.signing.publicKey.rawRepresentation))]
+        await store.sync()
+        XCTAssertEqual(store.inbox[0].sender, .verified(accountId: "SENDR001", nickname: "alice"))
     }
     func testTransientDirectoryFailureDoesNotPermanentlyDowngradeSender() async throws {
         let sender = SenderFixture()
