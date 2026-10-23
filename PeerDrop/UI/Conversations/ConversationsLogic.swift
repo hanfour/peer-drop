@@ -1,5 +1,6 @@
 import Foundation
 import PeerDropCore
+import PeerDropNotes
 
 /// A display-ready row of the 紙條 list.
 struct ConversationRowModel: Identifiable, Equatable {
@@ -41,6 +42,41 @@ enum ConversationsLogic {
             let b = $1.summary.lastActivity ?? .distantPast
             return a == b ? $0.id < $1.id : a > b
         }
+    }
+
+    // MARK: - Notes folding / badge math
+
+    /// Unread remote notes still shown by the inbox row: notes that moved into a friend's thread are
+    /// counted by that friend's row instead, so each unread note is counted once overall. Never negative.
+    static func inboxUnread(total: Int, boundUnread: Int) -> Int { max(0, total - boundUnread) }
+
+    /// Folds a bound friend's notes into the chat summary: the newest note (by `threadDate`, ties by
+    /// id) becomes `lastNote`, and the note unread count is added to the chat unread.
+    static func fold(_ summary: ConversationSummary, notes: [NoteRecord], noteUnread: Int) -> ConversationSummary {
+        guard let newest = notes.max(by: { $0.threadDate != $1.threadDate ? $0.threadDate < $1.threadDate : $0.id < $1.id }) else {
+            return summary
+        }
+        return ConversationSummary(id: summary.id, isGroup: summary.isGroup, lastMessage: summary.lastMessage,
+                                   lastNote: newest, unread: summary.unread + noteUnread)
+    }
+
+    /// Row preview for a note: mailbox-prefixed text, or a localized placeholder when there is none.
+    static func notePreview(_ note: NoteRecord) -> String {
+        if (note.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "📮 " + String(localized: "Undecryptable note")
+        }
+        return ConversationPreview.text(for: note)
+    }
+
+    /// One-line row preview: the newer of the last chat message and the last note.
+    static func preview(_ s: ConversationSummary) -> String {
+        if let n = s.lastNote, n.threadDate >= (s.lastMessage?.timestamp ?? .distantPast) {
+            let text = notePreview(n)
+            return n.direction == .outbound ? String(format: String(localized: "You: %@"), text) : text
+        }
+        guard let m = s.lastMessage else { return "" }
+        let text = ConversationPreview.text(for: m)
+        return m.isOutgoing && !m.isDeleted ? String(format: String(localized: "You: %@"), text) : text
     }
 
     private static func matches(_ name: String, _ needle: String) -> Bool {

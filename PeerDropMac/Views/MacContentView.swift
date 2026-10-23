@@ -7,6 +7,8 @@ struct MacContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var selection: MacSidebarSection? = .home
     @State private var openNoteID: String?
+    /// `DeviceRecord.id` of a bound friend whose chat a note deep link should open.
+    @State private var threadRequest: String?
     /// Bumped by the `.openNote` deep link so Notes pushes its inbox (see `ConversationsTab.inboxRequest`).
     @State private var inboxRequest = 0
     @State private var diariesPath: [String] = []
@@ -20,7 +22,7 @@ struct MacContentView: View {
             MacSidebar(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 180, ideal: sidebarWidth, max: 360)
         } detail: {
-            MacDetailRouter(selection: $selection, inboxRequest: $inboxRequest, openNoteID: $openNoteID,
+            MacDetailRouter(selection: $selection, inboxRequest: $inboxRequest, threadRequest: $threadRequest, openNoteID: $openNoteID,
                              diariesPath: $diariesPath, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq)
                 .navigationSplitViewColumnWidth(min: 480, ideal: 600)
         }
@@ -49,8 +51,13 @@ struct MacContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openNote)) { note in
             guard let id = note.userInfo?["id"] as? String else { return }
             selection = MacSidebarSection(appTab: AppTab.tab(forDeepLink: .openNote) ?? .notes)
-            openNoteID = id
-            inboxRequest += 1
+            switch BoundFriends.destination(forNoteID: id, cm: connectionManager) {
+            case .thread(let recordID):
+                threadRequest = recordID
+            case .inbox:
+                openNoteID = id
+                inboxRequest += 1
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDiary)) { note in
             guard let id = note.userInfo?["diaryId"] as? String else { return }

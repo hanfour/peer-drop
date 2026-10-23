@@ -13,26 +13,44 @@ struct ConversationsTabContent: View {
     @ObservedObject var accountManager: AccountManager
     @Binding var openNoteID: String?
     @Binding var inboxRequest: Int
+    /// Set (to a `DeviceRecord.id`) when a note deep link should open a bound friend's thread.
+    @Binding var threadRequest: String?
     var onGoHome: () -> Void
+    @EnvironmentObject private var connectionManager: ConnectionManager
+    @StateObject private var bound = BoundFriendsModel()
     @State private var pendingNote: NoteRecord?
+
+    /// Inbox/tab-badge unread: notes that live in a bound friend's thread are counted on that
+    /// friend's row instead (once overall).
+    private var inboxUnread: Int {
+        ConversationsLogic.inboxUnread(total: store.unreadCount,
+                                        boundUnread: store.boundUnreadIDs(accounts: bound.accounts).count)
+    }
 
     var body: some View {
         NavigationStack {
-            ConversationsTab(inboxUnread: store.unreadCount, onGoHome: onGoHome, inboxRequest: $inboxRequest) {
-                NotesInboxHost(store: store, accountManager: accountManager, note: $pendingNote)
+            ConversationsTab(inboxUnread: inboxUnread, onGoHome: onGoHome, inboxRequest: $inboxRequest,
+                             threadRequest: $threadRequest) {
+                NotesInboxHost(store: store, accountManager: accountManager, boundAccounts: bound.accounts, note: $pendingNote)
             }
         }
         #if os(iOS)
-        .badge(store.unreadCount)
+        .badge(inboxUnread)
         #endif
         .onChange(of: openNoteID) { _ in resolve() }
         .onChange(of: store.inbox) { _ in resolve() }
-        .onAppear { resolve() }
+        .onAppear { bound.bind(connectionManager); resolve() }
     }
 
     private func resolve() {
         guard let id = openNoteID, let record = store.note(id: id) else { return }
         openNoteID = nil
+        // A note from a verified-bound friend belongs to that friend's thread, not the inbox.
+        if case .thread(let recordID) = BoundFriends.destination(forNoteID: id, cm: connectionManager) {
+            pendingNote = nil
+            threadRequest = recordID
+            return
+        }
         if pendingNote != nil, pendingNote?.id != record.id {
             // A different note is already open: pop it, then push the new one on the next turn.
             pendingNote = nil
@@ -51,6 +69,7 @@ struct ConversationsTabContent: View {
 struct NotesInboxHost: View {
     @ObservedObject var store: NotesStore
     @ObservedObject var accountManager: AccountManager
+    var boundAccounts: Set<String> = []
     @Binding var note: NoteRecord?
     @State private var armed = false
 
@@ -59,6 +78,7 @@ struct NotesInboxHost: View {
             store: store,
             accountManager: accountManager,
             openNoteID: .constant(nil),
+            boundAccounts: boundAccounts,
             path: Binding(get: { note.map { [$0] } ?? [] }, set: { note = $0.last })
         )
         .navigationDestination(isPresented: Binding(get: { armed && note != nil }, set: { if !$0 { note = nil } })) {

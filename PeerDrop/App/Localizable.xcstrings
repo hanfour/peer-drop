@@ -6469,6 +6469,41 @@
         }
       }
     },
+    "Undecryptable note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undecryptable note"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法解密的紙條"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "无法解密的纸条"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "復号できないメモ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "복호화할 수 없는 쪽지"
+          }
+        }
+      }
+    },
     "Notes inbox": {
       "extractionState": "manual",
       "localizations": {

@@ -118,3 +118,55 @@ final class ConversationsLogicTests: XCTestCase {
         XCTAssertEqual(rows(records: [rec("a", "Amy"), rec("b", "Bob")], peers: peers, query: "bo").map(\.name), ["Bob"])
     }
 }
+
+final class ConversationsBadgeMathTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_000_000)
+
+    private func note(_ id: String, at off: TimeInterval, dir: NoteDirection = .inbound, text: String? = "hey",
+                      unread: Bool = false) -> NoteRecord {
+        NoteRecord(id: id, direction: dir, text: text, sentAt: t0.addingTimeInterval(off), sender: .anonymous,
+                   recipientAccountId: nil, readAt: unread ? nil : t0, receivedAt: t0.addingTimeInterval(off))
+    }
+
+    func testInboxUnreadSubtractsBoundAndNeverNegative() {
+        XCTAssertEqual(ConversationsLogic.inboxUnread(total: 5, boundUnread: 2), 3)
+        XCTAssertEqual(ConversationsLogic.inboxUnread(total: 2, boundUnread: 2), 0)
+        XCTAssertEqual(ConversationsLogic.inboxUnread(total: 1, boundUnread: 4), 0)
+        XCTAssertEqual(ConversationsLogic.inboxUnread(total: 0, boundUnread: 0), 0)
+    }
+
+    func testFoldAddsNewestNoteAndUnread() {
+        let base = ConversationSummary(id: "p", isGroup: false, lastMessage: nil, unread: 2)
+        let s = ConversationsLogic.fold(base, notes: [note("old", at: 5), note("new", at: 50), note("mid", at: 20)], noteUnread: 3)
+        XCTAssertEqual(s.lastNote?.id, "new")
+        XCTAssertEqual(s.unread, 5)
+        XCTAssertEqual(s.lastActivity, t0.addingTimeInterval(50))
+    }
+
+    func testFoldUsesThreadDateForNewestAndTiesById() {
+        // Outbound uses sentAt, inbound receivedAt.
+        let out = NoteRecord(id: "o", direction: .outbound, text: "x", sentAt: t0.addingTimeInterval(90), sender: .anonymous,
+                             recipientAccountId: "B", readAt: nil, receivedAt: t0)
+        let s = ConversationsLogic.fold(ConversationSummary(id: "p", isGroup: false, lastMessage: nil, unread: 0),
+                                        notes: [note("i", at: 40), out], noteUnread: 0)
+        XCTAssertEqual(s.lastNote?.id, "o")
+    }
+
+    func testFoldWithNoNotesIsIdentity() {
+        let base = ConversationSummary(id: "p", isGroup: false, lastMessage: nil, unread: 2)
+        XCTAssertEqual(ConversationsLogic.fold(base, notes: [], noteUnread: 0), base)
+    }
+
+    func testNotePreviewUsesMailboxPrefixAndFallbackWhenUndecryptable() {
+        XCTAssertEqual(ConversationsLogic.notePreview(note("a", at: 1, text: "hello")), "📮 hello")
+        let fb = ConversationsLogic.notePreview(note("b", at: 1, text: nil))
+        XCTAssertTrue(fb.hasPrefix("📮 "))
+        XCTAssertGreaterThan(fb.count, 3)
+    }
+
+    func testBoundUnreadCountedOnceOverall() {
+        // total 4 unread; friend rows hold 3 of them -> inbox shows 1; rows (3) + inbox (1) == total.
+        let total = 4, bound = 3
+        XCTAssertEqual(ConversationsLogic.inboxUnread(total: total, boundUnread: bound) + bound, total)
+    }
+}

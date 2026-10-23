@@ -9,11 +9,7 @@ struct ConversationRow: View, PaperThemed {
     /// nil for groups (no presence badge).
     let presence: PeerPresence?
 
-    private var preview: String {
-        guard let m = model.summary.lastMessage else { return "" }
-        let text = ConversationPreview.text(for: m)
-        return m.isOutgoing && !m.isDeleted ? String(format: String(localized: "You: %@"), text) : text
-    }
+    private var preview: String { ConversationsLogic.preview(model.summary) }
 
     private var timeText: String {
         guard let d = model.summary.lastActivity else { return "" }
