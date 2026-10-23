@@ -483,7 +483,7 @@ public final class ConnectionManager: ObservableObject {
 
     /// This device can never send notes: no way to authenticate, or registration was rejected.
     /// `.registering`, `.idle` and `.unavailable(.offline)` are NOT permanent: those queue.
-    nonisolated static func noteAccountIsPermanentlyUnavailable(_ state: AccountManager.State) -> Bool {
+    public nonisolated static func noteAccountIsPermanentlyUnavailable(_ state: AccountManager.State) -> Bool {
         switch state {
         case .unavailable(.attestUnsupported), .unavailable(.failed): return true
         case .idle, .registering, .ready, .unavailable(.offline): return false

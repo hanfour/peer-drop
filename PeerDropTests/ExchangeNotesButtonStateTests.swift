@@ -27,6 +27,28 @@ final class ExchangeNotesButtonStateTests: XCTestCase {
         XCTAssertEqual(state(.failed(.localRevealFailed)), .failed(.couldNotConfirm))
     }
 
+    func testHeadlessPeerHidesTheButtonInsteadOfSayingUpdateNeeded() {
+        let s = P.state(from: nil, peerSupportsExchange: false, bindingState: .none, gateDenial: .peerLacksSupport, peerIsHeadless: true)
+        XCTAssertEqual(s, .hidden)
+        XCTAssertEqual(P.state(from: nil, peerSupportsExchange: false, bindingState: .none, gateDenial: nil, peerIsHeadless: true), .hidden)
+        // A non-headless old peer is still explained.
+        XCTAssertEqual(P.state(from: nil, peerSupportsExchange: false, bindingState: .none, gateDenial: .peerLacksSupport, peerIsHeadless: false), .unavailableOldPeer)
+    }
+
+    func testFailedIsReplacedByBoundOnceTheBindingIsVerified() {
+        XCTAssertEqual(state(.failed(.invalidReveal), binding: .verified), .bound)
+        XCTAssertEqual(state(.failed(.localAccountUnavailable), binding: .verified), .bound)
+        XCTAssertEqual(state(.failed(.invalidReveal), binding: .none), .failed(.couldNotConfirm))
+        XCTAssertEqual(state(.failed(.invalidReveal), binding: .pending), .failed(.couldNotConfirm))
+    }
+
+    func testPeerUnavailableCopyIsNeutral() {
+        let text = ExchangeButtonState.peerUnavailable.label(peerName: "Amy")
+        XCTAssertEqual(text, String(localized: "The other person didn't continue the exchange"))
+        XCTAssertFalse(text.contains("set up"))
+        XCTAssertEqual(ExchangeButtonState.peerUnavailable.transitionToast(peerName: "Amy"), text)
+    }
+
     func testOldPeerIsDisabledAndExplained() {
         let s = state(nil, supports: false, denial: .peerLacksSupport)
         XCTAssertEqual(s, .unavailableOldPeer)

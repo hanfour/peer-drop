@@ -37,6 +37,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     /// Last-message summaries, rebuilt on appear and (debounced) on change signals — never inside `body`.
     @State private var peerSummaries: [String: ConversationSummary] = [:]
     @State private var groupSummaries: [String: ConversationSummary] = [:]
+    /// Records with a verified notes binding, computed with the summaries (never per row).
+    @State private var reachableRecordIDs: Set<String> = []
     /// False until the first synchronous seed, so the empty state never flashes.
     @State private var hasLoaded = false
     /// Refresh work only runs while this list is on screen (a chat pushed on top must not trigger decrypts).
@@ -73,6 +75,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         for g in connectionManager.groupStore.groups {
             groups[g.id] = chatManager.summary(forGroup: g.id)
         }
+        let reachable = Set(accountForRecord.keys)
+        if reachable != reachableRecordIDs { reachableRecordIDs = reachable }
         if peers != peerSummaries { peerSummaries = peers }
         if groups != groupSummaries { groupSummaries = groups }
         hasLoaded = true
@@ -305,7 +309,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                 openChat(recordID: model.sourceID, name: model.name)
             } label: {
                 HStack(spacing: 8) {
-                    ConversationRow(model: model, presence: presence)
+                    ConversationRow(model: model, presence: presence, notesReachable: reachableRecordIDs.contains(model.sourceID))
                     #if os(iOS)
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))

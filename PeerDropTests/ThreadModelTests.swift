@@ -19,6 +19,7 @@ final class ThreadModelTests: XCTestCase {
     private var contacts: [TrustedContact] = []
     private var presence: PeerPresence = .offline
     private var accountReady = true
+    private var accountUnavailable = false
     private var model: ThreadModel!
     private let signal = PassthroughSubject<Void, Never>()
 
@@ -61,6 +62,7 @@ final class ThreadModelTests: XCTestCase {
         let binding = FriendBinding(contacts: { [unowned self] in self.contacts }, live: { _ in .none })
         model.attach(peerID: peerID, chatManager: chat, notesStore: store, outbox: outbox, friend: binding,
                      presence: { [unowned self] in self.presence }, accountReady: { [unowned self] in self.accountReady },
+                     accountUnavailable: { [unowned self] in self.accountUnavailable },
                      signals: [signal.eraseToAnyPublisher()], throttle: throttle, markRead: markRead)
         return store
     }
@@ -253,6 +255,42 @@ final class ThreadModelTests: XCTestCase {
         model.refresh()
         XCTAssertEqual(model.decision, .note(canSendNow: false))
         XCTAssertTrue(model.mode.queuesUntilOnline)
+    }
+
+    func testUnavailableAccountLocksTheComposerInsteadOfQueueing() {
+        _ = attach()
+        accountReady = false
+        accountUnavailable = true
+        model.refresh()
+        XCTAssertEqual(model.decision, .locked(reason: .accountUnavailable))
+        XCTAssertTrue(model.mode.isLocked)
+        XCTAssertFalse(model.mode.queuesUntilOnline)
+        // An online friend still chats live.
+        presence = .online
+        model.refresh()
+        XCTAssertEqual(model.decision, .live)
+    }
+
+    func testOutboxProblemFlagFollowsLoadError() {
+        // A file must exist for the failing reader to be consulted.
+        let seed = NoteOutboxStore(directory: outboxDir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)))
+        seed.enqueue(contactID: UUID(), accountId: "FRND2345", expectedIdentityKey: key, text: "old")
+        let bad = NoteOutboxStore(directory: outboxDir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)),
+                                  reader: { _ in throw ChatDataEncryptor.EncryptionError.keychainError(-25308) })
+        let store = NotesStore(mockInbox: [], sent: [])
+        let binding = FriendBinding(contacts: { [unowned self] in self.contacts }, live: { _ in .none })
+        XCTAssertNotNil(bad.loadError)
+        model.attach(peerID: peerID, chatManager: chat, notesStore: store, outbox: bad, friend: binding,
+                     presence: { .offline }, accountReady: { true }, throttle: 0.01)
+        XCTAssertTrue(model.outboxProblem)
+        _ = attach()   // healthy outbox
+        XCTAssertFalse(model.outboxProblem)
+    }
+
+    func testAccountUnavailableOutcomeHasItsOwnMessage() {
+        let outcome = NoteSendOutcome.failed(.accountUnavailable)
+        XCTAssertFalse(outcome.clearsText)
+        XCTAssertEqual(outcome.message, String(localized: "Notes can't be sent from this device."))
     }
 
     // MARK: live gating

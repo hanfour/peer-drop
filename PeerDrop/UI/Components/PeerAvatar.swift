@@ -73,6 +73,8 @@ struct PeerAvatar: View {
     var palette: [Color]? = nil
     /// nil = no badge.
     var presence: PeerPresence? = nil
+    /// Verified notes binding: an offline friend can still be sent notes (envelope badge). Default false.
+    var notesReachable: Bool = false
 
     var body: some View {
         ZStack {
@@ -87,22 +89,22 @@ struct PeerAvatar: View {
         .saturation(presence == .offline ? 0.35 : 1)
         .overlay(alignment: .bottomTrailing) {
             if let presence {
-                PresenceBadge(presence: presence, avatarSize: size)
+                PresenceBadge(presence: presence, avatarSize: size, notesReachable: notesReachable)
                     .offset(x: 2, y: 2)
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.accessibilityText(name: name, presence: presence))
+        .accessibilityLabel(Self.accessibilityText(name: name, presence: presence, notesReachable: notesReachable))
         .accessibilityHidden(Self.isAccessibilityHidden(presence: presence))
     }
 
     /// Decorative (hidden) unless a presence state needs to be announced.
     static func isAccessibilityHidden(presence: PeerPresence?) -> Bool { presence == nil }
 
-    static func accessibilityText(name: String, presence: PeerPresence?) -> String {
+    static func accessibilityText(name: String, presence: PeerPresence?, notesReachable: Bool = false) -> String {
         let base = String(format: String(localized: "Avatar for %@"), name)
         guard let presence else { return base }
-        return "\(base), \(presence.accessibilityLabel)"
+        return "\(base), \(presence.accessibilityLabel(notesReachable: notesReachable))"
     }
 
     /// Default size keeps the original Dynamic-Type-scaling callout font;

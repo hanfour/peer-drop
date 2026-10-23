@@ -265,14 +265,14 @@ struct ChatView: View, PaperThemed {
             // (macOS keeps the system window title from navigationTitle.)
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
-                    PeerAvatar(name: displayName, size: 30, presence: peerPresence)
+                    PeerAvatar(name: displayName, size: 30, presence: peerPresence, notesReachable: thread.binding == .verified)
                         .accessibilityHidden(true)
                     Text(verbatim: displayName)
                         .font(.system(.headline, design: .rounded))
                         .lineLimit(1)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(verbatim: "\(displayName), \(peerPresence.accessibilityLabel)"))
+                .accessibilityLabel(Text(verbatim: "\(displayName), \(peerPresence.accessibilityLabel(notesReachable: thread.binding == .verified))"))
                 .accessibilityAddTraits(.isHeader)
             }
             if showsConnectionInfo, ChatPresenceMode.showsInfoButton(presence: peerPresence) {
@@ -509,13 +509,24 @@ struct ChatView: View, PaperThemed {
 
     @ViewBuilder
     private var composer: some View {
-        switch thread.mode.kind {
-        case .live:
-            inputBar
-        case .note:
-            noteInputBar
-        case .locked(let reason):
-            lockedBar(reason)
+        VStack(spacing: 0) {
+            if thread.outboxProblem {
+                Label("Some unsent notes could not be restored", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .accessibilityIdentifier("outbox-problem-banner")
+            }
+            switch thread.mode.kind {
+            case .live:
+                inputBar
+            case .note:
+                noteInputBar
+            case .locked(let reason):
+                lockedBar(reason)
+            }
         }
     }
 
@@ -551,7 +562,7 @@ struct ChatView: View, PaperThemed {
                     }
             }
             if thread.mode.queuesUntilOnline {
-                Label("Will be sent when you're online", systemImage: "wifi.slash")
+                Label("Will be sent when your account is ready", systemImage: "clock")
                     .font(.footnote)
                     .foregroundStyle(paper(.noteText).opacity(0.8))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -611,6 +622,7 @@ struct ChatView: View, PaperThemed {
         switch reason {
         case .notExchanged: text = String(localized: "Exchange notes with each other to stay in touch offline.")
         case .verifying: text = String(localized: "Checking their notes account…")
+        case .accountUnavailable: text = String(localized: "Notes can't be sent from this device.")
         }
         return HStack(spacing: 8) {
             Image(systemName: "lock.fill")

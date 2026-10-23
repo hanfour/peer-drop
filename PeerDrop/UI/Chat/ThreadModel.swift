@@ -52,6 +52,8 @@ final class ThreadModel: ObservableObject {
     @Published private(set) var failedEntries: [NoteOutboxEntry] = []
     @Published private(set) var sendingIDs: Set<UUID> = []
     @Published private(set) var contactID: UUID?
+    /// The unsent-notes list could not be loaded or had to be quarantined (a banner explains it).
+    @Published private(set) var outboxProblem = false
     /// False until the first decision exists, so the view shows nothing instead of a wrong composer.
     @Published private(set) var isReady = false
     /// Run / day grouping for `items`, computed once per rebuild (never per row in a view body).
@@ -74,6 +76,7 @@ final class ThreadModel: ObservableObject {
     private var friend: FriendBinding?
     private var presence: () -> PeerPresence = { .offline }
     private var accountReady: () -> Bool = { false }
+    private var accountUnavailable: () -> Bool = { false }
     private var throttle: TimeInterval = 0.05
     private var cancellables = Set<AnyCancellable>()
     private var attached = false
@@ -96,6 +99,7 @@ final class ThreadModel: ObservableObject {
                    return PeerPresenceResolver.presence(ids: [peerID], sources: cm.presenceSources())
                },
                accountReady: { [weak account] in account?.account != nil },
+               accountUnavailable: { [weak account] in account.map { ConnectionManager.noteAccountIsPermanentlyUnavailable($0.state) } ?? false },
                signals: [
                    // Presence / secure-channel changes only touch the decision, unless the resolved friend changes.
                    cm.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
@@ -109,12 +113,14 @@ final class ThreadModel: ObservableObject {
     /// Explicit wiring (tests, and the app overload above).
     func attach(peerID: String, chatManager: ChatManager, notesStore: NotesStore, outbox: NoteOutboxStore,
                 friend: FriendBinding, presence: @escaping () -> PeerPresence, accountReady: @escaping () -> Bool,
+                accountUnavailable: @escaping () -> Bool = { false },
                 signals: [AnyPublisher<Void, Never>] = [], itemSignals: [AnyPublisher<Void, Never>] = [],
                 throttle: TimeInterval = 0.05, markRead: ((String) async -> Void)? = nil) {
         cancellables.removeAll()
         self.markRead = markRead ?? { [weak notesStore] id in await notesStore?.markRead(id) }
         self.peerID = peerID; self.chatManager = chatManager; self.notesStore = notesStore; self.outbox = outbox
-        self.friend = friend; self.presence = presence; self.accountReady = accountReady; self.throttle = throttle
+        self.friend = friend; self.presence = presence; self.accountReady = accountReady
+        self.accountUnavailable = accountUnavailable; self.throttle = throttle
         attached = true
 
         // @Published publishers replay their current value on subscribe: skip it. Caller signals
@@ -129,6 +135,7 @@ final class ThreadModel: ObservableObject {
             p.sink { [weak self] in self?.itemsDirty = true; self?.scheduleRefresh() }.store(in: &cancellables)
         }
         outbox.$sendingIDs.dropFirst().sink { [weak self] _ in self?.scheduleRefresh() }.store(in: &cancellables)
+        outbox.$loadError.dropFirst().sink { [weak self] _ in self?.scheduleRefresh() }.store(in: &cancellables)
         for p in signals {
             p.sink { [weak self] in self?.scheduleRefresh() }.store(in: &cancellables)
         }
@@ -155,8 +162,10 @@ final class ThreadModel: ObservableObject {
 
         let newBinding = friend.bindingState(forChatPeerID: peerID)
         if newBinding != binding { binding = newBinding }
-        let newDecision = ThreadTransport.decide(presence: presence(), binding: newBinding,
-                                                 account: accountReady() ? .ready : .notReady)
+        let availability: AccountAvailability = accountUnavailable() ? .unavailable : (accountReady() ? .ready : .notReady)
+        let newDecision = ThreadTransport.decide(presence: presence(), binding: newBinding, account: availability)
+        let problem = outbox.loadError != nil
+        if problem != outboxProblem { outboxProblem = problem }
         if newDecision != decision { decision = newDecision }
         if !isReady { isReady = true }
         if !newDecision.isLive, replyingToMessage != nil { replyingToMessage = nil }
@@ -236,6 +245,8 @@ enum NoteSendOutcome: Equatable {
                 return String(localized: "Couldn't save the note on this device. Your text is still here. Try again.")
             case .unavailable:
                 return String(localized: "Notes can't be sent right now.")
+            case .accountUnavailable:
+                return String(localized: "Notes can't be sent from this device.")
             }
         }
     }

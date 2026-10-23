@@ -51,6 +51,8 @@ final class BoundFriendsModel: ObservableObject {
     /// False until the first `bind`; views use a synchronous fallback so no unfiltered frame shows.
     private(set) var isReady = false
     var accounts: Set<String> { Set(recordIDByAccount.keys) }
+    /// Records whose friend has a verified binding.
+    var reachableRecordIDs: Set<String> { Set(recordIDByAccount.values) }
     private var cancellable: AnyCancellable?
 
     func bind(_ cm: ConnectionManager) {

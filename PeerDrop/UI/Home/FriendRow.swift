@@ -10,6 +10,8 @@ struct FriendRow: View, PaperThemed {
     /// Resolved display name (live connection name for relay placeholders); falls back to the stored name.
     var name: String? = nil
     let presence: PeerPresence
+    /// Verified notes binding: an offline friend can still be sent notes.
+    var notesReachable: Bool = false
     var isConnecting: Bool = false
     var onConnect: (() -> Void)? = nil
     /// Live connection of a connected friend; shows the encryption status chip.
@@ -25,7 +27,7 @@ struct FriendRow: View, PaperThemed {
 
     var body: some View {
         HStack(spacing: 12) {
-            PeerAvatar(name: shownName, size: 44, presence: presence)
+            PeerAvatar(name: shownName, size: 44, presence: presence, notesReachable: notesReachable)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -41,7 +43,7 @@ struct FriendRow: View, PaperThemed {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: FriendRowAccessibility.label(name: shownName, presenceLabel: presence.accessibilityLabel, subtitle: subtitle, isConnecting: isConnecting && presence != .online)))
+            .accessibilityLabel(Text(verbatim: FriendRowAccessibility.label(name: shownName, presenceLabel: presence.accessibilityLabel(notesReachable: notesReachable), subtitle: subtitle, isConnecting: isConnecting && presence != .online)))
 
             if let connection {
                 SecureChannelIndicator(peerConn: connection)

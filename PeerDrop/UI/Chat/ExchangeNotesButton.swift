@@ -37,8 +37,11 @@ enum ExchangeButtonPresentation {
         from ui: NotesExchangeSession.UIState?,
         peerSupportsExchange: Bool,
         bindingState: BindingState,
-        gateDenial: NotesExchangeGate.Reason?
+        gateDenial: NotesExchangeGate.Reason?,
+        peerIsHeadless: Bool = false
     ) -> ExchangeButtonState {
+        // Headless peers (CLI) have no notes UI and never advertise the flag: not "needs an update".
+        if peerIsHeadless && bindingState == .none { return .hidden }
         if ui == .bound {
             switch bindingState {
             case .verified: return .bound
@@ -68,6 +71,8 @@ enum ExchangeButtonPresentation {
         case .peerUnavailable: return .peerUnavailable
         case .expired: return .expired
         case .failed(let reason):
+            // A verified binding is the truth: a failed re-exchange must not hide it.
+            if bindingState == .verified { return .bound }
             return .failed(reason == .localAccountUnavailable ? .localAccountUnavailable : .couldNotConfirm)
         }
     }
@@ -138,7 +143,8 @@ extension ExchangeButtonState {
         case .verifying: return String(localized: "Checking the notes account")
         case .bound: return String(localized: "Notes exchanged. Tap to cancel.")
         case .needsReconnect: return String(localized: "The notes link was cancelled. Reconnect with them to exchange notes again.")
-        case .peerUnavailable: return String(localized: "The other person hasn't set up notes yet")
+        // The peer's "unavailable" cannot tell "no account" from a failed reveal, so the copy stays neutral.
+        case .peerUnavailable: return String(localized: "The other person didn't continue the exchange")
         case .expired: return String(localized: "The request expired. Tap to try again.")
         case .failed(.localAccountUnavailable): return String(localized: "Your notes account isn't ready yet. Reconnect with them later to try again.")
         case .failed(.couldNotConfirm): return String(localized: "Couldn't exchange notes. Reconnect with them to try again.")
@@ -182,7 +188,8 @@ struct ExchangeNotesButton: View, PaperThemed {
             from: connectionManager.notesExchangeStates[connectionKey],
             peerSupportsExchange: pc?.peerIdentity.supportsNotesExchange ?? false,
             bindingState: bindingState,
-            gateDenial: denial)
+            gateDenial: denial,
+            peerIsHeadless: pc?.peerIdentity.isHeadless ?? false)
     }
 
     var body: some View {
