@@ -41,8 +41,10 @@ struct ConnectionView: View {
                         SecureChannelIndicator(peerConn: conn)
                     }
 
-                    if let ni = connectionManager.nearbyInteractionManager {
-                        PeerProximityRow(manager: ni, peerID: peer.id)
+                    if let ni = connectionManager.nearbyInteractionManager,
+                       let conn = connectionManager.connection(for: peer.id) {
+                        // Keyed by the connection key, not peerIdentity.id.
+                        PeerProximityRow(manager: ni, peerID: conn.id)
                     }
 
                     Spacer()

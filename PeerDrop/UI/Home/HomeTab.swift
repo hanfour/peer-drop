@@ -169,6 +169,7 @@ struct HomeTab: View, PaperThemed {
             FriendRow(record: record, presence: .online, connection: connectionManager.connection(for: record.id))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("active-peer-row")
         .listRowBackground(paper(.incomingBubble))
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -192,6 +193,7 @@ struct HomeTab: View, PaperThemed {
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: record.displayName)) {
             FriendRow(record: record, presence: presence, isConnecting: isConnecting, onConnect: connect)
         }
+        .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #else
@@ -201,6 +203,7 @@ struct HomeTab: View, PaperThemed {
             FriendRow(record: record, presence: presence, isConnecting: isConnecting, onConnect: connect)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #endif
@@ -222,6 +225,7 @@ struct HomeTab: View, PaperThemed {
                 NavigationLink(destination: GroupDetailView(group: group)) {
                     GroupRow(group: group)
                 }
+                .accessibilityIdentifier("group-row")
                 .listRowBackground(paper(.incomingBubble))
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { groupStore.remove(id: group.id) } label: {
