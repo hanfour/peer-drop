@@ -23,7 +23,7 @@ struct DecryptFailureBannerView: View {
     var body: some View {
         HStack(alignment: .top, spacing: rowSpacing) {
             Image(systemName: "exclamationmark.shield.fill")
-                .foregroundStyle(PaperTheme.color(.tickFailed))
+                .foregroundStyle(PaperTheme.color(.warning))
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: contentSpacing) {

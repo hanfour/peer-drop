@@ -22,6 +22,10 @@ enum PaperToken: CaseIterable {
     /// Fill for prominent action buttons (swipe Reply, Verify, Reconnect). SwiftUI draws their
     /// label white, so one value serves both modes: white >= 4.5:1 and >= 3:1 on `background`.
     case actionFill
+    /// Security-warning glyph on banner fills (`datePillFill`), >= 3:1 in both modes.
+    case warning
+    /// Tint for system controls (back chevron, links); >= 4.5:1 on `background`.
+    case accent
 }
 
 enum PaperPalette {
@@ -42,13 +46,15 @@ enum PaperPalette {
         case .inputPlaceholder: return dark ? 0x8F7D69 : 0x978671
         case .sendButton:       return dark ? 0xD89268 : 0xF0A878
         // Ticks sit on the outgoing bubble (>= 3:1 there); never blue/cyan.
-        case .tickSent:         return dark ? 0xFFF1E0 : 0x8A5A3A
-        case .tickDelivered:    return dark ? 0xFFF6EA : 0x7D5B42
-        case .tickRead:         return dark ? 0x3D1608 : 0x9A3412
+        case .tickSent:         return dark ? 0x3D1608 : 0x8A5A3A
+        case .tickDelivered:    return dark ? 0x3D1608 : 0x7D5B42
+        case .tickRead:         return dark ? 0xFFF1E0 : 0x9A3412
         case .tickFailed:       return dark ? 0x6E0C08 : 0xB3261E
         case .quoteBar:         return dark ? 0xD89268 : 0xD9A27A
         case .typingDot:        return dark ? 0xB7A58F : 0x8A7561
         case .actionFill:       return 0xB5532B
+        case .warning:          return dark ? 0xF08A6A : 0xB3261E
+        case .accent:           return dark ? 0xD89268 : 0xB5532B
         }
     }
 

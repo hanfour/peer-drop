@@ -37,6 +37,28 @@ final class PaperThemeTests: XCTestCase {
         }
     }
 
+    func testWarningIconVisibleOnBannerFill() {
+        for dark in [false, true] {
+            let r = PaperPalette.contrastRatio(PaperPalette.hex(.warning, dark: dark), PaperPalette.hex(.datePillFill, dark: dark))
+            XCTAssertGreaterThanOrEqual(r, 3.0, "warning on datePillFill dark=\(dark) ratio \(r)")
+        }
+    }
+
+    func testAccentTintReadableOnBackground() {
+        for dark in [false, true] {
+            let r = PaperPalette.contrastRatio(PaperPalette.hex(.accent, dark: dark), PaperPalette.hex(.background, dark: dark))
+            XCTAssertGreaterThanOrEqual(r, 4.5, "accent on background dark=\(dark) ratio \(r)")
+        }
+    }
+
+    func testReadTickIsTheEmphasisedOneInDarkMode() {
+        // Dark: read is the light, high-attention tick; sent/delivered match the dark timestamp tone.
+        let bubble = PaperPalette.hex(.outgoingBubble, dark: true)
+        let lightTone = PaperPalette.contrastRatio(PaperPalette.hex(.tickRead, dark: true), PaperPalette.hex(.outgoingText, dark: true))
+        let delivered = PaperPalette.contrastRatio(PaperPalette.hex(.tickDelivered, dark: true), PaperPalette.hex(.outgoingText, dark: true))
+        XCTAssertGreaterThan(lightTone, delivered, "read must stand out from delivered in dark mode (bubble \(bubble))")
+    }
+
     func testPlaceholderMeets3to1() {
         for dark in [false, true] {
             let r = PaperPalette.contrastRatio(PaperPalette.hex(.inputPlaceholder, dark: dark), PaperPalette.hex(.inputFill, dark: dark))
@@ -79,8 +101,8 @@ final class PaperThemeTests: XCTestCase {
                 let r = PaperPalette.contrastRatio(PaperPalette.hex(.outgoingText, dark: dark), PaperPalette.hex(fill, dark: dark))
                 XCTAssertGreaterThanOrEqual(r, 3.0, "outgoingText on \(fill) dark=\(dark): \(r)")
             }
-            let w = PaperPalette.contrastRatio(0xFFFFFF, PaperPalette.hex(.tickRead, dark: dark))
-            XCTAssertGreaterThanOrEqual(w, 4.5, "white on tickRead dark=\(dark): \(w)")
+            // (white-on-tickRead assertion removed: Verify/Reply now use `actionFill`,
+            // covered by testActionFillWorksWithWhiteLabelAndOnBackground.)
         }
     }
 
