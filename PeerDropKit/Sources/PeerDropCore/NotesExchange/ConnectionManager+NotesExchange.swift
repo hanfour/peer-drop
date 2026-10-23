@@ -193,7 +193,7 @@ extension ConnectionManager {
             helloKey: pc.peerIdentity.identityPublicKey,
             isLocalDirect: notesExchangeIsLocalDirect(pc),
             peerSupportsExchange: pc.peerIdentity.supportsNotesExchange,
-            localSupportsExchange: localIdentity.supportsNotesExchange)
+            localSupportsExchange: pc.advertisedNotesExchange ?? false)
     }
 
     /// Gate for `pc`, which must still be the installed, connected entry.

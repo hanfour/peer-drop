@@ -327,6 +327,8 @@ public final class ConnectionManager: ObservableObject {
         let peer: DiscoveredPeer
         /// The dialed peer sent `connectionAccept` on this socket.
         var accepted = false
+        /// Whether the HELLO we sent on this socket carried `supportsNotesExchange`.
+        var advertisedNotesExchange: Bool?
         init(connection: NWConnection, generation: UUID, peer: DiscoveredPeer) {
             self.connection = connection
             self.generation = generation
@@ -2358,7 +2360,9 @@ public final class ConnectionManager: ObservableObject {
                 try await connection.waitReady()
                 logger.info("Connection ready! Sending HELLO...")
                 // Tailnet is not face to face: no notes-exchange flag there.
-                let hello = try PeerMessage.hello(identity: notesExchangeHelloIdentity(for: connection))
+                let helloIdentity = notesExchangeHelloIdentity(for: connection)
+                attempt.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await connection.sendMessage(hello)
                 logger.info("HELLO sent. Sending CONNECTION_REQUEST...")
                 let request = PeerMessage.connectionRequest(senderID: localIdentity.id)
@@ -2817,7 +2821,9 @@ public final class ConnectionManager: ObservableObject {
             do {
                 let accept = PeerMessage.connectionAccept(senderID: localIdentity.id)
                 try await request.connection.sendMessage(accept)
-                let hello = try PeerMessage.hello(identity: notesExchangeHelloIdentity(for: request.connection))
+                let helloIdentity = notesExchangeHelloIdentity(for: request.connection)
+                peerConnection.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await request.connection.sendMessage(hello)
                 #if DEBUG
                 if _acceptInstallDelayNanosForTesting > 0 {
@@ -4015,6 +4021,7 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connected
         )
+        peerConnection.advertisedNotesExchange = attempt.advertisedNotesExchange
         sendSacrificialPingIfLegacyAcceptor(identity, on: connection)
         addConnection(peerConnection)
         // A dial is user-initiated: the user chose this peer, so it gets the

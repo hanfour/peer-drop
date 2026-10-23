@@ -125,6 +125,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
     }
     @Published public private(set) var pinningVerdict: PinningVerdict = .notChecked
 
+    /// Whether the HELLO WE sent on this connection advertised `supportsNotesExchange`
+    /// (it is withheld on tailnet / unreadable hosts). nil = unknown, treated as "no" by
+    /// the notes-exchange gate (fail closed).
+    var advertisedNotesExchange: Bool?
+
     /// Update the pinning verdict from outside (called by ConnectionManager
     /// after running the TrustedContactStore lookup in the
     /// `onSecureChannelEstablished` callback). Keeps `pinningVerdict`'s

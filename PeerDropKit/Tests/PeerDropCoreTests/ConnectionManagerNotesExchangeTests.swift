@@ -255,6 +255,22 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         try await super.tearDown()
     }
 
+    // MARK: - Per-connection advertised flag (final-fix item 11)
+
+    func testGateLocalSupportUsesWhatTheConnectionAdvertisedNotTheAppIdentity() {
+        XCTAssertTrue(cm.localIdentity.supportsNotesExchange)
+        let pc = PeerConnection(peerID: "p1", connection: NWConnection(host: "127.0.0.1", port: 9, using: .peerDrop()),
+                                peerIdentity: PeerIdentity(id: "p1", displayName: "x", supportsNotesExchange: true),
+                                localIdentity: cm.localIdentity, state: .connected)
+        // Unknown (nothing recorded when a HELLO was sent) fails closed.
+        XCTAssertNil(pc.advertisedNotesExchange)
+        XCTAssertFalse(cm.notesExchangeFacts(for: pc).localSupportsExchange)
+        pc.advertisedNotesExchange = false   // e.g. tailnet HELLO went out without the flag
+        XCTAssertFalse(cm.notesExchangeFacts(for: pc).localSupportsExchange)
+        pc.advertisedNotesExchange = true
+        XCTAssertTrue(cm.notesExchangeFacts(for: pc).localSupportsExchange)
+    }
+
     // MARK: - Helpers
 
     private func makeAccountManager(ready: Bool, hold: Bool = false) async throws -> AccountManager {
@@ -375,6 +391,8 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         XCTAssertEqual(helloMsg.type, .hello)
         let serverHello = try JSONDecoder().decode(PeerIdentity.self, from: try XCTUnwrap(helloMsg.payload))
         XCTAssertEqual(serverHello.supportsNotesExchange, expectFlagInHello, "HELLO capability flag")
+        // The gate's "local supports" fact is what THIS connection's HELLO advertised.
+        XCTAssertEqual(cm.connections[ident.id]?.advertisedNotesExchange, expectFlagInHello, "per-connection advertised flag")
 
         let peer = await attachClient(key: key, ident: ident, socket: socket, serverHello: serverHello, initiate: true)
         let secured = await poll(timeout: 6) {
