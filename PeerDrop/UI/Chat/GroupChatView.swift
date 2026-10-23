@@ -163,6 +163,7 @@ struct GroupChatView: View {
                     .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? PaperTheme.color(.inputPlaceholder) : PaperTheme.color(.sendButton))
             }
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .paperIconButton()
             .accessibilityLabel("Send")
         }
         .padding(.horizontal, 12)

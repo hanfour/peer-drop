@@ -106,3 +106,17 @@ enum PaperTheme {
         make(CGFloat((hex >> 16) & 0xFF) / 255, CGFloat((hex >> 8) & 0xFF) / 255, CGFloat(hex & 0xFF) / 255, 1)
     }
 }
+
+extension View {
+    /// Icon-only buttons in the chat input bars: on macOS the default button style
+    /// draws a grey bezel box around the already-circular symbol; use the plain
+    /// style there. iOS is unchanged (its default already renders the bare symbol).
+    @ViewBuilder
+    func paperIconButton() -> some View {
+        #if os(macOS)
+        self.buttonStyle(.plain)
+        #else
+        self
+        #endif
+    }
+}

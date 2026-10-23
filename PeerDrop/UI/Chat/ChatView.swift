@@ -446,6 +446,7 @@ struct ChatView: View {
                             .font(.title2)
                             .foregroundStyle(PaperTheme.color(.inputPlaceholder))
                     }
+                    .paperIconButton()
                     .accessibilityLabel("Attach")
                 }
 
@@ -489,6 +490,7 @@ struct ChatView: View {
                                 .font(.title2)
                                 .foregroundStyle(voiceRecorder.isRecording ? Color.red : PaperTheme.color(.inputPlaceholder))
                         }
+                        .paperIconButton()
                         .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                     }
                 } else {
@@ -499,6 +501,7 @@ struct ChatView: View {
                             .font(.title2)
                             .foregroundStyle(PaperTheme.color(.sendButton))
                     }
+                    .paperIconButton()
                     .accessibilityLabel("Send")
                 }
             }
