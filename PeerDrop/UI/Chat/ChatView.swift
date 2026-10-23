@@ -172,7 +172,7 @@ struct ChatView: View {
 
             // Typing indicator
             if chatManager.isTyping(peerID: peerID) {
-                TypingIndicatorView(peerName: peerName)
+                TypingIndicatorView(peerName: displayName)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
             }
@@ -256,8 +256,8 @@ struct ChatView: View {
         }
         .background(PaperTheme.color(.background))
         // Local accent for the chat screen only; the app-wide tint is untouched.
-        .tint(PaperTheme.color(.sendButton))
-        .navigationTitle(peerName)
+        .tint(PaperTheme.color(.accent))
+        .navigationTitle(displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -266,7 +266,7 @@ struct ChatView: View {
             // Rounded title face; the system navigation bar itself is kept.
             // (macOS keeps the system window title from navigationTitle.)
             ToolbarItem(placement: .principal) {
-                Text(verbatim: peerName)
+                Text(verbatim: displayName)
                     .font(.system(.headline, design: .rounded))
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
@@ -446,6 +446,8 @@ struct ChatView: View {
                 TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
                     Text("Message")
                 }
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .rounded))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(PaperTheme.color(.inputFill))

@@ -110,12 +110,11 @@ struct ChatBubbleView: View {
     }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .top) {
             if message.isOutgoing { Spacer(minLength: 50) }
 
             if !message.isOutgoing {
                 ChatAvatarSlot(name: senderDisplayName, visible: runStart)
-                    .frame(maxHeight: .infinity, alignment: .top)
             }
 
             VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 4) {
@@ -502,10 +501,7 @@ struct ChatBubbleView: View {
     }
 
     private func waveformHeight(for index: Int) -> CGFloat {
-        // Generate pseudo-random but consistent heights
-        let seed = message.id.hashValue + index
-        let normalized = abs(sin(Double(seed))) * 0.7 + 0.3
-        return CGFloat(normalized) * 16 + 4
+        VoiceWaveform.height(forMessageID: message.id, index: index)
     }
 
     private func toggleVoicePlayback() {
@@ -602,5 +598,14 @@ struct ChatBubbleView: View {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
+    }
+}
+
+/// Stable (per message id) pseudo-random bar heights for the voice waveform.
+enum VoiceWaveform {
+    static func height(forMessageID id: String, index: Int) -> CGFloat {
+        let seed = Double(Int(StableHash.fnv1a32(id.utf8) % 100_000) + index)
+        let normalized = abs(sin(seed)) * 0.7 + 0.3
+        return CGFloat(normalized) * 16 + 4
     }
 }

@@ -74,7 +74,7 @@ struct GroupChatView: View {
         }
         .background(PaperTheme.color(.background))
         // Local accent for the chat screen only; the app-wide tint is untouched.
-        .tint(PaperTheme.color(.sendButton))
+        .tint(PaperTheme.color(.accent))
         .navigationTitle(group.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -145,6 +145,7 @@ struct GroupChatView: View {
             TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
                 Text("Message")
             }
+                .textFieldStyle(.plain)
                 .font(.system(.body, design: .rounded))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -204,14 +205,13 @@ struct GroupChatBubbleView: View {
     }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .top) {
             if message.isOutgoing {
                 Spacer(minLength: 50)
             }
 
             if !message.isOutgoing {
                 ChatAvatarSlot(name: senderDisplayName, visible: runStart)
-                    .frame(maxHeight: .infinity, alignment: .top)
             }
 
             VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 4) {

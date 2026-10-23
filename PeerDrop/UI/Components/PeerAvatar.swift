@@ -2,15 +2,23 @@ import SwiftUI
 
 /// Stable colour selection for `PeerAvatar`. `String.hashValue` is randomised per process,
 /// so the index comes from FNV-1a over the name's unicode scalars instead.
+/// Process-independent hashing (Swift's `hashValue` is randomised per launch).
+enum StableHash {
+    /// FNV-1a, 32-bit, over the given values (each truncated to 32 bits).
+    static func fnv1a32<S: Sequence>(_ values: S) -> UInt32 where S.Element: BinaryInteger {
+        var hash: UInt32 = 0x811C9DC5
+        for v in values {
+            hash ^= UInt32(truncatingIfNeeded: v)
+            hash = hash &* 0x01000193
+        }
+        return hash
+    }
+}
+
 enum PeerAvatarPalette {
     static func index(for name: String, count: Int) -> Int {
         guard count > 0 else { return 0 }
-        var hash: UInt32 = 0x811C9DC5
-        for scalar in name.unicodeScalars {
-            hash ^= scalar.value
-            hash = hash &* 0x01000193
-        }
-        return Int(hash % UInt32(count))
+        return Int(StableHash.fnv1a32(name.unicodeScalars.map(\.value)) % UInt32(count))
     }
 
     /// Warm, earthy colours for the paper chat; white initials >= 4.5:1 on each.

@@ -9,6 +9,7 @@ public enum ChatMessageRuns {
         m.senderID ?? (m.isOutgoing ? "\u{0}me" : "\u{0}peer")
     }
 
+    /// `messages` must be sorted ascending by timestamp.
     /// IDs of messages that start a new run: first message, speaker change,
     /// day change, or gap strictly greater than `gap` seconds.
     public static func firstInRunIDs(
@@ -32,6 +33,7 @@ public enum ChatMessageRuns {
         return result
     }
 
+    /// `messages` must be sorted ascending by timestamp.
     /// IDs of messages that are the first of their calendar day.
     public static func dayStartIDs(
         in messages: [ChatMessage],
