@@ -77,19 +77,6 @@ struct ChatView: View, PaperThemed {
         ChatDisplayName.preferred(liveName, peerName) ?? String(localized: "Other person")
     }
 
-    /// Get disconnect reason for this peer.
-    private var disconnectReason: String? {
-        if let peerConn = connectionManager.connection(for: peerID) {
-            if case .failed(let reason) = peerConn.state {
-                return reason
-            }
-        }
-        if case .failed(let reason) = connectionManager.state {
-            return reason
-        }
-        return nil
-    }
-
     /// Presence of this peer, resolved over every id alias (connection key / identity id).
     private var peerPresence: PeerPresence {
         PeerPresenceResolver.presence(ids: [peerID], sources: connectionManager.presenceSources())
@@ -97,8 +84,10 @@ struct ChatView: View, PaperThemed {
 
     /// Live only while the peer is online; nearby / offline fall back to the paper-note look.
     /// Also forced to note while the connection is known to be down.
+    /// NOTE: this computed property intentionally shadows the `\.paperMode` environment value
+    /// for ChatView itself; descendants receive it via `.paperMode(paperMode)` in `body`.
     var paperMode: PaperMode {
-        isPeerDisconnected ? .note : ChatPresenceMode.mode(for: peerPresence)
+        ChatPresenceMode.mode(peerID: peerID, connectionManager: connectionManager)
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -803,10 +792,10 @@ struct AttachmentMenuSheet: View, PaperThemed {
     private var menuItems: [MenuItem] {
         var items: [MenuItem] = []
         #if os(iOS)
-        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: paper(.quoteBar), action: onCamera))
-        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: paper(.outgoingBubble), action: onPhotos))
+        items.append(MenuItem(icon: "camera.fill", label: "Camera", color: paper(.attachCamera), action: onCamera))
+        items.append(MenuItem(icon: "photo.on.rectangle", label: "Photos", color: paper(.attachPhotos), action: onPhotos))
         #endif
-        items.append(MenuItem(icon: "doc.fill", label: "Files", color: paper(.sendButton), action: onFiles))
+        items.append(MenuItem(icon: "doc.fill", label: "Files", color: paper(.attachFiles), action: onFiles))
         return items
     }
 
@@ -815,5 +804,16 @@ struct AttachmentMenuSheet: View, PaperThemed {
         let label: String
         let color: Color
         let action: () -> Void
+    }
+}
+
+extension ChatPresenceMode {
+    /// Mode for a chat with `peerID`, shared by ChatView and the Mac chat window.
+    @MainActor
+    static func mode(peerID: String, connectionManager: ConnectionManager) -> PaperMode {
+        mode(presence: PeerPresenceResolver.presence(ids: [peerID], sources: connectionManager.presenceSources()),
+             isDisconnected: ChatPeerPresence.isDisconnected(
+                connectionState: connectionManager.connection(for: peerID)?.state,
+                globalState: connectionManager.state))
     }
 }

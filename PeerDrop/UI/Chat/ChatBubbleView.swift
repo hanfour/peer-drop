@@ -304,7 +304,7 @@ struct ChatBubbleView: View, PaperThemed {
     private var replyPreview: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(paper(.quoteBar))
+                .fill(paper(message.isOutgoing ? .outgoingQuoteBar : .quoteBar))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {

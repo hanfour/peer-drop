@@ -13,13 +13,14 @@ extension PeerPresence {
 }
 
 /// Bottom-trailing status badge: filled dot (online), hollow ring (nearby), envelope square (offline).
-struct PresenceBadge: View {
+struct PresenceBadge: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let presence: PeerPresence
     let avatarSize: CGFloat
 
     static func diameter(forAvatarSize size: CGFloat) -> CGFloat { max(12, size * 0.36) }
     private var diameter: CGFloat { Self.diameter(forAvatarSize: avatarSize) }
-    private var ringColor: Color { PaperTheme.color(.background) }
+    private var ringColor: Color { paper(.background) }
     /// Dark glyph on the amber badge in both appearances (noteText is light in dark mode).
     private static let darkGlyph = Color(red: 0x1F / 255, green: 0x16 / 255, blue: 0x10 / 255)
 

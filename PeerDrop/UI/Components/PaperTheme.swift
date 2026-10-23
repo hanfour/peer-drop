@@ -19,6 +19,10 @@ enum PaperToken: CaseIterable {
     case inputFill, inputPlaceholder, sendButton
     case tickSent, tickDelivered, tickRead, tickFailed
     case quoteBar, typingDot
+    /// Quote bar drawn on an OUTGOING bubble (reply preview); >= 3:1 against that bubble in both modes.
+    case outgoingQuoteBar
+    /// Attachment-menu icon fills (white glyph, >= 3:1). Live mode gives each a distinct hue.
+    case attachCamera, attachPhotos, attachFiles
     /// Fill for prominent action buttons (swipe Reply, Verify, Reconnect). SwiftUI draws their
     /// label white, so one value serves both modes: white >= 4.5:1 and >= 3:1 on `background`.
     case actionFill
@@ -77,6 +81,10 @@ enum PaperPalette {
         case .tickRead:         return 0xFFFFFF
         case .tickFailed:       return dark ? 0xFFC4BA : 0xFFD0C8
         case .quoteBar:         return hex(.highlight, dark: dark)
+        case .outgoingQuoteBar: return 0xCCE3F6   // white ~80% over the brand bubble
+        case .attachCamera:     return hex(.brand, dark: dark)
+        case .attachPhotos:     return 0x107C41
+        case .attachFiles:      return 0xB25E00
         case .typingDot:        return dark ? 0x93A4B5 : 0x5E7387
         case .actionFill:       return 0x0076D4
         case .warning:          return dark ? 0xF08A6A : 0xC50F1F
@@ -106,6 +114,10 @@ enum PaperPalette {
         case .tickRead:         return dark ? 0xFFF1E0 : 0x9A3412
         case .tickFailed:       return dark ? 0x6E0C08 : 0xB3261E
         case .quoteBar:         return dark ? 0xD89268 : 0xD9A27A
+        case .outgoingQuoteBar: return noteHex(.quoteBar, dark: dark)
+        case .attachCamera:     return noteHex(.quoteBar, dark: dark)
+        case .attachPhotos:     return noteHex(.outgoingBubble, dark: dark)
+        case .attachFiles:      return noteHex(.sendButton, dark: dark)
         case .typingDot:        return dark ? 0xB7A58F : 0x8A7561
         case .actionFill:       return 0xB5532B
         case .warning:          return dark ? 0xF08A6A : 0xB3261E
@@ -209,5 +221,12 @@ extension PaperThemed {
 enum ChatPresenceMode {
     static func mode(for presence: PeerPresence) -> PaperMode {
         presence == .online ? .live : .note
+    }
+
+    /// Single source for ChatView and MacChatWindow. A known-down connection forces `.note`
+    /// even if a stale presence source still says online (e.g. a Bonjour record that has not
+    /// expired yet), so the screen never looks live while sending would fail.
+    static func mode(presence: PeerPresence, isDisconnected: Bool) -> PaperMode {
+        isDisconnected ? .note : mode(for: presence)
     }
 }
