@@ -20,6 +20,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     @ViewBuilder var inbox: () -> Inbox
 
     @State private var query = ""
+    @StateObject private var hub = RefreshHub()
     @State private var showPicker = false
     /// Last-message summaries, rebuilt on appear and (debounced) on change signals — never inside `body`.
     @State private var peerSummaries: [String: ConversationSummary] = [:]
@@ -65,14 +66,17 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         #endif
     }
 
-    private var changeSignal: AnyPublisher<Void, Never> {
-        Publishers.Merge4(
-            connectionManager.objectWillChange.map { _ in () },
-            chatManager.objectWillChange.map { _ in () },
-            connectionManager.deviceStore.objectWillChange.map { _ in () },
-            connectionManager.groupStore.objectWillChange.map { _ in () })
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-            .eraseToAnyPublisher()
+    /// Builds the throttled change pipeline once (leading + trailing, so the last change always lands).
+    private func bindRefreshHub() {
+        hub.bind(
+            Publishers.Merge4(
+                connectionManager.objectWillChange.map { _ in () },
+                chatManager.objectWillChange.map { _ in () },
+                connectionManager.deviceStore.objectWillChange.map { _ in () },
+                connectionManager.groupStore.objectWillChange.map { _ in () })
+                .throttle(for: .milliseconds(500), scheduler: DispatchQueue.main, latest: true)
+                .eraseToAnyPublisher()
+        ) { refreshSummaries() }
     }
 
     private func rows() -> [ConversationRowModel] {
@@ -136,8 +140,10 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         }
         #endif
         .chatTargetDestination()
-        .onAppear { refreshSummaries() }
-        .onReceive(changeSignal) { refreshSummaries() }
+        .onAppear {
+            refreshSummaries()
+            bindRefreshHub()
+        }
     }
 
     // MARK: - Rows
@@ -190,6 +196,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityHint(Text("Opens the conversation"))
         }
     }
 
@@ -290,5 +297,15 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         showPicker = false
         openChat(recordID: record.id, name: record.displayName)
         #endif
+    }
+}
+
+/// Owns the Combine subscription so it is created once, not per `body` evaluation.
+final class RefreshHub: ObservableObject {
+    private var cancellable: AnyCancellable?
+
+    func bind(_ publisher: AnyPublisher<Void, Never>, _ action: @escaping () -> Void) {
+        guard cancellable == nil else { return }
+        cancellable = publisher.sink { action() }
     }
 }
