@@ -13,7 +13,7 @@ enum ExchangeFailure: Equatable {
 enum ExchangeButtonState: Equatable {
     /// Nothing to offer (not secure / relay / tailnet / no support here).
     case hidden
-    /// The other app is too old to support the exchange (disabled, explained).
+    /// The other app is too old to support the exchange (explained on tap).
     case unavailableOldPeer
     case idle
     case waitingForPeer
@@ -21,6 +21,8 @@ enum ExchangeButtonState: Equatable {
     /// Both sides agreed; the account is being checked.
     case verifying
     case bound
+    /// The link was cancelled on this connection; the finished session cannot restart, so reconnect first.
+    case needsReconnect
     case peerUnavailable
     case expired
     case failed(ExchangeFailure)
@@ -29,6 +31,7 @@ enum ExchangeButtonState: Equatable {
 enum ExchangeButtonPresentation {
     /// - Parameters:
     ///   - ui: the exchange session state for this connection, if any.
+    ///   - bindingState: the contact's stored binding: the source of truth for "bound".
     ///   - gateDenial: why the CM would refuse an exchange right now (nil = allowed).
     static func state(
         from ui: NotesExchangeSession.UIState?,
@@ -36,7 +39,13 @@ enum ExchangeButtonPresentation {
         bindingState: BindingState,
         gateDenial: NotesExchangeGate.Reason?
     ) -> ExchangeButtonState {
-        if ui == .bound { return .bound }
+        if ui == .bound {
+            switch bindingState {
+            case .verified: return .bound
+            case .pending: return .verifying
+            case .none: return .needsReconnect
+            }
+        }
         if let denial = gateDenial {
             // Without a usable direct connection nothing can be started, but an existing binding
             // (or a claim still being checked) stays visible so it can be reviewed or cancelled.
@@ -55,7 +64,7 @@ enum ExchangeButtonPresentation {
         case .waitingForPeer: return .waitingForPeer
         case .peerWantsExchange: return .peerWantsExchange
         case .exchanging, .verifying: return .verifying
-        case .bound: return .bound
+        case .bound: return .bound   // unreachable: handled above
         case .peerUnavailable: return .peerUnavailable
         case .expired: return .expired
         case .failed(let reason):
@@ -73,17 +82,29 @@ enum ExchangeButtonPresentation {
 }
 
 extension ExchangeButtonState {
-    enum Action: Equatable { case noAction, confirmShare, confirmWithdraw, confirmUnbind }
+    enum Action: Equatable {
+        case noAction
+        /// Explanation only (alert on iOS).
+        case showInfo
+        /// Start: "if X also agrees".
+        case confirmShare
+        /// The peer already asked: agree or decline.
+        case confirmAgree
+        case confirmWithdraw
+        case confirmUnbind
+    }
 
     var isVisible: Bool { self != .hidden }
 
-    /// What a tap does. `.noAction` = informational only (disabled).
+    /// What a tap does.
     var action: Action {
         switch self {
-        case .idle, .peerWantsExchange, .expired: return .confirmShare
+        case .idle, .expired: return .confirmShare
+        case .peerWantsExchange: return .confirmAgree
         case .waitingForPeer: return .confirmWithdraw
         case .bound: return .confirmUnbind
-        case .hidden, .unavailableOldPeer, .verifying, .peerUnavailable, .failed: return .noAction
+        case .unavailableOldPeer, .verifying, .peerUnavailable, .needsReconnect, .failed: return .showInfo
+        case .hidden: return .noAction
         }
     }
 
@@ -93,17 +114,20 @@ extension ExchangeButtonState {
         switch self {
         case .hidden: return "envelope"
         case .unavailableOldPeer: return "arrow.down.app"
-        case .idle, .peerWantsExchange: return "envelope.badge"
+        case .idle: return "envelope.badge"
+        case .peerWantsExchange: return "envelope.badge.fill"
         case .waitingForPeer: return "clock"
         case .verifying: return "ellipsis.circle"
         case .bound: return "envelope.circle.fill"
-        case .peerUnavailable: return "envelope.badge.fill"
+        case .needsReconnect: return "envelope.arrow.triangle.branch"
+        case .peerUnavailable: return "person.crop.circle.badge.questionmark"
         case .expired: return "clock.arrow.circlepath"
         case .failed: return "exclamationmark.triangle"
         }
     }
 
-    /// VoiceOver label and tooltip. Never claims the other person's identity is verified.
+    /// VoiceOver label, tooltip and (for informational states) the alert text.
+    /// Never claims the other person's identity is verified.
     func label(peerName: String) -> String {
         switch self {
         case .hidden: return ""
@@ -113,10 +137,25 @@ extension ExchangeButtonState {
         case .peerWantsExchange: return String(format: String(localized: "%@ wants to exchange notes. Tap to agree."), peerName)
         case .verifying: return String(localized: "Checking the notes account")
         case .bound: return String(localized: "Notes exchanged. Tap to cancel.")
+        case .needsReconnect: return String(localized: "The notes link was cancelled. Reconnect with them to exchange notes again.")
         case .peerUnavailable: return String(localized: "The other person hasn't set up notes yet")
         case .expired: return String(localized: "The request expired. Tap to try again.")
-        case .failed(.localAccountUnavailable): return String(localized: "Your notes account isn't ready yet. Try again in a moment.")
-        case .failed(.couldNotConfirm): return String(localized: "Couldn't exchange notes. Try again.")
+        case .failed(.localAccountUnavailable): return String(localized: "Your notes account isn't ready yet. Reconnect with them later to try again.")
+        case .failed(.couldNotConfirm): return String(localized: "Couldn't exchange notes. Reconnect with them to try again.")
+        }
+    }
+
+    /// Alert text for `.showInfo` states (same copy as the label).
+    func infoMessage(peerName: String) -> String? {
+        action == .showInfo ? label(peerName: peerName) : nil
+    }
+
+    /// Toast posted when the state changes into a final result.
+    func transitionToast(peerName: String) -> String? {
+        switch self {
+        case .bound: return String(format: String(localized: "Notes exchanged with %@."), peerName)
+        case .peerUnavailable, .failed: return label(peerName: peerName)
+        default: return nil
         }
     }
 }
@@ -131,6 +170,7 @@ struct ExchangeNotesButton: View, PaperThemed {
     let contactID: UUID?
 
     @State private var dialog: ExchangeButtonState.Action?
+    @State private var infoText: String?
 
     private var connectionKey: String { connectionManager.connection(for: peerID)?.id ?? peerID }
 
@@ -149,19 +189,30 @@ struct ExchangeNotesButton: View, PaperThemed {
         let current = state
         if current.isVisible {
             Button {
-                dialog = current.action
+                if current.action == .showInfo {
+                    infoText = current.infoMessage(peerName: peerName)
+                } else {
+                    dialog = current.action
+                }
             } label: {
                 if current == .verifying {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: current.symbol)
-                        .foregroundStyle(current == .bound ? paper(.noteBadge) : Color.accentColor)
+                        .foregroundStyle(iconColor(current))
                 }
             }
-            .disabled(!current.isEnabled)
             .help(current.label(peerName: peerName))
             .accessibilityLabel(Text(verbatim: current.label(peerName: peerName)))
-            .confirmationDialog(title(for: dialog), isPresented: Binding(get: { dialog != nil && dialog != .some(.noAction) }, set: { if !$0 { dialog = nil } }), titleVisibility: .visible) {
+            .onChange(of: current) { newState in
+                if let toast = newState.transitionToast(peerName: peerName) { connectionManager.statusToast = toast }
+            }
+            .alert(Text("Notes"), isPresented: Binding(get: { infoText != nil }, set: { if !$0 { infoText = nil } })) {
+                Button("OK") { infoText = nil }
+            } message: {
+                Text(verbatim: infoText ?? "")
+            }
+            .confirmationDialog(title(for: dialog), isPresented: Binding(get: { dialog != nil }, set: { if !$0 { dialog = nil } }), titleVisibility: .visible) {
                 confirmButtons
             } message: {
                 Text(verbatim: message(for: dialog))
@@ -169,11 +220,22 @@ struct ExchangeNotesButton: View, PaperThemed {
         }
     }
 
+    private func iconColor(_ s: ExchangeButtonState) -> Color {
+        switch s {
+        case .bound: return paper(.noteBadge)
+        case .peerWantsExchange: return paper(.noteBorder)
+        default: return Color.accentColor
+        }
+    }
+
     @ViewBuilder
     private var confirmButtons: some View {
         switch dialog {
-        case .confirmShare:
+        case .confirmShare, .confirmAgree:
             Button("Share notes account") { press() }
+            if dialog == .confirmAgree {
+                Button("Decline", role: .destructive) { connectionManager.cancelExchangeNotes(with: peerID) }
+            }
         case .confirmWithdraw:
             Button("Withdraw", role: .destructive) { connectionManager.cancelExchangeNotes(with: peerID) }
         case .confirmUnbind:
@@ -188,7 +250,7 @@ struct ExchangeNotesButton: View, PaperThemed {
 
     private func title(for action: ExchangeButtonState.Action?) -> String {
         switch action {
-        case .confirmShare: return String(localized: "Exchange notes?")
+        case .confirmShare, .confirmAgree: return String(localized: "Exchange notes?")
         case .confirmWithdraw: return String(localized: "Withdraw your request?")
         case .confirmUnbind: return String(localized: "Cancel the notes link?")
         default: return ""
@@ -199,6 +261,8 @@ struct ExchangeNotesButton: View, PaperThemed {
         switch action {
         case .confirmShare:
             return String(format: String(localized: "If %@ also agrees, your notes account will be shared with them."), peerName)
+        case .confirmAgree:
+            return String(format: String(localized: "%@ wants to exchange notes. Share your notes account with them?"), peerName)
         case .confirmWithdraw:
             return String(localized: "Nothing has been shared.")
         case .confirmUnbind:

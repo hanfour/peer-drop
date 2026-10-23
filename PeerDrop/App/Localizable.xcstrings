@@ -17738,7 +17738,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在確認"
+            "value": "正在確認紙條帳號"
           }
         }
       }
@@ -18229,6 +18229,356 @@
           "stringUnit": {
             "state": "translated",
             "value": "只有在直接的加密連線上才能交換紙條。"
+          }
+        }
+      }
+    },
+    "%@ wants to exchange notes. Share your notes account with them?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wants to exchange notes. Share your notes account with them?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ がメモの交換を希望しています。あなたのメモアカウントを共有しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@님이 쪽지 교환을 원해요. 내 쪽지 계정을 공유할까요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ 想交换纸条。要把你的纸条账号分享给对方吗？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 想交換紙條。要把你的紙條帳號分享給對方嗎？"
+          }
+        }
+      }
+    },
+    "Notes exchanged with %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes exchanged with %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ とメモを交換しました。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@님과 쪽지를 교환했어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已和 %@ 交换纸条。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已和 %@ 交換紙條。"
+          }
+        }
+      }
+    },
+    "The notes link was cancelled. Reconnect with them to exchange notes again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The notes link was cancelled. Reconnect with them to exchange notes again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "メモの連携を解除しました。再度交換するには、もう一度接続してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "쪽지 연결이 취소되었어요. 다시 교환하려면 먼저 다시 연결해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "纸条绑定已取消。要再交换，请先重新连接。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "紙條綁定已取消。要再交換，請先重新連線。"
+          }
+        }
+      }
+    },
+    "Your notes account isn't ready yet. Reconnect with them later to try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your notes account isn't ready yet. Reconnect with them later to try again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "メモアカウントの準備ができていません。しばらくしてから接続し直してお試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "내 쪽지 계정이 아직 준비되지 않았어요. 잠시 후 다시 연결해서 시도해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "你的纸条账号还没准备好。请稍后重新连接再试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的紙條帳號還沒準備好。請稍後重新連線再試。"
+          }
+        }
+      }
+    },
+    "Couldn't exchange notes. Reconnect with them to try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't exchange notes. Reconnect with them to try again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "メモを交換できませんでした。接続し直してもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "쪽지를 교환하지 못했어요. 다시 연결한 뒤 시도해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "无法交换纸条。请重新连接后再试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法交換紙條。請重新連線後再試。"
+          }
+        }
+      }
+    },
+    "The notes link was cancelled. Exchange notes again to send.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The notes link was cancelled. Exchange notes again to send."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "メモの連携が解除されました。もう一度メモを交換してから送信してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "쪽지 연결이 취소되었어요. 쪽지를 다시 교환한 뒤 보내 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "纸条绑定已取消。请重新交换纸条后再寄。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "紙條綁定已取消。請重新交換紙條後再寄。"
+          }
+        }
+      }
+    },
+    "Not sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "未送信"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "보내지 못함"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "未寄出"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未寄出"
+          }
+        }
+      }
+    },
+    "%@ is offline. Notes go to their mailbox.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is offline. Notes go to their mailbox."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ はオフラインです。メモは相手の受信箱に届きます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@님은 오프라인이에요. 쪽지는 상대방의 우편함으로 가요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ 已离线。纸条会寄到对方的信箱。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已離線。紙條會寄到對方的信箱。"
+          }
+        }
+      }
+    },
+    "Delete this note?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this note?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "このメモを削除しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "이 쪽지를 삭제할까요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "要删除这张纸条吗？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要刪除這張紙條嗎？"
+          }
+        }
+      }
+    },
+    "This also deletes the note from the server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This also deletes the note from the server."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "サーバー上のこのメモも削除されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "서버에 있는 이 쪽지도 함께 삭제돼요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "服务器上的这张纸条也会一并删除。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器上的這張紙條也會一併刪除。"
           }
         }
       }

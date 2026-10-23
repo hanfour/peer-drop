@@ -55,12 +55,13 @@ final class ThreadModelTests: XCTestCase {
                           readAt: read ? at : nil, receivedAt: at)
     }
 
-    private func attach(inbox: [NoteRecord] = [], sent: [NoteRecord] = [], throttle: TimeInterval = 0.01) -> NotesStore {
+    private func attach(inbox: [NoteRecord] = [], sent: [NoteRecord] = [], throttle: TimeInterval = 0.01,
+                        markRead: ((String) async -> Void)? = nil) -> NotesStore {
         let store = NotesStore(mockInbox: inbox, sent: sent)
         let binding = FriendBinding(contacts: { [unowned self] in self.contacts }, live: { _ in .none })
         model.attach(peerID: peerID, chatManager: chat, notesStore: store, outbox: outbox, friend: binding,
                      presence: { [unowned self] in self.presence }, accountReady: { [unowned self] in self.accountReady },
-                     signals: [signal.eraseToAnyPublisher()], throttle: throttle)
+                     signals: [signal.eraseToAnyPublisher()], throttle: throttle, markRead: markRead)
         return store
     }
 
@@ -159,8 +160,54 @@ final class ThreadModelTests: XCTestCase {
 
     func testMarkVisibleNotesReadMarksBoundInbound() async {
         let store = attach(inbox: [note("n1", .inbound, at: 1, read: false), note("n2", .inbound, at: 2, read: false)])
-        await model.markVisibleNotesRead()
-        XCTAssertEqual(store.unreadCount(forAccount: friend), 0)
+        model.markVisibleNotesRead(isActive: true)
+        await waitUntil("marked") { store.unreadCount(forAccount: friend) == 0 }
+    }
+
+    func testServerMarkReadIsIssuedOncePerNoteAndSurvivesRebuilds() async {
+        var calls: [String] = []
+        _ = attach(inbox: [note("n1", .inbound, at: 1, read: false), note("n2", .inbound, at: 2, read: false)],
+                   markRead: { calls.append($0) })   // does not clear unread, so ids stay in unreadNoteIDs
+        model.markVisibleNotesRead(isActive: true)
+        await waitUntil("two calls") { calls.count == 2 }
+        let base = model.rebuildCount
+        chatMessage("rebuild trigger", at: 3)
+        await waitUntil("rebuilt") { model.rebuildCount > base }
+        XCTAssertEqual(model.unreadNoteIDs.sorted(), ["n1", "n2"])
+        model.markVisibleNotesRead(isActive: true)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(calls.sorted(), ["n1", "n2"], "each note is marked once, even across rebuilds")
+    }
+
+    func testNothingIsMarkedWhileTheAppIsNotActive() async {
+        var calls: [String] = []
+        _ = attach(inbox: [note("n1", .inbound, at: 1, read: false)], markRead: { calls.append($0) })
+        model.markVisibleNotesRead(isActive: false)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(calls.isEmpty)
+        model.markVisibleNotesRead(isActive: true)
+        await waitUntil("marked on activation") { calls == ["n1"] }
+    }
+
+    func testClampedUnreadNotesAreNotMarkedUntilTheyBecomeVisible() async {
+        for i in 0..<60 { chatMessage("m\(i)", at: 1_000 + Double(i)) }
+        chat.loadMessages(forPeer: peerID)
+        var calls: [String] = []
+        _ = attach(inbox: [note("old", .inbound, at: 100, read: false)], markRead: { calls.append($0) })
+        XCTAssertTrue(model.unreadNoteIDs.isEmpty, "clamped note is not in the visible window")
+        model.markVisibleNotesRead(isActive: true)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(calls.isEmpty)
+        chat.loadMoreMessages()
+        model.refresh()
+        model.markVisibleNotesRead(isActive: true)
+        await waitUntil("marked after loading earlier") { calls == ["old"] }
+    }
+
+    func testIsReadyOnlyAfterAttach() {
+        XCTAssertFalse(model.isReady)
+        _ = attach()
+        XCTAssertTrue(model.isReady)
     }
 
     // MARK: queued / failed
@@ -208,6 +255,56 @@ final class ThreadModelTests: XCTestCase {
         XCTAssertTrue(model.mode.queuesUntilOnline)
     }
 
+    // MARK: live gating
+
+    func testLiveOnlyWhenConnectedNotWhenNearbyOrConnecting() {
+        func resolve(connected: Set<String> = [], connecting: Set<String> = [], discovered: Set<String> = []) -> PeerPresence {
+            PeerPresenceResolver.presence(ids: [peerID], sources: PresenceSources(connected: connected, connecting: connecting, discovered: discovered))
+        }
+        let cases: [(PeerPresence, Bool)] = [
+            (resolve(connected: [peerID]), true),
+            (resolve(connecting: [peerID]), false),
+            (resolve(discovered: [peerID]), false),
+            (resolve(), false),
+        ]
+        for (p, live) in cases {
+            presence = p
+            _ = attach()
+            XCTAssertEqual(model.decision.isLive, live, "\(p)")
+        }
+    }
+
+    // MARK: note sending
+
+    func testNoteSendKeepsTextOnEveryQueueErrorAndClearsOnlyOnSuccess() {
+        let id = UUID()
+        let errors: [ConnectionManager.QueueNoteError] = [.contactNotFound, .outboxUnavailable, .blocked, .notBound, .bindingPending, .unavailable]
+        for e in errors {
+            let outcome = NoteSender.send(text: "hello", contactID: id) { _, _ in throw e }
+            XCTAssertEqual(outcome, .failed(e))
+            XCTAssertFalse(outcome.clearsText, "\(e)")
+            XCTAssertFalse(outcome.message?.isEmpty ?? true, "\(e) needs a user-visible message")
+        }
+        var queued: (String, UUID)?
+        let ok = NoteSender.send(text: "hello", contactID: id) { queued = ($0, $1) }
+        XCTAssertEqual(ok, .sent)
+        XCTAssertTrue(ok.clearsText)
+        XCTAssertNil(ok.message)
+        XCTAssertEqual(queued?.0, "hello"); XCTAssertEqual(queued?.1, id)
+    }
+
+    func testNoteSendRefusesTooLongAndMissingContactWithoutQueueing() {
+        var called = false
+        let long = NoteSender.send(text: String(repeating: "a", count: 2_001), contactID: UUID()) { _, _ in called = true }
+        XCTAssertEqual(long, .tooLong); XCTAssertFalse(long.clearsText)
+        let none = NoteSender.send(text: "x", contactID: nil) { _, _ in called = true }
+        XCTAssertEqual(none, .noContact); XCTAssertFalse(none.clearsText)
+        XCTAssertFalse(called)
+        struct Boom: Error {}
+        let unknown = NoteSender.send(text: "x", contactID: UUID()) { _, _ in throw Boom() }
+        XCTAssertEqual(unknown, .failedUnknown); XCTAssertFalse(unknown.clearsText)
+    }
+
     // MARK: composer mode mapping
 
     func testComposerModeMapping() {
@@ -246,5 +343,9 @@ final class ThreadModelTests: XCTestCase {
         XCTAssertEqual(NoteBubbleStatus.status(for: .queued(failed), sendingIDs: []), .failed(.bindingCancelled))
         XCTAssertEqual(NoteBubbleStatus.status(for: .note(note("a", .outbound, at: 1)), sendingIDs: []), .sentToMailbox)
         XCTAssertEqual(NoteBubbleStatus.status(for: .note(note("b", .inbound, at: 1)), sendingIDs: []), .received)
+        XCTAssertFalse(NoteBubbleStatus.failed(.bindingCancelled).offersRetry)
+        XCTAssertFalse(NoteBubbleStatus.failed(.recipientChanged).offersRetry)
+        XCTAssertTrue(NoteBubbleStatus.failed(.inboxFull).offersRetry)
+        XCTAssertTrue(NoteBubbleStatus.failed(nil).offersRetry)
     }
 }

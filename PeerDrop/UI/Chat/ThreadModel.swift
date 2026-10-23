@@ -52,6 +52,8 @@ final class ThreadModel: ObservableObject {
     @Published private(set) var failedEntries: [NoteOutboxEntry] = []
     @Published private(set) var sendingIDs: Set<UUID> = []
     @Published private(set) var contactID: UUID?
+    /// False until the first decision exists, so the view shows nothing instead of a wrong composer.
+    @Published private(set) var isReady = false
     /// Run / day grouping for `items`, computed once per rebuild (never per row in a view body).
     @Published private(set) var runStartIDs: Set<String> = []
     @Published private(set) var dayStartIDs: Set<String> = []
@@ -76,6 +78,9 @@ final class ThreadModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var attached = false
     private var itemsDirty = false
+    private var markRead: (String) async -> Void = { _ in }
+    /// Notes whose server mark-read was already issued (once per note).
+    private var markedNoteIDs = Set<String>()
     private var refreshScheduled = false
 
     init() {}
@@ -105,8 +110,9 @@ final class ThreadModel: ObservableObject {
     func attach(peerID: String, chatManager: ChatManager, notesStore: NotesStore, outbox: NoteOutboxStore,
                 friend: FriendBinding, presence: @escaping () -> PeerPresence, accountReady: @escaping () -> Bool,
                 signals: [AnyPublisher<Void, Never>] = [], itemSignals: [AnyPublisher<Void, Never>] = [],
-                throttle: TimeInterval = 0.05) {
+                throttle: TimeInterval = 0.05, markRead: ((String) async -> Void)? = nil) {
         cancellables.removeAll()
+        self.markRead = markRead ?? { [weak notesStore] id in await notesStore?.markRead(id) }
         self.peerID = peerID; self.chatManager = chatManager; self.notesStore = notesStore; self.outbox = outbox
         self.friend = friend; self.presence = presence; self.accountReady = accountReady; self.throttle = throttle
         attached = true
@@ -152,6 +158,7 @@ final class ThreadModel: ObservableObject {
         let newDecision = ThreadTransport.decide(presence: presence(), binding: newBinding,
                                                  account: accountReady() ? .ready : .notReady)
         if newDecision != decision { decision = newDecision }
+        if !isReady { isReady = true }
         if !newDecision.isLive, replyingToMessage != nil { replyingToMessage = nil }
 
         let newSending = outbox.sendingIDs
@@ -175,7 +182,8 @@ final class ThreadModel: ObservableObject {
             runStartIDs = ThreadMerge.runStartIDs(in: merged)
             dayStartIDs = ThreadMerge.dayStartIDs(in: merged)
         }
-        let unread = notes.filter(\.isUnread).map(\.id)
+        // Only notes inside the visible (unclamped) window count as unread-and-seen.
+        let unread: [String] = merged.compactMap { if case .note(let n) = $0, n.isUnread { return n.id } else { return nil } }
         if unread != unreadNoteIDs { unreadNoteIDs = unread }
         let queued = entries.filter { $0.state == .queued }
         let failed = entries.filter { $0.state == .failed }
@@ -184,13 +192,68 @@ final class ThreadModel: ObservableObject {
         if contact?.id != contactID { contactID = contact?.id }
     }
 
-    /// Marks the bound account's unread inbound notes read (syncs the server like the inbox does).
-    func markVisibleNotesRead() async {
-        guard let notesStore else { return }
-        for id in unreadNoteIDs { await notesStore.markRead(id) }
+    /// Marks the visible unread notes of the bound account read, once per note. The server call runs in an
+    /// unstructured task so a view update or rebuild can never cancel it. Does nothing while the app is inactive.
+    func markVisibleNotesRead(isActive: Bool) {
+        guard isActive else { return }
+        for id in unreadNoteIDs where markedNoteIDs.insert(id).inserted {
+            let markRead = self.markRead
+            Task { await markRead(id) }
+        }
     }
 }
 
 extension ThreadTransport.Decision {
     var isLive: Bool { if case .live = self { return true } else { return false } }
+}
+
+/// Result of pressing Send in note mode. The text is cleared only for `.sent`.
+enum NoteSendOutcome: Equatable {
+    case sent
+    case tooLong
+    case noContact
+    case failed(ConnectionManager.QueueNoteError)
+    case failedUnknown
+
+    var clearsText: Bool { self == .sent }
+
+    /// User-visible explanation, nil on success.
+    var message: String? {
+        switch self {
+        case .sent: return nil
+        case .tooLong: return String(localized: "The note is too long.")
+        case .noContact: return String(localized: "Exchange notes with each other to stay in touch offline.")
+        case .failedUnknown: return String(localized: "Something went wrong. Please try again.")
+        case .failed(let error):
+            switch error {
+            case .contactNotFound, .notBound:
+                return String(localized: "Exchange notes with each other to stay in touch offline.")
+            case .bindingPending:
+                return String(localized: "Checking their notes account…")
+            case .blocked:
+                return String(localized: "This contact is blocked.")
+            case .outboxUnavailable:
+                return String(localized: "Couldn't save the note on this device. Your text is still here. Try again.")
+            case .unavailable:
+                return String(localized: "Notes can't be sent right now.")
+            }
+        }
+    }
+}
+
+enum NoteSender {
+    /// Pure send decision: `queue` is `ConnectionManager.queueNote` in the app.
+    @MainActor
+    static func send(text: String, contactID: UUID?, queue: (String, UUID) throws -> Void) -> NoteSendOutcome {
+        guard !ComposerMode.isOverLimit(text) else { return .tooLong }
+        guard let contactID else { return .noContact }
+        do {
+            try queue(text, contactID)
+            return .sent
+        } catch let error as ConnectionManager.QueueNoteError {
+            return .failed(error)
+        } catch {
+            return .failedUnknown
+        }
+    }
 }

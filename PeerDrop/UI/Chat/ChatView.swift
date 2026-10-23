@@ -49,20 +49,6 @@ struct ChatView: View, PaperThemed {
     @State private var showConnectionInfo = false
     #endif
 
-    /// Check if this specific peer is connected (multi-connection aware).
-    private var isPeerConnected: Bool {
-        if let peerConn = connectionManager.connection(for: peerID) {
-            return peerConn.state.isConnected
-        }
-        // Fallback to global state for backward compatibility
-        switch connectionManager.state {
-        case .connected, .transferring, .voiceCall:
-            return connectionManager.connectedPeer?.id == peerID
-        default:
-            return false
-        }
-    }
-
     /// A headless peer (peerdrop-cli: a shell or AI agent) has no audio and no
     /// useful file handling, so the chat hides the attach + voice-message
     /// affordances and leaves a text-only composer.
@@ -108,6 +94,9 @@ struct ChatView: View, PaperThemed {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var noticeToken = UUID()
+    @State private var noteToDelete: NoteRecord?
 
     var body: some View {
         chatContent
@@ -208,7 +197,9 @@ struct ChatView: View, PaperThemed {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.exclamationmark")
                             .foregroundStyle(.orange)
-                        Text(String(localized: "\(displayName) is offline. Chat again when they're back."))
+                        Text(thread.mode.isNote
+                             ? String(format: String(localized: "%@ is offline. Notes go to their mailbox."), displayName)
+                             : String(localized: "\(displayName) is offline. Chat again when they're back."))
                             .font(.subheadline.weight(.medium))
                     }
 
@@ -254,7 +245,11 @@ struct ChatView: View, PaperThemed {
             }
 
             // Composer: live chat, a note to a bound friend, or a locked bar (ThreadTransport decides).
-            composer
+            if thread.isReady {
+                composer
+            } else {
+                Color.clear.frame(height: 56)
+            }
         }
         // Only the ground cross-fades on a live/note flip; layout must not animate.
         .background(paper(.background).animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: paperMode))
@@ -312,6 +307,7 @@ struct ChatView: View, PaperThemed {
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
             thread.attach(connectionManager: connectionManager, chatManager: chatManager, peerID: peerID)
+            thread.markVisibleNotesRead(isActive: scenePhase == .active)
             chatManager.activeChatPeerID = peerID
             // Focus on this peer for multi-connection
             connectionManager.focus(on: peerID)
@@ -319,11 +315,6 @@ struct ChatView: View, PaperThemed {
             connectionManager.suppressErrorAlert = true
             // Send read receipts for unread messages
             connectionManager.sendReadReceipts(for: peerID)
-        }
-        // Notes from the bound friend count as read while the thread is on screen.
-        .task(id: thread.unreadNoteIDs) { await thread.markVisibleNotesRead() }
-        .onChange(of: thread.mode) { newMode in
-            handleModeChange(to: newMode)
         }
         .onDisappear {
             chatManager.activeChatPeerID = nil
@@ -393,12 +384,24 @@ struct ChatView: View, PaperThemed {
 
     private func noteActionDialogs<V: View>(_ content: V) -> some View {
         content
+        // Notes from the bound friend count as read while the thread is on screen.
+        .onChange(of: thread.unreadNoteIDs) { _ in thread.markVisibleNotesRead(isActive: scenePhase == .active) }
+        .onChange(of: scenePhase) { phase in thread.markVisibleNotesRead(isActive: phase == .active) }
+        .onChange(of: thread.mode) { newMode in
+            handleModeChange(to: newMode)
+        }
         .confirmationDialog("Block this sender?", isPresented: Binding(get: { noteToBlock != nil }, set: { if !$0 { noteToBlock = nil } }), titleVisibility: .visible) {
             Button("Block Sender", role: .destructive) {
                 if let record = noteToBlock { Task { await block(record) } }
                 noteToBlock = nil
             }
         } message: { Text("You will no longer receive notes from this sender, even anonymous ones.") }
+        .confirmationDialog("Delete this note?", isPresented: Binding(get: { noteToDelete != nil }, set: { if !$0 { noteToDelete = nil } }), titleVisibility: .visible) {
+            Button("Delete this note", role: .destructive) {
+                if let record = noteToDelete { Task { await connectionManager.notesStore.delete(record) } }
+                noteToDelete = nil
+            }
+        } message: { Text("This also deletes the note from the server.") }
         .sheet(item: $noteToReport) { record in
             NoteReportSheet(record: record, onSubmit: { reason, includeText in
                 noteToReport = nil
@@ -442,13 +445,13 @@ struct ChatView: View, PaperThemed {
                         to: peerID
                     )
                 },
-                onReply: { replyingToMessage = message }
+                onReply: thread.mode.isLive ? { replyingToMessage = message } : nil
             )
             .swipeToReply(isEnabled: !message.isDeleted && thread.mode.isLive, isDeleted: message.isDeleted) {
                 replyingToMessage = message
             }
             .accessibilityActions {
-                if !message.isDeleted {
+                if !message.isDeleted && thread.mode.isLive {
                     Button("Reply") { replyingToMessage = message }
                 }
             }
@@ -458,7 +461,10 @@ struct ChatView: View, PaperThemed {
                 status: NoteBubbleStatus.status(for: item, sendingIDs: thread.sendingIDs) ?? .received,
                 peerName: displayName,
                 runStart: thread.runStartIDs.contains(item.id),
-                onDelete: { Task { await connectionManager.notesStore.delete(record) } },
+                onDelete: {
+                    if record.direction == .inbound { noteToDelete = record }
+                    else { Task { await connectionManager.notesStore.delete(record) } }
+                },
                 onBlock: record.direction == .inbound ? { noteToBlock = record } : nil,
                 onReport: record.direction == .inbound ? { noteToReport = record } : nil)
         case .queued(let entry):
@@ -521,7 +527,7 @@ struct ChatView: View, PaperThemed {
         if !newMode.isLive, voiceRecorder.isRecording { voiceRecorder.cancelRecording() }
         if newMode.isNote, old?.isLive == true {
             modeNotice = String(localized: "Switched to a note")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { modeNotice = nil }
+            noticeToken = UUID()   // restarts the scoped auto-clear task below
         } else if !newMode.isNote {
             modeNotice = nil
         }
@@ -539,6 +545,10 @@ struct ChatView: View, PaperThemed {
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
                     .accessibilityAddTraits(.updatesFrequently)
+                    .task(id: noticeToken) {
+                        try? await Task.sleep(nanoseconds: 6_000_000_000)
+                        if !Task.isCancelled { self.modeNotice = nil }
+                    }
             }
             if thread.mode.queuesUntilOnline {
                 Label("Will be sent when you're online", systemImage: "wifi.slash")
@@ -788,37 +798,14 @@ struct ChatView: View, PaperThemed {
 
     /// Queues a note the user just sent. The text stays in the field when anything fails.
     private func sendNote(_ text: String) {
-        guard !ComposerMode.isOverLimit(text) else {
-            connectionManager.statusToast = String(localized: "The note is too long.")
-            return
+        let outcome = NoteSender.send(text: text, contactID: thread.contactID) { text, id in
+            try connectionManager.queueNote(text: text, toContact: id)
         }
-        guard let contactID = thread.contactID else {
-            connectionManager.statusToast = String(localized: "Exchange notes with each other to stay in touch offline.")
-            return
-        }
-        do {
-            try connectionManager.queueNote(text: text, toContact: contactID)
+        if outcome.clearsText {
             messageText = ""
             modeNotice = nil
-        } catch let error as ConnectionManager.QueueNoteError {
-            connectionManager.statusToast = Self.message(for: error)
-        } catch {
-            connectionManager.statusToast = String(localized: "Something went wrong. Please try again.")
-        }
-    }
-
-    static func message(for error: ConnectionManager.QueueNoteError) -> String {
-        switch error {
-        case .contactNotFound, .notBound:
-            return String(localized: "Exchange notes with each other to stay in touch offline.")
-        case .bindingPending:
-            return String(localized: "Checking their notes account…")
-        case .blocked:
-            return String(localized: "This contact is blocked.")
-        case .outboxUnavailable:
-            return String(localized: "Couldn't save the note on this device. Your text is still here. Try again.")
-        case .unavailable:
-            return String(localized: "Notes can't be sent right now.")
+        } else if let message = outcome.message {
+            connectionManager.statusToast = message
         }
     }
 

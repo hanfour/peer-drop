@@ -28,18 +28,21 @@ enum NoteBubbleStatus: Equatable {
         case .sentToMailbox: return String(localized: "📮 Sent")
         case .queued: return String(localized: "Waiting to send")
         case .sending: return String(localized: "Sending…")
-        case .failed: return String(localized: "Not sent. Tap to retry.")
+        case .failed(let f): return (f?.isRetryable ?? true) ? String(localized: "Not sent. Tap to retry.") : String(localized: "Not sent")
         }
     }
 
     var isFailed: Bool { if case .failed = self { return true } else { return false } }
+
+    /// A failed note offers "tap to retry" only when sending the same note again can work.
+    var offersRetry: Bool { if case .failed(let f) = self { return f?.isRetryable ?? true } else { return false } }
 }
 
 extension NoteOutboxFailure {
     /// Localized, user-facing reason (the Kit stores diagnostic Chinese text).
     var userText: String {
         switch self {
-        case .bindingCancelled: return String(localized: "The notes link was cancelled.")
+        case .bindingCancelled: return String(localized: "The notes link was cancelled. Exchange notes again to send.")
         case .tooOld: return String(localized: "Couldn't send within 24 hours.")
         case .blocked: return String(localized: "This contact is blocked.")
         case .inboxFull: return String(localized: "Their mailbox is full.")
@@ -67,7 +70,9 @@ struct NoteBubbleView: View, PaperThemed {
 
     private var text: String {
         switch item {
-        case .note(let n): return n.text ?? String(localized: "This note could not be decrypted.")
+        case .note(let n):
+            if let t = n.text, !t.isEmpty { return t }
+            return String(localized: "This note could not be decrypted.")
         case .queued(let q): return q.text
         case .chat: return ""
         }
@@ -106,11 +111,11 @@ struct NoteBubbleView: View, PaperThemed {
                 Text(item.date, style: .time)
                 if let line = status.statusText { Text(line) }
             }
-            .font(.system(size: 11, design: .rounded))
-            .foregroundStyle(status.isFailed ? Color.red : paper(.noteText).opacity(0.75))
+            .font(.system(.caption2, design: .rounded))
+            .foregroundStyle(status.isFailed ? paper(.noteFailed) : paper(.noteText).opacity(0.75))
             if let failureText {
                 Text(failureText)
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(paper(.noteText).opacity(0.75))
                     .multilineTextAlignment(isOutgoing ? .trailing : .leading)
             }
@@ -148,7 +153,7 @@ struct NoteBubbleView: View, PaperThemed {
             }
         }
 
-        if status.isFailed {
+        if status.offersRetry {
             Button(action: onRetry) { content }
                 .buttonStyle(.plain)
                 .accessibilityHint(Text("Double-tap to try sending again"))
