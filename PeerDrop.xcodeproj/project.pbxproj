@@ -529,7 +529,6 @@
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
 		717DA78992AFADED72D66BEB /* Phase2IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase2IntegrationTests.swift; sourceTree = "<group>"; };
-		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		73383ABF5706CAEE306977CA /* ConnectionMetricTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionMetricTests.swift; sourceTree = "<group>"; };
 		733BB462B9452B438626C136 /* MacSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSidebar.swift; sourceTree = "<group>"; };
 		744845CAE313892B23F551BC /* ICEConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEConfigurationTests.swift; sourceTree = "<group>"; };
@@ -579,6 +578,7 @@
 		94BD192C79B059E535261B80 /* MessageReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReceiptTests.swift; sourceTree = "<group>"; };
 		959AE417761DC9ECD7F87129 /* NearbyQuickActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyQuickActions.swift; sourceTree = "<group>"; };
 		973BBE7427CDB153591110F3 /* ChatPresenceModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPresenceModeTests.swift; sourceTree = "<group>"; };
+		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		976954327B70CCD6637EB5FC /* BoundFriends.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundFriends.swift; sourceTree = "<group>"; };
 		99B71A06E3C254432BBCF700 /* TipJarManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarManagerTests.swift; sourceTree = "<group>"; };
 		9A29C2179049E0ADD341ABFE /* DiaryJoinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryJoinSheet.swift; sourceTree = "<group>"; };
@@ -950,15 +950,6 @@
 			path = PeerDropTests;
 			sourceTree = "<group>";
 		};
-		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
-			isa = PBXGroup;
-			children = (
-				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
-			);
-			name = "peer-drop";
-			path = .;
-			sourceTree = "<group>";
-		};
 		41D0BA2247D1B5AF174362E8 /* Diary */ = {
 			isa = PBXGroup;
 			children = (
@@ -1269,6 +1260,15 @@
 				A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
+			isa = PBXGroup;
+			children = (
+				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop";
+			path = .;
 			sourceTree = "<group>";
 		};
 		CE49B580FF5FD25E8461F508 /* Helpers */ = {
