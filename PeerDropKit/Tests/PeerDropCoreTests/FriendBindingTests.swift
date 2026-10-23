@@ -12,71 +12,82 @@ final class FriendBindingTests: XCTestCase {
         TrustedContact(deviceId: deviceId, displayName: name, identityPublicKey: key, trustLevel: .linked,
                        accountId: account, isBlocked: blocked, pendingAccountBinding: pending)
     }
-    private func record(_ id: String, _ name: String = "Bob") -> DeviceRecord {
-        DeviceRecord(id: id, displayName: name, sourceType: "bonjour", lastConnected: Date())
+    private func resolve(_ peer: String, live: LiveConnectionKey = .none, _ contacts: [TrustedContact]) -> TrustedContact? {
+        FriendBindingResolver.resolve(peerID: peer, live: live, contacts: contacts)
     }
-    private func resolve(_ peer: String, live: Data? = nil, _ contacts: [TrustedContact], _ records: [DeviceRecord] = []) -> TrustedContact? {
-        FriendBindingResolver.resolve(peerID: peer, liveHandshakeKey: live, contacts: contacts, records: records)
+    private func pendingClaim(_ id: String) -> PendingAccountBinding {
+        PendingAccountBinding(accountId: id, signingKey: Data(repeating: 1, count: 32), handshakeKeyHash: Data(repeating: 2, count: 32), receivedAt: Date())
     }
 
-    func testLiveConnectionResolvesByHandshakeKey() {
+    func testSecuredLiveConnectionResolvesByHandshakeKey() {
         let c = contact(key: keyA, deviceId: "other-id")
-        XCTAssertEqual(resolve("p1", live: keyA, [c, contact(key: keyB)])?.id, c.id)
+        XCTAssertEqual(resolve("p1", live: .secured(keyA), [c, contact(key: keyB)])?.id, c.id)
     }
 
-    func testLiveKeyWithNoMatchingContactDoesNotFallBackToDeviceId() {
-        let c = contact(key: keyB, deviceId: "p1")
-        XCTAssertNil(resolve("p1", live: keyA, [c]))
+    func testSecuredKeyWithNoMatchingContactDoesNotFallBackToDeviceId() {
+        XCTAssertNil(resolve("p1", live: .secured(keyA), [contact(key: keyB, deviceId: "p1")]))
+    }
+
+    func testUnsecuredLiveConnectionReturnsNil() {
+        XCTAssertNil(resolve("p1", live: .unsecured, [contact(key: keyA, deviceId: "p1")]))
     }
 
     func testOfflineResolvesByDeviceId() {
         let c = contact(key: keyA, deviceId: "p1")
-        XCTAssertEqual(resolve("p1", [c, contact(key: keyB, deviceId: "p2")], [record("p1")])?.id, c.id)
+        XCTAssertEqual(resolve("p1", [c, contact(key: keyB, deviceId: "p2")])?.id, c.id)
     }
 
-    func testRecordNameMergedWithAnotherRecordIsAmbiguous() {
-        let c = contact(key: keyA, deviceId: "p1")
-        XCTAssertNil(resolve("p1", [c], [record("p1", "Bob"), record("p9", "bob")]))
+    func testOfflineRequiresKeyUniqueness() {
+        let a = contact(key: keyA, deviceId: "p1"), dup = contact(key: keyA, deviceId: "p2")
+        XCTAssertNil(resolve("p1", [a, dup]))
     }
 
     func testSeveralCandidatesReturnNil() {
-        let a = contact(key: keyA, deviceId: "p1"), b = contact(key: keyB, deviceId: "p1")
-        XCTAssertNil(resolve("p1", [a, b]))
-        XCTAssertNil(resolve("p1", live: keyA, [a, contact(key: keyA)]))
+        XCTAssertNil(resolve("p1", [contact(key: keyA, deviceId: "p1"), contact(key: keyB, deviceId: "p1")]))
+        XCTAssertNil(resolve("p1", live: .secured(keyA), [contact(key: keyA), contact(key: keyA)]))
     }
 
     func testBlockedContactReturnsNil() {
         XCTAssertNil(resolve("p1", [contact(key: keyA, deviceId: "p1", blocked: true)]))
-        XCTAssertNil(resolve("p1", live: keyA, [contact(key: keyA, blocked: true)]))
+        XCTAssertNil(resolve("p1", live: .secured(keyA), [contact(key: keyA, blocked: true)]))
     }
 
-    func testRecordPeerDeviceIdIsNeverUsed() {
-        // peerDeviceId is a relay DeviceIdentity id, not PeerIdentity.id space.
-        var r = record("bonjour-name"); r.peerDeviceId = "p1"
-        XCTAssertNil(resolve("bonjour-name", [contact(key: keyA, deviceId: "p1")], [r]))
+    func testBlockedOfflineWithUnblockedDuplicateStillNil() {
+        let blocked = contact(key: keyA, deviceId: "p1", blocked: true)
+        let dup = contact(key: keyA, deviceId: "p1")
+        XCTAssertNil(resolve("p1", [blocked, dup]))
     }
 
     func testUnknownPeerReturnsNil() {
         XCTAssertNil(resolve("nobody", [contact(key: keyA, deviceId: "p1")]))
     }
 
-    func testBoundAccountVerifiedAndPending() {
+    // Name merges in DeviceRecordStore leave no marker, so they cannot be
+    // detected; resolution is per identity (key / PeerIdentity.id) only.
+    func testResolutionIgnoresDisplayNames() {
+        let a = contact(key: keyA, deviceId: "p1", name: "Bob"), b = contact(key: keyB, deviceId: "p2", name: "Bob")
+        XCTAssertEqual(resolve("p1", [a, b])?.id, a.id)
+        XCTAssertEqual(resolve("p2", [a, b])?.id, b.id)
+    }
+
+    func testVerifiedAccountAndBindingState() {
         let verified = contact(key: keyA, deviceId: "p1", account: "ABCD1234")
-        let pending = contact(key: keyB, deviceId: "p2", account: "WXYZ5678",
-                              pending: PendingAccountBinding(accountId: "WXYZ5678", signingKey: Data(repeating: 1, count: 32),
-                                                             handshakeKeyHash: Data(repeating: 2, count: 32), receivedAt: Date()))
+        let pendingOnly = contact(key: keyB, deviceId: "p2", pending: pendingClaim("WXYZ5678"))
+        let reExchange = contact(key: Data(repeating: 4, count: 32), deviceId: "p4", account: "OLDX2345", pending: pendingClaim("NEWY2345"))
         let none = contact(key: Data(repeating: 3, count: 32), deviceId: "p3")
-        let fb = FriendBinding(contacts: { [verified, pending, none] }, records: { [] }, liveHandshakeKey: { _ in nil })
-        let v = fb.boundAccount(forChatPeerID: "p1")
-        XCTAssertEqual(v?.accountId, "ABCD1234"); XCTAssertEqual(v?.verified, true)
-        XCTAssertEqual(v?.contactID, verified.id); XCTAssertEqual(v?.identityKey, keyA)
-        XCTAssertEqual(fb.boundAccount(forChatPeerID: "p2")?.verified, false)
-        XCTAssertNil(fb.boundAccount(forChatPeerID: "p3"))
+        let all = [verified, pendingOnly, reExchange, none]
+        let fb = FriendBinding(contacts: { all }, live: { _ in .none })
+        let v = fb.verifiedAccount(forChatPeerID: "p1")
+        XCTAssertEqual(v?.accountId, "ABCD1234"); XCTAssertEqual(v?.contactID, verified.id); XCTAssertEqual(v?.identityKey, keyA)
         XCTAssertEqual(fb.bindingState(forChatPeerID: "p1"), .verified)
+        XCTAssertNil(fb.verifiedAccount(forChatPeerID: "p2"))
         XCTAssertEqual(fb.bindingState(forChatPeerID: "p2"), .pending)
+        // old accountId X + pending Y: never expose X as verified
+        XCTAssertNil(fb.verifiedAccount(forChatPeerID: "p4"))
+        XCTAssertEqual(fb.bindingState(forChatPeerID: "p4"), .pending)
+        XCTAssertNil(fb.verifiedAccount(forChatPeerID: "p3"))
         XCTAssertEqual(fb.bindingState(forChatPeerID: "p3"), .none)
         XCTAssertEqual(fb.bindingState(forChatPeerID: "zzz"), .none)
-        XCTAssertNil(fb.boundAccount(forChatPeerID: "zzz"))
     }
 
     func testConnectionManagerConvenienceInit() async throws {
@@ -90,7 +101,7 @@ final class FriendBindingTests: XCTestCase {
         defer { cm.trustedContactStore.removeAll() }
         let fb = FriendBinding(connectionManager: cm)
         XCTAssertEqual(fb.contact(forChatPeerID: "fb-peer")?.id, c.id)
-        XCTAssertEqual(fb.boundAccount(forChatPeerID: "fb-peer")?.accountId, "ABCD1234")
+        XCTAssertEqual(fb.verifiedAccount(forChatPeerID: "fb-peer")?.accountId, "ABCD1234")
         XCTAssertNil(fb.contact(forChatPeerID: "other"))
     }
 }

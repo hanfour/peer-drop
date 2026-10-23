@@ -380,7 +380,7 @@ public final class NotesStore: ObservableObject {
         let received = inbox.filter { Self.isVerifiedInbound($0, from: accountId) }
         let delivered = sent.filter { $0.recipientAccountId == accountId && $0.sender != .anonymous }
         func when(_ r: NoteRecord) -> Date { r.direction == .inbound ? r.receivedAt : r.sentAt }
-        return (received + delivered).sorted { when($0) < when($1) }
+        return (received + delivered).sorted { when($0) != when($1) ? when($0) < when($1) : $0.id < $1.id }
     }
 
     public func unreadCount(forAccount accountId: String) -> Int {
@@ -399,7 +399,6 @@ public final class NotesStore: ObservableObject {
         guard r.direction == .inbound, case .verified(let id, _) = r.sender else { return false }
         return id == accountId
     }
-
 
     // MARK: - Send
 
@@ -420,6 +419,8 @@ public final class NotesStore: ObservableObject {
         guard let account = accountManager.account else { throw NotesStoreError.noAccount }
         guard text.unicodeScalars.count <= NoteCrypto.maxTextScalars else { throw NotesStoreError.textTooLong }
         let entry: DirectoryEntry?
+        // The worker consumes the recipient's OPK as soon as bundle=1 is requested,
+        // so a mismatch below burns one OPK (accepted: rare).
         do { entry = try await client.lookup(handle: accountId, includeBundle: true) } catch { throw Self.mapNetwork(error) }
         guard let entry else { throw NotesStoreError.recipientNotFound }
         guard entry.accountId.raw == accountId, entry.identityKey == expectedIdentityKey else { throw NotesStoreError.recipientMismatch }

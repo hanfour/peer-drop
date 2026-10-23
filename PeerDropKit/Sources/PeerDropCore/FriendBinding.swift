@@ -1,44 +1,52 @@
 import Foundation
 import PeerDropSecurity
 
+/// What the resolver knows about a live connection for a chat peer id.
+public enum LiveConnectionKey: Equatable {
+    /// No live connection with this id.
+    case none
+    /// Connected but without a secure channel (legacy/relay): no handshake key.
+    case unsecured
+    /// Secured; the handshake peer identity key.
+    case secured(Data)
+}
+
 /// Pure resolution of a chat `peerID` to the one `TrustedContact` it means.
-/// Never guesses: ambiguity, a blocked contact, or a key mismatch yields nil.
+/// Never guesses: ambiguity, a blocked contact, a duplicated key or an
+/// unsecured live connection all yield nil.
+///
+/// Known limitation: `DeviceRecordStore` folds same-name records without
+/// leaving a marker, so a name merge cannot be detected here. Resolution is
+/// per identity (handshake key / `PeerIdentity.id` on the contact), never per
+/// display name or `DeviceRecord`, so a merged record cannot redirect a
+/// binding to another identity.
 public enum FriendBindingResolver {
-    public static func resolve(peerID: String,
-                               liveHandshakeKey: Data?,
-                               contacts: [TrustedContact],
-                               records: [DeviceRecord]) -> TrustedContact? {
+    public static func resolve(peerID: String, live: LiveConnectionKey, contacts: [TrustedContact]) -> TrustedContact? {
         func unique(_ matches: [TrustedContact]) -> TrustedContact? {
             guard matches.count == 1, let c = matches.first, !c.isBlocked else { return nil }
             return c
         }
-        // 1. A live connection: the handshake key is authoritative. When it is
-        //    known, never fall back to id-based lookups (a contact that does
-        //    not own this key must not be guessed).
-        if let key = liveHandshakeKey {
+        switch live {
+        case .secured(let key):
+            // The handshake key is authoritative; never fall back to ids.
             return unique(contacts.filter { $0.matchesKey(key) })
+        case .unsecured:
+            // Threads bind only to a secured identity.
+            return nil
+        case .none:
+            // PeerIdentity.id stored on the contact (NOT record.peerDeviceId,
+            // a relay-only DeviceIdentity id), and its key must be unique.
+            guard let c = unique(contacts.filter { $0.deviceId == peerID }) else { return nil }
+            guard contacts.filter({ $0.matchesKey(c.identityPublicKey) }).count == 1 else { return nil }
+            return c
         }
-        // 2. PeerIdentity.id stored on the contact.
-        guard let contact = unique(contacts.filter { $0.deviceId == peerID }) else { return nil }
-        // 3. The DeviceRecord with this id (PeerIdentity.id space, NOT
-        //    `record.peerDeviceId`, which is a relay-only DeviceIdentity id):
-        //    if its name collides with another record (merged by name) the
-        //    mapping is ambiguous, so refuse.
-        let same = records.filter { $0.id == peerID }
-        if same.count > 1 { return nil }
-        if let record = same.first {
-            let name = record.displayName.lowercased()
-            if records.contains(where: { $0.id != record.id && $0.displayName.lowercased() == name }) { return nil }
-        }
-        return contact
     }
 }
 
-public struct BoundAccount: Equatable {
+/// A friend whose notes-account binding is verified (no pending claim).
+public struct VerifiedAccount: Equatable {
     public let accountId: String
     public let contactID: UUID
-    /// accountId != nil && pendingAccountBinding == nil
-    public let verified: Bool
     public let identityKey: Data
 }
 
@@ -46,37 +54,36 @@ public struct BoundAccount: Equatable {
 @MainActor
 public final class FriendBinding {
     private let contacts: () -> [TrustedContact]
-    private let records: () -> [DeviceRecord]
-    private let liveHandshakeKey: (String) -> Data?
+    private let live: (String) -> LiveConnectionKey
 
-    public init(contacts: @escaping () -> [TrustedContact],
-                records: @escaping () -> [DeviceRecord],
-                liveHandshakeKey: @escaping (String) -> Data?) {
+    public init(contacts: @escaping () -> [TrustedContact], live: @escaping (String) -> LiveConnectionKey) {
         self.contacts = contacts
-        self.records = records
-        self.liveHandshakeKey = liveHandshakeKey
+        self.live = live
     }
 
     public convenience init(connectionManager cm: ConnectionManager) {
-        self.init(contacts: { [unowned cm] in cm.trustedContactStore.contacts },
-                  records: { [unowned cm] in cm.deviceStore.records },
-                  liveHandshakeKey: { [unowned cm] in cm.connection(for: $0)?.handshakePeerIdentityKey })
+        self.init(contacts: { [weak cm] in cm?.trustedContactStore.contacts ?? [] },
+                  live: { [weak cm] id in
+                      guard let pc = cm?.connection(for: id) else { return .none }
+                      if let key = pc.handshakePeerIdentityKey { return .secured(key) }
+                      return .unsecured
+                  })
     }
 
     public func contact(forChatPeerID peerID: String) -> TrustedContact? {
-        FriendBindingResolver.resolve(peerID: peerID, liveHandshakeKey: liveHandshakeKey(peerID),
-                                      contacts: contacts(), records: records())
+        FriendBindingResolver.resolve(peerID: peerID, live: live(peerID), contacts: contacts())
     }
 
-    public func boundAccount(forChatPeerID peerID: String) -> BoundAccount? {
-        guard let c = contact(forChatPeerID: peerID), let accountId = c.accountId else { return nil }
-        return BoundAccount(accountId: accountId, contactID: c.id,
-                            verified: c.pendingAccountBinding == nil, identityKey: c.identityPublicKey)
+    /// Non-nil only when `accountId != nil && pendingAccountBinding == nil`,
+    /// so a stale account id is never returned while a claim is pending.
+    public func verifiedAccount(forChatPeerID peerID: String) -> VerifiedAccount? {
+        guard let c = contact(forChatPeerID: peerID), let accountId = c.accountId, c.pendingAccountBinding == nil else { return nil }
+        return VerifiedAccount(accountId: accountId, contactID: c.id, identityKey: c.identityPublicKey)
     }
 
-    /// `.pending` when a claim awaits directory verification (even before any
-    /// verified account exists); `.verified` only for accountId != nil with
-    /// no pending claim; otherwise `.none`.
+    /// `.pending` whenever a pending claim exists, even if an older account id
+    /// is still stored: a re-exchange in progress locks the thread
+    /// conservatively. `.verified` only for accountId != nil and no pending.
     public func bindingState(forChatPeerID peerID: String) -> BindingState {
         guard let c = contact(forChatPeerID: peerID) else { return .none }
         if c.pendingAccountBinding != nil { return .pending }

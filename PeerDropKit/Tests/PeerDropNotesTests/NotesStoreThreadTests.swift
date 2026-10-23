@@ -113,7 +113,8 @@ final class NotesStoreThreadTests: XCTestCase {
         XCTAssertEqual(store.notes(forAccount: "TESTRCPT").map(\.id), [rec.id])
         let body = try JSONSerialization.jsonObject(with: TestURLProtocol.requests[2].httpBody!) as! [String: Any]
         let opened = try NoteCrypto.open(try NoteEnvelope.fromWire(Data(base64Encoded: body["envelope"] as! String)!), recipientAccountId: "TESTRCPT", keys: recipient.keys())
-        XCTAssertNotNil(opened.sender)
+        XCTAssertEqual(opened.sender?.accountId, me.accountId.raw)
+        XCTAssertEqual(rec.sender, .verified(accountId: me.accountId.raw, nickname: "rcpt"))
     }
 
     func testSendToBoundNicknameCollisionThrowsBeforeSealing() async throws {
@@ -143,5 +144,46 @@ final class NotesStoreThreadTests: XCTestCase {
         TestURLProtocol.queue = [.init(status: 404, body: Data(#"{"error":"not_found"}"#.utf8))]
         do { _ = try await store.sendToBound(text: "x", accountId: "TESTRCPT", expectedIdentityKey: Data(repeating: 1, count: 32)); XCTFail() }
         catch { XCTAssertEqual(error as? NotesStoreError, .recipientNotFound) }
+    }
+
+    func testNotesForAccountTieBreaksByIdWhenTimestampsEqual() throws {
+        try seed([inbound("z", sender: .verified(accountId: friend, nickname: nil), at: 100),
+                  inbound("a", sender: .verified(accountId: friend, nickname: nil), at: 100)],
+                 [outbound("m", to: friend, anonymous: false, at: 100)])
+        XCTAssertEqual(store.notes(forAccount: friend).map(\.id), ["a", "m", "z"])
+    }
+
+    func testSendToBoundNonNormalisedAccountIdFailsClosed() async throws {
+        let recipient = try RecipientFixture(); let entry = try recipient.entry()   // raw TESTRCPT
+        TestURLProtocol.queue = [.init(status: 200, body: try directoryBody("TESTRCPT", entry: entry))]
+        do { _ = try await store.sendToBound(text: "x", accountId: "testrcpt", expectedIdentityKey: entry.identityKey); XCTFail() }
+        catch { XCTAssertEqual(error as? NotesStoreError, .recipientMismatch) }
+        XCTAssertEqual(TestURLProtocol.requests.count, 1)
+    }
+
+    func testSendToBoundMatchWithoutBundleThrowsNoKeys() async throws {
+        let recipient = try RecipientFixture(); let entry = try recipient.entry()
+        let body = Data(#"{"accountId":"TESTRCPT","nickname":"bob","identityKey":"\#(entry.identityKey.base64EncodedString())","signingKey":"\#(entry.signingKey.base64EncodedString())","mailboxId":"m"}"#.utf8)
+        TestURLProtocol.queue = [.init(status: 200, body: body)]
+        do { _ = try await store.sendToBound(text: "x", accountId: "TESTRCPT", expectedIdentityKey: entry.identityKey); XCTFail() }
+        catch { XCTAssertEqual(error as? NotesStoreError, .recipientHasNoKeys) }
+    }
+
+    func testSendToBoundWithoutAccountThrowsNoAccount() async throws {
+        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [TestURLProtocol.self]
+        let ac = AccountClient(baseURL: URL(string: "https://worker.test")!, session: URLSession(configuration: cfg), authProvider: { _ in }, tokenInvalidator: {})
+        struct Deps: AccountRegistrationDependencies {
+            var deviceId: String { "d" }; var platform: String { "ios" }
+            var registrationSupported: Bool { true }; var attestSupported: Bool { true }
+            func identityKeys() throws -> (identity: Data, signing: Data) { (Data(), Data()) }
+            func sign(_ data: Data) throws -> Data { Data() }
+            func currentMailbox() async throws -> (id: String, token: String) { ("", "") }
+        }
+        let idle = AccountManager(client: ac, store: AccountStore(storageKey: "idle", directory: dir.appendingPathComponent("acct"), encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))),
+                                  deps: Deps(), tokenAdopter: { _, _ in }, tokenIsFresh: { true })
+        let s2 = NotesStore(client: NotesClient(account: ac), accountManager: idle, crypto: FakeCrypto(fixture: me),
+                            storage: NotesStorage(directory: dir.appendingPathComponent("y"), encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))))
+        do { _ = try await s2.sendToBound(text: "x", accountId: "TESTRCPT", expectedIdentityKey: Data()); XCTFail() }
+        catch { XCTAssertEqual(error as? NotesStoreError, .noAccount) }
     }
 }
