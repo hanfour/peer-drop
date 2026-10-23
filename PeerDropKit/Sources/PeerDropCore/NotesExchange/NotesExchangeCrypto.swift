@@ -42,11 +42,14 @@ public struct NotesExchangePair: Equatable, Sendable {
 ///   SAME `PeerConnection` the intents/reveal travel on (`handshakePeerIdentityKey`
 ///   for theirs, the local identity key for mine) and the nonces from the
 ///   session's action for that connection, never cached values.
-/// - `verifyReveal` proves only key possession bound to this connection. Before
-///   persisting anything (including a pending binding), the directory entry
-///   must satisfy `entry.accountId.raw == payload.accountId`,
+/// - `verifyReveal` proves only key possession bound to this connection, and
+///   runs first, offline. Nothing is persisted unless it passes. Then: if the
+///   directory answers, bind only when `entry.accountId.raw == payload.accountId`,
 ///   `entry.identityKey == peer handshake key` and
-///   `entry.signingKey == payload.signingKey`.
+///   `entry.signingKey == payload.signingKey`. If the directory is unreachable,
+///   a pending binding may be persisted after the offline checks alone
+///   (spec §10.7). It becomes a binding only after a later retry passes the
+///   same three directory checks.
 public enum NotesExchangeCrypto {
 
     public static let domain = Data("peerdrop-notes-exchange-v1".utf8)
