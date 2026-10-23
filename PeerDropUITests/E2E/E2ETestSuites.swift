@@ -536,7 +536,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("03-library-check")
 
         // Look for saved device in contacts section
-        let contactsSection = app.staticTexts["Contacts"]
+        let contactsSection = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
         let hasContactsSection = contactsSection.waitForExistence(timeout: 5)
 
         // Look for iPhone in the contacts list

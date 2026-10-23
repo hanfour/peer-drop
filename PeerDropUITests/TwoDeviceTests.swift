@@ -860,7 +860,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
-        let notConnected = app.hasNoActiveConnection
+        let notConnected = app.hasNoActiveConnection()
         screenshot("S2-A-04-not-connected")
 
         // Verify app is functional

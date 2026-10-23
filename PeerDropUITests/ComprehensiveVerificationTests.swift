@@ -1919,7 +1919,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         let activeHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
         let contactsHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
 
-        print("[UI-03] Connected=\(activeHeader.exists) Friends=\(contactsHeader.exists) NoActive=\(app.hasNoActiveConnection)")
+        print("[UI-03] Connected=\(activeHeader.exists) Friends=\(contactsHeader.exists) NoActive=\(app.hasNoActiveConnection())")
         screenshot("UI-03-02-sections")
     }
 

@@ -427,7 +427,7 @@ final class ConnectionE2EAcceptorTests: E2EAcceptorTestBase {
         sleep(1)
 
         XCTAssertTrue(
-            app.hasNoActiveConnection,
+            app.hasNoActiveConnection(),
             "Should show no connection after rejection"
         )
         screenshot("04-not-connected")

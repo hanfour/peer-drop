@@ -782,7 +782,19 @@ extension XCUIApplication {
     /// these tests were written when Nearby was the launch tab, so select it right after launch.
     /// Home lists live connections as `active-peer-row` buttons; none means not connected
     /// (replaces the old Connected tab's "No active connection" empty state).
-    var hasNoActiveConnection: Bool { !buttons["active-peer-row"].exists }
+    /// Navigates to Home first (the row only exists there, so checking elsewhere would be vacuously true),
+    /// then waits up to `settle` seconds for the row to be absent.
+    func hasNoActiveConnection(settle: TimeInterval = 2) -> Bool {
+        goToHomeTab()
+        return buttons["active-peer-row"].waitForNonExistence(timeout: settle)
+    }
+
+    /// Select the Home tab (re-tapping a selected tab pops back to the Home root) and wait for its nav bar.
+    func goToHomeTab() {
+        let home = tabBars.buttons["Home"]
+        if home.waitForExistence(timeout: 5) { home.tap() }
+        _ = navigationBars["Home"].waitForExistence(timeout: 3)
+    }
 
     func goToNearbyTab() {
         let nearby = tabBars.buttons["Nearby"]
