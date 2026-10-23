@@ -7,7 +7,7 @@ final class NotesExchangeGateTests: XCTestCase {
 
     private func allowedFacts() -> NotesExchangeFacts {
         NotesExchangeFacts(isSecured: true, handshakeKey: key, helloKey: key,
-                           pinningVerdictIsMismatch: false, isLocalDirect: true,
+                           pinning: .trusted, isLocalDirect: true,
                            peerSupportsExchange: true, localSupportsExchange: true)
     }
 
@@ -15,19 +15,33 @@ final class NotesExchangeGateTests: XCTestCase {
         XCTAssertEqual(NotesExchangeGate.evaluate(allowedFacts()), .allowed)
     }
 
+    private func facts(_ verdict: PeerConnection.PinningVerdict) -> NotesExchangeFacts {
+        NotesExchangeFacts(verdict: verdict, isSecured: true, handshakeKey: key, helloKey: key,
+                           isLocalDirect: true, peerSupportsExchange: true, localSupportsExchange: true)
+    }
+
     func testFirstTrustIsAllowed() {
-        // `firstTrust` (and `matched`, `notChecked`) map to pinningVerdictIsMismatch == false.
-        let facts = NotesExchangeFacts(verdict: .firstTrust, isSecured: true, handshakeKey: key, helloKey: key,
-                                       isLocalDirect: true, peerSupportsExchange: true, localSupportsExchange: true)
-        XCTAssertFalse(facts.pinningVerdictIsMismatch)
-        XCTAssertEqual(NotesExchangeGate.evaluate(facts), .allowed)
+        // Only an evaluated verdict of `firstTrust` or `matched` passes the pinning check.
+        XCTAssertEqual(facts(.firstTrust).pinning, .trusted)
+        XCTAssertEqual(NotesExchangeGate.evaluate(facts(.firstTrust)), .allowed)
+    }
+
+    func testMatchedIsAllowed() {
+        XCTAssertEqual(facts(.matched).pinning, .trusted)
+        XCTAssertEqual(NotesExchangeGate.evaluate(facts(.matched)), .allowed)
+    }
+
+    func testNotCheckedWhileSecuredIsDenied() {
+        // Fail closed: a secured channel whose pinning was never evaluated is not enough.
+        XCTAssertEqual(facts(.notChecked).pinning, .notEvaluated)
+        XCTAssertEqual(NotesExchangeGate.evaluate(facts(.notChecked)), .denied(.pinningNotEvaluated))
     }
 
     func testMismatchVerdictMapsToMismatchFact() {
         let facts = NotesExchangeFacts(verdict: .mismatch(stored: "aa", received: "bb"),
                                        isSecured: true, handshakeKey: key, helloKey: key,
                                        isLocalDirect: true, peerSupportsExchange: true, localSupportsExchange: true)
-        XCTAssertTrue(facts.pinningVerdictIsMismatch)
+        XCTAssertEqual(facts.pinning, .mismatch)
         XCTAssertEqual(NotesExchangeGate.evaluate(facts), .denied(.pinningMismatch))
     }
 
@@ -58,7 +72,7 @@ final class NotesExchangeGateTests: XCTestCase {
     }
 
     func testDeniedWhenPinningMismatch() {
-        var f = allowedFacts(); f.pinningVerdictIsMismatch = true
+        var f = allowedFacts(); f.pinning = .mismatch
         XCTAssertEqual(NotesExchangeGate.evaluate(f), .denied(.pinningMismatch))
     }
 
@@ -78,13 +92,14 @@ final class NotesExchangeGateTests: XCTestCase {
     }
 
     func testEveryCombinationOfFailuresIsDenied() {
-        // Exhaustive: allowed iff all seven conditions hold.
-        for mask in 0..<(1 << 7) {
+        // Exhaustive: allowed iff all eight conditions hold.
+        for mask in 0..<(1 << 8) {
             var f = allowedFacts()
             if mask & 1 != 0 { f.isSecured = false }
             if mask & 2 != 0 { f.handshakeKey = nil }
             if mask & 4 != 0 { f.helloKey = Data(repeating: 9, count: 32) }
-            if mask & 8 != 0 { f.pinningVerdictIsMismatch = true }
+            if mask & 8 != 0 { f.pinning = .mismatch }
+            if mask & 128 != 0 { f.pinning = .notEvaluated }
             if mask & 16 != 0 { f.isLocalDirect = false }
             if mask & 32 != 0 { f.peerSupportsExchange = false }
             if mask & 64 != 0 { f.localSupportsExchange = false }

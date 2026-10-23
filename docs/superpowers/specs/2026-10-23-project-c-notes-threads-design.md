@@ -171,9 +171,9 @@
 ### 10.1 驗證要比對的鑰匙（硬性守門條件）
 現況的釘選判定用的是 HELLO 裡**自稱**的身分公鑰，沒有確認它就是加密通道握手實際用的那把鑰匙。因此交換與綁定**必須同時滿足**：
 1. 握手實際使用的對方身分公鑰 ＝ HELLO 自稱的公鑰 ＝ 本機釘選的 `TrustedContact` 公鑰（沿用既有 `handshakePeerIdentityKey` 的比對，不得省略）；
-2. `pinningVerdict != mismatch`；
+2. `pinningVerdict` 已評估且為 `matched` 或 `firstTrust`（`notChecked` 未評估一律不通過，`mismatch` 不通過）；
 3. 目錄回傳的 `identityKey` ＝ 上述公鑰；
-4. `reveal` 內附一個 **`signingKey` 的簽章**，簽的是「`accountId` ‖ 雙方握手身分公鑰（固定順序）‖ 本次連線隨機值」，證明揭露者同時持有該帳號的簽章金鑰，且簽章綁定了這次連線，無法重放到別的連線或別的對象。
+4. `reveal` 內附一個 **`signingKey` 的簽章**，簽的是依角色排序（不做字典序排序）的摘要 `SHA256("peerdrop-notes-exchange-v1" ‖ accountId(8 bytes) ‖ 揭露者握手公鑰(32) ‖ 驗證者握手公鑰(32) ‖ 揭露者 nonce(32) ‖ 驗證者 nonce(32))`（nonce 來自雙方 `intent`），證明揭露者同時持有該帳號的簽章金鑰，且簽章綁定了這次連線與揭露方向：無法重放到別的連線或別的對象，也無法被反射回簽署者本人。小階（small-order）Ed25519 簽章金鑰與全零簽章一律拒絕。
 任一不符就不綁定。
 
 ### 10.2 為什麼這樣夠，以及已知殘餘風險

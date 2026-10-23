@@ -393,6 +393,144 @@ final class NotesExchangeSessionTests: XCTestCase {
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(8), now: t0)), [])
     }
 
+    // MARK: - Review fix round 1
+
+    func testMyIntentExpiresOnIntentEventWithoutTick() {
+        // Expiry must be enforced by every now-bearing event, not only `.tick`.
+        var s = readySession()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        let out = s.handle(.receivedIntent(nonce: n(2), now: t0 + 601))
+        XCTAssertEqual(reveals(out), 0, "a late peer intent must not pair with my expired intent")
+        XCTAssertTrue(out.contains(.sendCancel))
+        // Same outcome as if a tick had fired first (behaviour must not depend on tick timing).
+        var t = readySession()
+        _ = t.handle(.userPressed(nonce: n(1), now: t0))
+        _ = t.handle(.tick(now: t0 + 601))
+        _ = t.handle(.receivedIntent(nonce: n(2), now: t0 + 601))
+        XCTAssertEqual(s.state, t.state)
+        XCTAssertEqual(s.state, .peerWantsExchange)
+    }
+
+    func testMyIntentExpiresOnIntentEventStateExpiredWhenPeerIntentInvalid() {
+        // With no new peer intent recorded, the observable state is `.expired`.
+        var s = readySession()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        XCTAssertEqual(s.handle(.receivedIntent(nonce: n(1), now: t0 + 601)),
+                       [.sendCancel, .updateState(.expired)], "reflected nonce ignored, but expiry still runs")
+    }
+
+    func testPeerIntentExpiresOnPressWithoutTick() {
+        var s = readySession()
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(s.handle(.userPressed(nonce: n(1), now: t0 + 600)),
+                       [.sendIntent(nonce: n(1)), .updateState(.waitingForPeer)])
+    }
+
+    func testBackwardsClockDoesNotExtendLifetime() {
+        var s = readySession()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        XCTAssertEqual(s.handle(.tick(now: t0 + 599)), [])
+        XCTAssertEqual(s.handle(.tick(now: t0 - 5_000)), [], "a backwards jump is not an expiry")
+        XCTAssertEqual(s.handle(.tick(now: t0 + 600)), [.sendCancel, .updateState(.expired)])
+
+        // An intent made while the clock reads earlier than the latest time seen is
+        // measured against that latest time: it can only expire sooner, never later.
+        var b = readySession()
+        _ = b.handle(.tick(now: t0 + 1_000))
+        _ = b.handle(.userPressed(nonce: n(1), now: t0))
+        XCTAssertEqual(b.handle(.tick(now: t0 + 50)), [.sendCancel, .updateState(.expired)])
+    }
+
+    func testMyRevealStillSentWhenPeerBoundFirst() {
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        _ = s.handle(.receivedReveal(peerReveal()))
+        XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
+        let out = s.handle(.localAccountReady(myAccount))
+        XCTAssertEqual(out, [.sendReveal(account: myAccount, nonces: NotesExchangePair(mine: n(1), theirs: n(2)))])
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount))), 0, "exactly one reveal")
+        XCTAssertEqual(s.state, .bound)
+    }
+
+    func testLocalRevealFailedSendsUnavailableAndFails() {
+        var s = readySession()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(s.state, .exchanging)
+        XCTAssertEqual(s.handle(.localRevealFailed),
+                       [.sendUnavailable, .updateState(.failed(.localRevealFailed))])
+        XCTAssertEqual(s.handle(.localRevealFailed), [], "reported once")
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.state, .failed(.localRevealFailed))
+    }
+
+    func testLocalRevealFailedWithoutSentRevealIgnored() {
+        var s = readySession()
+        XCTAssertEqual(s.handle(.localRevealFailed), [])
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        XCTAssertEqual(s.handle(.localRevealFailed), [])
+        XCTAssertEqual(s.state, .waitingForPeer)
+        var u = S()
+        _ = u.handle(.localAccountReady(nil))
+        _ = u.handle(.userPressed(nonce: n(1), now: t0))
+        _ = u.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(u.handle(.localRevealFailed), [], "we sent unavailable, not a reveal")
+    }
+
+    func testLocalRevealFailedKeepsPendingVerification() {
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.localAccountReady(myAccount))
+        XCTAssertEqual(s.handle(.localRevealFailed), [.sendUnavailable])
+        XCTAssertEqual(s.state, .verifying)
+        XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
+    }
+
+    func testAccountUnavailableAfterPeerRevealKeepsPendingVerification() {
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        _ = s.handle(.receivedReveal(peerReveal()))
+        XCTAssertEqual(s.state, .verifying)
+        XCTAssertEqual(s.handle(.localAccountReady(nil)), [.sendUnavailable], "tell the peer, keep verifying")
+        XCTAssertEqual(s.state, .verifying)
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [], "never reveal after unavailable")
+        XCTAssertEqual(s.handle(.verificationFailed), [.updateState(.failed(.verificationFailed))])
+        var b = S()
+        _ = b.handle(.userPressed(nonce: n(1), now: t0))
+        _ = b.handle(.receivedIntent(nonce: n(2), now: t0))
+        _ = b.handle(.receivedReveal(peerReveal()))
+        _ = b.handle(.verificationSucceeded)
+        XCTAssertEqual(b.handle(.localAccountReady(nil)), [.sendUnavailable])
+        XCTAssertEqual(b.state, .bound, "unavailable never overwrites a binding")
+    }
+
+    func testDeclinePeerIntent() {
+        var s = readySession()
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(s.handle(.userCancelled), [.updateState(.idle)], "decline: no network action")
+        XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0 + 1)), [], "same nonce does not re-prompt")
+        // Even after the declined intent expires, a re-sent copy stays declined.
+        _ = s.handle(.tick(now: t0 + 700))
+        XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0 + 701)), [])
+        XCTAssertEqual(s.state, .idle)
+        // A fresh peer intent (new nonce) prompts again.
+        XCTAssertEqual(s.handle(.receivedIntent(nonce: n(5), now: t0 + 702)), [.updateState(.peerWantsExchange)])
+    }
+
+    func testPressAfterDeclineStillPairs() {
+        var s = readySession()
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        _ = s.handle(.userCancelled)
+        XCTAssertEqual(s.handle(.userPressed(nonce: n(1), now: t0 + 1)),
+                       [.sendIntent(nonce: n(1)),
+                        .sendReveal(account: myAccount, nonces: NotesExchangePair(mine: n(1), theirs: n(2))),
+                        .updateState(.exchanging)])
+    }
+
     // MARK: - With real crypto
 
     func testReplayFromFreshSessionFailsVerification() throws {

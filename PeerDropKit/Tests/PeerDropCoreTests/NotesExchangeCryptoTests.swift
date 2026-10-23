@@ -54,52 +54,56 @@ final class NotesExchangeCryptoTests: XCTestCase {
             nonces: NotesExchangePair(mine: v.nonce, theirs: r.nonce))
     }
 
-    // MARK: - Digest
+    // MARK: - Digest (role-ordered: revealer first)
 
-    func testDigestIsOrderIndependent() throws {
-        // Each nonce stays paired with the key of the party that produced it.
-        let a = try XCTUnwrap(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyHigh, nonceA: nonceX, nonceB: nonceY))
-        let b = try XCTUnwrap(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyHigh, keyB: keyLow, nonceA: nonceY, nonceB: nonceX))
-        XCTAssertEqual(a, b)
-        XCTAssertEqual(a.count, 32)
+    private func digest(_ id: String, rk: Data, vk: Data, rn: Data, vn: Data) -> Data? {
+        NotesExchangeCrypto.revealDigest(accountId: id, revealerKey: rk, verifierKey: vk,
+                                         revealerNonce: rn, verifierNonce: vn)
     }
 
     func testDigestMatchesSpecifiedLayout() throws {
-        // keyHigh's owner produced nonceY (the lexicographically SMALLER nonce):
-        // nonces must follow the owning key's order, not their own byte order.
+        // SHA256(domain ‖ id ‖ revealerKey ‖ verifierKey ‖ revealerNonce ‖ verifierNonce), no sorting.
         var m = Data("peerdrop-notes-exchange-v1".utf8)
         m.append(Data(accountId.utf8))
-        m.append(keyLow); m.append(keyHigh)
-        m.append(nonceX)  // owner = keyLow
-        m.append(nonceY)  // owner = keyHigh
-        let expected = Data(SHA256.hash(data: m))
-        XCTAssertEqual(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyHigh, keyB: keyLow, nonceA: nonceY, nonceB: nonceX), expected)
-        XCTAssertEqual(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyHigh, nonceA: nonceX, nonceB: nonceY), expected)
+        m.append(keyHigh); m.append(keyLow)
+        m.append(nonceX); m.append(nonceY)
+        XCTAssertEqual(digest(accountId, rk: keyHigh, vk: keyLow, rn: nonceX, vn: nonceY),
+                       Data(SHA256.hash(data: m)))
+    }
+
+    func testDigestIsRoleOrdered() throws {
+        // Swapping revealer and verifier must change the digest (no symmetric sorting).
+        let a = try XCTUnwrap(digest(accountId, rk: keyLow, vk: keyHigh, rn: nonceX, vn: nonceY))
+        let b = try XCTUnwrap(digest(accountId, rk: keyHigh, vk: keyLow, rn: nonceY, vn: nonceX))
+        XCTAssertNotEqual(a, b)
+        XCTAssertEqual(a.count, 32)
     }
 
     func testDigestNoncesAreNotSortedByValue() throws {
-        // Swapping which party owns which nonce must change the digest.
-        let a = NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyHigh, nonceA: nonceX, nonceB: nonceY)
-        let b = NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyHigh, nonceA: nonceY, nonceB: nonceX)
+        let a = digest(accountId, rk: keyLow, vk: keyHigh, rn: nonceX, vn: nonceY)
+        let b = digest(accountId, rk: keyLow, vk: keyHigh, rn: nonceY, vn: nonceX)
         XCTAssertNotNil(a); XCTAssertNotNil(b)
         XCTAssertNotEqual(a, b)
+        let c = digest(accountId, rk: keyLow, vk: keyHigh, rn: nonceX, vn: nonceY)
+        let e = digest(accountId, rk: keyHigh, vk: keyLow, rn: nonceX, vn: nonceY)
+        XCTAssertNotEqual(c, e, "keys are not sorted either")
     }
 
     func testWrongSizeFieldsRejected() {
         let short = Data(repeating: 1, count: 31), long = Data(repeating: 1, count: 33)
         for bad in [Data(), short, long] {
-            XCTAssertNil(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: bad, keyB: keyHigh, nonceA: nonceX, nonceB: nonceY))
-            XCTAssertNil(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: bad, nonceA: nonceX, nonceB: nonceY))
-            XCTAssertNil(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyHigh, nonceA: bad, nonceB: nonceY))
-            XCTAssertNil(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyHigh, nonceA: nonceX, nonceB: bad))
+            XCTAssertNil(digest(accountId, rk: bad, vk: keyHigh, rn: nonceX, vn: nonceY))
+            XCTAssertNil(digest(accountId, rk: keyLow, vk: bad, rn: nonceX, vn: nonceY))
+            XCTAssertNil(digest(accountId, rk: keyLow, vk: keyHigh, rn: bad, vn: nonceY))
+            XCTAssertNil(digest(accountId, rk: keyLow, vk: keyHigh, rn: nonceX, vn: bad))
         }
         for badId in ["", "ABCD123", "ABCD12345", "abcd1234", "ABCD-234", "ABCDI234", "ＡBCD1234", "ABCD1234\u{0}"] {
-            XCTAssertNil(NotesExchangeCrypto.revealDigest(accountId: badId, keyA: keyLow, keyB: keyHigh, nonceA: nonceX, nonceB: nonceY), badId)
+            XCTAssertNil(digest(badId, rk: keyLow, vk: keyHigh, rn: nonceX, vn: nonceY), badId)
         }
     }
 
     func testIdenticalKeysRejected() {
-        XCTAssertNil(NotesExchangeCrypto.revealDigest(accountId: accountId, keyA: keyLow, keyB: keyLow, nonceA: nonceX, nonceB: nonceY))
+        XCTAssertNil(digest(accountId, rk: keyLow, vk: keyLow, rn: nonceX, vn: nonceY))
     }
 
     func testMakeNonceIs32RandomBytes() {
@@ -223,6 +227,111 @@ final class NotesExchangeCryptoTests: XCTestCase {
         // Bad sizes.
         XCTAssertThrowsError(try NotesExchangeCrypto.makeReveal(account: r.account, handshakeKeys: NotesExchangePair(mine: r.handshakeKey, theirs: r.handshakeKey), nonces: pairN, signer: { try r.signing.signature(for: $0) }))
         XCTAssertThrowsError(try NotesExchangeCrypto.makeReveal(account: r.account, handshakeKeys: pairK, nonces: NotesExchangePair(mine: r.nonce.prefix(16), theirs: v.nonce), signer: { try r.signing.signature(for: $0) }))
+    }
+
+    // MARK: - Reflection / cross-connection (role-ordered digest)
+
+    func testOwnRevealReflectedBackDoesNotVerify() throws {
+        // I (r) sign a reveal for v; v echoes it back to me. Verifying at r treats
+        // v as the revealer, so the role-ordered digest differs → reject by signature.
+        let (r, v) = makeParties()
+        let mine = try reveal(by: r, to: v)
+        XCTAssertTrue(verify(mine, at: v, from: r), "sanity: verifies at the intended verifier")
+        XCTAssertFalse(verify(mine, at: r, from: v), "reflection to the signer must fail")
+    }
+
+    func testRevealVerifiesOnlyOnItsOwnConnection() throws {
+        // A's reveal for B verifies at B but not at a third connection C (other keys/nonces),
+        // nor at C pretending to be on a connection with A.
+        let a = Party.make(accountId: "AAAA0001"), b = Party.make(accountId: "BBBB0001")
+        let c = Party.make(accountId: "CCCC0001")
+        let p = try reveal(by: a, to: b)
+        XCTAssertTrue(verify(p, at: b, from: a))
+        XCTAssertFalse(verify(p, at: c, from: a))
+        var aSeenByC = a; aSeenByC.nonce = c.nonce
+        XCTAssertFalse(verify(p, at: c, from: aSeenByC))
+    }
+
+    // MARK: - Small-order / degenerate keys and signatures
+
+    func testSmallOrderListIsComplete() {
+        XCTAssertEqual(NotesExchangeCrypto.smallOrderSigningKeys.count, 14, "8 canonical + 6 non-canonical encodings")
+        XCTAssertEqual(Set(NotesExchangeCrypto.smallOrderSigningKeys).count, 14)
+        XCTAssertTrue(NotesExchangeCrypto.smallOrderSigningKeys.allSatisfy { $0.count == 32 })
+    }
+
+    private static let smallOrderHex: [String] = [
+        "0100000000000000000000000000000000000000000000000000000000000000", // identity (order 1)
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // (0,-1) order 2
+        "0000000000000000000000000000000000000000000000000000000000000000", // order 4
+        "0000000000000000000000000000000000000000000000000000000000000080", // order 4
+        "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05", // order 8
+        "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85", // order 8
+        "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a", // order 8
+        "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa", // order 8
+        "0100000000000000000000000000000000000000000000000000000000000080", // identity, x=-0
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // (0,-1), x=-0
+        "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // y=p (≡0)
+        "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // y=p, sign 1
+        "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // y=p+1 (≡1)
+        "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // y=p+1, sign 1
+    ]
+
+    private static func hex(_ s: String) -> Data {
+        var d = Data(); var i = s.startIndex
+        while i < s.endIndex { let j = s.index(i, offsetBy: 2); d.append(UInt8(s[i..<j], radix: 16)!); i = j }
+        return d
+    }
+
+    private func assertSmallOrderRejected(_ index: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+        let key = Self.hex(Self.smallOrderHex[index])
+        XCTAssertTrue(NotesExchangeCrypto.smallOrderSigningKeys.contains(key), "constant contains #\(index)", file: file, line: line)
+        XCTAssertNil(NotesExchangeSession.AccountSnapshot(accountId: "ABCD1234", signingKey: key), file: file, line: line)
+        let (r, v) = makeParties()
+        // Forged reveal with R = identity, S = 0: verifies for ANY message under a small-order key
+        // in lenient verifiers. Also try a few other degenerate signatures.
+        var forged = Data([0x01]) + Data(repeating: 0, count: 63)
+        for sig in [forged, Data(repeating: 0, count: 64), key + Data(repeating: 0, count: 32)] {
+            forged = sig
+            let p = NotesExchangePayload(phase: "reveal", accountId: r.account.accountId, signingKey: key, signature: forged)
+            XCTAssertFalse(verify(p, at: v, from: r), "small-order key #\(index)", file: file, line: line)
+        }
+    }
+
+    func testSmallOrderKey0Rejected() throws { try assertSmallOrderRejected(0) }
+    func testSmallOrderKey1Rejected() throws { try assertSmallOrderRejected(1) }
+    func testSmallOrderKey2Rejected() throws { try assertSmallOrderRejected(2) }
+    func testSmallOrderKey3Rejected() throws { try assertSmallOrderRejected(3) }
+    func testSmallOrderKey4Rejected() throws { try assertSmallOrderRejected(4) }
+    func testSmallOrderKey5Rejected() throws { try assertSmallOrderRejected(5) }
+    func testSmallOrderKey6Rejected() throws { try assertSmallOrderRejected(6) }
+    func testSmallOrderKey7Rejected() throws { try assertSmallOrderRejected(7) }
+    func testSmallOrderKey8Rejected() throws { try assertSmallOrderRejected(8) }
+    func testSmallOrderKey9Rejected() throws { try assertSmallOrderRejected(9) }
+    func testSmallOrderKey10Rejected() throws { try assertSmallOrderRejected(10) }
+    func testSmallOrderKey11Rejected() throws { try assertSmallOrderRejected(11) }
+    func testSmallOrderKey12Rejected() throws { try assertSmallOrderRejected(12) }
+    func testSmallOrderKey13Rejected() throws { try assertSmallOrderRejected(13) }
+
+    func testIdentityKeyWithIdentitySignatureRejected() {
+        // The reviewer's exact case.
+        let (r, v) = makeParties()
+        let p = NotesExchangePayload(phase: "reveal", accountId: r.account.accountId,
+                                     signingKey: Data([0x01]) + Data(repeating: 0, count: 31),
+                                     signature: Data([0x01]) + Data(repeating: 0, count: 63))
+        XCTAssertFalse(verify(p, at: v, from: r))
+    }
+
+    func testAllZeroSignatureRejected() throws {
+        let (r, v) = makeParties()
+        var p = try reveal(by: r, to: v)
+        p.signature = Data(repeating: 0, count: 64)
+        XCTAssertFalse(verify(p, at: v, from: r))
+        XCTAssertThrowsError(try NotesExchangeCrypto.makeReveal(
+            account: r.account,
+            handshakeKeys: NotesExchangePair(mine: r.handshakeKey, theirs: v.handshakeKey),
+            nonces: NotesExchangePair(mine: r.nonce, theirs: v.nonce),
+            signer: { _ in Data(repeating: 0, count: 64) }))
     }
 
     func testAccountSnapshotValidation() {
