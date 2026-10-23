@@ -2,10 +2,10 @@ import SwiftUI
 import Combine
 import PeerDropCore
 
-/// 紙條: pinned notes-inbox row + conversation list (friends and groups with messages, newest first).
+/// 紙條: first-row notes inbox + conversation list (friends and groups with messages, newest first).
 /// Expects to be hosted in a NavigationStack that the container owns. It registers the
 /// `ChatTarget` destination itself (`.chatTargetDestination()`); the container must NOT add one.
-/// The pinned inbox row pushes the injected `inbox` view (Task 9 wires NotesInboxView).
+/// The inbox row (first row of the list) pushes the injected `inbox` view (Task 9 wires NotesInboxView).
 struct ConversationsTab<Inbox: View>: View, PaperThemed {
     @EnvironmentObject var connectionManager: ConnectionManager
     var paperMode: PaperMode { .live }
@@ -13,7 +13,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     @Environment(\.openWindow) private var openWindow
     #endif
 
-    /// Number of unread remote notes, shown on the pinned inbox row.
+    /// Number of unread remote notes, shown on the inbox row.
     var inboxUnread: Int = 0
     /// Switches to the Home tab (empty-state button; provided by the container).
     var onGoHome: () -> Void = {}
@@ -24,9 +24,13 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     /// Last-message summaries, rebuilt on appear and (debounced) on change signals — never inside `body`.
     @State private var peerSummaries: [String: ConversationSummary] = [:]
     @State private var groupSummaries: [String: ConversationSummary] = [:]
+    /// False until the first synchronous seed, so the empty state never flashes.
+    @State private var hasLoaded = false
     #if os(iOS)
     @State private var pickedTarget: ChatTarget?
     @State private var showPicked = false
+    /// Chosen in the picker sheet; pushed from the sheet's onDismiss.
+    @State private var pendingTarget: ChatTarget?
     #endif
 
     private var chatManager: ChatManager { connectionManager.chatManager }
@@ -45,12 +49,25 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         for g in connectionManager.groupStore.groups {
             groups[g.id] = chatManager.summary(forGroup: g.id)
         }
-        peerSummaries = peers
-        groupSummaries = groups
+        if peers != peerSummaries { peerSummaries = peers }
+        if groups != groupSummaries { groupSummaries = groups }
+        hasLoaded = true
+    }
+
+    /// Single entry point for opening a friend's chat (row tap and picker); resolves the chat key at call time.
+    private func openChat(recordID: String, name: String) {
+        let id = chatKey(for: recordID)
+        #if os(iOS)
+        pickedTarget = ChatTarget(peerID: id, name: name)
+        showPicked = true
+        #else
+        openWindow(id: "chat", value: id)
+        #endif
     }
 
     private var changeSignal: AnyPublisher<Void, Never> {
-        Publishers.Merge3(
+        Publishers.Merge4(
+            connectionManager.objectWillChange.map { _ in () },
             chatManager.objectWillChange.map { _ in () },
             connectionManager.deviceStore.objectWillChange.map { _ in () },
             connectionManager.groupStore.objectWillChange.map { _ in () })
@@ -73,13 +90,13 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         let records = connectionManager.deviceStore.records
         var presenceMap: [String: PeerPresence] = [:]
         for r in records { presenceMap[r.id] = connectionManager.presence(for: r, sources: sources) }
-        let rowModels = rows()
+        let rowModels = hasLoaded ? rows() : []
         let searching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         return List {
             inboxRow
             if rowModels.isEmpty {
-                if searching { noResults } else { emptyState }
+                if !hasLoaded { EmptyView() } else if searching { noResults } else { emptyState }
             } else {
                 ForEach(rowModels) { model in
                     row(model, presence: presenceMap[model.sourceID])
@@ -101,7 +118,15 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                     .accessibilityLabel(Text("New conversation"))
             }
         }
-        .sheet(isPresented: $showPicker) { friendPicker }
+        .sheet(isPresented: $showPicker, onDismiss: {
+            #if os(iOS)
+            if let t = pendingTarget {
+                pendingTarget = nil
+                pickedTarget = t
+                showPicked = true
+            }
+            #endif
+        }) { friendPicker }
         #if os(iOS)
         .navigationDestination(isPresented: $showPicked) {
             if let t = pickedTarget {
@@ -111,7 +136,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         }
         #endif
         .chatTargetDestination()
-        .onAppear(perform: refreshSummaries)
+        .onAppear { refreshSummaries() }
         .onReceive(changeSignal) { refreshSummaries() }
     }
 
@@ -151,18 +176,20 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                 }
             }
         } else {
-            #if os(iOS)
-            NavigationLink(value: ChatTarget(peerID: model.summary.id, name: model.name)) {
-                ConversationRow(model: model, presence: presence)
-            }
-            #else
             Button {
-                openWindow(id: "chat", value: model.summary.id)
+                openChat(recordID: model.sourceID, name: model.name)
             } label: {
-                ConversationRow(model: model, presence: presence)
+                HStack(spacing: 8) {
+                    ConversationRow(model: model, presence: presence)
+                    #if os(iOS)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(paper(.datePillText))
+                        .accessibilityHidden(true)
+                    #endif
+                }
             }
             .buttonStyle(.plain)
-            #endif
         }
     }
 
@@ -255,13 +282,13 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     }
 
     private func pick(_ record: DeviceRecord) {
-        let id = chatKey(for: record.id)
-        showPicker = false
         #if os(iOS)
-        pickedTarget = ChatTarget(peerID: id, name: record.displayName)
-        showPicked = true
+        // Push only after the sheet has fully dismissed (see the sheet's onDismiss).
+        pendingTarget = ChatTarget(peerID: chatKey(for: record.id), name: record.displayName)
+        showPicker = false
         #else
-        openWindow(id: "chat", value: id)
+        showPicker = false
+        openChat(recordID: record.id, name: record.displayName)
         #endif
     }
 }

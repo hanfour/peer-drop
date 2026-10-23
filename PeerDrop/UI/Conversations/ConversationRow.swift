@@ -43,6 +43,7 @@ struct ConversationRow: View, PaperThemed {
                     .font(.caption)
                     .foregroundStyle(paper(.datePillText))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 if model.summary.unread > 0 {
                     Text(model.summary.unread > 99 ? "99+" : "\(model.summary.unread)")
                         .font(.caption.weight(.bold))
@@ -53,7 +54,7 @@ struct ConversationRow: View, PaperThemed {
                         .background(Capsule().fill(paper(.brand)))
                 }
             }
-            .fixedSize()
+            .frame(maxWidth: 90, alignment: .trailing)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -87,16 +88,14 @@ struct ConversationRow: View, PaperThemed {
 
 /// "14:05" today, otherwise a localized relative day ("Yesterday") or short date.
 enum ConversationTime {
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateStyle = .none; f.timeStyle = .short; return f
+    }()
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .none; f.doesRelativeDateFormatting = true; return f
+    }()
+
     static func text(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let f = DateFormatter()
-        if calendar.isDate(date, inSameDayAs: now) {
-            f.dateStyle = .none
-            f.timeStyle = .short
-        } else {
-            f.dateStyle = .short
-            f.timeStyle = .none
-            f.doesRelativeDateFormatting = true
-        }
-        return f.string(from: date)
+        calendar.isDate(date, inSameDayAs: now) ? timeFormatter.string(from: date) : dayFormatter.string(from: date)
     }
 }
