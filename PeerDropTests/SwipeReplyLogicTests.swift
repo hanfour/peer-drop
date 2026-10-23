@@ -8,6 +8,7 @@ final class SwipeReplyLogicTests: XCTestCase {
         XCTAssertFalse(SwipeReplyLogic.isHorizontalDominant(dx: 10, dy: 30))
         XCTAssertFalse(SwipeReplyLogic.isHorizontalDominant(dx: 30, dy: 30))
         XCTAssertFalse(SwipeReplyLogic.isHorizontalDominant(dx: 40, dy: 30))
+        XCTAssertFalse(SwipeReplyLogic.isHorizontalDominant(dx: 45, dy: 30)) // strict > 1.5
     }
 
     func testLeftwardOrZeroIsInert() {
@@ -45,5 +46,18 @@ final class SwipeReplyLogicTests: XCTestCase {
         XCTAssertFalse(SwipeReplyLogic.shouldTrigger(translationWidth: 59.9, isHorizontal: true, isDeleted: false))
         XCTAssertFalse(SwipeReplyLogic.shouldTrigger(translationWidth: 500, isHorizontal: false, isDeleted: false))
         XCTAssertFalse(SwipeReplyLogic.shouldTrigger(translationWidth: 500, isHorizontal: true, isDeleted: true))
+    }
+
+    func testDecideAxis() {
+        // Undecided below the radius.
+        XCTAssertNil(SwipeReplyLogic.decideAxis(current: nil, dx: 5, dy: 3))
+        // Decided at the radius.
+        XCTAssertEqual(SwipeReplyLogic.decideAxis(current: nil, dx: 12, dy: 0), true)
+        XCTAssertEqual(SwipeReplyLogic.decideAxis(current: nil, dx: 2, dy: 12), false)
+        // Never flipped by later wobble.
+        XCTAssertEqual(SwipeReplyLogic.decideAxis(current: true, dx: 1, dy: 100), true)
+        XCTAssertEqual(SwipeReplyLogic.decideAxis(current: false, dx: 100, dy: 1), false)
+        // A fresh drag re-decides.
+        XCTAssertEqual(SwipeReplyLogic.decideAxis(current: nil, dx: 1, dy: 100), false)
     }
 }

@@ -13,13 +13,21 @@ enum SwipeReplyLogic {
     static let threshold: CGFloat = 60
     /// The row never moves further than this, however far the finger goes.
     static let maxOffset: CGFloat = 90
-    /// Drag distance within which the horizontal/vertical decision may still be revised.
-    static let decisionWindow: CGFloat = 16
+    /// Movement (pt) before the horizontal/vertical decision is made.
+    static let decisionRadius: CGFloat = 12
     private static let dominanceRatio: CGFloat = 1.5
 
     /// Horizontal only if |dx| > 1.5 * |dy|, so vertical scrolling is never hijacked.
     static func isHorizontalDominant(dx: CGFloat, dy: CGFloat) -> Bool {
         abs(dx) > dominanceRatio * abs(dy)
+    }
+
+    /// Decide the axis ONCE: nil while movement is below `decisionRadius`; an already-decided
+    /// value is kept for the rest of the drag (later wobble never flips it).
+    static func decideAxis(current: Bool?, dx: CGFloat, dy: CGFloat) -> Bool? {
+        if let current { return current }
+        guard hypot(dx, dy) >= decisionRadius else { return nil }
+        return isHorizontalDominant(dx: dx, dy: dy)
     }
 
     /// Rubber band: slope 1 at the start, saturating toward `maxOffset`. 0 for leftward drags.
@@ -44,11 +52,16 @@ private struct SwipeToReplyModifier: ViewModifier {
     let isDeleted: Bool
     let onReply: () -> Void
 
-    /// Resets automatically when the gesture ends or is cancelled (e.g. a scroll takes over).
-    @GestureState private var dragWidth: CGFloat = 0
-    /// Decided once near the start of a drag and kept until it ends.
-    @State private var isHorizontal: Bool?
-    @State private var crossed = false
+    /// Per-drag state. Lives in a `@GestureState`, so it resets whenever the gesture ends OR is
+    /// cancelled (scroll takeover, interruption); no decision can outlive its drag.
+    private struct DragState {
+        var width: CGFloat = 0
+        var axis: Bool?
+        var crossed = false
+    }
+    @GestureState private var drag = DragState()
+
+    private var dragWidth: CGFloat { drag.axis == true ? drag.width : 0 }
 
     func body(content: Content) -> some View {
         if isEnabled {
@@ -67,28 +80,22 @@ private struct SwipeToReplyModifier: ViewModifier {
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 12)
-                        .updating($dragWidth) { value, state, _ in
-                            guard isHorizontal == true else { return }
-                            state = value.translation.width
-                        }
-                        .onChanged { value in
+                        .updating($drag) { value, state, _ in
                             let t = value.translation
-                            if isHorizontal == nil || hypot(t.width, t.height) <= SwipeReplyLogic.decisionWindow {
-                                isHorizontal = SwipeReplyLogic.isHorizontalDominant(dx: t.width, dy: t.height)
-                            }
-                            let nowCrossed = isHorizontal == true && !isDeleted && t.width >= SwipeReplyLogic.threshold
-                            if nowCrossed && !crossed { haptic() }
-                            crossed = nowCrossed
+                            state.axis = SwipeReplyLogic.decideAxis(current: state.axis, dx: t.width, dy: t.height)
+                            state.width = t.width
+                            let nowCrossed = state.axis == true && !isDeleted && t.width >= SwipeReplyLogic.threshold
+                            if nowCrossed && !state.crossed { haptic() }
+                            state.crossed = nowCrossed
                         }
                         .onEnded { value in
-                            let trigger = SwipeReplyLogic.shouldTrigger(
-                                translationWidth: value.translation.width,
-                                isHorizontal: isHorizontal == true,
+                            let t = value.translation
+                            let axis = SwipeReplyLogic.decideAxis(current: nil, dx: t.width, dy: t.height)
+                            if SwipeReplyLogic.shouldTrigger(
+                                translationWidth: t.width,
+                                isHorizontal: axis == true,
                                 isDeleted: isDeleted
-                            )
-                            isHorizontal = nil
-                            crossed = false
-                            if trigger { onReply() }
+                            ) { onReply() }
                         }
                 )
                 .animation(.spring(response: 0.3, dampingFraction: 0.75), value: dragWidth == 0)

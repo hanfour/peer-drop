@@ -145,11 +145,13 @@ struct ChatView: View {
                                 onReply: { replyingToMessage = message }
                             )
                             .id(message.id)
-                            .swipeToReply(isEnabled: true, isDeleted: message.isDeleted) {
+                            .swipeToReply(isEnabled: !message.isDeleted, isDeleted: message.isDeleted) {
                                 replyingToMessage = message
                             }
-                            .accessibilityAction(named: Text("Reply")) {
-                                if !message.isDeleted { replyingToMessage = message }
+                            .accessibilityActions {
+                                if !message.isDeleted {
+                                    Button("Reply") { replyingToMessage = message }
+                                }
                             }
                         }
                     }
