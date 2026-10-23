@@ -44,12 +44,12 @@
 
 ---
 
-### Task C0: 工作區
+### Task 0: 工作區
 
 - [ ] 在 repo 根 `git worktree add .worktrees/peer-drop-c -b feat/project-c docs/project-c-notes-threads`；複製被忽略的 `Secrets.xcconfig`（不提交）；`xcodegen generate` 後還原 pbxproj 雜訊。
 - [ ] 跑 Kit `swift test` 與 iOS 全部測試記錄基準（預期只有已知失敗）。無程式碼變更不需 commit。
 
-### Task C1: 能力旗標、訊息型別、信封來源
+### Task 1: 能力旗標、訊息型別、信封來源
 
 **Files:**
 - Modify: `PeerDropKit/Sources/PeerDropSecurity/PeerIdentity.swift`、`PeerDropKit/Sources/PeerDropProtocol/MessageType.swift`、`PeerDropProtocol/PeerMessage.swift`、`PeerDropCore/PeerConnection.swift`、`PeerDropCore/ConnectionManager.swift`
@@ -75,7 +75,7 @@
 - [ ] **Step 4:** Kit `swift test` 全部（僅既有失敗）；iOS 與 Mac 建置通過（`PeerIdentity` 被兩邊共用）。
 - [ ] **Step 5:** commit `feat: notes-exchange capability flag, message type and envelope-origin plumbing`
 
-### Task C2: TrustedContact 帳號綁定
+### Task 2: TrustedContact 帳號綁定
 
 **Files:**
 - Modify: `PeerDropKit/Sources/PeerDropSecurity/TrustedContact.swift`、`TrustedContactStore.swift`
@@ -97,7 +97,7 @@
 - [ ] **Step 4:** `swift test --filter TrustedContact` 全過，再跑全部。
 - [ ] **Step 5:** commit `feat: unique account binding and pending binding on TrustedContact`
 
-### Task C3: 交換狀態機、守門與簽章（純函式）
+### Task 3: 交換狀態機、守門與簽章（純函式）
 
 **Files:**
 - Create: `PeerDropKit/Sources/PeerDropCore/NotesExchange/NotesExchangeSession.swift`、`NotesExchangeGate.swift`、`NotesExchangeCrypto.swift`
@@ -119,7 +119,7 @@
 - [ ] **Step 4:** `swift test --filter NotesExchange` 全過。
 - [ ] **Step 5:** commit `feat: notes-exchange session state machine, gate and reveal signature`
 
-### Task C4: CM 整合（收發、驗證、綁定、待驗證）
+### Task 4: CM 整合（收發、驗證、綁定、待驗證）
 
 **Files:**
 - Create: `PeerDropKit/Sources/PeerDropCore/NotesExchange/ConnectionManager+NotesExchange.swift`
@@ -149,7 +149,7 @@
 - [ ] **Step 4:** Kit 全部測試；iOS／Mac 建置。
 - [ ] **Step 5:** commit `feat: notes-exchange over the secure local channel with verified account binding`
 
-### Task C5: 朋友綁定解析、寄信模式、紙條查詢
+### Task 5: 朋友綁定解析、寄信模式、紙條查詢
 
 **Files:**
 - Create: `PeerDropKit/Sources/PeerDropCore/FriendBinding.swift`、`PeerDropCore/ThreadTransport.swift`
@@ -169,7 +169,7 @@
 - [ ] **Step 4:** Kit 全部測試；既有 `NotesStoreTests` 全過。
 - [ ] **Step 5:** commit `feat: friend binding resolver, thread transport decision and bound-note queries`
 
-### Task C6: 本機待寄清單與寄送服務
+### Task 6: 本機待寄清單與寄送服務
 
 **Files:**
 - Create: `PeerDropKit/Sources/PeerDropNotes/NoteOutboxStore.swift`、`PeerDropNotes/NoteOutboxSender.swift`
@@ -188,7 +188,7 @@
 - [ ] **Step 2:** 跑測試確認失敗。 **Step 3:** 實作。 **Step 4:** Kit 全部測試。
 - [ ] **Step 5:** commit `feat: encrypted local outbox for notes sent from friend threads`
 
-### Task C7: 對話串合併（純邏輯）與對話摘要
+### Task 7: 對話串合併（純邏輯）與對話摘要
 
 **Files:**
 - Create: `PeerDropKit/Sources/PeerDropCore/ThreadItem.swift`
@@ -207,7 +207,7 @@
 - [ ] **Step 2–4:** 紅→綠→Kit 全部測試。
 - [ ] **Step 5:** commit `feat: thread item merge and note-aware conversation summaries`
 
-### Task C8: ChatView 整合（對話串、輸入框模式、交換按鈕）
+### Task 8: ChatView 整合（對話串、輸入框模式、交換按鈕）
 
 **Files:**
 - Create: `PeerDrop/UI/Chat/NoteBubbleView.swift`、`PeerDrop/UI/Chat/ExchangeNotesButton.swift`、`PeerDrop/UI/Chat/ThreadModel.swift`（`@MainActor ObservableObject`，持有合併後的 `[ThreadItem]`，依 `chatManager`／`notesStore`／outbox／`trustedContactStore` 變更於 main 上節流重建，**不在 `body` 內逐列計算**）
@@ -230,7 +230,7 @@
 - [ ] **Step 4:** iOS 全部單元測試；iOS 與 Mac 建置；模擬器（SCREENSHOT_MODE 暫時 harness，不提交）截圖：live、紙條可寄、鎖定、等待對方、已綁定、含紙條氣泡的對話串，淺色與夜間，最大字級；如無法目視請明說。
 - [ ] **Step 5:** commit `feat: merged notes thread, transport-aware composer and exchange button in chat`
 
-### Task C9: 對話清單、紙條信箱、徽章、推播路由
+### Task 9: 對話清單、紙條信箱、徽章、推播路由
 
 **Files:**
 - Modify: `PeerDrop/UI/Conversations/ConversationsTab.swift`、`ConversationsLogic.swift`、`ConversationsTabContent.swift`、`PeerDrop/UI/Notes/NotesInboxView.swift`、`PeerDrop/UI/ContentView.swift`、`PeerDropMac/Views/MacContentView.swift`、`MacDetailRouter.swift`
@@ -246,7 +246,7 @@
 - [ ] **Step 2–4:** 紅→綠→iOS 全部單元測試；iOS 與 Mac 建置。
 - [ ] **Step 5:** commit `feat: fold bound notes into conversations list, inbox filter and push routing`
 
-### Task C10: 相容與端對端驗證、在地化稽核、PR 說明
+### Task 10: 相容與端對端驗證、在地化稽核、PR 說明
 
 **Files:** 腳本與文件；除補缺的字串外不新增功能。
 
