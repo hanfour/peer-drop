@@ -17,7 +17,7 @@ struct MessageBubbleShape: Shape {
         let h = rect.height
         let r = cornerRadius
         // The tail-side bottom corner gets a tighter radius
-        let tailR: CGFloat = 2
+        let tailR: CGFloat = 6
 
         var path = Path()
 
@@ -125,28 +125,28 @@ struct ChatBubbleView: View {
                             Text("Message deleted")
                                 .italic()
                         }
-                        .font(.body)
-                        .foregroundStyle(message.isOutgoing ? .white.opacity(0.6) : .secondary)
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(textColor.opacity(0.6))
                     } else if message.isMedia {
                         mediaContent
                     } else {
                         Text(message.text ?? "")
-                            .font(.body)
-                            .foregroundStyle(message.isOutgoing ? .white : .primary)
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(textColor)
                     }
 
                     // Timestamp + edited label + status inline
                     HStack(spacing: 3) {
                         if message.editedAt != nil {
                             Text("edited")
-                                .font(.system(size: 10))
+                                .font(.system(size: 10, design: .rounded))
                                 .italic()
-                                .foregroundStyle(message.isOutgoing ? .white.opacity(0.5) : .secondary)
+                                .foregroundStyle(textColor.opacity(0.6))
                         }
 
                         Text(message.timestamp, style: .time)
-                            .font(.system(size: 11))
-                            .foregroundStyle(message.isOutgoing ? .white.opacity(0.65) : .secondary)
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(textColor.opacity(0.7))
 
                         if message.isOutgoing {
                             statusView
@@ -157,6 +157,12 @@ struct ChatBubbleView: View {
                 .padding(.vertical, 7)
                 .background(bubbleColor)
                 .clipShape(MessageBubbleShape(isOutgoing: message.isOutgoing))
+                .overlay {
+                    if !message.isOutgoing {
+                        MessageBubbleShape(isOutgoing: false)
+                            .stroke(PaperTheme.color(.border), lineWidth: 1)
+                    }
+                }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(bubbleAccessibilityLabel)
                 .accessibilityHint("Long press to react")
@@ -261,23 +267,23 @@ struct ChatBubbleView: View {
     private var replyPreview: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(message.isOutgoing ? Color.white.opacity(0.5) : Color.blue)
+                .fill(PaperTheme.color(.quoteBar))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(replyToSenderDisplayName)
-                    .font(.caption.bold())
-                    .foregroundStyle(message.isOutgoing ? .white : .blue)
+                    .font(.system(.caption, design: .rounded).bold())
+                    .foregroundStyle(textColor)
 
                 Text(message.replyToText ?? "")
-                    .font(.caption)
-                    .foregroundStyle(message.isOutgoing ? .white.opacity(0.8) : .secondary)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(textColor.opacity(0.8))
                     .lineLimit(2)
             }
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
-        .background(message.isOutgoing ? Color.white.opacity(0.15) : Color.peerDropFillTertiary)
+        .background(message.isOutgoing ? PaperTheme.color(.outgoingText).opacity(0.08) : PaperTheme.color(.border))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.bottom, 4)
     }
@@ -291,8 +297,12 @@ struct ChatBubbleView: View {
 
     // MARK: - Bubble color
 
+    private var textColor: Color {
+        PaperTheme.color(message.isOutgoing ? .outgoingText : .incomingText)
+    }
+
     private var bubbleColor: Color {
-        message.isOutgoing ? Color(red: 0.21, green: 0.78, blue: 0.35) : Color.peerDropFillSecondary
+        PaperTheme.color(message.isOutgoing ? .outgoingBubble : .incomingBubble)
     }
 
     // MARK: - Status view
@@ -307,25 +317,25 @@ struct ChatBubbleView: View {
         case .sent:
             Image(systemName: "checkmark")
                 .font(.system(size: 9))
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
         case .delivered:
             HStack(spacing: -4) {
                 Image(systemName: "checkmark")
                 Image(systemName: "checkmark")
             }
             .font(.system(size: 9))
-            .foregroundStyle(.white.opacity(0.65))
+            .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
         case .read:
             HStack(spacing: -4) {
                 Image(systemName: "checkmark")
                 Image(systemName: "checkmark")
             }
             .font(.system(size: 9))
-            .foregroundStyle(.cyan)
+            .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(.red)
+                .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
         }
     }
 
@@ -374,7 +384,7 @@ struct ChatBubbleView: View {
             } else {
                 Label(message.fileName ?? "Image", systemImage: "photo")
                     .font(.subheadline)
-                    .foregroundStyle(message.isOutgoing ? .white : .primary)
+                    .foregroundStyle(textColor)
             }
         }
         .contentShape(Rectangle())
@@ -421,7 +431,7 @@ struct ChatBubbleView: View {
             } label: {
                 Image(systemName: isVoicePlaying ? "pause.fill" : "play.fill")
                     .font(.body)
-                    .foregroundStyle(message.isOutgoing ? .white : .primary)
+                    .foregroundStyle(textColor)
             }
             .accessibilityLabel(isVoicePlaying ? "Pause voice message" : "Play voice message")
 
@@ -436,8 +446,8 @@ struct ChatBubbleView: View {
                         RoundedRectangle(cornerRadius: 1)
                             .fill(
                                 isPlayed
-                                    ? (message.isOutgoing ? Color.white : Color.blue)
-                                    : (message.isOutgoing ? Color.white.opacity(0.4) : Color.primary.opacity(0.3))
+                                    ? PaperTheme.color(.quoteBar)
+                                    : textColor.opacity(0.3)
                             )
                             .frame(width: 2, height: waveformHeight(for: i))
                     }
@@ -449,12 +459,12 @@ struct ChatBubbleView: View {
             if isVoicePlaying {
                 Text(formatDuration(voicePlayer.currentTime))
                     .font(.caption)
-                    .foregroundStyle(message.isOutgoing ? .white.opacity(0.7) : .secondary)
+                    .foregroundStyle(textColor.opacity(0.7))
                     .monospacedDigit()
             } else if let duration = message.duration {
                 Text(formatDuration(duration))
                     .font(.caption)
-                    .foregroundStyle(message.isOutgoing ? .white.opacity(0.7) : .secondary)
+                    .foregroundStyle(textColor.opacity(0.7))
             }
         }
         .frame(minWidth: 160)
@@ -494,18 +504,18 @@ struct ChatBubbleView: View {
         HStack(spacing: 8) {
             Image(systemName: "doc.fill")
                 .font(.title3)
-                .foregroundStyle(message.isOutgoing ? .white.opacity(0.8) : .blue)
+                .foregroundStyle(textColor.opacity(0.8))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.fileName ?? "File")
                     .font(.subheadline)
-                    .foregroundStyle(message.isOutgoing ? .white : .primary)
+                    .foregroundStyle(textColor)
                     .lineLimit(1)
 
                 if let size = message.fileSize {
                     Text(formatFileSize(size))
                         .font(.caption2)
-                        .foregroundStyle(message.isOutgoing ? .white.opacity(0.7) : .secondary)
+                        .foregroundStyle(textColor.opacity(0.7))
                 }
             }
         }
