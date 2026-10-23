@@ -83,13 +83,13 @@ final class ConversationSummaryTests: XCTestCase {
     @MainActor
     func testGroupSummary() {
         let m = ChatManager(rootDirectory: root)
-        _ = m.saveGroupOutgoing(text: "hi group", groupID: "g", localName: "Me")
-        m.incrementGroupUnread(groupID: "g")
-        let s = m.summary(forGroup: "g")
+        let gid = "g-\(UUID().uuidString)" // unread counts persist in UserDefaults
+        _ = m.saveGroupOutgoing(text: "hi group", groupID: gid, localName: "Me")
+        m.incrementGroupUnread(groupID: gid)
+        let s = m.summary(forGroup: gid)
         XCTAssertTrue(s.isGroup)
         XCTAssertEqual(s.lastMessage?.text, "hi group")
         XCTAssertEqual(s.unread, 1)
-        m.markGroupAsRead(groupID: "g")
     }
 
     func testPreviewTexts() {
@@ -107,5 +107,42 @@ final class ConversationSummaryTests: XCTestCase {
         XCTAssertEqual(ConversationPreview.text(for: msg(media: "file", file: "doc.pdf")), "📄 doc.pdf")
         XCTAssertEqual(ConversationPreview.text(for: msg(media: "video", file: "m.mov")), "🎞 Video")
         XCTAssertEqual(ConversationPreview.text(for: msg(media: "weird")), "Attachment")
+    }
+
+    @MainActor
+    func testSameSizeRewriteRefreshesSummary() {
+        let m = ChatManager(rootDirectory: root)
+        let msg = m.saveOutgoing(text: "aaa", peerID: "p", peerName: "P")
+        m.flushAllPendingPersists()
+        let at = Date(timeIntervalSince1970: 1_700_000_000)
+        m.applyEdit(messageID: msg.id, newText: "bbb", editedAt: at, peerID: "p", origin: .localUser)
+        m.flushAllPendingPersists()
+        XCTAssertEqual(m.summary(forPeer: "p").lastMessage?.text, "bbb")
+        m.applyEdit(messageID: msg.id, newText: "ccc", editedAt: at, peerID: "p", origin: .localUser)
+        m.flushAllPendingPersists()
+        XCTAssertEqual(m.summary(forPeer: "p").lastMessage?.text, "ccc")
+    }
+
+    @MainActor
+    func testDeleteClearsCacheImmediately() {
+        let m = ChatManager(rootDirectory: root)
+        _ = m.saveOutgoing(text: "a", peerID: "p", peerName: "P")
+        m.flushAllPendingPersists()
+        _ = m.summary(forPeer: "p")
+        m.deleteMessages(forPeer: "p")
+        XCTAssertNil(m.summary(forPeer: "p").lastMessage)
+        _ = m.saveGroupOutgoing(text: "g", groupID: "g", localName: "Me")
+        XCTAssertNotNil(m.summary(forGroup: "g").lastMessage)
+        m.deleteGroupMessages(forGroup: "g")
+        XCTAssertNil(m.summary(forGroup: "g").lastMessage)
+    }
+
+    @MainActor
+    func testCorruptFileYieldsNilLast() throws {
+        let m = ChatManager(rootDirectory: root)
+        let dir = root.appendingPathComponent("ChatData/messages")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("not encrypted garbage".utf8).write(to: dir.appendingPathComponent("bad.json"))
+        XCTAssertNil(m.summary(forPeer: "bad").lastMessage)
     }
 }
