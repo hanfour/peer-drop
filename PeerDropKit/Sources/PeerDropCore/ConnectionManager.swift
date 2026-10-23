@@ -1369,9 +1369,14 @@ public final class ConnectionManager: ObservableObject {
     }
 
     /// Attempt to reconnect to a specific peer.
-    public func reconnect(to peerID: String) {
+    /// - Returns: whether there was anything to try — the peer is currently
+    ///   discovered, or a stored record has an address. `false` means the call
+    ///   did nothing, so the caller should tell the user.
+    @discardableResult
+    public func reconnect(to peerID: String) -> Bool {
         if let peer = discoveredPeers.first(where: { $0.id == peerID }) {
             requestConnection(to: peer)
+            return true
         } else if let record = deviceStore.records.first(where: { $0.id == peerID }),
                   let host = record.host, let port = record.port {
             addManualPeer(host: host, port: port, name: record.displayName)
@@ -1380,7 +1385,9 @@ public final class ConnectionManager: ObservableObject {
                     self?.requestConnection(to: peer)
                 }
             }
+            return true
         }
+        return false
     }
 
     /// Whether a reconnect is possible (we have a last-connected peer).
