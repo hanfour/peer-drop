@@ -76,6 +76,10 @@ public final class TrustedContactStore: ObservableObject {
         contacts.first { $0.mailboxId == mailboxId }
     }
 
+    public func find(byAccountId accountId: String) -> TrustedContact? {
+        contacts.first { $0.accountId == accountId }
+    }
+
     // MARK: - Trust Management
 
     public func updateTrustLevel(for id: UUID, to level: TrustLevel) {
@@ -103,6 +107,35 @@ public final class TrustedContactStore: ObservableObject {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         guard contacts[index].peerProtocolVersion != version else { return }
         contacts[index].peerProtocolVersion = version
+        scheduleSave()
+    }
+
+    /// Bind (or unbind with `nil`) an account to a contact. An account maps to
+    /// at most one contact, so the same `accountId` is cleared everywhere else.
+    /// Any pending binding on this contact is dropped.
+    public func setAccountBinding(for id: UUID, accountId: String?) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        if let accountId {
+            for i in contacts.indices where i != index && contacts[i].accountId == accountId {
+                contacts[i].accountId = nil
+            }
+        }
+        contacts[index].accountId = accountId
+        contacts[index].pendingAccountBinding = nil
+        scheduleSave()
+    }
+
+    public func setPendingBinding(for id: UUID, _ binding: PendingAccountBinding?) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        contacts[index].pendingAccountBinding = binding
+        scheduleSave()
+    }
+
+    /// Fills the device ID only when none is recorded yet.
+    public func setDeviceId(for id: UUID, _ deviceId: String) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        guard contacts[index].deviceId == nil else { return }
+        contacts[index].deviceId = deviceId
         scheduleSave()
     }
 
@@ -146,6 +179,9 @@ public final class TrustedContactStore: ObservableObject {
             contacts[index].keyHistory.removeFirst(overflow)
         }
         contacts[index].identityPublicKey = newKey
+        // A new identity key invalidates any account binding made for the old one.
+        contacts[index].accountId = nil
+        contacts[index].pendingAccountBinding = nil
         contacts[index].trustLevel = trustLevel
         if trustLevel != .verified {
             contacts[index].lastVerified = nil
