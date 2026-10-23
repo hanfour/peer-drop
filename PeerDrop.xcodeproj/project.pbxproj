@@ -17,6 +17,7 @@
 		086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09411CC81953144963CB18 /* PeerRowView.swift */; };
 		09F596F0C3DC648623D8746B /* EmptyChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F51B1652C885D69B3C96C7 /* EmptyChatView.swift */; };
 		0B77F471E5A114C808B503AA /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5328488B4605628BD3820F15 /* PeerDropCore */; };
+		0BD77025380F860010859AA8 /* PresenceBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EF0292C510AFC1BDB066E3 /* PresenceBadge.swift */; };
 		0D7CB122177AFADF9F2A6743 /* TransferProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C2478F20C10D5FB383E756 /* TransferProgressView.swift */; };
 		0E4D9CA8921067C590CDCCC8 /* RemoteInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE188ABC5162584F8AF6DA /* RemoteInviteView.swift */; };
 		0EAF35A4699EC1A016D27DAC /* DiaryJoinSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A29C2179049E0ADD341ABFE /* DiaryJoinSheet.swift */; };
@@ -80,6 +81,7 @@
 		3B8C23FCE45A7BAA19CA5CD6 /* BackupRecordListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E76CE04F40C6495A70F9E11 /* BackupRecordListView.swift */; };
 		3BA9E96946522808CDFBC770 /* CryptoHardeningBannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D85E471A8F4B9D788A277219 /* CryptoHardeningBannerTests.swift */; };
 		3BD6BDEACD112B57E75D5A84 /* DeviceRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1240CE114D649D9D23131928 /* DeviceRecordTests.swift */; };
+		3D24CE0DB76AAFA92D88CD8B /* PresenceBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EF0292C510AFC1BDB066E3 /* PresenceBadge.swift */; };
 		3F7C39D4719DCB9C662022DA /* CrossDeviceFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EEFD7B3BD8A478DB9668CA /* CrossDeviceFeatureTests.swift */; };
 		3FC7000ACFFA0923AA0AE460 /* NearbyTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505238DF5946BC1E6E39B70B /* NearbyTab.swift */; };
 		402668C766BED0AC8C7E4529 /* E2EIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613B66E2077223EA0560E336 /* E2EIntegrationTests.swift */; };
@@ -244,6 +246,7 @@
 		BB5FD2A5EA9911A111B6B2AB /* ChatAvatarSlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43D2736FB31245BEE3BF1AC /* ChatAvatarSlot.swift */; };
 		BB752D0F39B8A1562D530106 /* MacDeepLinkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C47C9BE5B30B181084B1052C /* MacDeepLinkHandler.swift */; };
 		BC6156CC6CA44233F862B5A6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F29D2B63FA143EDF5EF0957C /* PrivacyInfo.xcprivacy */; };
+		BC7717C17F90CCAE772B53D8 /* PeerAvatarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C685D155048666F8DC88E61 /* PeerAvatarTests.swift */; };
 		BCA7CC236E57C9DA467866E7 /* LocalFirstTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1D13034674D26767D38013 /* LocalFirstTrustTests.swift */; };
 		BCACD17C59E487EF6F7A581F /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F97E28AE05420CF10F681A8 /* ToastView.swift */; };
 		BDC78AF7F36123EE19BFBE0F /* PeerDropCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D956D3F0B546F8A036FC44C /* PeerDropCore */; };
@@ -399,6 +402,7 @@
 		190A50E1CBA99B173EC8B908 /* SessionKeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKeyManagerTests.swift; sourceTree = "<group>"; };
 		1947BD8F11846069B3EA25CC /* SecurityDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityDashboardView.swift; sourceTree = "<group>"; };
 		1AA2A4797AC8095B6EE63842 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
+		1C685D155048666F8DC88E61 /* PeerAvatarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerAvatarTests.swift; sourceTree = "<group>"; };
 		1D0644790BDA63B2309997A1 /* DiscoveryE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryE2ETests.swift; sourceTree = "<group>"; };
 		1DD1035C987434358B87AFCD /* DisabledFeatureUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledFeatureUXTests.swift; sourceTree = "<group>"; };
 		1E06F5B8C58FBC0715B3B89B /* InviteAcceptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteAcceptView.swift; sourceTree = "<group>"; };
@@ -474,7 +478,6 @@
 		6B34AD557F41611401810878 /* DeviceIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityTests.swift; sourceTree = "<group>"; };
 		6DCF5FDE27FB91B934E30E93 /* RelayAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthenticatorTests.swift; sourceTree = "<group>"; };
 		6F115476911593E865D32B46 /* PeerDrop.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PeerDrop.entitlements; sourceTree = "<group>"; };
-		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManagerTests.swift; sourceTree = "<group>"; };
 		712CCBDE5A63978DD474D214 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		715D93D38328F7F41A2BB8DB /* GroupEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditorView.swift; sourceTree = "<group>"; };
@@ -522,6 +525,7 @@
 		942E08C41652EB6AEC201A49 /* MacCallProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCallProvider.swift; sourceTree = "<group>"; };
 		94A0AF4FEF462DB76CC4FD9C /* ProofOfWorkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofOfWorkTests.swift; sourceTree = "<group>"; };
 		94BD192C79B059E535261B80 /* MessageReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReceiptTests.swift; sourceTree = "<group>"; };
+		98C6DB39D83BB1894C674D7C /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		99B71A06E3C254432BBCF700 /* TipJarManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarManagerTests.swift; sourceTree = "<group>"; };
 		9A29C2179049E0ADD341ABFE /* DiaryJoinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryJoinSheet.swift; sourceTree = "<group>"; };
 		9B1DA20B516AD2B99CD2E205 /* MacRemoteNotificationRegistering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRemoteNotificationRegistering.swift; sourceTree = "<group>"; };
@@ -536,6 +540,7 @@
 		A3DEBE03E5EDAD5B8CA5C7DC /* TipJarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarManager.swift; sourceTree = "<group>"; };
 		A4C80BFCC4EAF2CB326660AA /* DataChannelTransportReassemblyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelTransportReassemblyTests.swift; sourceTree = "<group>"; };
 		A4DA8BF1A5C5506A039A44DE /* MediaPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewView.swift; sourceTree = "<group>"; };
+		A4EF0292C510AFC1BDB066E3 /* PresenceBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceBadge.swift; sourceTree = "<group>"; };
 		A510B35484AB026C531FBA38 /* Ringtone.caf */ = {isa = PBXFileReference; path = Ringtone.caf; sourceTree = "<group>"; };
 		A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashVerifierTests.swift; sourceTree = "<group>"; };
 		A58E46F49381937D21F420B9 /* TailnetPeerEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetPeerEntryTests.swift; sourceTree = "<group>"; };
@@ -673,7 +678,7 @@
 			isa = PBXGroup;
 			children = (
 				A8062E16F091E8B75C5ED172 /* Packages */,
-				9EC0E908E1A38EE0458CEC1B /* peer-drop */,
+				CD95FCFBFDB5E57222475BC2 /* peer-drop-ui */,
 				55E7323601F0EA90C2773FDC /* PeerDrop */,
 				5846F184FFC38A0FC4C80099 /* PeerDropMac */,
 				27C871958EB5E8E427248037 /* PeerDropMacUITests */,
@@ -804,6 +809,7 @@
 				043E7D352DA50757FD403C6C /* PairingPayloadTests.swift */,
 				9B42F6619B2D7FEFA7935D2E /* PaperThemeTests.swift */,
 				906268CA81FDDD73DD036FE6 /* PeerAvatarPaletteTests.swift */,
+				1C685D155048666F8DC88E61 /* PeerAvatarTests.swift */,
 				8CF1B25E08410F483EFA7103 /* PeerConnectionSecureChannelTests.swift */,
 				220095737CDEF280F66E1649 /* PeerIdentitySecurityTests.swift */,
 				46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */,
@@ -903,6 +909,7 @@
 				78D7C0916E3A7FFA6ED0CD4E /* PeerAvatar.swift */,
 				B6E1809532A651DA46008F31 /* PeerGridItemView.swift */,
 				B390D065DDE669E50F90FCAA /* PlatformColors.swift */,
+				A4EF0292C510AFC1BDB066E3 /* PresenceBadge.swift */,
 				4E541AC353B141C1ABC8F38B /* StatusBadge.swift */,
 				8522C558C3B5DDC867FCE801 /* StatusToastView.swift */,
 				0F97E28AE05420CF10F681A8 /* ToastView.swift */,
@@ -1073,15 +1080,6 @@
 			path = Discovery;
 			sourceTree = "<group>";
 		};
-		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
-			isa = PBXGroup;
-			children = (
-				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
-			);
-			name = "peer-drop";
-			path = .;
-			sourceTree = "<group>";
-		};
 		A1A520854D812BF198400449 /* Purchase */ = {
 			isa = PBXGroup;
 			children = (
@@ -1155,6 +1153,15 @@
 				A7E45AC7B93E04597FEC2593 /* PeerDropUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CD95FCFBFDB5E57222475BC2 /* peer-drop-ui */ = {
+			isa = PBXGroup;
+			children = (
+				98C6DB39D83BB1894C674D7C /* Secrets.xcconfig */,
+			);
+			name = "peer-drop-ui";
+			path = .;
 			sourceTree = "<group>";
 		};
 		CE49B580FF5FD25E8461F508 /* Helpers */ = {
@@ -1523,6 +1530,7 @@
 				EC619EE7C1A8D81571523362 /* PairingPayloadTests.swift in Sources */,
 				D729754BE2441D8EC6EF8319 /* PaperThemeTests.swift in Sources */,
 				691AB3BAA3DE965DF78EAA52 /* PeerAvatarPaletteTests.swift in Sources */,
+				BC7717C17F90CCAE772B53D8 /* PeerAvatarTests.swift in Sources */,
 				27538539E3C9506E49455EF5 /* PeerConnectionSecureChannelTests.swift in Sources */,
 				06528AA9160E9CF2F6DC7F90 /* PeerIdentitySecurityTests.swift in Sources */,
 				FF6F383897F52F459CB1893F /* PeerMessageTests.swift in Sources */,
@@ -1634,6 +1642,7 @@
 				FA86F407E38041676D1C7D84 /* PeerGridItemView.swift in Sources */,
 				086A26B7FBCA6689A8CFBEFA /* PeerRowView.swift in Sources */,
 				EE7176B36A615CD6A999D9E8 /* PlatformColors.swift in Sources */,
+				0BD77025380F860010859AA8 /* PresenceBadge.swift in Sources */,
 				A26D03AAD1A5F03215DC0DF0 /* PushStatusRow.swift in Sources */,
 				EE3FDCDE1B20A0027BC311E5 /* ReactionPickerView.swift in Sources */,
 				85804F312615EC7ECE8E13E2 /* RelayConnectView.swift in Sources */,
@@ -1748,6 +1757,7 @@
 				844CF854524B7EDA238BF50C /* PeerGridItemView.swift in Sources */,
 				C8B2A8F25C866B521585A1B8 /* PeerRowView.swift in Sources */,
 				CCC5D14D0FEA8FA169D20D9B /* PlatformColors.swift in Sources */,
+				3D24CE0DB76AAFA92D88CD8B /* PresenceBadge.swift in Sources */,
 				25C4BA2BA66BF68D6A3CF6F8 /* PushStatusRow.swift in Sources */,
 				1CC43871988FF017A6346B9C /* ReactionPickerView.swift in Sources */,
 				A6F69BC7EF128E429BE68495 /* RelayConnectView.swift in Sources */,
@@ -1882,7 +1892,7 @@
 		};
 		67C046C3A3E9A839F9155B26 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
+			baseConfigurationReference = 98C6DB39D83BB1894C674D7C /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "PeerDropMac/App/PeerDrop-Mac.entitlements";
@@ -1929,7 +1939,7 @@
 		};
 		80EB7FBA76991A74CA5A81F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
+			baseConfigurationReference = 98C6DB39D83BB1894C674D7C /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -2094,7 +2104,7 @@
 		};
 		F2D6CAD8F28615F8F8BA5477 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 71060D2244B026D50B454D62 /* Secrets.xcconfig */;
+			baseConfigurationReference = 98C6DB39D83BB1894C674D7C /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "PeerDropMac/App/PeerDrop-Mac.entitlements";
