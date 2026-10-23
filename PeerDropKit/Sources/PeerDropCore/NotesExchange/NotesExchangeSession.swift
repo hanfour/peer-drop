@@ -19,13 +19,20 @@ import PeerDropProtocol
 ///   state change (it does not consume the one-reveal slot).
 /// - Only the first accepted peer reveal is used; later ones are ignored.
 /// - Once the local response is sent or the peer's reveal is accepted the pair
-///   is LOCKED: nonces are frozen, intents/cancels/expiry are ignored.
+///   is LOCKED: nonces are frozen and intents/cancels no longer change it.
+/// - Consent is still required while the pair is locked but my response is not
+///   yet sent (account unknown when the peer's reveal arrived): `userCancelled`,
+///   or my intent reaching `intentLifetime`, withdraws my response for good
+///   (`sendUnavailable`, never a reveal for this pairing). The peer's pending
+///   verification still decides the outcome. A reveal is only ever emitted
+///   while my intent is unexpired relative to the latest `now`.
 /// - Duplicate intents are ignored; the first intent's nonce is kept. An intent
 ///   echoing any nonce we sent in this session is ignored.
 /// - Intents expire `intentLifetime` seconds after they were made/received
 ///   (elapsed ≥ 600 s). Expiry runs at the start of EVERY event that carries
-///   `now` (`userPressed`, `receivedIntent`, `tick`), before pairing, so a late
-///   intent can never pair with an expired one. My expiry emits `sendCancel`;
+///   `now` (`userPressed`, `receivedIntent`, `receivedReveal`,
+///   `localAccountReady`, `tick`), before pairing, so a late intent, reveal or
+///   account can never pair with an expired intent. My expiry emits `sendCancel`;
 ///   the peer's is silent.
 /// - Time only moves forward: the session uses the largest `now` seen so far,
 ///   so a clock that jumps backwards can make an intent expire sooner but never
@@ -34,7 +41,9 @@ import PeerDropProtocol
 /// - `receivedCancel` clears only the peer's intent and never unbinds.
 /// - `userCancelled` withdraws my intent (`sendCancel`), or, when only the peer
 ///   has an intent, declines it locally (no network action): that nonce never
-///   prompts again, but a later press still pairs with it.
+///   prompts again, but a later press still pairs with it. On a locked pair it
+///   withdraws my not-yet-sent response (see above); after my reveal it does
+///   nothing.
 /// - `disconnected` closes the session for good: every later event is ignored,
 ///   so replays after a disconnect can do nothing.
 /// - `receivedUnavailable` is honoured only once both intents are present and
@@ -48,8 +57,9 @@ import PeerDropProtocol
 /// - Create the session when the connection's exchange becomes possible and
 ///   feed `localAccountReady` IMMEDIATELY (and again whenever the account
 ///   state changes); while it is unknown a completed pair just waits.
-/// - Drive `tick` from monotonic time (see above), e.g. once per second while
-///   any intent is pending.
+/// - Pass the same monotonic `now` with `receivedReveal` and
+///   `localAccountReady` as with intents and ticks. Drive `tick` from it, e.g.
+///   once per second while any intent is pending or a response is owed.
 /// - Re-run `NotesExchangeGate` on the same `PeerConnection` when any exchange
 ///   message is received and right before acting on `.sendReveal`.
 /// - `.sendReveal`: build it with `NotesExchangeCrypto.makeReveal` using this
@@ -101,12 +111,12 @@ public struct NotesExchangeSession: Sendable {
         /// The local user withdrew (my intent) or declined (the peer's intent).
         case userCancelled
         case receivedIntent(nonce: Data, now: Date)
-        case receivedReveal(NotesExchangePayload)
+        case receivedReveal(NotesExchangePayload, now: Date)
         case receivedUnavailable
         case receivedCancel
         /// nil = account not `ready`. Until the first such event the account is
         /// "unknown" and a completed pair waits (no reveal, no unavailable).
-        case localAccountReady(AccountSnapshot?)
+        case localAccountReady(AccountSnapshot?, now: Date)
         /// Result of the CM's handling of a `.verify` action. A pending
         /// directory lookup needs no event (state stays `.verifying`).
         case verificationSucceeded
@@ -119,7 +129,8 @@ public struct NotesExchangeSession: Sendable {
 
         var now: Date? {
             switch self {
-            case let .userPressed(_, now), let .receivedIntent(_, now), let .tick(now): return now
+            case let .userPressed(_, now), let .receivedIntent(_, now), let .tick(now),
+                 let .receivedReveal(_, now), let .localAccountReady(_, now): return now
             default: return nil
             }
         }
@@ -197,7 +208,13 @@ public struct NotesExchangeSession: Sendable {
     }
 
     private mutating func expireIntents(now: Date) -> [Action] {
-        guard isOpen, !isLocked else { return [] }
+        if isLocked {
+            // Intents are frozen, but a response we still owe must not outlive
+            // my intent: consent has lapsed, so withdraw it for good.
+            if myResponse == .none, canStillRespond, myIntentExpired(at: now) { return withdrawMyResponse() }
+            return []
+        }
+        guard isOpen else { return [] }
         var out: [Action] = []
         if let m = myIntent, now.timeIntervalSince(m.at) >= Self.intentLifetime {
             myIntent = nil
@@ -225,7 +242,13 @@ public struct NotesExchangeSession: Sendable {
             return [.sendIntent(nonce: nonce)] + respondIfPaired()
 
         case .userCancelled:
-            guard isOpen, !isLocked else { return [] }
+            // Locked but my response not sent yet (account unknown when the
+            // peer's reveal was accepted): withdraw consent permanently.
+            if isLocked {
+                guard myResponse == .none, canStillRespond else { return [] }
+                return withdrawMyResponse()
+            }
+            guard isOpen else { return [] }
             if myIntent != nil {
                 myIntent = nil
                 return [.sendCancel]
@@ -243,7 +266,7 @@ public struct NotesExchangeSession: Sendable {
             didExpire = false
             return respondIfPaired()
 
-        case let .receivedReveal(payload):
+        case let .receivedReveal(payload, _):
             guard isOpen, let mine = myIntent, let theirs = peerIntent, !peerRevealAccepted,
                   payload.phase == NotesExchangePhase.reveal.rawValue
             else { return [] }
@@ -266,7 +289,7 @@ public struct NotesExchangeSession: Sendable {
             peerIntent = nil
             return []
 
-        case let .localAccountReady(snapshot):
+        case let .localAccountReady(snapshot, _):
             account = snapshot.map(AccountKnowledge.ready) ?? .unavailable
             return respondIfPaired()
 
@@ -306,9 +329,12 @@ public struct NotesExchangeSession: Sendable {
     /// account is known. Unknown account → wait. Allowed after `.bound` so a
     /// late-ready account still reciprocates.
     private mutating func respondIfPaired() -> [Action] {
-        guard !closed, myResponse == .none, terminal == nil || terminal == .bound,
+        guard myResponse == .none, canStillRespond,
               let mine = myIntent, let theirs = peerIntent
         else { return [] }
+        // The only place a reveal is emitted: never on a lapsed intent. Locked
+        // → withdraw for good; unlocked → leave it to expiry (next event).
+        if let now = latestNow, myIntentExpired(at: now) { return isLocked ? withdrawMyResponse() : [] }
         switch account {
         case .unknown:
             return []
@@ -321,6 +347,25 @@ public struct NotesExchangeSession: Sendable {
             return [.sendReveal(account: snapshot,
                                 nonces: NotesExchangePair(mine: mine.nonce, theirs: theirs.nonce))]
         }
+    }
+
+    /// A response can still go out: open, or bound by the peer's reveal.
+    private var canStillRespond: Bool { !closed && (terminal == nil || terminal == .bound) }
+
+    private func myIntentExpired(at now: Date) -> Bool {
+        guard let m = myIntent else { return false }
+        return now.timeIntervalSince(m.at) >= Self.intentLifetime
+    }
+
+    /// Commits `unavailable` as my one response: no reveal is ever sent for
+    /// this pairing. The peer is told so it does not wait (it honours
+    /// `unavailable` because it has not seen my reveal). Any pending
+    /// verification of the peer's reveal is left to the CM, and an existing
+    /// outcome is not overwritten (the pair is locked here, so the peer's
+    /// reveal has already been accepted).
+    private mutating func withdrawMyResponse() -> [Action] {
+        myResponse = .unavailable
+        return [.sendUnavailable]
     }
 
     /// Size/shape checks plus reflection: the role-ordered digest already makes

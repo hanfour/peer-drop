@@ -71,7 +71,7 @@
 - **同一次連線內有效**：斷線時所有 `intent`／`reveal` 狀態清空，不留待處理、不事後補送。
 - **一方沒按**：畫面顯示「等待對方也按下交換」，不洩漏任何資訊；對方走遠即作廢。
 - **對方版本過舊**：按鈕為停用狀態，說明「對方的 App 需要更新才能交換紙條」。
-- **安全要求**：僅在 `secureChannelState == .secured` 且 `pinningVerdict != mismatch` 時允許；`fallbackPlaintext` 一律拒絕。重複的 `intent` 忽略；payload 大小與欄位長度設上限。
+- **安全要求**：僅在 `secureChannelState == .secured` 且 `pinningVerdict` 為 `matched` 或 `firstTrust`（`notChecked` 未評估亦拒絕）時允許；`fallbackPlaintext` 一律拒絕。重複的 `intent` 忽略；payload 大小與欄位長度設上限。
 - **協定版本**維持 v1，不做版本協商（現有也沒有），靠能力旗標與跨版本迴路測試保證相容。
 
 ### 4.2 驗證與綁定

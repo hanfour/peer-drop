@@ -25,7 +25,7 @@ final class NotesExchangeSessionTests: XCTestCase {
 
     private func readySession() -> S {
         var s = S()
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [])
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)), [])
         return s
     }
 
@@ -60,7 +60,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         var all: [S.Action] = []
         all += s.handle(.userPressed(nonce: n(1), now: t0))
         all += s.handle(.receivedIntent(nonce: n(2), now: t0))
-        all += s.handle(.receivedReveal(peerReveal()))
+        all += s.handle(.receivedReveal(peerReveal(), now: t0))
         // Peer re-sends its intent, user taps again, more intents arrive.
         all += s.handle(.receivedIntent(nonce: n(2), now: t0))
         all += s.handle(.userPressed(nonce: n(3), now: t0))
@@ -73,10 +73,10 @@ final class NotesExchangeSessionTests: XCTestCase {
 
     func testRevealWithoutMyIntentIgnored() {
         var s = readySession()
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.state, .idle)
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0)), [.updateState(.peerWantsExchange)])
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [], "unsolicited push while only the PEER pressed")
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [], "unsolicited push while only the PEER pressed")
         XCTAssertEqual(s.state, .peerWantsExchange)
     }
 
@@ -85,10 +85,10 @@ final class NotesExchangeSessionTests: XCTestCase {
         // both intents but we never received theirs: ignore without state change.
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.state, .waitingForPeer)
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())),
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)),
                        [.verify(reveal: peerReveal(), nonces: NotesExchangePair(mine: n(1), theirs: n(2))),
                         .updateState(.verifying)])
     }
@@ -111,7 +111,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
         XCTAssertEqual(s.handle(.disconnected), [.updateState(.idle)])
         XCTAssertEqual(s.state, .idle)
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0)), [])
         XCTAssertEqual(s.handle(.userPressed(nonce: n(5), now: t0)), [])
         XCTAssertEqual(s.handle(.receivedUnavailable), [])
@@ -173,7 +173,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
         XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
         XCTAssertEqual(s.handle(.receivedCancel), [])
         XCTAssertEqual(s.state, .bound)
@@ -188,18 +188,18 @@ final class NotesExchangeSessionTests: XCTestCase {
         XCTAssertEqual(s.handle(.receivedCancel), [])
         XCTAssertEqual(s.state, .exchanging)
         // Nonces stay frozen: the peer's reveal is still verified against n(2).
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())).first,
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)).first,
                        .verify(reveal: peerReveal(), nonces: NotesExchangePair(mine: n(1), theirs: n(2))))
     }
 
     func testLocalAccountUnavailableSendsUnavailable() {
         var s = S()
-        XCTAssertEqual(s.handle(.localAccountReady(nil)), [])
+        XCTAssertEqual(s.handle(.localAccountReady(nil, now: t0)), [])
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0)),
                        [.sendUnavailable, .updateState(.failed(.localAccountUnavailable))])
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [], "never reveal after saying unavailable")
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)), [], "never reveal after saying unavailable")
         XCTAssertEqual(s.handle(.userPressed(nonce: n(3), now: t0)), [])
         XCTAssertEqual(s.state, .failed(.localAccountUnavailable))
     }
@@ -207,7 +207,7 @@ final class NotesExchangeSessionTests: XCTestCase {
     func testAccountBecomesUnavailableBeforePairCompletes() {
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
-        XCTAssertEqual(s.handle(.localAccountReady(nil)), [])
+        XCTAssertEqual(s.handle(.localAccountReady(nil, now: t0)), [])
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0)),
                        [.sendUnavailable, .updateState(.failed(.localAccountUnavailable))])
     }
@@ -216,19 +216,19 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = S()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(2), now: t0)), [.updateState(.exchanging)])
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)),
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)),
                        [.sendReveal(account: myAccount, nonces: NotesExchangePair(mine: n(1), theirs: n(2)))])
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [], "at most one reveal")
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)), [], "at most one reveal")
     }
 
     func testRevealWhileWaitingForMyAccountIsAccepted() {
         var s = S()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())),
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)),
                        [.verify(reveal: peerReveal(), nonces: NotesExchangePair(mine: n(1), theirs: n(2))),
                         .updateState(.verifying)])
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)),
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)),
                        [.sendReveal(account: myAccount, nonces: NotesExchangePair(mine: n(1), theirs: n(2)))])
         XCTAssertEqual(s.state, .verifying)
     }
@@ -238,7 +238,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
         XCTAssertEqual(s.handle(.receivedCancel), [.updateState(.waitingForPeer)])
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [], "peer withdrew before we revealed")
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)), [], "peer withdrew before we revealed")
     }
 
     func testPeerUnavailableEndsExchange() {
@@ -246,7 +246,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
         XCTAssertEqual(s.handle(.receivedUnavailable), [.updateState(.peerUnavailable)])
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.handle(.receivedUnavailable), [])
         XCTAssertEqual(s.handle(.userPressed(nonce: n(3), now: t0)), [])
         XCTAssertEqual(s.state, .peerUnavailable)
@@ -269,14 +269,14 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
         XCTAssertEqual(s.handle(.receivedUnavailable), [.updateState(.peerUnavailable)])
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [], "no reason to reveal to a peer without an account")
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)), [], "no reason to reveal to a peer without an account")
     }
 
     func testUnavailableAfterPeerRevealIgnored() {
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
         XCTAssertEqual(s.handle(.receivedUnavailable), [])
         XCTAssertEqual(s.state, .verifying)
     }
@@ -285,10 +285,10 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())).count, 2)
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(accountId: "OTHER001"))), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)).count, 2)
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(accountId: "OTHER001"), now: t0)), [])
         XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.state, .bound)
     }
 
@@ -298,10 +298,10 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
         XCTAssertEqual(s.handle(.verificationFailed), [.updateState(.failed(.verificationFailed))])
         XCTAssertEqual(s.handle(.verificationSucceeded), [])
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.state, .failed(.verificationFailed))
     }
 
@@ -324,8 +324,8 @@ final class NotesExchangeSessionTests: XCTestCase {
             var s = readySession()
             _ = s.handle(.userPressed(nonce: n(1), now: t0))
             _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-            XCTAssertEqual(s.handle(.receivedReveal(bad)), [.updateState(.failed(.invalidReveal))], "\(bad)")
-            XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+            XCTAssertEqual(s.handle(.receivedReveal(bad, now: t0)), [.updateState(.failed(.invalidReveal))], "\(bad)")
+            XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         }
     }
 
@@ -334,8 +334,8 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
         var p = peerReveal(); p.phase = "intent"
-        XCTAssertEqual(s.handle(.receivedReveal(p)), [])
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())).count, 2)
+        XCTAssertEqual(s.handle(.receivedReveal(p, now: t0)), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)).count, 2)
     }
 
     func testReflectedRevealRejected() {
@@ -346,13 +346,13 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
         let mine = NotesExchangePayload(phase: "reveal", accountId: myAccount.accountId,
                                         signingKey: myAccount.signingKey, signature: Data(repeating: 7, count: 64))
-        XCTAssertEqual(s.handle(.receivedReveal(mine)), [.updateState(.failed(.invalidReveal))])
+        XCTAssertEqual(s.handle(.receivedReveal(mine, now: t0)), [.updateState(.failed(.invalidReveal))])
         var s2 = readySession()
         _ = s2.handle(.userPressed(nonce: n(1), now: t0))
         _ = s2.handle(.receivedIntent(nonce: n(2), now: t0))
         let sameKey = NotesExchangePayload(phase: "reveal", accountId: "PEER0001",
                                            signingKey: myAccount.signingKey, signature: Data(repeating: 7, count: 64))
-        XCTAssertEqual(s2.handle(.receivedReveal(sameKey)), [.updateState(.failed(.invalidReveal))])
+        XCTAssertEqual(s2.handle(.receivedReveal(sameKey, now: t0)), [.updateState(.failed(.invalidReveal))])
     }
 
     func testReflectedIntentNonceIgnored() {
@@ -387,7 +387,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = readySession()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
         _ = s.handle(.verificationSucceeded)
         XCTAssertEqual(s.handle(.userPressed(nonce: n(9), now: t0)), [])
         XCTAssertEqual(s.handle(.receivedIntent(nonce: n(8), now: t0)), [])
@@ -445,11 +445,11 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = S()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
         XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
-        let out = s.handle(.localAccountReady(myAccount))
+        let out = s.handle(.localAccountReady(myAccount, now: t0))
         XCTAssertEqual(out, [.sendReveal(account: myAccount, nonces: NotesExchangePair(mine: n(1), theirs: n(2)))])
-        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount))), 0, "exactly one reveal")
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0))), 0, "exactly one reveal")
         XCTAssertEqual(s.state, .bound)
     }
 
@@ -461,7 +461,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         XCTAssertEqual(s.handle(.localRevealFailed),
                        [.sendUnavailable, .updateState(.failed(.localRevealFailed))])
         XCTAssertEqual(s.handle(.localRevealFailed), [], "reported once")
-        XCTAssertEqual(s.handle(.receivedReveal(peerReveal())), [])
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0)), [])
         XCTAssertEqual(s.state, .failed(.localRevealFailed))
     }
 
@@ -472,7 +472,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         XCTAssertEqual(s.handle(.localRevealFailed), [])
         XCTAssertEqual(s.state, .waitingForPeer)
         var u = S()
-        _ = u.handle(.localAccountReady(nil))
+        _ = u.handle(.localAccountReady(nil, now: t0))
         _ = u.handle(.userPressed(nonce: n(1), now: t0))
         _ = u.handle(.receivedIntent(nonce: n(2), now: t0))
         XCTAssertEqual(u.handle(.localRevealFailed), [], "we sent unavailable, not a reveal")
@@ -482,8 +482,8 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = S()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
-        _ = s.handle(.localAccountReady(myAccount))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
+        _ = s.handle(.localAccountReady(myAccount, now: t0))
         XCTAssertEqual(s.handle(.localRevealFailed), [.sendUnavailable])
         XCTAssertEqual(s.state, .verifying)
         XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
@@ -493,18 +493,18 @@ final class NotesExchangeSessionTests: XCTestCase {
         var s = S()
         _ = s.handle(.userPressed(nonce: n(1), now: t0))
         _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = s.handle(.receivedReveal(peerReveal()))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
         XCTAssertEqual(s.state, .verifying)
-        XCTAssertEqual(s.handle(.localAccountReady(nil)), [.sendUnavailable], "tell the peer, keep verifying")
+        XCTAssertEqual(s.handle(.localAccountReady(nil, now: t0)), [.sendUnavailable], "tell the peer, keep verifying")
         XCTAssertEqual(s.state, .verifying)
-        XCTAssertEqual(s.handle(.localAccountReady(myAccount)), [], "never reveal after unavailable")
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0)), [], "never reveal after unavailable")
         XCTAssertEqual(s.handle(.verificationFailed), [.updateState(.failed(.verificationFailed))])
         var b = S()
         _ = b.handle(.userPressed(nonce: n(1), now: t0))
         _ = b.handle(.receivedIntent(nonce: n(2), now: t0))
-        _ = b.handle(.receivedReveal(peerReveal()))
+        _ = b.handle(.receivedReveal(peerReveal(), now: t0))
         _ = b.handle(.verificationSucceeded)
-        XCTAssertEqual(b.handle(.localAccountReady(nil)), [.sendUnavailable])
+        XCTAssertEqual(b.handle(.localAccountReady(nil, now: t0)), [.sendUnavailable])
         XCTAssertEqual(b.state, .bound, "unavailable never overwrites a binding")
     }
 
@@ -531,6 +531,101 @@ final class NotesExchangeSessionTests: XCTestCase {
                         .updateState(.exchanging)])
     }
 
+    // MARK: - Review fix round 2 (consent after the pair is locked)
+
+    /// Account unknown, both intents, peer reveal accepted (pair locked).
+    private func lockedAwaitingAccount() -> S {
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
+        XCTAssertEqual(s.state, .verifying)
+        return s
+    }
+
+    func testCancelAfterPeerRevealWithdrawsMyResponseForGood() {
+        var s = lockedAwaitingAccount()
+        XCTAssertEqual(s.handle(.userCancelled), [.sendUnavailable], "withdraw consent; peer is told")
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0 + 1))), 0)
+        XCTAssertEqual(s.handle(.userCancelled), [], "withdrawn once")
+        XCTAssertEqual(s.state, .verifying, "pending verification is left to the CM")
+        XCTAssertEqual(s.handle(.verificationSucceeded), [.updateState(.bound)])
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0 + 2))), 0)
+    }
+
+    func testCancelAfterBoundWithdrawsMyResponse() {
+        var s = lockedAwaitingAccount()
+        _ = s.handle(.verificationSucceeded)
+        XCTAssertEqual(s.handle(.userCancelled), [.sendUnavailable])
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0 + 1))), 0)
+        XCTAssertEqual(s.state, .bound)
+    }
+
+    func testCancelAfterMyRevealSentIsIgnored() {
+        var s = readySession()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(s.handle(.userCancelled), [], "nothing left to withdraw")
+    }
+
+    func testLateAccountReadyAfterExpiryDoesNotReveal() {
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        let out = s.handle(.localAccountReady(myAccount, now: t0 + 601))
+        XCTAssertEqual(reveals(out), 0)
+        XCTAssertTrue(out.contains(.sendCancel))
+        XCTAssertEqual(s.state, .expired)
+    }
+
+    func testLateAccountReadyAfterExpiryWhileLockedDoesNotReveal() {
+        var s = lockedAwaitingAccount()
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0 + 601)), [.sendUnavailable])
+        XCTAssertEqual(s.state, .verifying)
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0 + 602))), 0)
+    }
+
+    func testTickAfterExpiryWhileLockedWithdrawsOnce() {
+        var s = lockedAwaitingAccount()
+        XCTAssertEqual(s.handle(.tick(now: t0 + 599)), [])
+        XCTAssertEqual(s.handle(.tick(now: t0 + 600)), [.sendUnavailable])
+        XCTAssertEqual(s.handle(.tick(now: t0 + 700)), [])
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0 + 701))), 0)
+    }
+
+    func testRevealAfterExpiryIsIgnored() {
+        // The reveal's `now` runs expiry first, so it cannot lock an expired pair;
+        // a later account-ready with an earlier clock reading changes nothing.
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(s.handle(.receivedReveal(peerReveal(), now: t0 + 601)),
+                       [.sendCancel, .updateState(.expired)])
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0))), 0)
+        XCTAssertEqual(s.state, .expired)
+    }
+
+    func testIntentStaleOnArrivalNeverReveals() {
+        // Backwards clock: my intent is already ≥ lifetime old against latestNow.
+        var s = readySession()
+        _ = s.handle(.tick(now: t0 + 1_000))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0 + 1_000))
+        XCTAssertEqual(reveals(s.handle(.userPressed(nonce: n(1), now: t0))), 0)
+        XCTAssertEqual(s.handle(.tick(now: t0 + 1_001)), [.sendCancel, .updateState(.peerWantsExchange)])
+    }
+
+    func testAccountReadyWithinLifetimeRevealsExactlyOnce() {
+        var s = S()
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))
+        XCTAssertEqual(s.handle(.localAccountReady(myAccount, now: t0 + 599)),
+                       [.sendReveal(account: myAccount, nonces: NotesExchangePair(mine: n(1), theirs: n(2)))])
+        XCTAssertEqual(reveals(s.handle(.localAccountReady(myAccount, now: t0 + 599))), 0)
+        var l = lockedAwaitingAccount()
+        XCTAssertEqual(reveals(l.handle(.localAccountReady(myAccount, now: t0 + 599))), 1)
+        XCTAssertEqual(reveals(l.handle(.tick(now: t0 + 700))), 0)
+    }
+
     // MARK: - With real crypto
 
     func testReplayFromFreshSessionFailsVerification() throws {
@@ -553,14 +648,14 @@ final class NotesExchangeSessionTests: XCTestCase {
         _ = s1.handle(.userPressed(nonce: n(1), now: t0))
         _ = s1.handle(.receivedIntent(nonce: n(2), now: t0))
         let captured = try peerSigns(NotesExchangePair(mine: n(2), theirs: n(1)))
-        XCTAssertEqual(verifyAction(s1.handle(.receivedReveal(captured))), true)
+        XCTAssertEqual(verifyAction(s1.handle(.receivedReveal(captured, now: t0))), true)
         _ = s1.handle(.disconnected)
 
         // Connection 2: attacker replays the old intent AND reveal; we pressed with a fresh nonce.
         var s2 = readySession()
         _ = s2.handle(.userPressed(nonce: n(3), now: t0))
         _ = s2.handle(.receivedIntent(nonce: n(2), now: t0))
-        XCTAssertEqual(verifyAction(s2.handle(.receivedReveal(captured))), false)
+        XCTAssertEqual(verifyAction(s2.handle(.receivedReveal(captured, now: t0))), false)
     }
 
     func testTwoSessionsAgreeEndToEnd() throws {
@@ -570,7 +665,7 @@ final class NotesExchangeSessionTests: XCTestCase {
         let aAcct = S.AccountSnapshot(accountId: "AAAA0001", signingKey: aSign.publicKey.rawRepresentation)!
         let bAcct = S.AccountSnapshot(accountId: "BBBB0001", signingKey: bSign.publicKey.rawRepresentation)!
         var a = S(), b = S()
-        _ = a.handle(.localAccountReady(aAcct)); _ = b.handle(.localAccountReady(bAcct))
+        _ = a.handle(.localAccountReady(aAcct, now: t0)); _ = b.handle(.localAccountReady(bAcct, now: t0))
         let aOut = a.handle(.userPressed(nonce: n(0xA1), now: t0))
         let bOut = b.handle(.userPressed(nonce: n(0xB1), now: t0))
         guard case let .sendIntent(aNonce) = aOut[0], case let .sendIntent(bNonce) = bOut[0] else { return XCTFail() }
@@ -579,8 +674,8 @@ final class NotesExchangeSessionTests: XCTestCase {
         guard case let .sendReveal(aSnap, aNonces) = aOut2[0], case let .sendReveal(bSnap, bNonces) = bOut2[0] else { return XCTFail() }
         let aReveal = try NotesExchangeCrypto.makeReveal(account: aSnap, handshakeKeys: NotesExchangePair(mine: aKey, theirs: bKey), nonces: aNonces, signer: { try aSign.signature(for: $0) })
         let bReveal = try NotesExchangeCrypto.makeReveal(account: bSnap, handshakeKeys: NotesExchangePair(mine: bKey, theirs: aKey), nonces: bNonces, signer: { try bSign.signature(for: $0) })
-        guard case let .verify(pAtA, nAtA) = a.handle(.receivedReveal(bReveal))[0],
-              case let .verify(pAtB, nAtB) = b.handle(.receivedReveal(aReveal))[0] else { return XCTFail() }
+        guard case let .verify(pAtA, nAtA) = a.handle(.receivedReveal(bReveal, now: t0))[0],
+              case let .verify(pAtB, nAtB) = b.handle(.receivedReveal(aReveal, now: t0))[0] else { return XCTFail() }
         XCTAssertTrue(NotesExchangeCrypto.verifyReveal(payload: pAtA, handshakeKeys: NotesExchangePair(mine: aKey, theirs: bKey), nonces: nAtA))
         XCTAssertTrue(NotesExchangeCrypto.verifyReveal(payload: pAtB, handshakeKeys: NotesExchangePair(mine: bKey, theirs: aKey), nonces: nAtB))
         XCTAssertEqual(pAtA.accountId, "BBBB0001")

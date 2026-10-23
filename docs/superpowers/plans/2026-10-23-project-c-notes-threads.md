@@ -18,7 +18,7 @@
 - **隱私鐵律**：雙方都按下之前，不得傳送任何帳號資訊；`intent` 不含帳號資訊。第一版**不做盲發**。
 - 不改既有儲存格式、既有訊息、伺服器；新增僅限：HELLO 一個可選旗標、一種訊息型別 `notesExchange`、`TrustedContact` 的可選欄位、本機待寄清單。
 - 新 `MessageType` 只有在**雙方都宣告 `supportsNotesExchange`** 時才送；舊版收到未知型別會斷線，所以閘控是硬性要求；`notesExchange` **不得**加入 `unwrappedControlTypes`。
-- 守門條件（缺一不可）：`secureChannelState == .secured`；握手實際對方公鑰（`handshakePeerIdentityKey`）＝ HELLO 自稱公鑰 ＝ 釘選公鑰；`pinningVerdict != mismatch`；本地直連（**非中繼、非 tailnet**）；訊息來源為**加密信封**；明文一律丟棄。
+- 守門條件（缺一不可）：`secureChannelState == .secured`；握手實際對方公鑰（`handshakePeerIdentityKey`）＝ HELLO 自稱公鑰 ＝ 釘選公鑰；`pinningVerdict` 已評估且為 `matched` 或 `firstTrust`（`notChecked`、`mismatch` 皆拒絕）；本地直連（**非中繼、非 tailnet**）；訊息來源為**加密信封**；明文一律丟棄。
 - `reveal` 驗證：`AccountID(raw:)` 嚴格解析；目錄 `entry.accountId.raw == 揭露值`、`entry.identityKey == 握手公鑰`、`entry.signingKey == 揭露的 signingKey`；簽章（Ed25519，signingKey）通過，摘要依角色排序、不做字典序排序：`SHA256("peerdrop-notes-exchange-v1" ‖ accountId(8 bytes utf8) ‖ 揭露者握手公鑰(32) ‖ 驗證者握手公鑰(32) ‖ 揭露者 nonce(32) ‖ 驗證者 nonce(32))`（nonce 來自雙方 `intent`；簽署用 (keys.mine, keys.theirs, nonces.mine, nonces.theirs)，驗證用 (keys.theirs, keys.mine, nonces.theirs, nonces.mine)）；小階 Ed25519 簽章金鑰與全零簽章拒絕。
 - 所有「透過帳號 ID 寄信」都必須斷言 `entry.accountId == 綁定帳號` 且 `entry.identityKey == 釘選公鑰`（目錄會先以 ID 找、再以暱稱找）。
 - 五語系（en、zh-Hant、zh-Hans、ja、ko）；`Localizable.xcstrings` 只用文字插入；非繁中 `needs_review`；新增 Swift 檔後 `xcodegen generate`，並還原 pbxproj 雜訊（根 group 名稱 `peer-drop` id `9EC0E908E1A38EE0458CEC1B`、Secrets.xcconfig ref `71060D2244B026D50B454D62`）；diff 只應新增。
@@ -105,15 +105,15 @@
 
 **Interfaces:**
 - Produces:
-  - `public struct NotesExchangeFacts { isSecured: Bool; handshakeKey: Data?; helloKey: Data?; pinningVerdictIsMismatch: Bool; isLocalDirect: Bool; peerSupportsExchange: Bool; localSupportsExchange: Bool }` 與 `NotesExchangeGate.evaluate(_:) -> NotesExchangeGate.Result`（`allowed` 或 `denied(Reason)`，Reason 涵蓋每個守門條件，供測試與 UI 文案；`handshakeKey == helloKey` 且非空）
+  - `public struct NotesExchangeFacts { isSecured: Bool; handshakeKey: Data?; helloKey: Data?; pinning: NotesExchangeFacts.Pinning /* trusted | notEvaluated | mismatch，由 PinningVerdict 對映 */; isLocalDirect: Bool; peerSupportsExchange: Bool; localSupportsExchange: Bool }` 與 `NotesExchangeGate.evaluate(_:) -> NotesExchangeGate.Result`（`allowed` 或 `denied(Reason)`，Reason 涵蓋每個守門條件，供測試與 UI 文案；`handshakeKey == helloKey` 且非空）
   - `public enum NotesExchangeCrypto`：`static func revealDigest(accountId: String, revealerKey: Data, verifierKey: Data, revealerNonce: Data, verifierNonce: Data) -> Data?`（依角色排序、不排序，固定長度欄位）、`static func makeNonce() -> Data`（32 bytes，可注入）、`static func verifyReveal(payload:, handshakeKeys:, nonces:) -> Bool`（用 `Curve25519.Signing.PublicKey(rawRepresentation:)`）、`sign` 以注入的 `(Data) throws -> Data` 簽名器（生產：`IdentityKeyManager.shared.sign`）
   - `public struct NotesExchangeSession`（值型別）：`enum Event { userPressed(nonce: Data, now: Date), receivedIntent(nonce: Data, now: Date), receivedReveal(NotesExchangePayload), receivedUnavailable, receivedCancel, localAccountReady(AccountSnapshot?) , tick(now: Date), disconnected }`；`enum Action { sendIntent(nonce: Data), sendReveal, sendUnavailable, sendCancel, verify(reveal: NotesExchangePayload, nonces: (mine: Data, theirs: Data)), updateState(UIState) }`；`enum UIState { idle, waitingForPeer, peerWantsExchange, exchanging, verifying, bound, peerUnavailable, expired, failed(Reason) }`；`mutating func handle(_ event: Event) -> [Action]`；`static let intentLifetime: TimeInterval = 600`
   - 規則：兩邊 `intent` 都在才產生 `sendReveal`（若我方帳號不可用則改 `sendUnavailable`）；**只在已有 `myIntent` 時才接受 `reveal`**（否則忽略）；每次連線 `reveal` 最多送一次；重複 `intent` 忽略；`intent` 逾時 600 秒自動 `expired` 並 `sendCancel`；`disconnected` 清空；`cancel` 僅清除對方 intent，不影響已成立的綁定。
 
 - [ ] **Step 1: 寫失敗測試**
   - Session：`testBothPressSendsReveal`、`testSimultaneousPressNoDuplicateReveal`、`testRevealWithoutMyIntentIgnored`、`testDuplicateIntentIgnored`、`testReplayedRevealAfterDisconnectIgnored`、`testIntentExpiresAfter600s`、`testCancelClearsPeerIntentOnly`、`testLocalAccountUnavailableSendsUnavailable`、`testPeerUnavailableEndsExchange`、`testSecondRevealIgnored`。
-  - Gate：每個 `denied` 分支各一測（不在 secured、握手公鑰≠HELLO、HELLO 公鑰缺、mismatch、非本地直連、對方不支援、我方不支援），以及 `allowed`（含 `pinningVerdict == firstTrust` 允許）。
-  - Crypto：`testDigestIsOrderIndependent`（交換雙方順序得到相同摘要）、`testSignatureVerifies`、`testSignatureFailsOnDifferentAccountId`、`testSignatureFailsOnDifferentNonce`（跨連線重放失敗）、`testSignatureFailsOnDifferentHandshakeKey`、`testWrongSizeFieldsRejected`。
+  - Gate：每個 `denied` 分支各一測（不在 secured、握手公鑰≠HELLO、HELLO 公鑰缺、pinning 未評估（`notChecked`）、mismatch、非本地直連、對方不支援、我方不支援），以及 `allowed`（`matched`、`firstTrust` 允許）。
+  - Crypto：依角色排序的測試：`testOwnRevealReflectedBackDoesNotVerify`（反射回簽署者失敗）、`testRevealVerifiesOnlyOnItsOwnConnection`（第三方連線驗證失敗）、正確角色順序可驗證、`testSignatureVerifies`、`testSignatureFailsOnDifferentAccountId`、`testSignatureFailsOnDifferentNonce`（跨連線重放失敗）、`testSignatureFailsOnDifferentHandshakeKey`、`testWrongSizeFieldsRejected`。
 - [ ] **Step 2:** 跑測試確認失敗。
 - [ ] **Step 3:** 實作純函式（不碰 CM、網路或時鐘：時間與隨機值皆注入）。
 - [ ] **Step 4:** `swift test --filter NotesExchange` 全過。
