@@ -134,7 +134,7 @@ struct ChatView: View {
                                 } label: {
                                     Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
                                 }
-                                .tint(PaperTheme.color(.sendButton))
+                                .tint(PaperTheme.color(.tickRead))
                             }
                         }
                     }
@@ -245,13 +245,16 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if os(iOS)
             // Rounded title face; the system navigation bar itself is kept.
+            // (macOS keeps the system window title from navigationTitle.)
             ToolbarItem(placement: .principal) {
                 Text(verbatim: peerName)
                     .font(.system(.headline, design: .rounded))
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
             }
+            #endif
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     showSearch = true
@@ -715,7 +718,7 @@ struct AttachmentMenuSheet: View {
                     HStack(spacing: 16) {
                         Image(systemName: item.icon)
                             .font(.title3)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(PaperTheme.color(.outgoingText))
                             .frame(width: 40, height: 40)
                             .background(item.color)
                             .clipShape(Circle())

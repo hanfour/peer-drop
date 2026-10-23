@@ -42,7 +42,7 @@ struct DecryptFailureBannerView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(PaperTheme.color(.sendButton))
+                    .tint(PaperTheme.color(.tickRead))
                 }
                 .padding(.top, actionRowTopPadding)
             }

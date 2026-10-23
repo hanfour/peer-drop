@@ -52,6 +52,19 @@ final class PaperThemeTests: XCTestCase {
         XCTAssertEqual(PaperTheme.tick(for: .read), .tickRead)
     }
 
+    func testAccentFillGlyphsMeetContrast() {
+        // Attachment icons: outgoingText glyph on quoteBar / outgoingBubble / sendButton fills (>= 3:1).
+        // Verify button + reply swipe: white label on tickRead fill (>= 4.5:1).
+        for dark in [false, true] {
+            for fill in [PaperToken.quoteBar, .outgoingBubble, .sendButton] {
+                let r = PaperPalette.contrastRatio(PaperPalette.hex(.outgoingText, dark: dark), PaperPalette.hex(fill, dark: dark))
+                XCTAssertGreaterThanOrEqual(r, 3.0, "outgoingText on \(fill) dark=\(dark): \(r)")
+            }
+            let w = PaperPalette.contrastRatio(0xFFFFFF, PaperPalette.hex(.tickRead, dark: dark))
+            XCTAssertGreaterThanOrEqual(w, 4.5, "white on tickRead dark=\(dark): \(w)")
+        }
+    }
+
     func testContrastRatioKnownValues() {
         XCTAssertEqual(PaperPalette.contrastRatio(0x000000, 0xFFFFFF), 21.0, accuracy: 0.01)
         XCTAssertEqual(PaperPalette.contrastRatio(0x777777, 0xFFFFFF), 4.48, accuracy: 0.05)
