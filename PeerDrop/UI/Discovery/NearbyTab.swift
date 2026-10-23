@@ -38,7 +38,7 @@ struct NearbyTab: View, PaperThemed {
     /// Nearby is always the live look; children read it through the environment.
     var paperMode: PaperMode { .live }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Binding var selectedTab: Int
+    @Binding var selectedTab: AppTab
     @EnvironmentObject var connectionManager: ConnectionManager
     #if os(macOS)
     // Round 10 audit fix: on Mac, tapping a connected peer needs to
@@ -551,15 +551,14 @@ struct NearbyTab: View, PaperThemed {
         return connectionManager.lastConnectedPeer?.id == peer.id
     }
 
-    /// Cross-platform "open chat" dispatcher. iOS flips the TabView's
-    /// selected index so the existing chat tab focuses the right peer
-    /// (via the iOS ContentView routing). Mac opens a fresh per-peer
-    /// chat WindowGroup defined in PeerDropMacApp.
+    /// Cross-platform "open chat" dispatcher. iOS switches to the Home tab, where
+    /// connected peers and chats live. Mac opens a fresh per-peer chat WindowGroup
+    /// defined in PeerDropMacApp.
     private func openChatWindow(for peerID: String) {
         #if os(macOS)
         openWindow(id: "chat", value: peerID)
         #else
-        selectedTab = 1
+        selectedTab = .home
         #endif
     }
 

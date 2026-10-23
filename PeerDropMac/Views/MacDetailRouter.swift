@@ -30,7 +30,7 @@ struct MacDetailRouter: View {
     // selected index after certain actions. macOS has no tab parent —
     // the sidebar (`MacSidebar`) owns navigation — so we feed a
     // throwaway state slot that nothing observes.
-    @State private var nearbyTabIndex: Int = 0
+    @State private var nearbyTabIndex: AppTab = .nearby
 
     var body: some View {
         switch section {
@@ -52,7 +52,7 @@ struct MacDetailRouter: View {
             }
         case .trusted:
             NavigationStack {
-                LibraryTab()
+                HomeTab()
                     .environmentObject(connectionManager)
             }
         case .relay:

@@ -17,7 +17,11 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     var inboxUnread: Int = 0
     /// Switches to the Home tab (empty-state button; provided by the container).
     var onGoHome: () -> Void = {}
+    /// Incremented by the container to ask for the inbox to be pushed (notification deep link).
+    var inboxRequest: Int = 0
     @ViewBuilder var inbox: () -> Inbox
+    @State private var showInbox = false
+    @State private var handledInboxRequest = 0
 
     @State private var query = ""
     @StateObject private var hub = RefreshHub()
@@ -137,10 +141,19 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         }
         #endif
         .chatTargetDestination()
+        .navigationDestination(isPresented: $showInbox) { inbox() }
+        .onChange(of: inboxRequest) { _ in consumeInboxRequest() }
         .onAppear {
             refreshSummaries()
             bindRefreshHub()
+            consumeInboxRequest()
         }
+    }
+
+    private func consumeInboxRequest() {
+        guard inboxRequest != handledInboxRequest else { return }
+        handledInboxRequest = inboxRequest
+        showInbox = true
     }
 
     // MARK: - Rows
