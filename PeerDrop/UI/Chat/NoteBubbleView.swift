@@ -107,7 +107,7 @@ struct NoteBubbleView: View, PaperThemed {
                 if let line = status.statusText { Text(line) }
             }
             .font(.system(size: 11, design: .rounded))
-            .foregroundStyle(status.isFailed ? PaperTheme.color(.tickFailed, mode: paperMode) : paper(.noteText).opacity(0.75))
+            .foregroundStyle(status.isFailed ? Color.red : paper(.noteText).opacity(0.75))
             if let failureText {
                 Text(failureText)
                     .font(.system(size: 11, design: .rounded))
