@@ -123,7 +123,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
         let nearbyTab = app.tabBars.buttons["Nearby"]
         nearbyTab.tap()
         sleep(1)
-        let connectedTab = app.tabBars.buttons.element(boundBy: 1)
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
 
@@ -622,21 +622,21 @@ final class CrossDeviceFeatureTests: XCTestCase {
         if backBtn.exists { backBtn.tap() }
         sleep(1)
 
-        // Navigate to Library tab (3rd tab, index 2)
-        let libraryTab = app.tabBars.buttons.element(boundBy: 2)
+        // Saved devices live in Home's Friends section (Library tab was merged into Home)
+        let libraryTab = app.tabBars.buttons["Home"]
         libraryTab.tap()
         sleep(1)
 
         takeScreenshot("09-LibraryTab")
 
         // Count device records — should be exactly 1 (no duplicates)
-        let cells = app.cells
+        let cells = app.buttons.matching(identifier: "saved-device-row")
         let cellCount = cells.count
         takeScreenshot("09-LibraryCellCount-\(cellCount)")
         XCTAssertEqual(cellCount, 1, "Library should have exactly 1 device record, not \(cellCount) duplicates")
 
         // Go back to Connected tab for cleanup
-        let connectedTab = app.tabBars.buttons.element(boundBy: 1)
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
 
@@ -705,7 +705,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
         }
 
         // Navigate to Connected tab to check
-        let connectedTab = app.tabBars.buttons.element(boundBy: 1)
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
         if app.staticTexts["File"].exists {

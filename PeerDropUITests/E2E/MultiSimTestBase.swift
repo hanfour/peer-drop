@@ -778,24 +778,31 @@ class E2EAcceptorTestBase: MultiSimTestBase {
 }
 
 extension XCUIApplication {
-    /// The app launches on the Home tab since the four-tab overhaul (Home, Notes, Nearby, Diaries);
-    /// these tests were written when Nearby was the launch tab, so select it right after launch.
+    /// True while a consent sheet, action sheet or alert is up; tapping a tab then would act through it.
+    var isBlockedByModal: Bool {
+        buttons["Accept"].exists || buttons["Decline"].exists || sheets.firstMatch.exists || alerts.firstMatch.exists
+    }
+
     /// Home lists live connections as `active-peer-row` buttons; none means not connected
     /// (replaces the old Connected tab's "No active connection" empty state).
-    /// Navigates to Home first (the row only exists there, so checking elsewhere would be vacuously true),
-    /// then waits up to `settle` seconds for the row to be absent.
-    func hasNoActiveConnection(settle: TimeInterval = 2) -> Bool {
-        goToHomeTab()
+    /// Returns false when it cannot conclude: a modal is presented (do not navigate through it), or the row is still there.
+    func hasNoActiveConnection(settle: TimeInterval = 1) -> Bool {
+        guard goToHomeTab() else { return false }
         return buttons["active-peer-row"].waitForNonExistence(timeout: settle)
     }
 
     /// Select the Home tab (re-tapping a selected tab pops back to the Home root) and wait for its nav bar.
-    func goToHomeTab() {
+    /// Returns false without tapping anything if a modal is presented.
+    @discardableResult
+    func goToHomeTab() -> Bool {
+        if isBlockedByModal { return false }
         let home = tabBars.buttons["Home"]
         if home.waitForExistence(timeout: 5) { home.tap() }
-        _ = navigationBars["Home"].waitForExistence(timeout: 3)
+        return navigationBars["Home"].waitForExistence(timeout: 3)
     }
 
+    /// The app launches on the Home tab since the four-tab overhaul (Home, Notes, Nearby, Diaries);
+    /// these tests were written when Nearby was the launch tab, so select it right after launch.
     func goToNearbyTab() {
         let nearby = tabBars.buttons["Nearby"]
         if nearby.waitForExistence(timeout: 10), !nearby.isSelected { nearby.tap() }
