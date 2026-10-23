@@ -158,8 +158,8 @@
 
 **Interfaces:**
 - Produces:
-  - `FriendBinding`：`@MainActor` 的解析器（持有 CM 的 `trustedContactStore`、`deviceStore`、`connections`）：`contact(forChatPeerID:) -> TrustedContact?`（依序：活連線的握手公鑰 → `find(byPublicKey:)`；`find(byDeviceId: peerID)`；`DeviceRecord(id:)` → `find(byDeviceId: record.id)`；候選多於一個或名稱被合併則回 `nil`）、`verifiedAccount(forChatPeerID:) -> (accountId: String, verified: Bool)?`（`verified` 表示 `pendingAccountBinding == nil` 且 `accountId != nil`）
-  - `ThreadTransport.decide(presence: PeerPresence, binding: BindingState, account: AccountAvailability) -> Decision`：`BindingState { none, pending, verified }`、`AccountAvailability { ready, notReady }`、`Decision { live, note(canSendNow: Bool), locked(reason: LockReason) }`；表格：online → `live`；非 online＋verified＋ready → `note(true)`；非 online＋verified＋notReady → `note(false)`；其餘 → `locked`（`pending` 用 `.verifying`，`none` 用 `.notExchanged`）
+  - `FriendBinding`（實作後更新）：`@MainActor` 的解析器，注入 `contacts: () -> [TrustedContact]` 與 `live: (String) -> LiveConnectionKey`（`.none`／`.unsecured`／`.secured(握手公鑰)`；CM 版本由 `connection(for:)` 的 `handshakePeerIdentityKey` 取得）。解析純函式 `FriendBindingResolver.resolve`：活連線一律以握手公鑰唯一比對（未加密連線不綁定）；離線以 `TrustedContact.deviceId == peerID`，且該聯絡人的公鑰在所有聯絡人中必須唯一；候選不是恰好一個、或已封鎖，回 `nil`。API：`contact(forChatPeerID:) -> TrustedContact?`、`verifiedAccount(forChatPeerID:) -> VerifiedAccount?`（僅在 `accountId != nil` 且無 `pendingAccountBinding` 時非 nil）、`bindingState(forChatPeerID:) -> BindingState`。寄件端 `ConnectionManager.outboxBinding(for:among:)` 套用同一條「每把公鑰恰好一位聯絡人」規則。
+  - `ThreadTransport.decide(presence: PeerPresence, binding: BindingState, account: AccountAvailability) -> Decision`（實作後更新）：`BindingState { none, pending, verified }`、`AccountAvailability { ready, notReady, unavailable }`（`unavailable`＝本機永遠無法寄紙條：`attestUnsupported`／註冊被拒）、`Decision { live, note(canSendNow: Bool), locked(reason: LockReason) }`、`LockReason { notExchanged, verifying, accountUnavailable }`；表格：online → `live`；非 online＋verified＋ready → `note(true)`；非 online＋verified＋notReady → `note(false)`；非 online＋verified＋unavailable → `locked(.accountUnavailable)`（不排入待寄，`queueNote` 丟 `accountUnavailable`）；其餘 → `locked`（`pending` 用 `.verifying`，`none` 用 `.notExchanged`）
   - `NotesStore.notes(forAccount accountId: String) -> [NoteRecord]`（收到：`.verified(accountId:)` 相符；寄出：`recipientAccountId` 相符且 **不含匿名寄出**）；`unreadCount(forAccount:)`；`boundUnreadIDs`
   - `NotesStore.sendToBound(text:accountId:expectedIdentityKey:) async throws -> NoteRecord`：目錄查詢後斷言 `entry.accountId.raw == accountId` 與 `entry.identityKey == expectedIdentityKey`，不符丟 `NotesStoreError.recipientMismatch`（新增 case）；簽名寄出（非匿名）；其餘步驟沿用現有 `send`（抽出共用私有函式，**現有 `send(text:to:anonymous:)` 行為與測試不變**）
 
@@ -219,9 +219,9 @@
 - 行為（對照設計 §4.3–§4.5、§10.11）：
   1. 訊息清單改用 `ThreadModel.items`；聊天氣泡沿用 `ChatBubbleView`，紙條用新的 `NoteBubbleView`（`noteFill`／`noteBorder`／`noteText`，狀態文字「📮 已寄出」，待寄「待寄出」，失敗「未寄出，點此重試」）。紙條氣泡**沒有**反應、編輯、回覆、滑動回覆、已讀勾勾；長按選單：複製、刪除這張紙條（`NotesStore.delete`）、封鎖、檢舉（沿用既有 API，以紙條 ID）。
   2. 搜尋維持只搜聊天；「載入更早」同時擴大紙條納入範圍。
-  3. 輸入框由 `ThreadTransport.decide` 決定：`live`＝現狀；`note(canSendNow)`＝開啟、提示字「寫一張紙條給 X…」、傳送鈕為紙條樣式、2,000 字元計數（接近上限才顯示）、`canSendNow == false` 時提示「有網路時才能寄出」並進入待寄；`locked`＝灰色橫條與誠實文案（`.notExchanged`：「雙方交換紙條後才能離線聯絡」；`.verifying`：「正在確認對方的紙條帳號」）。移除寫死的 `.disabled(!isPeerConnected)`。
+  3. 輸入框由 `ThreadTransport.decide` 決定：`live`＝現狀；`note(canSendNow)`＝開啟、提示字「寫一張紙條給 X…」、傳送鈕為紙條樣式、2,000 字元計數（接近上限才顯示）、`canSendNow == false`（我方帳號註冊中／離線）時提示「帳號準備好後就會寄出」並進入待寄；`locked`＝灰色橫條與誠實文案（`.notExchanged`：「雙方交換紙條後才能離線聯絡」；`.verifying`：「正在確認對方的紙條帳號」；`.accountUnavailable`：「這台裝置無法寄送紙條」）。移除寫死的 `.disabled(!isPeerConnected)`。
   4. 連線中途斷線：**不自動改寄**；文字保留，畫面切為紙感並提示「已改為紙條」；切換成紙條模式時 `replyingToMessage = nil`。
-  5. `ExchangeNotesButton`（工具列右上；iOS 與 Mac 聊天視窗）：狀態圖示＋VoiceOver 文字——可按（未綁定、對方支援）、對方過舊（停用，「對方的 App 需要更新才能交換紙條」）、等待對方（已按下）、對方想交換（可同意）、確認中、已綁定（郵戳徽章，點擊可取消綁定）、對方尚未開通（結果訊息）。按下前跳確認：「若 X 也同意，將分享你的紙條帳號」。純函式 `ExchangeButtonPresentation.state(from:)` 可測。
+  5. `ExchangeNotesButton`（工具列右上；iOS 與 Mac 聊天視窗）：狀態圖示＋VoiceOver 文字——可按（未綁定、對方支援）、對方過舊（停用，「對方的 App 需要更新才能交換紙條」）、等待對方（已按下）、對方想交換（可同意）、確認中、已綁定（郵戳徽章，點擊可取消綁定）、對方沒有繼續交換（結果訊息；對方的 `unavailable` 無法分辨「沒帳號」與「簽章失敗」，故文案中性）。無頭（CLI）對方不顯示按鈕；綁定已驗證時優先顯示「已綁定」而非「失敗」。按下前跳確認：「若 X 也同意，將分享你的紙條帳號」。純函式 `ExchangeButtonPresentation.state(from:)` 可測。
   6. `onAppear`：對該帳號的收到紙條呼叫 `markRead`（已讀同步伺服器，與現行一致）。
 - 在地化：本任務新增字串全部五語系（文字插入，非繁中 `needs_review`），先檢查既有 key 可否重用。
 
