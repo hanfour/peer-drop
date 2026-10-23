@@ -122,4 +122,81 @@ final class PaperThemeTests: XCTestCase {
         XCTAssertEqual(PaperPalette.contrastRatio(0x000000, 0xFFFFFF), 21.0, accuracy: 0.01)
         XCTAssertEqual(PaperPalette.contrastRatio(0x777777, 0xFFFFFF), 4.48, accuracy: 0.05)
     }
+
+    // MARK: - live / note modes
+
+    func testLiveTextPairsMeetAA() {
+        let pairs: [(PaperToken, PaperToken)] = [
+            (.incomingText, .incomingBubble), (.outgoingText, .outgoingBubble),
+            (.incomingText, .background), (.datePillText, .datePillFill),
+        ]
+        for dark in [false, true] {
+            for (fg, bg) in pairs {
+                let r = PaperPalette.contrastRatio(PaperPalette.hex(fg, dark: dark, mode: .live), PaperPalette.hex(bg, dark: dark, mode: .live))
+                XCTAssertGreaterThanOrEqual(r, 4.5, "live \(fg) on \(bg) dark=\(dark) ratio \(r)")
+            }
+        }
+    }
+
+    func testLiveNonTextMeets3to1() {
+        func h(_ t: PaperToken, _ d: Bool) -> UInt32 { PaperPalette.hex(t, dark: d, mode: .live) }
+        for dark in [false, true] {
+            var pairs: [(PaperToken, PaperToken)] = [
+                (.inputPlaceholder, .inputFill), (.highlight, .background), (.online, .background),
+            ]
+            pairs += [PaperToken.tickSent, .tickDelivered, .tickRead].map { ($0, PaperToken.outgoingBubble) }
+            for (fg, bg) in pairs {
+                let r = PaperPalette.contrastRatio(h(fg, dark), h(bg, dark))
+                XCTAssertGreaterThanOrEqual(r, 3.0, "live \(fg) on \(bg) dark=\(dark) ratio \(r)")
+            }
+            let ticks = Set([h(.tickSent, dark), h(.tickDelivered, dark), h(.tickRead, dark)])
+            XCTAssertEqual(ticks.count, 3, "live ticks must be pairwise distinct (dark=\(dark))")
+        }
+    }
+
+    func testLiveAccentReadableOnBackground() {
+        for dark in [false, true] {
+            let r = PaperPalette.contrastRatio(PaperPalette.hex(.accent, dark: dark, mode: .live), PaperPalette.hex(.background, dark: dark, mode: .live))
+            XCTAssertGreaterThanOrEqual(r, 4.5, "live accent dark=\(dark) ratio \(r)")
+        }
+    }
+
+    func testBrandWithWhiteLabel() {
+        for mode in [PaperMode.live, .note] {
+            for dark in [false, true] {
+                let r = PaperPalette.contrastRatio(0xFFFFFF, PaperPalette.hex(.brand, dark: dark, mode: mode))
+                XCTAssertGreaterThanOrEqual(r, 4.5, "white on brand \(mode) dark=\(dark) ratio \(r)")
+            }
+        }
+    }
+
+    func testNoteTokensContrast() {
+        for dark in [false, true] {
+            let t = PaperPalette.contrastRatio(PaperPalette.hex(.noteText, dark: dark), PaperPalette.hex(.noteFill, dark: dark))
+            XCTAssertGreaterThanOrEqual(t, 4.5, "noteText on noteFill dark=\(dark) ratio \(t)")
+            for mode in [PaperMode.live, .note] {
+                let b = PaperPalette.contrastRatio(PaperPalette.hex(.noteBorder, dark: dark, mode: mode), PaperPalette.hex(.background, dark: dark, mode: mode))
+                XCTAssertGreaterThanOrEqual(b, 3.0, "noteBorder on background \(mode) dark=\(dark) ratio \(b)")
+            }
+        }
+    }
+
+    func testModeIndependentTokensAreEqualAcrossModes() {
+        for token in [PaperToken.brand, .highlight, .online, .noteFill, .noteBorder, .noteText, .noteBadge] {
+            for dark in [false, true] {
+                XCTAssertEqual(PaperPalette.hex(token, dark: dark, mode: .live), PaperPalette.hex(token, dark: dark, mode: .note), "\(token) dark=\(dark)")
+            }
+        }
+    }
+
+    func testDefaultModeIsNoteAndUnchanged() {
+        XCTAssertEqual(PaperPalette.hex(.background, dark: false), 0xFBF6EE)
+        XCTAssertEqual(PaperPalette.hex(.background, dark: true), 0x2A221C)
+    }
+
+    func testLiveBackgroundValues() {
+        XCTAssertEqual(PaperPalette.hex(.background, dark: false, mode: .live), 0xF4F9FD)
+        XCTAssertEqual(PaperPalette.hex(.border, dark: false, mode: .live), 0xDDEAF4)
+        XCTAssertEqual(PaperPalette.hex(.incomingText, dark: false, mode: .live), 0x1E2B36)
+    }
 }

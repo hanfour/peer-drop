@@ -26,11 +26,66 @@ enum PaperToken: CaseIterable {
     case warning
     /// Tint for system controls (back chevron, links); >= 4.5:1 on `background`.
     case accent
+    // MSN-style tokens. brand/highlight/online/note* are identical in both modes.
+    /// Brand blue; carries a white label at >= 4.5:1.
+    case brand
+    /// Selection / progress accent (never carries text), >= 3:1 on `background`.
+    case highlight
+    /// "Online" presence dot (never carries text), >= 3:1 on `background`.
+    case online
+    /// Sticky-note ("note") fill, border, text and badge.
+    case noteFill, noteBorder, noteText, noteBadge
 }
+
+/// Page ground: `.live` is a crisp white-blue; `.note` is the warm paper look.
+enum PaperMode { case live, note }
 
 enum PaperPalette {
     /// 0xRRGGBB for the token in the given appearance.
-    static func hex(_ token: PaperToken, dark: Bool) -> UInt32 {
+    static func hex(_ token: PaperToken, dark: Bool, mode: PaperMode = .note) -> UInt32 {
+        switch token {
+        // Mode-independent tokens.
+        case .brand:      return dark ? 0x0B6FC4 : 0x0076D4
+        case .highlight:  return dark ? 0x00A2E8 : 0x0087C8
+        case .online:     return dark ? 0x80C41C : 0x4C9A0A
+        case .noteFill:   return dark ? 0x4A3810 : 0xFFF1CC
+        case .noteBorder: return dark ? 0xF9A825 : 0x9A6200
+        case .noteText:   return dark ? 0xFFE9B0 : 0x4A3200
+        case .noteBadge:  return dark ? 0xF9A825 : 0x9A6200
+        default: break
+        }
+        if mode == .live { return liveHex(token, dark: dark) }
+        return noteHex(token, dark: dark)
+    }
+
+    private static func liveHex(_ token: PaperToken, dark: Bool) -> UInt32 {
+        switch token {
+        case .background:       return dark ? 0x0F1720 : 0xF4F9FD
+        case .border:           return dark ? 0x2A3846 : 0xDDEAF4
+        case .incomingBubble:   return dark ? 0x1A2430 : 0xFFFFFF
+        case .outgoingBubble:   return hex(.brand, dark: dark)
+        case .incomingText:     return dark ? 0xE6EEF5 : 0x1E2B36
+        case .outgoingText:     return 0xFFFFFF
+        case .datePillFill:     return dark ? 0x1A2430 : 0xE8F1F8
+        case .datePillText:     return dark ? 0x93A4B5 : 0x4F6477
+        case .inputFill:        return dark ? 0x1A2430 : 0xFFFFFF
+        case .inputPlaceholder: return dark ? 0x93A4B5 : 0x6F8497
+        case .sendButton:       return hex(.brand, dark: dark)
+        // White blended over the brand bubble: opacity rises sent < delivered < read.
+        case .tickSent:         return dark ? 0xC9DFF2 : 0xD9EAF9
+        case .tickDelivered:    return dark ? 0xE7F1F9 : 0xEDF5FC
+        case .tickRead:         return 0xFFFFFF
+        case .tickFailed:       return dark ? 0xFFC4BA : 0xFFD0C8
+        case .quoteBar:         return hex(.highlight, dark: dark)
+        case .typingDot:        return dark ? 0x93A4B5 : 0x5E7387
+        case .actionFill:       return 0x0076D4
+        case .warning:          return dark ? 0xF08A6A : 0xC50F1F
+        case .accent:           return dark ? 0x5CB0F0 : 0x0069BE
+        default:                return noteHex(token, dark: dark)
+        }
+    }
+
+    private static func noteHex(_ token: PaperToken, dark: Bool) -> UInt32 {
         switch token {
         case .background:       return dark ? 0x2A221C : 0xFBF6EE
         case .border:           return dark ? 0x3A2F27 : 0xEFE4D3
@@ -55,6 +110,7 @@ enum PaperPalette {
         case .actionFill:       return 0xB5532B
         case .warning:          return dark ? 0xF08A6A : 0xB3261E
         case .accent:           return dark ? 0xD89268 : 0xB5532B
+        default:                return 0 // mode-independent tokens are handled in `hex`
         }
     }
 
@@ -75,9 +131,9 @@ enum PaperPalette {
 
 enum PaperTheme {
     /// Appearance-adaptive colour for a token.
-    static func color(_ token: PaperToken) -> Color {
-        let light = PaperPalette.hex(token, dark: false)
-        let dark = PaperPalette.hex(token, dark: true)
+    static func color(_ token: PaperToken, mode: PaperMode = .note) -> Color {
+        let light = PaperPalette.hex(token, dark: false, mode: mode)
+        let dark = PaperPalette.hex(token, dark: true, mode: mode)
         #if canImport(UIKit)
         return Color(UIColor { traits in
             rgb(traits.userInterfaceStyle == .dark ? dark : light, UIColor.init(red:green:blue:alpha:))
@@ -118,5 +174,23 @@ extension View {
         #else
         self
         #endif
+    }
+}
+
+private struct PaperModeKey: EnvironmentKey {
+    static let defaultValue: PaperMode = .note
+}
+
+extension EnvironmentValues {
+    var paperMode: PaperMode {
+        get { self[PaperModeKey.self] }
+        set { self[PaperModeKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Sets the paper mode that descendants resolve their colours with.
+    func paperMode(_ m: PaperMode) -> some View {
+        environment(\.paperMode, m)
     }
 }
