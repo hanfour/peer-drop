@@ -39,6 +39,10 @@ struct MediaPreviewView: View {
         }
         #if os(iOS)
         .statusBar(hidden: true)
+        #else
+        // A macOS sheet sizes to its content, and a GeometryReader has no
+        // intrinsic size, so without this the preview collapsed to a thin strip.
+        .frame(minWidth: 640, idealWidth: 900, minHeight: 480, idealHeight: 640)
         #endif
         .onAppear {
             if isVideo {

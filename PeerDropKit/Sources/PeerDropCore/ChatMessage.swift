@@ -161,9 +161,9 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         )
     }
 
-    public static func media(mediaType: String, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil) -> ChatMessage {
+    public static func media(mediaType: String, fileName: String, fileSize: Int64, mimeType: String, duration: Double?, localFileURL: String?, thumbnailData: Data?, isOutgoing: Bool, peerName: String, groupID: String? = nil, senderID: String? = nil, senderName: String? = nil, replyTo: ChatMessage? = nil, id: String? = nil) -> ChatMessage {
         ChatMessage(
-            id: UUID().uuidString,
+            id: id ?? UUID().uuidString,
             text: nil,
             isMedia: true,
             mediaType: mediaType,

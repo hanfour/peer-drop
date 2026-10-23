@@ -78,6 +78,8 @@ struct ChatBubbleView: View {
     let chatManager: ChatManager?
     @EnvironmentObject private var voicePlayer: VoicePlayer
     @State private var showMediaPreview = false
+    @State private var sharedFileURL: URL?
+    @State private var showFileShare = false
     @State private var showReactionPicker = false
     @State private var showEditSheet = false
     @State private var editText = ""
@@ -194,6 +196,9 @@ struct ChatBubbleView: View {
             if let chatManager, isPreviewableMedia {
                 MediaPreviewView(message: message, chatManager: chatManager)
             }
+        }
+        .sheet(isPresented: $showFileShare) {
+            if let sharedFileURL { ShareSheet(items: [sharedFileURL]) }
         }
         #else
         .sheet(isPresented: $showMediaPreview) {
@@ -501,6 +506,24 @@ struct ChatBubbleView: View {
                 }
             }
         }
+        .contentShape(Rectangle())
+        .accessibilityHint("Double tap to open")
+        .onTapGesture { openFile() }
+    }
+
+    /// Opens a received/sent file attachment. The stored copy is encrypted at
+    /// rest, so it is decrypted to a temp file first; macOS opens it in the
+    /// default app, iOS offers the share sheet (open in / save to Files).
+    private func openFile() {
+        guard let chatManager, let localPath = message.localFileURL,
+              let url = chatManager.writeMediaToTempFile(relativePath: localPath),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 0 else { return }
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #else
+        sharedFileURL = url
+        showFileShare = true
+        #endif
     }
 
     // MARK: - Accessibility
