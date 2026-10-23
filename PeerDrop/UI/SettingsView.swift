@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var importURL: URL?
     @State private var archiveError: String?
     @State private var showArchiveError = false
+    @State private var showTransferHistory = false
 
     init() {
         _displayName = State(initialValue: UserDefaults.standard.string(forKey: "peerDropDisplayName") ?? UIDevice.current.name)
@@ -33,6 +34,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Button { showTransferHistory = true } label: { Label("Transfer History", systemImage: "clock") }
+                }
                 Section { TextField("Display Name", text: $displayName).autocorrectionDisabled() } header: { Text("Identity") } footer: { Text("This name is visible to nearby devices.") }
                 Section("Profile") { NavigationLink("Edit Profile") { UserProfileView() } }
                 AccountSectionView(accountManager: connectionManager.accountManager)
@@ -85,6 +89,7 @@ struct SettingsView: View {
             }
             .alert("Notifications Denied", isPresented: $showNotificationDeniedAlert) { Button("OK", role: .cancel) {} } message: { Text("Please enable notifications in Settings to receive alerts.") }
             .alert("Archive Error", isPresented: $showArchiveError) { Button("OK", role: .cancel) {} } message: { Text(archiveError ?? "An unknown error occurred.") }
+            .sheet(isPresented: $showTransferHistory) { NavigationStack { TransferHistoryView().environmentObject(connectionManager) } }
             .sheet(isPresented: $showShareSheet) { if let url = exportURL { ShareSheet(items: [url]) } }
             .sheet(isPresented: $showDocumentPicker) { ArchiveDocumentPickerView(contentTypes: [.zip]) { url in importURL = url; showImportChoice = true } }
             .confirmationDialog("Import Mode", isPresented: $showImportChoice, titleVisibility: .visible) { Button("Merge with existing data") { performImport(merge: true) }; Button("Replace all data", role: .destructive) { performImport(merge: false) }; Button("Cancel", role: .cancel) {} }
