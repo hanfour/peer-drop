@@ -540,6 +540,11 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         // Oversize field: an intent carrying a 4 KB signature is dropped whole.
         try await peer.send(NotesExchangePayload(phase: "intent", nonce: peer.nonce,
                                                  signature: Data(repeating: 1, count: 4096)))
+        // Oversize field inside a small payload (100-byte signature).
+        try await peer.send(NotesExchangePayload(phase: "intent", nonce: peer.nonce,
+                                                 signature: Data(repeating: 1, count: 100)))
+        // Oversize nonce.
+        try await peer.send(NotesExchangePayload(phase: "intent", nonce: Data(repeating: 3, count: 33)))
         try await drain(peer)
         XCTAssertEqual(state(peer), .waitingForPeer)
         XCTAssertTrue(cm.connections[peer.identity.id]?.state.isConnected == true, "connection dropped")
@@ -680,7 +685,9 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
                                    accountId: peerAccountId, signingKey: signing,
                                    handshakeKeyHash: Data(SHA256.hash(data: oldKey)), receivedAt: Date()))
         cm.trustedContactStore.add(a)
-        DirectoryScript.shared.reply = .entry(accountId: peerAccountId, identityKey: oldKey, signingKey: signing)
+        // The directory agrees with the contact's CURRENT key: only the hash
+        // check stops binding an account revealed under the old key.
+        DirectoryScript.shared.reply = .entry(accountId: peerAccountId, identityKey: newKey, signingKey: signing)
         await cm.retryPendingBindings()
         XCTAssertNil(cm.trustedContactStore.find(byId: a.id)?.pendingAccountBinding)
         XCTAssertNil(cm.trustedContactStore.find(byId: a.id)?.accountId)
