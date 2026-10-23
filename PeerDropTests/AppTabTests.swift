@@ -1,5 +1,6 @@
 import XCTest
 @testable import PeerDrop
+import PeerDropCore
 
 final class AppTabTests: XCTestCase {
     func testRawValuesAreStable() {
@@ -24,6 +25,60 @@ final class AppTabTests: XCTestCase {
         XCTAssertEqual(InboxDeepLink.action(inboxShowing: true, chatShowing: false), .none)
         XCTAssertEqual(InboxDeepLink.action(inboxShowing: false, chatShowing: true), .dismissChatThenPush)
         XCTAssertEqual(InboxDeepLink.action(inboxShowing: true, chatShowing: true), .none)
+    }
+
+    func testInboxRequestConsumedOnlyWhilePending() {
+        XCTAssertTrue(InboxDeepLink.shouldConsume(pending: 1))
+        XCTAssertTrue(InboxDeepLink.shouldConsume(pending: 3))
+        // Once the tab resets the counter to 0, a rebuilt view must not replay it.
+        XCTAssertFalse(InboxDeepLink.shouldConsume(pending: 0))
+    }
+
+    func testRefreshGateOnlyWhileOnScreen() {
+        var gate = ConversationsRefreshGate()
+        XCTAssertFalse(gate.shouldRefreshOnChange)
+        gate.appear()
+        XCTAssertTrue(gate.shouldRefreshOnChange)
+        gate.disappear()
+        XCTAssertFalse(gate.shouldRefreshOnChange)
+    }
+
+    func testInfoButtonOnlyForOnlinePeer() {
+        XCTAssertTrue(ChatPresenceMode.showsInfoButton(presence: .online))
+        XCTAssertFalse(ChatPresenceMode.showsInfoButton(presence: .nearby))
+        XCTAssertFalse(ChatPresenceMode.showsInfoButton(presence: .offline))
+    }
+
+    func testConnectingVoiceOverLabelSkipsPresence() {
+        XCTAssertEqual(FriendRowAccessibility.label(name: "Amy", presenceLabel: "Nearby, not connected", subtitle: "Connecting...", isConnecting: true), "Amy, Connecting...")
+        XCTAssertEqual(FriendRowAccessibility.label(name: "Amy", presenceLabel: "Online", subtitle: "Connected", isConnecting: false), "Amy, Online, Connected")
+    }
+
+    // MARK: tabAfterConnectionChange
+
+    func testNewConnectionFromNearbyGoesHome() {
+        for old: ConnectionState in [.idle, .discovering, .peerFound, .requesting, .connecting] {
+            XCTAssertEqual(AppTab.tabAfterConnectionChange(from: old, to: .connected, current: .nearby), .home, "\(old)")
+        }
+    }
+
+    func testNeverSwitchesAwayFromNotesOrDiaries() {
+        for tab in [AppTab.notes, .diaries, .home] {
+            XCTAssertEqual(AppTab.tabAfterConnectionChange(from: .connecting, to: .connected, current: tab), tab)
+        }
+    }
+
+    func testTransitionsAmongLiveStatesNeverSwitch() {
+        let live: [ConnectionState] = [.connected, .transferring(progress: 0.5), .voiceCall]
+        for a in live { for b in live {
+            XCTAssertEqual(AppTab.tabAfterConnectionChange(from: a, to: b, current: .nearby), .nearby)
+            XCTAssertEqual(AppTab.tabAfterConnectionChange(from: a, to: b, current: .notes), .notes)
+        } }
+    }
+
+    func testNonConnectedTargetsNeverSwitch() {
+        XCTAssertEqual(AppTab.tabAfterConnectionChange(from: .connected, to: .disconnected, current: .nearby), .nearby)
+        XCTAssertEqual(AppTab.tabAfterConnectionChange(from: .idle, to: .failed(reason: "x"), current: .nearby), .nearby)
     }
 
     func testNoMagicNumbersRemain() throws {

@@ -10,7 +10,7 @@ private struct ChatTargetDestination: ViewModifier {
     func body(content: Content) -> some View {
         #if os(iOS)
         content.navigationDestination(for: ChatTarget.self) { target in
-            ChatView(chatManager: connectionManager.chatManager, peerID: target.peerID, peerName: target.name)
+            ChatView(chatManager: connectionManager.chatManager, peerID: target.peerID, peerName: target.name, showsConnectionInfo: true)
                 .environmentObject(connectionManager)
         }
         #else

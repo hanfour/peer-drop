@@ -46,7 +46,8 @@ struct HomeTab: View, PaperThemed {
             if let a = r.peerDeviceId { ids.insert(a) }
             if p != .online, !ids.isDisjoint(with: sources.connecting) { connecting.insert(r.id) }
         }
-        let sections = HomeListLogic.sections(records: records, presence: { map[$0.id] ?? .offline }, query: query)
+        let sections = HomeListLogic.sections(records: records, presence: { map[$0.id] ?? .offline }, query: query,
+                                              name: { connectionManager.displayName(for: $0) })
         return Snapshot(presence: map, connecting: connecting, sections: sections)
     }
 
@@ -154,19 +155,19 @@ struct HomeTab: View, PaperThemed {
     }
 
     private func peerID(for record: DeviceRecord) -> String {
-        connectionManager.connection(for: record.id)?.peerIdentity.id ?? record.id
+        connectionManager.connection(for: record)?.peerIdentity.id ?? record.id
     }
 
     private func connectedRow(_ record: DeviceRecord) -> some View {
         Button {
             #if os(iOS)
-            connectionManager.focus(on: connectionManager.connection(for: record.id)?.id ?? record.id)
+            connectionManager.focus(on: connectionManager.connection(for: record)?.id ?? record.id)
             showConnection = true
             #else
             openWindow(id: "chat", value: peerID(for: record))
             #endif
         } label: {
-            FriendRow(record: record, presence: .online, connection: connectionManager.connection(for: record.id))
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: .online, connection: connectionManager.connection(for: record))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
@@ -174,7 +175,7 @@ struct HomeTab: View, PaperThemed {
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
-                let id = connectionManager.connection(for: record.id)?.id ?? record.id
+                let id = connectionManager.connection(for: record)?.id ?? record.id
                 Task { await connectionManager.disconnect(from: id) }
             } label: {
                 Label("Disconnect", systemImage: "xmark.circle.fill")
@@ -190,8 +191,8 @@ struct HomeTab: View, PaperThemed {
         let isConnecting = snap.connecting.contains(record.id)
         let connect: () -> Void = { _ = connectionManager.reconnect(to: record.id) }
         #if os(iOS)
-        NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: record.displayName)) {
-            FriendRow(record: record, presence: presence, isConnecting: isConnecting, onConnect: connect)
+        NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) {
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, isConnecting: isConnecting, onConnect: connect)
         }
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
@@ -200,7 +201,7 @@ struct HomeTab: View, PaperThemed {
         Button {
             openWindow(id: "chat", value: peerID(for: record))
         } label: {
-            FriendRow(record: record, presence: presence, isConnecting: isConnecting, onConnect: connect)
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, isConnecting: isConnecting, onConnect: connect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")

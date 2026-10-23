@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
+import PeerDropSecurity
 
 struct ConnectionView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
@@ -22,17 +23,23 @@ struct ConnectionView: View {
         }
     }
 
+    /// Live connection name wins over a relay placeholder / blank name.
+    private func shownName(_ peer: PeerIdentity) -> String {
+        ChatDisplayName.forRecord(recordName: peer.displayName,
+                                  liveName: connectionManager.connection(for: peer.id)?.peerIdentity.displayName)
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 20) {
                 if let peer = connectionManager.connectedPeer {
                     Spacer()
 
-                    PeerAvatar(name: peer.displayName)
+                    PeerAvatar(name: shownName(peer))
                         .scaleEffect(1.8)
                         .padding(.bottom, 8)
 
-                    Text(peer.displayName)
+                    Text(shownName(peer))
                         .font(.title2.bold())
 
                     StatusBadge(state: connectionManager.state)
@@ -109,7 +116,7 @@ struct ConnectionView: View {
                             ChatView(
                                 chatManager: connectionManager.chatManager,
                                 peerID: peer.id,
-                                peerName: peer.displayName
+                                peerName: shownName(peer)
                             )
                             .environmentObject(connectionManager)
                         }
@@ -163,7 +170,7 @@ struct ConnectionView: View {
         .animation(.easeInOut(duration: 0.25), value: showFilePicker)
         .sheet(isPresented: $showDisconnectConfirm) {
             if let peer = connectionManager.connectedPeer {
-                DisconnectSheet(peerName: peer.displayName) {
+                DisconnectSheet(peerName: shownName(peer)) {
                     connectionManager.disconnect()
                 }
             }

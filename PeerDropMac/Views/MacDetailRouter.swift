@@ -20,7 +20,7 @@ import PeerDropDiary
 /// `NavigationStack`.
 struct MacDetailRouter: View {
     @Binding var selection: MacSidebarSection?
-    var inboxRequest: Int
+    @Binding var inboxRequest: Int
     @Binding var openNoteID: String?
     @Binding var diariesPath: [String]
     @Binding var openDiaryID: String?
@@ -48,7 +48,7 @@ struct MacDetailRouter: View {
                 store: connectionManager.notesStore,
                 accountManager: connectionManager.accountManager,
                 openNoteID: $openNoteID,
-                inboxRequest: inboxRequest,
+                inboxRequest: $inboxRequest,
                 onGoHome: { selection = .home }
             )
             .environmentObject(connectionManager)

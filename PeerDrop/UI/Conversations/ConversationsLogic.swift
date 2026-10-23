@@ -21,14 +21,15 @@ enum ConversationsLogic {
         groups: [DeviceGroup],
         summaryForPeer: (String) -> ConversationSummary,
         summaryForGroup: (String) -> ConversationSummary,
-        query: String
+        query: String,
+        name: (DeviceRecord) -> String = { $0.displayName }
     ) -> [ConversationRowModel] {
         let needle = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
         var result: [ConversationRowModel] = []
-        for r in records where matches(r.displayName, needle) {
+        for r in records where matches(name(r), needle) {
             let s = summaryForPeer(r.id)
             guard s.lastMessage != nil else { continue }
-            result.append(ConversationRowModel(id: "peer:\(r.id)", sourceID: r.id, isGroup: false, name: r.displayName, summary: s))
+            result.append(ConversationRowModel(id: "peer:\(r.id)", sourceID: r.id, isGroup: false, name: name(r), summary: s))
         }
         for g in groups where matches(g.name, needle) {
             let s = summaryForGroup(g.id)

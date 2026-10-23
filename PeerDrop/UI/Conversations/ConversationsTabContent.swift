@@ -12,13 +12,13 @@ struct ConversationsTabContent: View {
     @ObservedObject var store: NotesStore
     @ObservedObject var accountManager: AccountManager
     @Binding var openNoteID: String?
-    var inboxRequest: Int
+    @Binding var inboxRequest: Int
     var onGoHome: () -> Void
     @State private var pendingNote: NoteRecord?
 
     var body: some View {
         NavigationStack {
-            ConversationsTab(inboxUnread: store.unreadCount, onGoHome: onGoHome, inboxRequest: inboxRequest) {
+            ConversationsTab(inboxUnread: store.unreadCount, onGoHome: onGoHome, inboxRequest: $inboxRequest) {
                 NotesInboxHost(store: store, accountManager: accountManager, note: $pendingNote)
             }
         }

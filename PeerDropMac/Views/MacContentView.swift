@@ -20,7 +20,7 @@ struct MacContentView: View {
             MacSidebar(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 180, ideal: sidebarWidth, max: 360)
         } detail: {
-            MacDetailRouter(selection: $selection, inboxRequest: inboxRequest, openNoteID: $openNoteID,
+            MacDetailRouter(selection: $selection, inboxRequest: $inboxRequest, openNoteID: $openNoteID,
                              diariesPath: $diariesPath, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq)
                 .navigationSplitViewColumnWidth(min: 480, ideal: 600)
         }

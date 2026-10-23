@@ -3,8 +3,8 @@ import Combine
 import PeerDropCore
 
 /// 紙條: first-row notes inbox + conversation list (friends and groups with messages, newest first).
-/// Expects to be hosted in a NavigationStack that the container owns. It registers the
-/// `ChatTarget` destination itself (`.chatTargetDestination()`); the container must NOT add one.
+/// Expects to be hosted in a NavigationStack that the container owns. Chats are pushed through
+/// `isPresented` destinations here (no `ChatTarget` value is pushed), so no `.chatTargetDestination()`.
 /// The inbox row (first row of the list) pushes the injected `inbox` view (Task 9 wires NotesInboxView).
 struct ConversationsTab<Inbox: View>: View, PaperThemed {
     @EnvironmentObject var connectionManager: ConnectionManager
@@ -17,13 +17,13 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     var inboxUnread: Int = 0
     /// Switches to the Home tab (empty-state button; provided by the container).
     var onGoHome: () -> Void = {}
-    /// Incremented by the container to ask for the inbox to be pushed (notification deep link).
-    var inboxRequest: Int = 0
+    /// Pending inbox-push requests from the container (notification deep link). Consumed (reset to 0)
+    /// here, so a rebuilt view (Mac sidebar switch) never replays an already handled request.
+    @Binding var inboxRequest: Int
     @ViewBuilder var inbox: () -> Inbox
     @State private var showInbox = false
     @State private var pickedGroup: DeviceGroup?
     @State private var showGroup = false
-    @State private var handledInboxRequest = 0
 
     @State private var query = ""
     @StateObject private var hub = RefreshHub()
@@ -33,6 +33,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     @State private var groupSummaries: [String: ConversationSummary] = [:]
     /// False until the first synchronous seed, so the empty state never flashes.
     @State private var hasLoaded = false
+    /// Refresh work only runs while this list is on screen (a chat pushed on top must not trigger decrypts).
+    @State private var refreshGate = ConversationsRefreshGate()
     #if os(iOS)
     @State private var pickedTarget: ChatTarget?
     @State private var showPicked = false
@@ -44,7 +46,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
 
     /// Chat files are keyed by the live peer id when connected, else the record id (same rule as HomeTab).
     private func chatKey(for recordID: String) -> String {
-        connectionManager.connection(for: recordID)?.peerIdentity.id ?? recordID
+        guard let record = connectionManager.deviceStore.records.first(where: { $0.id == recordID }) else { return recordID }
+        return connectionManager.connection(for: record)?.peerIdentity.id ?? recordID
     }
 
     private func refreshSummaries() {
@@ -79,7 +82,9 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             chatManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.deviceStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.groupStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
-        ])) { refreshSummaries() }
+        ])) {
+            if refreshGate.shouldRefreshOnChange { refreshSummaries() }
+        }
     }
 
     private func rows() -> [ConversationRowModel] {
@@ -88,7 +93,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             groups: connectionManager.groupStore.groups,
             summaryForPeer: { peerSummaries[$0] ?? ConversationSummary(id: $0, isGroup: false, lastMessage: nil, unread: 0) },
             summaryForGroup: { groupSummaries[$0] ?? ConversationSummary(id: $0, isGroup: true, lastMessage: nil, unread: 0) },
-            query: query)
+            query: query,
+            name: { connectionManager.displayName(for: $0) })
     }
 
     var body: some View {
@@ -137,30 +143,31 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         #if os(iOS)
         .navigationDestination(isPresented: $showPicked) {
             if let t = pickedTarget {
-                ChatView(chatManager: chatManager, peerID: t.peerID, peerName: t.name)
+                ChatView(chatManager: chatManager, peerID: t.peerID, peerName: t.name, showsConnectionInfo: true)
                     .environmentObject(connectionManager)
             }
         }
         #endif
-        .chatTargetDestination()
         .navigationDestination(isPresented: $showInbox) { inbox() }
         .navigationDestination(isPresented: $showGroup) {
             if let g = pickedGroup { GroupChatView(group: g) }
         }
         .onChange(of: inboxRequest) { _ in consumeInboxRequest() }
         .onAppear {
+            refreshGate.appear()
             refreshSummaries()
             bindRefreshHub()
             consumeInboxRequest()
         }
+        .onDisappear { refreshGate.disappear() }
     }
 
     /// Single route to the inbox (row tap and deep link both drive `showInbox`).
     /// If the inbox is already visible nothing is pushed: the visible `NotesInboxView`
     /// consumes `openNoteID` itself. A chat pushed from this tab is dismissed first.
     private func consumeInboxRequest() {
-        guard inboxRequest != handledInboxRequest else { return }
-        handledInboxRequest = inboxRequest
+        guard InboxDeepLink.shouldConsume(pending: inboxRequest) else { return }
+        inboxRequest = 0
         #if os(iOS)
         let chatShowing = showPicked || showGroup
         #else
@@ -298,7 +305,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
 
     private var friendPicker: some View {
         let records = connectionManager.deviceStore.records.sorted {
-            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            connectionManager.displayName(for: $0).localizedCaseInsensitiveCompare(connectionManager.displayName(for: $1)) == .orderedAscending
         }
         return NavigationStack {
             List {
@@ -313,8 +320,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                         pick(record)
                     } label: {
                         HStack(spacing: 12) {
-                            PeerAvatar(name: record.displayName, size: 44).accessibilityHidden(true)
-                            Text(record.displayName)
+                            PeerAvatar(name: connectionManager.displayName(for: record), size: 44).accessibilityHidden(true)
+                            Text(connectionManager.displayName(for: record))
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(paper(.incomingText))
                                 .lineLimit(1)
@@ -350,17 +357,20 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     private func pick(_ record: DeviceRecord) {
         #if os(iOS)
         // Push only after the sheet has fully dismissed (see the sheet's onDismiss).
-        pendingTarget = ChatTarget(peerID: chatKey(for: record.id), name: record.displayName)
+        pendingTarget = ChatTarget(peerID: chatKey(for: record.id), name: connectionManager.displayName(for: record))
         showPicker = false
         #else
         showPicker = false
-        openChat(recordID: record.id, name: record.displayName)
+        openChat(recordID: record.id, name: connectionManager.displayName(for: record))
         #endif
     }
 }
 
 /// What the notes deep link should do given what the Notes tab is currently showing.
 enum InboxDeepLink {
+    /// A pending request (> 0) is consumed once and reset by the tab, so it is never replayed.
+    static func shouldConsume(pending: Int) -> Bool { pending > 0 }
+
     enum Action: Equatable { case none, push, dismissChatThenPush }
 
     static func action(inboxShowing: Bool, chatShowing: Bool) -> Action {
@@ -388,4 +398,13 @@ final class RefreshHub: ObservableObject {
         guard cancellable == nil else { return }
         cancellable = publisher.sink { action() }
     }
+}
+
+/// Gates the throttled refresh so an off-screen conversations list (another tab, or a chat pushed
+/// on top) does no summary work; appearing always refreshes once.
+struct ConversationsRefreshGate {
+    private(set) var isVisible = false
+    var shouldRefreshOnChange: Bool { isVisible }
+    mutating func appear() { isVisible = true }
+    mutating func disappear() { isVisible = false }
 }

@@ -61,6 +61,8 @@ struct ContentView: View {
     @EnvironmentObject var inboxService: InboxService
     @ObservedObject private var pushManager = PushNotificationManager.shared
     @State private var selectedTab: AppTab = .home
+    /// Last observed global connection state (iOS 16 `onChange` has no old value).
+    @State private var previousConnectionState: ConnectionState = .idle
     /// Bumped by the `.openNote` deep link so the Notes tab pushes its inbox (see `ConversationsTab.inboxRequest`).
     @State private var inboxRequest = 0
     @State private var openNoteID: String?
@@ -87,13 +89,13 @@ struct ContentView: View {
             .tabItem { Label("Home", systemImage: "house") }
             .tag(AppTab.home)
             .accessibilityLabel("Home")
-            .accessibilityHint("View connected devices")
+            .accessibilityHint("Your friends and connections")
 
             ConversationsTabContent(
                 store: connectionManager.notesStore,
                 accountManager: connectionManager.accountManager,
                 openNoteID: $openNoteID,
-                inboxRequest: inboxRequest,
+                inboxRequest: $inboxRequest,
                 onGoHome: { selectedTab = .home }
             )
             .tabItem { Label("Notes", systemImage: "envelope.fill") }
@@ -210,10 +212,11 @@ struct ContentView: View {
         )) {
             OnboardingView()
         }
-        .onChange(of: connectionManager.state) { _ in
-            switch connectionManager.state {
-            case .connected, .transferring, .voiceCall:
-                selectedTab = .home
+        .onChange(of: connectionManager.state) { newState in
+            let oldState = previousConnectionState
+            previousConnectionState = newState
+            selectedTab = AppTab.tabAfterConnectionChange(from: oldState, to: newState, current: selectedTab)
+            switch newState {
             case .failed(let reason):
                 // Only show alert if not suppressed (e.g., ChatView handles it locally).
                 // Recommendation card is now persistent in NearbyTab.
@@ -384,6 +387,8 @@ private struct DiaryTabContent: View {
     var body: some View {
         NavigationStack(path: $path) {
             DiaryListView(store: store, accountManager: accountManager, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq, path: $path)
+                .scrollContentBackground(.hidden)
+                .background(PaperTheme.color(.background, mode: .note).ignoresSafeArea())
         }
     }
 }

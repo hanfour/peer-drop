@@ -219,6 +219,9 @@ extension PaperThemed {
 
 /// Chat screen mode from peer presence: only an online peer gets the live look.
 enum ChatPresenceMode {
+    /// The header info button (-> ConnectionView) only makes sense while the peer is connected.
+    static func showsInfoButton(presence: PeerPresence) -> Bool { presence == .online }
+
     static func mode(for presence: PeerPresence) -> PaperMode {
         presence == .online ? .live : .note
     }

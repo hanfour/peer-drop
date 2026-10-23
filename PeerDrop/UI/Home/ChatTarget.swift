@@ -14,12 +14,13 @@ enum HomeListLogic {
     static func sections(
         records: [DeviceRecord],
         presence: (DeviceRecord) -> PeerPresence,
-        query: String
+        query: String,
+        name: (DeviceRecord) -> String = { $0.displayName }
     ) -> (connected: [DeviceRecord], friends: [DeviceRecord]) {
         let needle = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
-        let kept = needle.isEmpty ? records : records.filter { fold($0.displayName).contains(needle) }
+        let kept = needle.isEmpty ? records : records.filter { fold(name($0)).contains(needle) }
         let sorted = kept.sorted {
-            let c = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+            let c = name($0).localizedCaseInsensitiveCompare(name($1))
             return c == .orderedSame ? $0.id < $1.id : c == .orderedAscending
         }
         var connected: [DeviceRecord] = []
@@ -44,6 +45,12 @@ extension HomeListLogic {
 
 /// Second line of a Home row.
 enum FriendSubtitle {
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f
+    }()
+
     static func text(presence: PeerPresence, lastConnected: Date, connectionCount: Int, source: String, isConnecting: Bool = false, now: Date = Date()) -> String {
         if isConnecting && presence != .online { return String(localized: "Connecting...") }
         switch presence {
@@ -55,9 +62,7 @@ enum FriendSubtitle {
             return String(localized: "Nearby · ready to connect")
         case .offline:
             guard connectionCount > 0 else { return String(localized: "Not connected yet") }
-            let f = RelativeDateTimeFormatter()
-            f.unitsStyle = .short
-            return String(format: String(localized: "Last online %@"), f.localizedString(for: lastConnected, relativeTo: now))
+            return String(format: String(localized: "Last online %@"), relativeFormatter.localizedString(for: lastConnected, relativeTo: now))
         }
     }
 }

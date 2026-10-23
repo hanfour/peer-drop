@@ -16,6 +16,9 @@ struct ChatView: View, PaperThemed {
     let peerID: String
     let peerName: String
     var onBack: (() -> Void)?
+    /// iOS: show the header info button that pushes `ConnectionView` (only for chats opened from the
+    /// Home / Notes stacks; the chat pushed from ConnectionView itself leaves it off).
+    var showsConnectionInfo = false
     @EnvironmentObject var connectionManager: ConnectionManager
 
     @State private var messageText = ""
@@ -31,6 +34,9 @@ struct ChatView: View, PaperThemed {
     @State private var showSearch = false
     @State private var scrollToMessageID: String?
     @StateObject private var voiceRecorder = VoiceRecorder()
+    #if os(iOS)
+    @State private var showConnectionInfo = false
+    #endif
 
     /// Check if this specific peer is connected (multi-connection aware).
     private var isPeerConnected: Bool {
@@ -95,7 +101,6 @@ struct ChatView: View, PaperThemed {
     var body: some View {
         chatContent
             .paperMode(paperMode)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: paperMode)
     }
 
     private var chatContent: some View {
@@ -270,7 +275,8 @@ struct ChatView: View, PaperThemed {
                 .disabled(!isPeerConnected)
                 .opacity(isPeerConnected ? 1.0 : 0.5)
         }
-        .background(paper(.background))
+        // Only the ground cross-fades on a live/note flip; layout must not animate.
+        .background(paper(.background).animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: paperMode))
         // Local accent for the chat screen only; the app-wide tint is untouched.
         .tint(paper(.accent))
         .navigationTitle(displayName)
@@ -284,12 +290,25 @@ struct ChatView: View, PaperThemed {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
                     PeerAvatar(name: displayName, size: 30, presence: peerPresence)
+                        .accessibilityHidden(true)
                     Text(verbatim: displayName)
                         .font(.system(.headline, design: .rounded))
                         .lineLimit(1)
                 }
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: "\(displayName), \(peerPresence.accessibilityLabel)"))
                 .accessibilityAddTraits(.isHeader)
+            }
+            if showsConnectionInfo, ChatPresenceMode.showsInfoButton(presence: peerPresence) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        connectionManager.focus(on: connectionManager.connection(for: peerID)?.id ?? peerID)
+                        showConnectionInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .accessibilityLabel(Text("Connection details"))
+                }
             }
             #endif
             ToolbarItem(placement: .confirmationAction) {
@@ -300,6 +319,11 @@ struct ChatView: View, PaperThemed {
                 }
             }
         }
+        #if os(iOS)
+        .navigationDestination(isPresented: $showConnectionInfo) {
+            ConnectionView().environmentObject(connectionManager)
+        }
+        #endif
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
             chatManager.activeChatPeerID = peerID

@@ -1,6 +1,24 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Connection details" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection details" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "接続の詳細" } },
+        "ko" : { "stringUnit" : { "state" : "needs_review", "value" : "연결 정보" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "连接信息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線資訊" } }
+      }
+    },
+    "Your friends and connections" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your friends and connections" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "友だちと接続" } },
+        "ko" : { "stringUnit" : { "state" : "needs_review", "value" : "친구 및 연결" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "你的朋友与连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的朋友與連線" } }
+      }
+    },
     "Plaintext fallback — peer didn't complete secure handshake" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Plaintext fallback — peer didn't complete secure handshake" } },

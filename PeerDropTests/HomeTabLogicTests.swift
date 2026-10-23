@@ -101,4 +101,13 @@ final class HomeTabLogicTests: XCTestCase {
         XCTAssertEqual(FriendSubtitle.text(presence: .online, lastConnected: Date(), connectionCount: 1, source: "bonjour", isConnecting: true),
                        String(localized: "Connected · Local network"))
     }
+
+    func testSectionsUseResolvedNameForSearchAndSort() {
+        let all = [rec("1", "relay-ab12"), rec("2", "Zed")]
+        let names = ["1": "Amy", "2": "Zed"]
+        let r = HomeListLogic.sections(records: all, presence: { _ in .offline }, query: "am", name: { names[$0.id] ?? $0.displayName })
+        XCTAssertEqual(r.friends.map(\.id), ["1"])
+        let sorted = HomeListLogic.sections(records: all, presence: { _ in .offline }, query: "", name: { names[$0.id] ?? $0.displayName })
+        XCTAssertEqual(sorted.friends.map(\.id), ["1", "2"])
+    }
 }

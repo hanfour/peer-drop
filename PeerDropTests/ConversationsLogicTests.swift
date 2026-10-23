@@ -77,4 +77,12 @@ final class ConversationsLogicTests: XCTestCase {
                      peers: ["x": summary("x", at: 10)], groupSummaries: ["x": summary("x", group: true, at: 20)])
         XCTAssertEqual(Set(r.map(\.id)).count, 2)
     }
+
+    func testRowsUseResolvedName() {
+        let r = ConversationsLogic.rows(
+            records: [rec("a", "relay-ab12")], groups: [],
+            summaryForPeer: { self.summary($0, at: 10) }, summaryForGroup: { self.summary($0, group: true, at: nil) },
+            query: "amy", name: { _ in "Amy" })
+        XCTAssertEqual(r.map(\.name), ["Amy"])
+    }
 }
