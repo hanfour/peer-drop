@@ -30,7 +30,28 @@ public enum PeerPresenceResolver {
     }
 }
 
+/// Resolves a record to a live value by trying its ids in order (record id, then alias).
+public enum RecordConnectionLookup {
+    public static func resolve<T>(recordID: String, peerDeviceID: String?, lookup: (String) -> T?) -> T? {
+        if let hit = lookup(recordID) { return hit }
+        if let alias = peerDeviceID, alias != recordID { return lookup(alias) }
+        return nil
+    }
+}
+
 extension ConnectionManager {
+    /// The live connection for a saved record. Presence matches `{record.id, record.peerDeviceId}`,
+    /// so actions must resolve through the same two ids (each via the `connection(for:)` alias lookup).
+    public func connection(for record: DeviceRecord) -> PeerConnection? {
+        RecordConnectionLookup.resolve(recordID: record.id, peerDeviceID: record.peerDeviceId) { connection(for: $0) }
+    }
+
+    /// Name to show for a saved record: relay/blank stored names defer to the live connection's identity.
+    public func displayName(for record: DeviceRecord) -> String {
+        ChatDisplayName.forRecord(recordName: record.displayName,
+                                  liveName: connection(for: record)?.peerIdentity.displayName)
+    }
+
     public func presenceSources() -> PresenceSources {
         func ids(_ conns: [PeerConnection]) -> Set<String> {
             Set(conns.flatMap { [$0.id, $0.peerIdentity.id] })

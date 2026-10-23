@@ -22,4 +22,14 @@ public enum ChatDisplayName {
         }
         return nil
     }
+
+    /// Name for a saved record. A relay placeholder (`relay-<code>`) or blank stored name defers to the
+    /// live connection's name when there is one; otherwise the stored name wins.
+    public static func forRecord(recordName: String, liveName: String?) -> String {
+        let stored = trimmed(recordName)
+        if stored == nil || stored!.hasPrefix("relay-") {
+            return preferred(liveName, recordName) ?? recordName
+        }
+        return stored!
+    }
 }

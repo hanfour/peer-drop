@@ -36,4 +36,22 @@ final class PeerPresenceTests: XCTestCase {
     func testRelayKeyAloneDoesNotMatchRecord() {
         XCTAssertEqual(resolve(["uuid-1"], connected: ["relay-ab"]), .offline)
     }
+
+    // MARK: - RecordConnectionLookup
+
+    func testLookupPrefersRecordID() {
+        let map = ["rec": 1, "alias": 2]
+        XCTAssertEqual(RecordConnectionLookup.resolve(recordID: "rec", peerDeviceID: "alias") { map[$0] }, 1)
+    }
+
+    func testLookupFallsBackToPeerDeviceID() {
+        let map = ["alias": 2]
+        XCTAssertEqual(RecordConnectionLookup.resolve(recordID: "rec", peerDeviceID: "alias") { map[$0] }, 2)
+    }
+
+    func testLookupMissesWhenNeitherMatches() {
+        let map = ["other": 3]
+        XCTAssertNil(RecordConnectionLookup.resolve(recordID: "rec", peerDeviceID: "alias") { map[$0] })
+        XCTAssertNil(RecordConnectionLookup.resolve(recordID: "rec", peerDeviceID: nil) { map[$0] })
+    }
 }
