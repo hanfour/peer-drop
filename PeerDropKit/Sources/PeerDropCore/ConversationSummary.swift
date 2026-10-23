@@ -22,7 +22,7 @@ public struct ConversationSummary: Identifiable, Equatable {
         self.isGroup = isGroup
         self.lastMessage = lastMessage
         self.lastNote = lastNote
-        let noteDate = lastNote.map { $0.direction == .inbound ? $0.receivedAt : $0.sentAt }
+        let noteDate = lastNote?.threadDate
         switch (lastMessage?.timestamp, noteDate) {
         case let (m?, n?): self.lastActivity = max(m, n)
         case let (m?, nil): self.lastActivity = m

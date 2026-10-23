@@ -21,13 +21,17 @@ public struct NoteOutboxEntry: Codable, Equatable, Identifiable {
     public var failReason: String?
     /// Earliest time the next automatic attempt may run (exponential backoff).
     public var nextAttemptAt: Date?
+    /// Set the instant the send returned (before removal): the note is already in the
+    /// sent store, so this entry must never be sent again and the thread hides it.
+    public var sentNoteID: String?
 
     public init(id: UUID = UUID(), contactID: UUID, accountId: String, expectedIdentityKey: Data, text: String,
                 createdAt: Date = Date(), attempts: Int = 0, state: State = .queued,
-                failReason: String? = nil, nextAttemptAt: Date? = nil) {
+                failReason: String? = nil, nextAttemptAt: Date? = nil, sentNoteID: String? = nil) {
         self.id = id; self.contactID = contactID; self.accountId = accountId
         self.expectedIdentityKey = expectedIdentityKey; self.text = text; self.createdAt = createdAt
         self.attempts = attempts; self.state = state; self.failReason = failReason; self.nextAttemptAt = nextAttemptAt
+        self.sentNoteID = sentNoteID
     }
 }
 
@@ -94,6 +98,13 @@ public final class NoteOutboxStore: ObservableObject {
         entries.append(entry)
         save()
         return entry
+    }
+
+    /// Records that the send succeeded (persisted BEFORE removal). If the later removal
+    /// save fails or the app is killed, the surviving entry is removed, never resent.
+    /// Residual: if this save itself fails and the app dies before a retry, a resend is possible.
+    public func markSent(id: UUID, noteID: String) {
+        update(id) { $0.sentNoteID = noteID; $0.nextAttemptAt = nil }
     }
 
     public func markFailed(id: UUID, reason: String) {

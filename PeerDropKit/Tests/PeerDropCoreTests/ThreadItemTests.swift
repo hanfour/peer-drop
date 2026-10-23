@@ -114,4 +114,34 @@ final class ThreadItemTests: XCTestCase {
         // t0 = 1_000_000 s => 11 days + 13_600 s UTC; +day is the next date
         XCTAssertEqual(starts, ["chat:a", "chat:b"])
     }
+
+    func testQueuedTwinOfSentNoteIsHidden() {
+        var q = queued(20)
+        q.sentNoteID = "n"
+        let n = note("n", .outbound, sent: 21, received: 21)
+        let items = ThreadMerge.items(chat: [], notes: [n], queued: [q], oldestLoadedChatDate: nil, hasMoreChat: false)
+        XCTAssertEqual(ids(items), ["note:n"])
+    }
+
+    func testQueuedWithoutSentNoteIDOrOtherNoteStillShows() {
+        var q2 = queued(20); q2.sentNoteID = "other"
+        let q1 = queued(10)
+        let n = note("n", .outbound, sent: 21, received: 21)
+        let items = ThreadMerge.items(chat: [], notes: [n], queued: [q1, q2], oldestLoadedChatDate: nil, hasMoreChat: false)
+        XCTAssertEqual(items.count, 3)
+    }
+
+    func testChatEqualityIncludesStatusAndReactions() {
+        var a = chat("a", 1), b = chat("a", 1)
+        XCTAssertEqual(ThreadItem.chat(a), ThreadItem.chat(b))
+        b.status = .read
+        if a.status != .read { XCTAssertNotEqual(ThreadItem.chat(a), ThreadItem.chat(b)) }
+        b = chat("a", 1); a.reactions = ["x": ["p"]]
+        XCTAssertNotEqual(ThreadItem.chat(a), ThreadItem.chat(b))
+    }
+
+    func testThreadDateRule() {
+        XCTAssertEqual(note("n", .inbound, sent: 1, received: 9).threadDate, t0.addingTimeInterval(9))
+        XCTAssertEqual(note("n", .outbound, sent: 1, received: 9).threadDate, t0.addingTimeInterval(1))
+    }
 }

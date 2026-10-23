@@ -20,6 +20,7 @@ public enum ThreadItem: Identifiable, Equatable {
         switch (lhs, rhs) {
         case let (.chat(a), .chat(b)):
             return a.id == b.id && a.text == b.text && a.isDeleted == b.isDeleted && a.timestamp == b.timestamp
+                && a.status == b.status && a.editedAt == b.editedAt && a.reactions == b.reactions
         case let (.note(a), .note(b)): return a == b
         case let (.queued(a), .queued(b)): return a == b
         default: return false
@@ -31,7 +32,7 @@ public enum ThreadItem: Identifiable, Equatable {
     public var date: Date {
         switch self {
         case .chat(let m): return m.timestamp
-        case .note(let n): return n.direction == .inbound ? n.receivedAt : n.sentAt
+        case .note(let n): return n.threadDate
         case .queued(let q): return q.createdAt
         }
     }
@@ -58,14 +59,18 @@ public enum ThreadMerge {
     /// While older chat pages remain (`hasMoreChat`), notes/queued older than
     /// `oldestLoadedChatDate` are held back so they don't appear above chat that
     /// hasn't loaded yet; with no anchor (`nil`, i.e. no chat loaded) everything is included.
-    /// A sent note never coexists with its outbox entry (the entry is removed on
-    /// success), and the outbox exposes no resulting note id, so no cross-dedupe is possible.
+    /// A queued entry whose `sentNoteID` matches a note in `notes` is the already-delivered
+    /// twin of that note (the entry is removed just after the send) and is dropped, so the
+    /// thread never shows both. A queued bubble turning into a sent note may move position
+    /// (sentAt is the real send time); that jump is accepted.
     public static func items(
         chat: [ChatMessage], notes: [NoteRecord], queued: [NoteOutboxEntry],
         oldestLoadedChatDate: Date?, hasMoreChat: Bool
     ) -> [ThreadItem] {
         var all = chat.map(ThreadItem.chat)
-        var extra = notes.map(ThreadItem.note) + queued.map(ThreadItem.queued)
+        let noteIDs = Set(notes.map(\.id))
+        let liveQueued = queued.filter { $0.sentNoteID.map { !noteIDs.contains($0) } ?? true }
+        var extra = notes.map(ThreadItem.note) + liveQueued.map(ThreadItem.queued)
         if hasMoreChat, let oldest = oldestLoadedChatDate {
             extra = extra.filter { $0.date >= oldest }
         }

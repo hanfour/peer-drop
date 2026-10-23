@@ -79,6 +79,8 @@ public final class NoteOutboxSender {
         store.reloadIfNeeded()
         store.retrySaveIfNeeded()
         guard !store.isLoadFailed else { return }   // outbox unreadable: send nothing, retry load next trigger
+        // Already delivered (sentNoteID set) but not yet removed, e.g. a failed removal save: never resend.
+        for e in store.all where e.sentNoteID != nil { store.remove(id: e.id) }
         // Snapshot ids: only entries that were queued when the pass started are considered.
         let ids = store.all.filter { $0.state == .queued }.map(\.id)
         for id in ids {
@@ -111,7 +113,8 @@ public final class NoteOutboxSender {
             let prior = (attempts: entry.attempts, next: entry.nextAttemptAt)
             store.beginAttempt(id: id, nextAttemptAt: now.addingTimeInterval(backoff(afterAttempts: prior.attempts + 1)))
             do {
-                _ = try await send(entry.text, entry.accountId, entry.expectedIdentityKey)
+                let record = try await send(entry.text, entry.accountId, entry.expectedIdentityKey)
+                store.markSent(id: id, noteID: record.id)
                 store.remove(id: id)
             } catch {
                 store.endSending(id: id)

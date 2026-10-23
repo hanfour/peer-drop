@@ -266,6 +266,37 @@ final class NoteOutboxSenderTests: XCTestCase {
         XCTAssertTrue(NoteOutboxStore(directory: dir, encryptor: encForTests).all.isEmpty)
     }
 
+    func testSuccessPersistsSentNoteIDBeforeRemoval() async throws {
+        queue(); results = [.success(())]
+        let before = store.saveCount
+        await makeSender().flush(now: now)
+        XCTAssertTrue(store.all.isEmpty)
+        XCTAssertEqual(store.saveCount - before, 3)   // beginAttempt, markSent, remove
+    }
+
+    func testMarkSentPersistsNoteID() throws {
+        let e = queue()
+        store.markSent(id: e.id, noteID: "NOTE1")
+        XCTAssertEqual(store.all[0].sentNoteID, "NOTE1")
+        XCTAssertEqual(NoteOutboxStore(directory: dir, encryptor: encForTests).all[0].sentNoteID, "NOTE1")
+    }
+
+    func testResurrectedSentEntryIsNotResentJustRemoved() async {
+        let e = queue(); store.markSent(id: e.id, noteID: "NOTE1")
+        results = [.success(())]
+        await makeSender().flush(now: now)
+        XCTAssertTrue(sent.isEmpty)
+        XCTAssertTrue(store.all.isEmpty)
+        XCTAssertTrue(NoteOutboxStore(directory: dir, encryptor: encForTests).all.isEmpty)
+    }
+
+    func testOldJSONWithoutSentNoteIDDecodes() throws {
+        let json = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","contactID":"6F9619FF-8B86-D011-B42D-00C04FC964FE","accountId":"A","expectedIdentityKey":"AAAA","text":"t","createdAt":"2026-01-01T00:00:00Z","attempts":0,"state":"queued"}"#
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        let e = try dec.decode(NoteOutboxEntry.self, from: Data(json.utf8))
+        XCTAssertNil(e.sentNoteID)
+    }
+
     // MARK: against the real NotesStore
 
     private struct Crypto: NotesCryptoContext {
