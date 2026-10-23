@@ -17,7 +17,8 @@ struct PresenceBadge: View {
     let presence: PeerPresence
     let avatarSize: CGFloat
 
-    private var diameter: CGFloat { max(12, avatarSize * 0.36) }
+    static func diameter(forAvatarSize size: CGFloat) -> CGFloat { max(12, size * 0.36) }
+    private var diameter: CGFloat { Self.diameter(forAvatarSize: avatarSize) }
     private var ringColor: Color { PaperTheme.color(.background) }
     /// Dark glyph on the amber badge in both appearances (noteText is light in dark mode).
     private static let darkGlyph = Color(red: 0x1F / 255, green: 0x16 / 255, blue: 0x10 / 255)

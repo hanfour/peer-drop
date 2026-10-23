@@ -65,7 +65,6 @@ enum PeerAvatarShape {
     }
 }
 
-
 struct PeerAvatar: View {
     let name: String
     static let defaultSize: CGFloat = 40
@@ -93,12 +92,15 @@ struct PeerAvatar: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
-        .accessibilityHidden(presence == nil)
+        .accessibilityLabel(Self.accessibilityText(name: name, presence: presence))
+        .accessibilityHidden(Self.isAccessibilityHidden(presence: presence))
     }
 
-    private var accessibilityText: String {
-        let base = String(localized: "Avatar for \(name)")
+    /// Decorative (hidden) unless a presence state needs to be announced.
+    static func isAccessibilityHidden(presence: PeerPresence?) -> Bool { presence == nil }
+
+    static func accessibilityText(name: String, presence: PeerPresence?) -> String {
+        let base = String(format: String(localized: "Avatar for %@"), name)
         guard let presence else { return base }
         return "\(base), \(presence.accessibilityLabel)"
     }
@@ -127,6 +129,6 @@ struct PeerAvatar: View {
     }
 
     private var labelColor: Color {
-        palette == nil || palette!.isEmpty ? PeerAvatarPalette.swatch(for: name).labelColor : .white
+        palette?.isEmpty ?? true ? PeerAvatarPalette.swatch(for: name).labelColor : .white
     }
 }

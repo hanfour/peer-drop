@@ -32,4 +32,20 @@ final class PeerAvatarTests: XCTestCase {
         XCTAssertEqual(Set(labels).count, 3)
         XCTAssertTrue(labels.allSatisfy { !$0.isEmpty })
     }
+
+    func testBadgeDiameter() {
+        XCTAssertEqual(PresenceBadge.diameter(forAvatarSize: 32), 12, accuracy: 0.001)
+        XCTAssertEqual(PresenceBadge.diameter(forAvatarSize: 40), 14.4, accuracy: 0.001)
+        XCTAssertEqual(PresenceBadge.diameter(forAvatarSize: 64), 23.04, accuracy: 0.001)
+    }
+
+    func testAccessibilityHiddenOnlyWithoutPresence() {
+        XCTAssertTrue(PeerAvatar.isAccessibilityHidden(presence: nil))
+        for p in [PeerPresence.online, .nearby, .offline] {
+            XCTAssertFalse(PeerAvatar.isAccessibilityHidden(presence: p))
+        }
+        let text = PeerAvatar.accessibilityText(name: "Mika", presence: .offline)
+        XCTAssertTrue(text.contains("Mika"))
+        XCTAssertTrue(text.contains(PeerPresence.offline.accessibilityLabel))
+    }
 }
