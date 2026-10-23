@@ -39,7 +39,6 @@ struct DecryptFailureBannerView: View {
                     Button(action: onVerify) {
                         Text("Verify")
                             .font(.caption.bold())
-                            .foregroundStyle(PaperTheme.color(.actionLabel))
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)

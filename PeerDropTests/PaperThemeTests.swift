@@ -65,15 +65,15 @@ final class PaperThemeTests: XCTestCase {
         }
     }
 
-    func testActionFillIsVisibleOnBackgroundAndLabelReadable() {
-        // Reply swipe action + Verify button: the fill must read as a shape against
-        // the chat background (>= 3:1) and carry its label at >= 4.5:1.
+    func testActionFillWorksWithWhiteLabelAndOnBackground() {
+        // Swipe Reply / Verify / Reconnect: SwiftUI draws the label white on the tint,
+        // so one fill must carry white at >= 4.5:1 and read as a shape (>= 3:1) on the page.
         for dark in [false, true] {
             let fill = PaperPalette.hex(.actionFill, dark: dark)
             let shape = PaperPalette.contrastRatio(fill, PaperPalette.hex(.background, dark: dark))
             XCTAssertGreaterThanOrEqual(shape, 3.0, "actionFill vs background dark=\(dark): \(shape)")
-            let label = PaperPalette.contrastRatio(PaperPalette.hex(.actionLabel, dark: dark), fill)
-            XCTAssertGreaterThanOrEqual(label, 4.5, "actionLabel on actionFill dark=\(dark): \(label)")
+            let label = PaperPalette.contrastRatio(0xFFFFFF, fill)
+            XCTAssertGreaterThanOrEqual(label, 4.5, "white on actionFill dark=\(dark): \(label)")
         }
     }
 

@@ -124,7 +124,7 @@ struct SearchResultRow: View {
             HStack {
                 Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
                     .font(.system(.subheadline, design: .rounded).bold())
-                    .foregroundStyle(PaperTheme.color(message.isOutgoing ? .actionFill : .incomingText))
+                    .foregroundStyle(PaperTheme.color(message.isOutgoing ? .datePillText : .incomingText))
 
                 Spacer()
 
@@ -197,7 +197,7 @@ struct HighlightedText: View {
         let suffix = String(text.suffix(text.count - endIndex))
 
         return Text(prefix) +
-            Text(match).bold().foregroundColor(PaperTheme.color(.actionFill)) +
+            Text(match).bold().underline().foregroundColor(PaperTheme.color(.incomingText)) +
             Text(suffix)
     }
 }
