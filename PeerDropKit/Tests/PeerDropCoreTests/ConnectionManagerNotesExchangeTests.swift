@@ -924,13 +924,22 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
         let c = pendingContact(peerAccountId, key: k, signing: signing)
         cm.trustedContactStore.add(c)
-        DirectoryScript.shared.reply = .entry(accountId: peerAccountId, identityKey: k, signingKey: signing)
+        // Still offline: every retry would hit the directory, so the count
+        // shows how many retries a burst of path updates caused.
+        DirectoryScript.shared.reply = .offline
         for _ in 0..<5 {
             cm.notesExchangeNetworkPathChanged(from: .unsatisfied, oldInterfaces: [], to: .satisfied, newInterfaces: ["en0"])
         }
-        let bound = await poll { self.cm.trustedContactStore.find(byId: c.id)?.accountId == self.peerAccountId }
-        XCTAssertTrue(bound, "network recovery did not retry the pending binding")
+        let tried = await poll { self.lookups(self.peerAccountId) >= 1 }
+        XCTAssertTrue(tried, "network recovery did not retry the pending binding")
+        try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertEqual(lookups(peerAccountId), 1, "a burst of path updates must retry once")
+        XCTAssertNotNil(cm.trustedContactStore.find(byId: c.id)?.pendingAccountBinding)
+
+        DirectoryScript.shared.reply = .entry(accountId: peerAccountId, identityKey: k, signingKey: signing)
+        cm.notesExchangeNetworkPathChanged(from: .unsatisfied, oldInterfaces: [], to: .satisfied, newInterfaces: ["en0"])
+        let bound = await poll { self.cm.trustedContactStore.find(byId: c.id)?.accountId == self.peerAccountId }
+        XCTAssertTrue(bound, "network recovery did not bind once the directory answered")
 
         // An unchanged satisfied path does not retry.
         let d = pendingContact("PEER2346", key: EphemeralKey().raw, signing: signing)
