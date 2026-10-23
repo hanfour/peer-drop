@@ -21,6 +21,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     var inboxRequest: Int = 0
     @ViewBuilder var inbox: () -> Inbox
     @State private var showInbox = false
+    @State private var pickedGroup: DeviceGroup?
+    @State private var showGroup = false
     @State private var handledInboxRequest = 0
 
     @State private var query = ""
@@ -142,6 +144,9 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         #endif
         .chatTargetDestination()
         .navigationDestination(isPresented: $showInbox) { inbox() }
+        .navigationDestination(isPresented: $showGroup) {
+            if let g = pickedGroup { GroupChatView(group: g) }
+        }
         .onChange(of: inboxRequest) { _ in consumeInboxRequest() }
         .onAppear {
             refreshSummaries()
@@ -150,17 +155,40 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         }
     }
 
+    /// Single route to the inbox (row tap and deep link both drive `showInbox`).
+    /// If the inbox is already visible nothing is pushed: the visible `NotesInboxView`
+    /// consumes `openNoteID` itself. A chat pushed from this tab is dismissed first.
     private func consumeInboxRequest() {
         guard inboxRequest != handledInboxRequest else { return }
         handledInboxRequest = inboxRequest
-        showInbox = true
+        #if os(iOS)
+        let chatShowing = showPicked || showGroup
+        #else
+        let chatShowing = showGroup
+        #endif
+        switch InboxDeepLink.action(inboxShowing: showInbox, chatShowing: chatShowing) {
+        case .none:
+            break
+        case .push:
+            showInbox = true
+        case .dismissChatThenPush:
+            var t = Transaction(animation: nil)
+            t.disablesAnimations = true
+            withTransaction(t) {
+                showGroup = false
+                #if os(iOS)
+                showPicked = false
+                #endif
+                showInbox = true
+            }
+        }
     }
 
     // MARK: - Rows
 
     private var inboxRow: some View {
-        NavigationLink {
-            inbox()
+        Button {
+            showInbox = true
         } label: {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: PeerAvatarShape.cornerRadius(forSize: 44), style: .continuous)
@@ -177,9 +205,18 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                     .foregroundStyle(paper(.incomingText))
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                #if os(iOS)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(paper(.datePillText))
+                    .accessibilityHidden(true)
+                #endif
             }
             .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isLink)
         .listRowBackground(paper(.incomingBubble))
     }
 
@@ -187,9 +224,21 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     private func row(_ model: ConversationRowModel, presence: PeerPresence?) -> some View {
         if model.isGroup {
             if let group = connectionManager.groupStore.groups.first(where: { $0.id == model.sourceID }) {
-                NavigationLink(destination: GroupChatView(group: group)) {
-                    ConversationRow(model: model, presence: nil)
+                Button {
+                    pickedGroup = group
+                    showGroup = true
+                } label: {
+                    HStack(spacing: 8) {
+                        ConversationRow(model: model, presence: nil)
+                        #if os(iOS)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(paper(.datePillText))
+                            .accessibilityHidden(true)
+                        #endif
+                    }
                 }
+                .buttonStyle(.plain)
             }
         } else {
             Button {
@@ -307,6 +356,16 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         showPicker = false
         openChat(recordID: record.id, name: record.displayName)
         #endif
+    }
+}
+
+/// What the notes deep link should do given what the Notes tab is currently showing.
+enum InboxDeepLink {
+    enum Action: Equatable { case none, push, dismissChatThenPush }
+
+    static func action(inboxShowing: Bool, chatShowing: Bool) -> Action {
+        if inboxShowing { return .none }
+        return chatShowing ? .dismissChatThenPush : .push
     }
 }
 

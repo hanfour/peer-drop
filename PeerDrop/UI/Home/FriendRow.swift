@@ -1,5 +1,6 @@
 import SwiftUI
 import PeerDropCore
+import PeerDropTransport
 
 /// One row of the Home list: avatar with presence badge, single-line name, subtitle,
 /// and an optional filled "Connect" pill for nearby friends.
@@ -9,6 +10,8 @@ struct FriendRow: View, PaperThemed {
     let presence: PeerPresence
     var isConnecting: Bool = false
     var onConnect: (() -> Void)? = nil
+    /// Live connection of a connected friend; shows the encryption status chip.
+    var connection: PeerConnection? = nil
 
     private var subtitle: String {
         FriendSubtitle.text(presence: presence, lastConnected: record.lastConnected,
@@ -35,6 +38,10 @@ struct FriendRow: View, PaperThemed {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("\(record.displayName), \(presence.accessibilityLabel), \(subtitle)"))
+
+            if let connection {
+                SecureChannelIndicator(peerConn: connection)
+            }
 
             if HomeListLogic.showsConnectPill(presence: presence, isConnecting: isConnecting), let onConnect {
                 Button(action: onConnect) {

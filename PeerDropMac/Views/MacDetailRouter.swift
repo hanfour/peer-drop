@@ -6,7 +6,7 @@ import PeerDropDiary
 /// Routes the selected sidebar section to its detail content.
 ///
 /// M4 Task 1b wired the three real section views (NearbyTab,
-/// LibraryTab, RelayConnectView) after their iOS
+/// HomeTab, RelayConnectView) after their iOS
 /// dependencies were cross-platformed via `PlatformImage` +
 /// `Image(platformImage:)` + cross-platform pasteboard / file
 /// pickers / QR rendering.
@@ -30,7 +30,7 @@ struct MacDetailRouter: View {
     // selected index after certain actions. macOS has no tab parent —
     // the sidebar (`MacSidebar`) owns navigation — so we feed a
     // throwaway state slot that nothing observes.
-    @State private var nearbyTabIndex: AppTab = .nearby
+    @State private var unusedTabSelection: AppTab = .nearby
 
     var body: some View {
         switch section {
@@ -47,7 +47,7 @@ struct MacDetailRouter: View {
             }
         case .nearby:
             NavigationStack {
-                NearbyTab(selectedTab: $nearbyTabIndex)
+                NearbyTab(selectedTab: $unusedTabSelection)
                     .environmentObject(connectionManager)
             }
         case .trusted:

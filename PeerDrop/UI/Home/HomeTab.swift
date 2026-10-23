@@ -166,11 +166,21 @@ struct HomeTab: View, PaperThemed {
             openWindow(id: "chat", value: peerID(for: record))
             #endif
         } label: {
-            FriendRow(record: record, presence: .online)
+            FriendRow(record: record, presence: .online, connection: connectionManager.connection(for: record.id))
         }
         .buttonStyle(.plain)
         .listRowBackground(paper(.incomingBubble))
-        .swipeActions(edge: .trailing) { forgetButton(record) }
+        // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                let id = connectionManager.connection(for: record.id)?.id ?? record.id
+                Task { await connectionManager.disconnect(from: id) }
+            } label: {
+                Label("Disconnect", systemImage: "xmark.circle.fill")
+            }
+            .tint(.orange)
+            forgetButton(record)
+        }
     }
 
     @ViewBuilder

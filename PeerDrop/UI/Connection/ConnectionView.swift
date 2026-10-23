@@ -37,6 +37,14 @@ struct ConnectionView: View {
 
                     StatusBadge(state: connectionManager.state)
 
+                    if let conn = connectionManager.connection(for: peer.id) {
+                        SecureChannelIndicator(peerConn: conn)
+                    }
+
+                    if let ni = connectionManager.nearbyInteractionManager {
+                        PeerProximityRow(manager: ni, peerID: peer.id)
+                    }
+
                     Spacer()
 
                     if case .connected = connectionManager.state {
@@ -198,5 +206,32 @@ struct ConnectionView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityHint(disabled ? "\(label) is disabled. Enable in Settings." : "Double tap to \(label.lowercased())")
+    }
+}
+
+
+/// Distance / direction to the peer from Nearby Interaction (UWB devices only; absent otherwise).
+private struct PeerProximityRow: View {
+    @ObservedObject var manager: NearbyInteractionManager
+    let peerID: String
+
+    var body: some View {
+        if let proximity = manager.peerProximity[peerID] {
+            HStack(spacing: 4) {
+                if let distance = proximity.distance {
+                    Image(systemName: "ruler")
+                        .font(.system(size: 9))
+                    Text(String(format: "%.1f m", distance))
+                        .font(.caption2)
+                }
+                if let direction = proximity.direction {
+                    Image(systemName: "location.north.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.blue)
+                        .rotationEffect(.radians(Double(atan2(direction.x, direction.z))))
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
     }
 }
