@@ -11,7 +11,7 @@ struct ChatAvatarSlot: View {
     var body: some View {
         Group {
             if visible {
-                PeerAvatar(name: name, size: Self.width)
+                PeerAvatar(name: name, size: Self.width, palette: PeerAvatarPalette.paper)
             } else {
                 Color.clear
             }
