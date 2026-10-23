@@ -21,6 +21,8 @@ public enum NotesStoreError: Error, Equatable {
     case rateLimited
     case inboxFull
     case noteNotFound
+    /// The directory resolved a bound-account send to a different account or identity key.
+    case recipientMismatch
     case network(String)
 }
 
@@ -368,6 +370,37 @@ public final class NotesStore: ObservableObject {
         return lookup
     }
 
+    // MARK: - Thread queries (bound friend)
+
+    /// Notes belonging to one friend's thread: inbound with a verified sender
+    /// equal to `accountId`, outbound addressed to it and NOT anonymous.
+    /// Oldest first (inbound by `receivedAt`, outbound by `sentAt`); merging
+    /// with live chat is the caller's job.
+    public func notes(forAccount accountId: String) -> [NoteRecord] {
+        let received = inbox.filter { Self.isVerifiedInbound($0, from: accountId) }
+        let delivered = sent.filter { $0.recipientAccountId == accountId && $0.sender != .anonymous }
+        func when(_ r: NoteRecord) -> Date { r.direction == .inbound ? r.receivedAt : r.sentAt }
+        return (received + delivered).sorted { when($0) < when($1) }
+    }
+
+    public func unreadCount(forAccount accountId: String) -> Int {
+        inbox.filter { Self.isVerifiedInbound($0, from: accountId) && $0.isUnread }.count
+    }
+
+    /// Ids of unread inbound notes whose verified sender is any of `accounts`.
+    public func boundUnreadIDs(accounts: Set<String>) -> Set<String> {
+        Set(inbox.filter { r in
+            guard r.isUnread, case .verified(let id, _) = r.sender else { return false }
+            return accounts.contains(id)
+        }.map(\.id))
+    }
+
+    private static func isVerifiedInbound(_ r: NoteRecord, from accountId: String) -> Bool {
+        guard r.direction == .inbound, case .verified(let id, _) = r.sender else { return false }
+        return id == accountId
+    }
+
+
     // MARK: - Send
 
     public func send(text: String, to handle: String, anonymous: Bool) async throws -> NoteRecord {
@@ -376,6 +409,25 @@ public final class NotesStore: ObservableObject {
         let entry: DirectoryEntry?
         do { entry = try await client.lookup(handle: handle, includeBundle: true) } catch { throw Self.mapNetwork(error) }
         guard let entry else { throw NotesStoreError.recipientNotFound }
+        return try await deliver(text: text, to: entry, account: account, anonymous: anonymous)
+    }
+
+    /// Sends a signed note to a friend bound by account id. The directory
+    /// resolves ids first and nicknames second ("ABCD1234" can be a nickname),
+    /// so the resolved entry is asserted to be exactly the bound account and
+    /// identity key BEFORE anything is sealed. Never anonymous.
+    public func sendToBound(text: String, accountId: String, expectedIdentityKey: Data) async throws -> NoteRecord {
+        guard let account = accountManager.account else { throw NotesStoreError.noAccount }
+        guard text.unicodeScalars.count <= NoteCrypto.maxTextScalars else { throw NotesStoreError.textTooLong }
+        let entry: DirectoryEntry?
+        do { entry = try await client.lookup(handle: accountId, includeBundle: true) } catch { throw Self.mapNetwork(error) }
+        guard let entry else { throw NotesStoreError.recipientNotFound }
+        guard entry.accountId.raw == accountId, entry.identityKey == expectedIdentityKey else { throw NotesStoreError.recipientMismatch }
+        return try await deliver(text: text, to: entry, account: account, anonymous: false)
+    }
+
+    /// Shared tail of `send` / `sendToBound`: bundle check, seal, PoW, post, persist.
+    private func deliver(text: String, to entry: DirectoryEntry, account: Account, anonymous: Bool) async throws -> NoteRecord {
         guard entry.preKeyBundle != nil else { throw NotesStoreError.recipientHasNoKeys }
         let signer = anonymous ? nil : try crypto.signer(accountId: account.accountId.raw, nickname: account.nickname)
         let envelope: NoteEnvelope
