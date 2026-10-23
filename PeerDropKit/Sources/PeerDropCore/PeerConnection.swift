@@ -431,6 +431,15 @@ public final class PeerConnection: ObservableObject, Identifiable {
         }
     }
 
+    /// Runs on the global executor (nonisolated async), not the main actor.
+    private nonisolated static func decryptEnvelope(
+        _ frame: Data, channel: LocalSecureChannel
+    ) async throws -> PeerMessage {
+        let plaintext = try PerfSignpost.measure(.ratchetDecrypt) { try channel.decrypt(frame) }
+        let inner = try PerfSignpost.measure(.messageDecode) { try PeerMessage.decoded(from: plaintext) }
+        return inner
+    }
+
     // MARK: - Secure Channel (audit-#13 Phase 2)
 
     /// Initiate the local-TCP secure handshake. Generates a fresh
@@ -596,10 +605,16 @@ public final class PeerConnection: ObservableObject, Identifiable {
                 return
             }
             guard let frame = message.payload else { return }
-            let plaintext = try PerfSignpost.measure(.ratchetDecrypt) { try channel.decrypt(frame) }
+            // Decrypt + decode run off the main actor (~0.7 ms per 64 KB chunk
+            // on macOS). The receive loop awaits each message before reading
+            // the next, so ratchet order and `onMessageReceived` order are
+            // unchanged; if the connection was replaced while we were off the
+            // main actor, the result belongs to a dead transport and is dropped.
+            let generation = connectionGeneration
+            let inner = try await Self.decryptEnvelope(frame, channel: channel)
+            guard connectionGeneration == generation else { return }
             if !hasReceivedEnvelope { hasReceivedEnvelope = true }
             sendResponderNoOpIfNeeded(channel)
-            let inner = try PerfSignpost.measure(.messageDecode) { try PeerMessage.decoded(from: plaintext) }
             onMessageReceived?(inner)
 
         default:
