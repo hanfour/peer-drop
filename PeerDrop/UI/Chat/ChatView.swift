@@ -95,10 +95,16 @@ struct ChatView: View {
                             .frame(maxWidth: .infinity)
                         }
 
+                        let runStarts = ChatMessageRuns.firstInRunIDs(in: chatManager.messages)
+                        let dayStarts = ChatMessageRuns.dayStartIDs(in: chatManager.messages)
                         ForEach(chatManager.messages, id: \.id) { message in
+                            if dayStarts.contains(message.id) {
+                                ChatDatePill(date: message.timestamp)
+                            }
                             ChatBubbleView(
                                 message: message,
                                 chatManager: chatManager,
+                                runStart: runStarts.contains(message.id),
                                 onReaction: { emoji in
                                     connectionManager.sendReaction(
                                         emoji: emoji,

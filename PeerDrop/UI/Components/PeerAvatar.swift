@@ -2,15 +2,16 @@ import SwiftUI
 
 struct PeerAvatar: View {
     let name: String
+    var size: CGFloat = 40
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(color)
-                .frame(width: 40, height: 40)
+                .frame(width: size, height: size)
 
             Text(initials)
-                .font(.system(.callout, weight: .semibold))
+                .font(.system(size: size * 0.35, weight: .semibold))
                 .foregroundStyle(.white)
         }
         .accessibilityLabel("Avatar for \(name)")
