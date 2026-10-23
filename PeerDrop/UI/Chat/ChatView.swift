@@ -141,16 +141,15 @@ struct ChatView: View {
                                         messageID: messageID,
                                         to: peerID
                                     )
-                                }
+                                },
+                                onReply: { replyingToMessage = message }
                             )
                             .id(message.id)
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    replyingToMessage = message
-                                } label: {
-                                    Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
-                                }
-                                .tint(PaperTheme.color(.actionFill))
+                            .swipeToReply(isEnabled: true, isDeleted: message.isDeleted) {
+                                replyingToMessage = message
+                            }
+                            .accessibilityAction(named: Text("Reply")) {
+                                if !message.isDeleted { replyingToMessage = message }
                             }
                         }
                     }
