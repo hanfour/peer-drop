@@ -3488,9 +3488,13 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MediaMessagePayload")
                 return
             }
+            if payload.fileData != nil, payload.validatedFileData == nil {
+                logger.warning("Dropping media bytes whose size doesn't match the claimed fileSize (\(payload.fileSize))")
+            }
             chatManager.saveIncomingMedia(
                 payload: payload,
-                fileData: Data(),
+                // nil from a pre-H7 peer (or rejected bytes) keeps the old thumbnail-only behaviour.
+                fileData: payload.validatedFileData ?? Data(),
                 peerID: peerID,
                 peerName: peerConnection.peerIdentity.displayName
             )
@@ -4282,7 +4286,15 @@ public final class ConnectionManager: ObservableObject {
         }
         let peer = peerConn.peerIdentity
 
-        let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData)
+        // The file rides inline in the message (H7: it used to be omitted, so
+        // receivers stored an empty file). Refuse over-cap files up front rather
+        // than build a message the framer or reassembler would reject.
+        guard fileData.count <= MediaMessagePayload.maxInlineFileSize else {
+            logger.info("Blocked outgoing media — \(fileData.count) bytes exceeds the inline cap")
+            statusToast = "File too large to send in chat"
+            return
+        }
+        let payload = MediaMessagePayload(mediaType: mediaType, fileName: fileName, fileSize: Int64(fileData.count), mimeType: mimeType, duration: duration, thumbnailData: thumbnailData, fileData: fileData)
         guard let msg = try? PeerMessage.mediaMessage(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for mediaMessage")
             return
