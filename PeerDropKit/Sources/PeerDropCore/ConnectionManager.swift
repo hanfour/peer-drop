@@ -445,7 +445,8 @@ public final class ConnectionManager: ObservableObject {
         },
         wakeScheduling: true,
         // Unknown (no path seen yet) counts as satisfied.
-        networkSatisfied: { [weak self] in self?.lastNetworkPath?.status != .unsatisfied })
+        networkSatisfied: { [weak self] in self?.lastNetworkPath?.status != .unsatisfied },
+        accountReady: { [weak self] in self?.accountManager.account != nil })
 
     /// What the outbox may do for a contact right now. Blocked wins over everything.
     nonisolated static func outboxBinding(for contact: TrustedContact?) -> OutboxBindingLookup {
@@ -456,7 +457,7 @@ public final class ConnectionManager: ObservableObject {
         return .verified(accountId: accountId, identityKey: c.identityPublicKey)
     }
 
-    public enum QueueNoteError: Error, Equatable { case contactNotFound, blocked, notBound, bindingPending, unavailable }
+    public enum QueueNoteError: Error, Equatable { case contactNotFound, outboxUnavailable, blocked, notBound, bindingPending, unavailable }
 
     /// Queues a note the user explicitly sent from a friend thread and makes
     /// one immediate delivery attempt. Throws (queueing nothing) when the
@@ -474,6 +475,8 @@ public final class ConnectionManager: ObservableObject {
             default: throw QueueNoteError.notBound
             }
         }
+        noteOutbox.reloadIfNeeded()
+        guard !noteOutbox.isLoadFailed else { throw QueueNoteError.outboxUnavailable }
         let entry = noteOutbox.enqueue(contactID: c.id, accountId: accountId, expectedIdentityKey: key, text: text)
         Task { await flushNoteOutbox() }
         return entry

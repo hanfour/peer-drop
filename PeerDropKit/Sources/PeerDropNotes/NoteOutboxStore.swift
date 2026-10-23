@@ -60,6 +60,8 @@ public final class NoteOutboxStore: ObservableObject {
     private let encryptor: ChatDataEncryptor
     private let reader: ((URL) throws -> Data)?
     private var saveDirty = false
+    /// Number of save attempts (test observability).
+    public private(set) var saveCount = 0
 
     /// `reader` is a test seam replacing `encryptor.readAndDecrypt`.
     public init(directory: URL? = nil, encryptor: ChatDataEncryptor = .shared, reader: ((URL) throws -> Data)? = nil) {
@@ -101,9 +103,12 @@ public final class NoteOutboxStore: ObservableObject {
     /// Marks every still-queued entry of a contact failed (binding cancelled,
     /// contact forgotten, ...). Entries are kept, never deleted.
     public func failQueuedEntries(forContact contactID: UUID, reason: String) {
-        for e in entries where e.contactID == contactID && e.state == .queued {
-            markFailed(id: e.id, reason: reason)
+        var changed = false
+        for i in entries.indices where entries[i].contactID == contactID && entries[i].state == .queued {
+            entries[i].state = .failed; entries[i].failReason = reason; entries[i].nextAttemptAt = nil
+            changed = true
         }
+        if changed { save() }   // one write for the whole batch
     }
 
     /// Persists the attempt BEFORE the network await so a kill mid-send is
@@ -157,7 +162,7 @@ public final class NoteOutboxStore: ObservableObject {
 
     private func load(merging pending: [NoteOutboxEntry]) {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            isLoadFailed = false; entries = pending; refreshQuarantineCount()
+            isLoadFailed = false; loadError = nil; entries = pending; refreshQuarantineCount()
             if !pending.isEmpty { save() }
             return
         }
@@ -221,6 +226,7 @@ public final class NoteOutboxStore: ObservableObject {
     }
 
     private func save() {
+        saveCount += 1
         guard !isLoadFailed else { saveDirty = true; return }   // never clobber an unread file
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

@@ -71,4 +71,26 @@ final class ConnectionManagerNoteOutboxTests: XCTestCase {
         XCTAssertEqual(cm.noteOutbox.all.first?.state, .failed)
         XCTAssertEqual(cm.noteOutbox.all.first?.failReason, "綁定已取消")
     }
+
+    func testQueueNoteThrowsWhenOutboxUnavailable() {
+        let c = bound()
+        let dir = outboxDir!
+        NoteOutboxStore(directory: dir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)))
+            .enqueue(contactID: c.id, accountId: "FRND2345", expectedIdentityKey: key, text: "old")
+        cm.noteOutbox = NoteOutboxStore(directory: dir, encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)),
+                                        reader: { _ in throw ChatDataEncryptor.EncryptionError.keychainError(-25308) })
+        XCTAssertThrowsError(try cm.queueNote(text: "x", toContact: c.id)) {
+            XCTAssertEqual($0 as? ConnectionManager.QueueNoteError, .outboxUnavailable)
+        }
+        XCTAssertTrue(cm.noteOutbox.all.isEmpty)
+    }
+
+    func testForgetDeviceFailsQueuedEntries() {
+        let c = bound()
+        cm.noteOutbox.enqueue(contactID: c.id, accountId: "FRND2345", expectedIdentityKey: key, text: "x")
+        cm.forgetDevice(id: c.deviceId!)
+        XCTAssertNil(cm.trustedContactStore.find(byId: c.id))
+        XCTAssertEqual(cm.noteOutbox.all.first?.state, .failed)
+        XCTAssertEqual(cm.noteOutbox.all.first?.failReason, "綁定已取消")
+    }
 }

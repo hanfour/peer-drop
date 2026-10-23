@@ -35,6 +35,7 @@ public final class NoteOutboxSender {
     private let clock: () -> Date
     private let wakeScheduling: Bool
     private let networkSatisfied: () -> Bool
+    private let accountReady: () -> Bool
 
     private var flushing = false
     private var flushRequested = false
@@ -42,7 +43,9 @@ public final class NoteOutboxSender {
 
     public init(store: NoteOutboxStore, send: @escaping SendFunction, binding: @escaping (UUID) -> OutboxBindingLookup,
                 baseDelay: TimeInterval = 30, clock: @escaping () -> Date = { Date() }, wakeScheduling: Bool = false,
-                networkSatisfied: @escaping () -> Bool = { true }) {
+                networkSatisfied: @escaping () -> Bool = { true },
+                accountReady: @escaping () -> Bool = { true }) {
+        self.accountReady = accountReady
         self.networkSatisfied = networkSatisfied
         self.store = store; self.send = send; self.binding = binding
         self.baseDelay = baseDelay; self.clock = clock; self.wakeScheduling = wakeScheduling
@@ -50,10 +53,11 @@ public final class NoteOutboxSender {
 
     public convenience init(store: NoteOutboxStore, notesStore: NotesStore, binding: @escaping (UUID) -> OutboxBindingLookup,
                             baseDelay: TimeInterval = 30, clock: @escaping () -> Date = { Date() }, wakeScheduling: Bool = false,
-                            networkSatisfied: @escaping () -> Bool = { true }) {
+                            networkSatisfied: @escaping () -> Bool = { true },
+                            accountReady: @escaping () -> Bool = { true }) {
         self.init(store: store, send: { [notesStore] text, account, key in
             try await notesStore.sendToBound(text: text, accountId: account, expectedIdentityKey: key)
-        }, binding: binding, baseDelay: baseDelay, clock: clock, wakeScheduling: wakeScheduling, networkSatisfied: networkSatisfied)
+        }, binding: binding, baseDelay: baseDelay, clock: clock, wakeScheduling: wakeScheduling, networkSatisfied: networkSatisfied, accountReady: accountReady)
     }
 
     /// Delay after the n-th failed attempt (n >= 1): base, 4x, 16x ...
@@ -102,6 +106,8 @@ public final class NoteOutboxSender {
             }
             if let next = entry.nextAttemptAt, now < next { continue }
 
+            // Account not ready: wait with NO write (begin/revert would burn an attempt on a kill).
+            guard accountReady() else { return }
             let prior = (attempts: entry.attempts, next: entry.nextAttemptAt)
             store.beginAttempt(id: id, nextAttemptAt: now.addingTimeInterval(backoff(afterAttempts: prior.attempts + 1)))
             do {

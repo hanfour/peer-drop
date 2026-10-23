@@ -17,11 +17,12 @@ final class NoteOutboxSenderTests: XCTestCase {
     private var lookup: OutboxBindingLookup = .verified(accountId: "TESTRCPT", identityKey: Data(repeating: 7, count: 32))
     private var delay: UInt64 = 0
     private var online = true
+    private var accountReady = true
     private let encForTests = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
 
     override func setUp() { reset() }
     private func reset() {
-        sent = []; results = []; online = true; lookup = .verified(accountId: "TESTRCPT", identityKey: Data(repeating: 7, count: 32))
+        sent = []; results = []; online = true; accountReady = true; lookup = .verified(accountId: "TESTRCPT", identityKey: Data(repeating: 7, count: 32))
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("outbox-s-\(UUID().uuidString)", isDirectory: true)
         store = NoteOutboxStore(directory: dir, encryptor: encForTests)
         TestURLProtocol.reset()
@@ -37,7 +38,7 @@ final class NoteOutboxSenderTests: XCTestCase {
             if self.delay > 0 { try await Task.sleep(nanoseconds: self.delay) }
             if !self.results.isEmpty, case .failure(let e) = self.results.removeFirst() { throw e }
             return self.record()
-        }, binding: { [unowned self] _ in self.lookup }, baseDelay: 30, clock: { [unowned self] in self.now }, networkSatisfied: { [unowned self] in self.online })
+        }, binding: { [unowned self] _ in self.lookup }, baseDelay: 30, clock: { [unowned self] in self.now }, networkSatisfied: { [unowned self] in self.online }, accountReady: { [unowned self] in self.accountReady })
     }
     @discardableResult private func queue(_ text: String = "hello") -> NoteOutboxEntry {
         store.enqueue(contactID: contact, accountId: acct, expectedIdentityKey: key, text: text, now: now)
@@ -197,6 +198,20 @@ final class NoteOutboxSenderTests: XCTestCase {
         store.setAttemptState(id: e.id, attempts: NoteOutboxSender.maxAttempts, nextAttemptAt: nil)  // three killed launches
         await makeSender().flush()
         XCTAssertTrue(sent.isEmpty); XCTAssertEqual(store.all[0].state, .failed)
+    }
+
+    func testAccountNotReadySkipsWithoutAnyWrite() async throws {
+        queue(); accountReady = false
+        let file = dir.appendingPathComponent("outbox.enc")
+        let before = try Data(contentsOf: file)
+        let s = makeSender()
+        await s.flush(); await s.flush()
+        XCTAssertTrue(sent.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: file), before, "no disk write while the account is not ready")
+        XCTAssertEqual(store.all[0].attempts, 0)
+        accountReady = true; results = [.success(())]
+        await s.flush()
+        XCTAssertTrue(store.all.isEmpty)
     }
 
     func testNoAccountDoesNotConsumeAttemptEvenThoughPersistedFirst() async {

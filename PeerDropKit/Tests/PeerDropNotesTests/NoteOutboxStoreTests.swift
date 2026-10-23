@@ -85,6 +85,39 @@ final class NoteOutboxStoreTests: XCTestCase {
         XCTAssertEqual(Set(NoteOutboxStore(directory: dir, encryptor: enc).all.map(\.id)), [kept.id, fresh.id])
     }
 
+    func testSuccessfulReloadClearsStaleLoadError() {
+        var fail = true
+        let reader: (URL) throws -> Data = { [enc] url in
+            if fail { throw ChatDataEncryptor.EncryptionError.keychainError(-25308) }
+            return try enc!.readAndDecrypt(from: url)
+        }
+        NoteOutboxStore(directory: dir, encryptor: enc).enqueue(contactID: contact, accountId: "A", expectedIdentityKey: Data(), text: "t")
+        let s = NoteOutboxStore(directory: dir, encryptor: enc, reader: reader)
+        XCTAssertNotNil(s.loadError)
+        fail = false; s.reloadIfNeeded()
+        XCTAssertNil(s.loadError)
+    }
+
+    func testMissingFileReloadAlsoClearsLoadError() throws {
+        let reader: (URL) throws -> Data = { _ in throw ChatDataEncryptor.EncryptionError.keychainError(-1) }
+        NoteOutboxStore(directory: dir, encryptor: enc).enqueue(contactID: contact, accountId: "A", expectedIdentityKey: Data(), text: "t")
+        let s = NoteOutboxStore(directory: dir, encryptor: enc, reader: reader)
+        XCTAssertTrue(s.isLoadFailed)
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("outbox.enc"))
+        s.reloadIfNeeded()
+        XCTAssertFalse(s.isLoadFailed); XCTAssertNil(s.loadError)
+    }
+
+    func testFailQueuedEntriesWritesOnce() throws {
+        let s = NoteOutboxStore(directory: dir, encryptor: enc)
+        for i in 0..<3 { s.enqueue(contactID: contact, accountId: "A", expectedIdentityKey: Data(), text: "\(i)") }
+        let base = s.saveCount
+        s.failQueuedEntries(forContact: contact, reason: "r")
+        XCTAssertEqual(s.failedCount(), 3)
+        XCTAssertEqual(NoteOutboxStore(directory: dir, encryptor: enc).failedCount(), 3)
+        XCTAssertEqual(s.saveCount, base + 1)   // ONE batched save
+    }
+
     func testFailQueuedEntriesForContactKeepsThem() {
         let s = NoteOutboxStore(directory: dir, encryptor: enc)
         let a = s.enqueue(contactID: contact, accountId: "ABCD2345", expectedIdentityKey: Data(), text: "a")
