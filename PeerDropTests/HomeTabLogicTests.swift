@@ -81,4 +81,24 @@ final class HomeTabLogicTests: XCTestCase {
         XCTAssertEqual(FriendSubtitle.text(presence: .offline, lastConnected: Date(), connectionCount: 0, source: "bonjour"),
                        String(localized: "Not connected yet"))
     }
+
+    func testEqualNamesTieBreakById() {
+        let all = [rec("b", "Sam"), rec("a", "Sam"), rec("c", "sam")]
+        let r = HomeListLogic.sections(records: all, presence: presence(online: []), query: "")
+        XCTAssertEqual(r.friends.map(\.id), ["a", "b", "c"])
+    }
+
+    func testConnectPillHiddenWhileConnecting() {
+        XCTAssertTrue(HomeListLogic.showsConnectPill(presence: .nearby, isConnecting: false))
+        XCTAssertFalse(HomeListLogic.showsConnectPill(presence: .nearby, isConnecting: true))
+        XCTAssertFalse(HomeListLogic.showsConnectPill(presence: .offline, isConnecting: false))
+        XCTAssertFalse(HomeListLogic.showsConnectPill(presence: .online, isConnecting: false))
+    }
+
+    func testSubtitleConnectingIsNeutral() {
+        XCTAssertEqual(FriendSubtitle.text(presence: .nearby, lastConnected: Date(), connectionCount: 1, source: "bonjour", isConnecting: true),
+                       String(localized: "Connecting..."))
+        XCTAssertEqual(FriendSubtitle.text(presence: .online, lastConnected: Date(), connectionCount: 1, source: "bonjour", isConnecting: true),
+                       String(localized: "Connected · Local network"))
+    }
 }

@@ -46,7 +46,7 @@ extension ConnectionManager {
         presence(for: record, sources: presenceSources())
     }
 
-    func presence(for record: DeviceRecord, sources: PresenceSources) -> PeerPresence {
+    public func presence(for record: DeviceRecord, sources: PresenceSources) -> PeerPresence {
         var ids: Set<String> = [record.id]
         if let alias = record.peerDeviceId { ids.insert(alias) }
         return PeerPresenceResolver.presence(ids: ids, sources: sources)

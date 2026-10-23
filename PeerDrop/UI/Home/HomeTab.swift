@@ -27,11 +27,27 @@ struct HomeTab: View, PaperThemed {
 
     private var groupStore: DeviceGroupStore { connectionManager.groupStore }
 
-    private var split: (connected: [DeviceRecord], friends: [DeviceRecord]) {
-        HomeListLogic.sections(
-            records: connectionManager.deviceStore.records,
-            presence: { connectionManager.presence(for: $0) },
-            query: query)
+    /// Presence is resolved once per body update from a single `presenceSources()` snapshot.
+    private struct Snapshot {
+        let presence: [String: PeerPresence]
+        let connecting: Set<String>
+        let sections: (connected: [DeviceRecord], friends: [DeviceRecord])
+    }
+
+    private func snapshot() -> Snapshot {
+        let sources = connectionManager.presenceSources()
+        let records = connectionManager.deviceStore.records
+        var map: [String: PeerPresence] = [:]
+        var connecting: Set<String> = []
+        for r in records {
+            let p = connectionManager.presence(for: r, sources: sources)
+            map[r.id] = p
+            var ids: Set<String> = [r.id]
+            if let a = r.peerDeviceId { ids.insert(a) }
+            if p != .online, !ids.isDisjoint(with: sources.connecting) { connecting.insert(r.id) }
+        }
+        let sections = HomeListLogic.sections(records: records, presence: { map[$0.id] ?? .offline }, query: query)
+        return Snapshot(presence: map, connecting: connecting, sections: sections)
     }
 
     private var groups: [DeviceGroup] {
@@ -44,7 +60,8 @@ struct HomeTab: View, PaperThemed {
     }
 
     var body: some View {
-        let sections = split
+        let snap = snapshot()
+        let sections = snap.sections
         List {
             selfRow
             if !hasAnyContent {
@@ -65,7 +82,7 @@ struct HomeTab: View, PaperThemed {
             if !sections.friends.isEmpty {
                 Section {
                     ForEach(sections.friends) { record in
-                        friendRow(record)
+                        friendRow(record, snap)
                     }
                 } header: { Text("Friends \(sections.friends.count)") }
             }
@@ -115,12 +132,18 @@ struct HomeTab: View, PaperThemed {
 
     private var selfRow: some View {
         let name = connectionManager.localIdentity.displayName
-        return Button {
-            #if os(iOS)
-            showProfile = true
-            #endif
-        } label: {
-            HStack(spacing: 12) {
+        let content = selfRowContent(name)
+        #if os(iOS)
+        return Button { showProfile = true } label: { content }
+            .buttonStyle(.plain)
+            .listRowBackground(paper(.incomingBubble))
+        #else
+        return content.listRowBackground(paper(.incomingBubble))
+        #endif
+    }
+
+    private func selfRowContent(_ name: String) -> some View {
+        HStack(spacing: 12) {
                 PeerAvatar(name: name, size: 44)
                 Text(name)
                     .font(.title3.weight(.semibold))
@@ -128,12 +151,9 @@ struct HomeTab: View, PaperThemed {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .listRowBackground(paper(.incomingBubble))
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 
     private func peerID(for record: DeviceRecord) -> String {
@@ -157,12 +177,13 @@ struct HomeTab: View, PaperThemed {
     }
 
     @ViewBuilder
-    private func friendRow(_ record: DeviceRecord) -> some View {
-        let presence = connectionManager.presence(for: record)
+    private func friendRow(_ record: DeviceRecord, _ snap: Snapshot) -> some View {
+        let presence = snap.presence[record.id] ?? .offline
+        let isConnecting = snap.connecting.contains(record.id)
         let connect: () -> Void = { _ = connectionManager.reconnect(to: record.id) }
         #if os(iOS)
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: record.displayName)) {
-            FriendRow(record: record, presence: presence, onConnect: connect)
+            FriendRow(record: record, presence: presence, isConnecting: isConnecting, onConnect: connect)
         }
         .listRowBackground(paper(.incomingBubble))
         .swipeActions(edge: .trailing) { forgetButton(record) }
@@ -170,7 +191,7 @@ struct HomeTab: View, PaperThemed {
         Button {
             openWindow(id: "chat", value: peerID(for: record))
         } label: {
-            FriendRow(record: record, presence: presence, onConnect: connect)
+            FriendRow(record: record, presence: presence, isConnecting: isConnecting, onConnect: connect)
         }
         .buttonStyle(.plain)
         .listRowBackground(paper(.incomingBubble))

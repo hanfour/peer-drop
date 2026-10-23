@@ -35,9 +35,17 @@ enum HomeListLogic {
     }
 }
 
+extension HomeListLogic {
+    /// The filled "Connect" pill only makes sense for a nearby friend that is not already mid-connection.
+    static func showsConnectPill(presence: PeerPresence, isConnecting: Bool) -> Bool {
+        presence == .nearby && !isConnecting
+    }
+}
+
 /// Second line of a Home row.
 enum FriendSubtitle {
-    static func text(presence: PeerPresence, lastConnected: Date, connectionCount: Int, source: String, now: Date = Date()) -> String {
+    static func text(presence: PeerPresence, lastConnected: Date, connectionCount: Int, source: String, isConnecting: Bool = false, now: Date = Date()) -> String {
+        if isConnecting && presence != .online { return String(localized: "Connecting...") }
         switch presence {
         case .online:
             return source == "relay"

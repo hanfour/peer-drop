@@ -7,16 +7,19 @@ struct FriendRow: View, PaperThemed {
     @Environment(\.paperMode) var paperMode
     let record: DeviceRecord
     let presence: PeerPresence
+    var isConnecting: Bool = false
     var onConnect: (() -> Void)? = nil
 
     private var subtitle: String {
         FriendSubtitle.text(presence: presence, lastConnected: record.lastConnected,
-                            connectionCount: record.connectionCount, source: record.sourceType)
+                            connectionCount: record.connectionCount, source: record.sourceType,
+                            isConnecting: isConnecting)
     }
 
     var body: some View {
         HStack(spacing: 12) {
             PeerAvatar(name: record.displayName, size: 44, presence: presence)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.displayName)
@@ -30,8 +33,10 @@ struct FriendRow: View, PaperThemed {
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("\(record.displayName), \(presence.accessibilityLabel), \(subtitle)"))
 
-            if presence == .nearby, let onConnect {
+            if HomeListLogic.showsConnectPill(presence: presence, isConnecting: isConnecting), let onConnect {
                 Button(action: onConnect) {
                     Text("Connect")
                         .font(.subheadline.weight(.semibold))
