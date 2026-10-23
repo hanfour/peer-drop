@@ -225,6 +225,28 @@ public final class ConnectionManager: ObservableObject {
     /// All active peer connections, keyed by peerID.
     @Published public private(set) var connections: [String: PeerConnection] = [:]
 
+    // MARK: - Notes exchange (Project C; logic in ConnectionManager+NotesExchange.swift)
+
+    /// UI state of the notes-account exchange per connection, keyed by
+    /// `PeerConnection.id`. Absent = no exchange on that connection.
+    @Published public internal(set) var notesExchangeStates: [String: NotesExchangeSession.UIState] = [:]
+    /// One session per `PeerConnection` instance (Ruling 4).
+    var notesExchangeSessions: [ObjectIdentifier: NotesExchangeSessionBox] = [:]
+    /// Monotonic time for every now-bearing session event (injectable).
+    var notesExchangeClock: () -> Date = { ConnectionManager.notesExchangeMonotonicNow() }
+    /// Signs the reveal digest with the account's Ed25519 key.
+    var notesExchangeSigner: (Data) throws -> Data = { try IdentityKeyManager.shared.sign($0) }
+    /// The account's Ed25519 public key (registered as the directory `signingKey`).
+    var notesExchangeLocalSigningKey: () -> Data = { IdentityKeyManager.shared.signingPublicKey.rawRepresentation }
+    var notesExchangeMakeNonce: () -> Data = { NotesExchangeCrypto.makeNonce() }
+    var notesExchangeTickNanoseconds: UInt64 = 1_000_000_000
+    /// Test hook: replaces the remote host(s) read off a TCP connection.
+    var notesExchangeRemoteHostOverride: ((NWConnection?) -> String?)?
+    var notesExchangeObservedAccountManager: AccountManager?
+    var notesExchangeAccountCancellable: AnyCancellable?
+    var notesExchangeRetryInFlight = false
+    var notesExchangeRetryRequested = false
+
     /// The currently focused peer ID for UI interactions.
     @Published public var focusedPeerID: String?
 
@@ -753,6 +775,7 @@ public final class ConnectionManager: ObservableObject {
         // no longer installed, and must never regain an identity swap.
         if let replaced = connections[peerID], replaced !== peerConnection {
             replaced.isRelayPlaceholder = false
+            tearDownNotesExchange(for: replaced)
         }
         connections[peerID] = peerConnection
 
@@ -809,6 +832,7 @@ public final class ConnectionManager: ObservableObject {
     private func removeConnection(peerID: String) {
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
+            tearDownNotesExchange(for: removed)
         }
 
         // Update focused peer if needed
@@ -1659,6 +1683,28 @@ public final class ConnectionManager: ObservableObject {
         pc.isRelayPlaceholder
     }
 
+    /// Test-only: replace the identity sent in HELLOs (e.g. a test process
+    /// whose `PeerIdentity.local()` does not advertise notes exchange).
+    public func _setLocalIdentityForTesting(_ identity: PeerIdentity) {
+        localIdentity = identity
+    }
+
+    /// Test-only: swap in an `AccountManager` (fake directory). Treated as an
+    /// account-state change by the notes exchange.
+    public func _setAccountManagerForTesting(_ manager: AccountManager) {
+        accountManager = manager
+        observeAccountForNotesExchange()
+        notesExchangeAccountStateChanged(manager.state)
+    }
+
+    /// Test-only: send the relay HELLO (+ device-id exchange) on `pc`.
+    public func _startRelayHandshakeForTesting(_ pc: PeerConnection) {
+        startRelayHandshake(pc)
+    }
+
+    /// Test-only: live notes-exchange sessions.
+    public var _notesExchangeSessionCountForTesting: Int { notesExchangeSessions.count }
+
     /// Test-only: reconnect back-off attempts consumed so far.
     public func _reconnectAttemptCountForTesting() async -> Int {
         await reconnectController.currentAttempt
@@ -1838,6 +1884,8 @@ public final class ConnectionManager: ObservableObject {
                 // before the `diaryStore` lazy below has installed
                 // `diaryKeyHandler` (see `syncNotes`' doc).
                 Task { await syncNotes() }
+                // Project C: confirm notes bindings received while offline.
+                notesExchangeDidBecomeActive()
                 Task { await diaryStore.syncList() }
             }
             // Restart discovery when returning to foreground
@@ -2230,7 +2278,8 @@ public final class ConnectionManager: ObservableObject {
                 logger.info("Waiting for connection to be ready...")
                 try await connection.waitReady()
                 logger.info("Connection ready! Sending HELLO...")
-                let hello = try PeerMessage.hello(identity: localIdentity)
+                // Tailnet is not face to face: no notes-exchange flag there.
+                let hello = try PeerMessage.hello(identity: notesExchangeHelloIdentity(for: connection))
                 try await connection.sendMessage(hello)
                 logger.info("HELLO sent. Sending CONNECTION_REQUEST...")
                 let request = PeerMessage.connectionRequest(senderID: localIdentity.id)
@@ -2689,7 +2738,7 @@ public final class ConnectionManager: ObservableObject {
             do {
                 let accept = PeerMessage.connectionAccept(senderID: localIdentity.id)
                 try await request.connection.sendMessage(accept)
-                let hello = try PeerMessage.hello(identity: localIdentity)
+                let hello = try PeerMessage.hello(identity: notesExchangeHelloIdentity(for: request.connection))
                 try await request.connection.sendMessage(hello)
                 #if DEBUG
                 if _acceptInstallDelayNanosForTesting > 0 {
@@ -3142,6 +3191,7 @@ public final class ConnectionManager: ObservableObject {
             state: .connected
         )
         peerConnection.isRelayPlaceholder = true
+        peerConnection.isRelayTransport = true
         addConnection(peerConnection)
         focusedPeerID = peerID
         return peerConnection
@@ -3699,8 +3749,7 @@ public final class ConnectionManager: ObservableObject {
             // carry this. Anything else is dropped silently (no reply, no log
             // of content).
             guard origin == .envelope, peerConnection.secureChannelState == .secured else { return }
-            // Task 4: handle intent/reveal/cancel/unavailable here.
-            break
+            handleNotesExchangeMessage(message, on: peerConnection, origin: origin)
 
         case .secureHandshake, .secureEnvelope:
             // Safety net (should be unreachable). The single-reader handoff
@@ -4855,7 +4904,7 @@ public final class ConnectionManager: ObservableObject {
 
     // MARK: - Tailnet Helpers
 
-    private func extractRemoteHost(from endpoint: NWEndpoint) -> String? {
+    func extractRemoteHost(from endpoint: NWEndpoint) -> String? {
         switch endpoint {
         case .hostPort(let host, _):
             switch host {

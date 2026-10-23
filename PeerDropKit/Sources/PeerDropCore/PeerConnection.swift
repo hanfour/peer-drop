@@ -79,6 +79,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// object allocated at the same address.
     var isRelayPlaceholder = false
 
+    /// Installed as a relay (`relay-<code>`) connection. Unlike
+    /// `isRelayPlaceholder` this is never cleared: the notes exchange (Project
+    /// C) uses it as one of its "not face to face" markers.
+    var isRelayTransport = false
+
     // MARK: - Secure channel (audit-#13 Phase 2)
 
     /// Active local-TCP secure channel, or nil if the peer hasn't completed
@@ -86,6 +91,10 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// encrypts non-control messages and the receive loop decrypts
     /// `.secureEnvelope` frames before delivering to `onMessageReceived`.
     private(set) var secureChannel: LocalSecureChannel?
+    /// OUR identity public key as used in this connection's handshake (set
+    /// together with `secureChannel`). The notes exchange signs and verifies
+    /// with this and `handshakePeerIdentityKey` from the same connection.
+    public private(set) var localHandshakeIdentityKey: Data?
     /// Tail of the ordered secure-send chain (see `sendMessage`).
     private var secureSendTail: Task<Void, Error>?
 
@@ -564,6 +573,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
             myRatchetPrivateKey: ratchetPriv,
             peerBundle: bundle
         )
+        localHandshakeIdentityKey = identity.publicKey.rawRepresentation
         pendingRatchetPrivateKey = nil
         secureChannelState = .secured
         handshakeFallbackTask?.cancel()
