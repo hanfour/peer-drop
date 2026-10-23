@@ -1,6 +1,24 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Invite Link" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invite Link" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "招待リンク" } },
+        "ko" : { "stringUnit" : { "state" : "needs_review", "value" : "초대 링크" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "邀请链接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "邀請連結" } }
+      }
+    },
+    "Connect with invite code (relay)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect with invite code (relay)" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "招待コードで接続（リレー）" } },
+        "ko" : { "stringUnit" : { "state" : "needs_review", "value" : "초대 코드로 연결(릴레이)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "用邀请码连接（中继）" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "用邀請碼連線（中繼）" } }
+      }
+    },
     "Account" : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "アカウント" } },

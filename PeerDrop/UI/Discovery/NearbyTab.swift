@@ -14,8 +14,6 @@ private enum NearbyTabSheet: Identifiable {
     case manualConnect
     case editPeer(DiscoveredPeer)
     case connectionQR
-    case settings
-    case transferHistory
     case relayConnect
     case options
 
@@ -24,15 +22,16 @@ private enum NearbyTabSheet: Identifiable {
         case .manualConnect:    return "manualConnect"
         case .editPeer(let p):  return "editPeer:\(p.id)"
         case .connectionQR:     return "connectionQR"
-        case .settings:         return "settings"
-        case .transferHistory:  return "transferHistory"
         case .relayConnect:     return "relayConnect"
         case .options:          return "options"
         }
     }
 }
 
-struct NearbyTab: View {
+struct NearbyTab: View, PaperThemed {
+    /// Nearby is always the live look; children read it through the environment.
+    var paperMode: PaperMode { .live }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var selectedTab: Int
     @EnvironmentObject var connectionManager: ConnectionManager
     #if os(macOS)
@@ -113,9 +112,21 @@ struct NearbyTab: View {
         }
     }
 
+    /// There is no QR scanner anywhere in the app (ConnectionQRView only displays a code), so no scan entry.
+    private static let hasScanner = false
+
+    private func presence(of peer: DiscoveredPeer, _ sources: PresenceSources) -> PeerPresence {
+        PeerPresenceResolver.presence(ids: [peer.id], sources: sources)
+    }
+
     var body: some View {
-        ZStack {
+        // One presence snapshot per body update.
+        let sources = connectionManager.presenceSources()
+        return ZStack {
             VStack(spacing: 0) {
+            if isOnline {
+                quickActionsBar
+            }
             if shouldShowGuidance {
                 GuidanceCard(onMoreOptions: { activeSheet = .options }, onDismiss: nil)
             }
@@ -145,13 +156,13 @@ struct NearbyTab: View {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                             ForEach(filteredPeers) { peer in
-                                PeerGridItemView(peer: peer) {
+                                PeerGridItemView(peer: peer, onTap: {
                                     if isConnectedPeer(peer) {
                                         openChatWindow(for: peer.id)
                                     } else {
                                         connectionManager.requestConnection(to: peer)
                                     }
-                                }
+                                }, presence: presence(of: peer, sources))
                                 .disabled(isConnecting)
                             }
                         }
@@ -166,21 +177,14 @@ struct NearbyTab: View {
                         if !networkPeers.isEmpty {
                         Section {
                             ForEach(networkPeers) { peer in
-                                PeerRowView(peer: peer) {
+                                PeerRowView(peer: peer, onTap: {
                                     if isConnectedPeer(peer) {
                                         openChatWindow(for: peer.id)
                                     } else {
                                         connectionManager.requestConnection(to: peer)
                                     }
-                                }
-                                .overlay(alignment: .trailing) {
-                                    if isConnectedPeer(peer) {
-                                        Text("Connected")
-                                            .font(.caption2.bold())
-                                            .foregroundStyle(.green)
-                                            .padding(.trailing, 8)
-                                    }
-                                }
+                                }, presence: presence(of: peer, sources), isConnected: isConnectedPeer(peer))
+                                .listRowBackground(paper(.incomingBubble))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     if peer.source == .manual {
                                         Button(role: .destructive) {
@@ -219,9 +223,10 @@ struct NearbyTab: View {
                         if !bleOnlyPeers.isEmpty {
                         Section {
                             ForEach(bleOnlyPeers) { peer in
-                                PeerRowView(peer: peer) {
+                                PeerRowView(peer: peer, onTap: {
                                     connectionManager.requestConnection(to: peer)
-                                }
+                                }, presence: presence(of: peer, sources), isConnected: isConnectedPeer(peer))
+                                .listRowBackground(paper(.incomingBubble))
                                 .disabled(isConnecting)
                             }
                         } header: {
@@ -242,6 +247,19 @@ struct NearbyTab: View {
                                 Text("These devices were discovered via Bluetooth. Connect to the same WiFi network to transfer files.")
                             }
                         }
+                        }
+
+                        if FeatureSettings.isRelayEnabled {
+                            Section {
+                                Button {
+                                    activeSheet = .relayConnect
+                                } label: {
+                                    Label("Connect with invite code (relay)", systemImage: "antenna.radiowaves.left.and.right.circle")
+                                        .foregroundStyle(paper(.brand))
+                                }
+                                .accessibilityIdentifier("relay-connect-button")
+                                .listRowBackground(paper(.incomingBubble))
+                            }
                         }
 
                         if let error = connectionManager.certificateManager.setupError {
@@ -293,6 +311,9 @@ struct NearbyTab: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isConnecting)
+        .scrollContentBackground(.hidden)
+        .background(paper(.background).ignoresSafeArea())
+        .paperMode(.live)
         .navigationTitle("PeerDrop")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -317,14 +338,6 @@ struct NearbyTab: View {
                 .accessibilityLabel(isOnline ? "Go offline" : "Go online")
             }
             ToolbarItemGroup(placement: .confirmationAction) {
-                Button {
-                    activeSheet = .manualConnect
-                } label: {
-                    Image(systemName: "bolt.horizontal.fill")
-                }
-                .accessibilityIdentifier("quick-connect-button")
-                .accessibilityLabel("Quick Connect")
-
                 Button {
                     isGridMode.toggle()
                 } label: {
@@ -351,16 +364,6 @@ struct NearbyTab: View {
                     .accessibilityLabel(isSearchActive ? "Close search" : "Search devices")
                 }
 
-                if FeatureSettings.isRelayEnabled {
-                    Button {
-                        activeSheet = .relayConnect
-                    } label: {
-                        Image(systemName: "antenna.radiowaves.left.and.right.circle")
-                    }
-                    .accessibilityIdentifier("relay-connect-button")
-                    .accessibilityLabel("Relay Connect")
-                }
-
                 Menu {
                     // Picker in a Menu auto-renders a leading checkmark on
                     // the selected option and nothing on the others —
@@ -374,23 +377,6 @@ struct NearbyTab: View {
                         Text("Name").tag(SortMode.name.rawValue)
                         Text("Last Connected").tag(SortMode.lastConnected.rawValue)
                         Text("Connection Count").tag(SortMode.connectionCount.rawValue)
-                    }
-                    Section {
-                        Button {
-                            activeSheet = .connectionQR
-                        } label: {
-                            Label("My QR Code", systemImage: "qrcode")
-                        }
-                        Button {
-                            activeSheet = .settings
-                        } label: {
-                            Label("Settings", systemImage: "gearshape")
-                        }
-                        Button {
-                            activeSheet = .transferHistory
-                        } label: {
-                            Label("Transfer History", systemImage: "clock.arrow.circlepath")
-                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -419,21 +405,6 @@ struct NearbyTab: View {
             case .connectionQR:
                 ConnectionQRView()
                     .environmentObject(connectionManager)
-            case .settings:
-                #if os(iOS)
-                SettingsView()
-                    .environmentObject(connectionManager)
-                #else
-                // macOS uses MacSettingsView in the Settings scene (⌘,);
-                // the in-sheet settings affordance is iOS-only.
-                Text("Open from menu (⌘,)")
-                    .foregroundStyle(.secondary)
-                #endif
-            case .transferHistory:
-                NavigationStack {
-                    TransferHistoryView()
-                        .environmentObject(connectionManager)
-                }
             case .relayConnect:
                 RelayConnectView()
                     .environmentObject(connectionManager)
@@ -477,6 +448,53 @@ struct NearbyTab: View {
                 }
             }
         }
+    }
+
+    // MARK: - Quick actions
+
+    private func quickActionInfo(_ action: NearbyQuickAction) -> (title: LocalizedStringKey, icon: String, id: String, sheet: NearbyTabSheet) {
+        switch action {
+        case .qr:     return ("My QR Code", "qrcode", "quick-action-qr", .connectionQR)
+        case .manual: return ("Manual Connect", "bolt.horizontal.fill", "quick-connect-button", .manualConnect)
+        case .invite: return ("Invite Link", "link", "quick-action-invite", .relayConnect)
+        case .scan:   return ("Scan", "qrcode.viewfinder", "quick-action-scan", .connectionQR)
+        }
+    }
+
+    private var quickActionsBar: some View {
+        let actions = NearbyQuickAction.available(relayEnabled: FeatureSettings.isRelayEnabled,
+                                                  hasScanner: Self.hasScanner)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
+            ForEach(actions, id: \.self) { action in
+                let info = quickActionInfo(action)
+                Button { activeSheet = info.sheet } label: {
+                    let content = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(HStackLayout(spacing: 12))
+                        : AnyLayout(VStackLayout(spacing: 4))
+                    content {
+                        Image(systemName: info.icon)
+                            .font(.title3)
+                            .foregroundStyle(paper(.brand))
+                        Text(info.title)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(paper(.incomingText))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(paper(.incomingBubble)))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(paper(.border), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(info.id)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 
     private var isConnecting: Bool {
