@@ -122,6 +122,27 @@ public final class NoteOutboxStore: ObservableObject {
         if changed { save() }   // one write for the whole batch
     }
 
+    /// Fails every still-queued entry for which `reason` returns text (nil = leave it). One write.
+    public func failQueuedEntries(reason: (NoteOutboxEntry) -> String?) {
+        var changed = false
+        for i in entries.indices where entries[i].state == .queued {
+            guard let text = reason(entries[i]) else { continue }
+            entries[i].state = .failed; entries[i].failReason = text; entries[i].nextAttemptAt = nil
+            changed = true
+        }
+        if changed { save() }
+    }
+
+    /// Deletes every entry of a contact (contact forgotten: the plaintext must not stay on disk and
+    /// nothing in the UI could show it any more).
+    public func removeAll(forContact contactID: UUID) {
+        let ids = entries.filter { $0.contactID == contactID }.map(\.id)
+        guard !ids.isEmpty else { return }
+        sendingIDs.subtract(ids)
+        entries.removeAll { $0.contactID == contactID }
+        save()
+    }
+
     /// Persists the attempt BEFORE the network await so a kill mid-send is
     /// bounded by the attempt cap. `nextAttemptAt` is the tentative backoff.
     public func beginAttempt(id: UUID, nextAttemptAt: Date?) {

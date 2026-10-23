@@ -16,6 +16,13 @@ final class ThreadTransportTests: XCTestCase {
             (.offline, .verified, .ready, .note(canSendNow: true)), (.offline, .verified, .notReady, .note(canSendNow: false)),
         ]
         XCTAssertEqual(rows.count, 18)
+        // A permanently unavailable own account never queues: offline/nearby verified friends are locked,
+        // online friends still chat live, and unbound/pending rows are unaffected.
+        XCTAssertEqual(ThreadTransport.decide(presence: .offline, binding: .verified, account: .unavailable), .locked(reason: .accountUnavailable))
+        XCTAssertEqual(ThreadTransport.decide(presence: .nearby, binding: .verified, account: .unavailable), .locked(reason: .accountUnavailable))
+        XCTAssertEqual(ThreadTransport.decide(presence: .online, binding: .verified, account: .unavailable), .live)
+        XCTAssertEqual(ThreadTransport.decide(presence: .offline, binding: .none, account: .unavailable), .locked(reason: .notExchanged))
+        XCTAssertEqual(ThreadTransport.decide(presence: .offline, binding: .pending, account: .unavailable), .locked(reason: .verifying))
         for (p, b, a, expected) in rows {
             XCTAssertEqual(ThreadTransport.decide(presence: p, binding: b, account: a), expected, "\(p) \(b) \(a)")
         }

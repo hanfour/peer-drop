@@ -5,6 +5,22 @@ import PeerDropSecurity
 
 @MainActor
 final class NoteOutboxStoreTests: XCTestCase {
+    func testRemoveAllForContactDeletesOnlyThatContactsEntriesAndPersists() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("obs-rm-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let enc = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
+        let store = NoteOutboxStore(directory: dir, encryptor: enc)
+        let a = UUID(), b = UUID(), key = Data(repeating: 1, count: 32)
+        store.enqueue(contactID: a, accountId: "AAAAAAAA", expectedIdentityKey: key, text: "secret-a1")
+        let a2 = store.enqueue(contactID: a, accountId: "AAAAAAAA", expectedIdentityKey: key, text: "secret-a2")
+        store.markFailed(id: a2.id, reason: "x")
+        store.enqueue(contactID: b, accountId: "BBBBBBBB", expectedIdentityKey: key, text: "keep-b")
+        store.removeAll(forContact: a)
+        XCTAssertEqual(store.all.map(\.text), ["keep-b"])
+        let reloaded = NoteOutboxStore(directory: dir, encryptor: enc)
+        XCTAssertEqual(reloaded.all.map(\.text), ["keep-b"])
+    }
+
     private var dir: URL!
     private var enc: ChatDataEncryptor!
     private let contact = UUID()
