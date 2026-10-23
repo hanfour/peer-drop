@@ -6,34 +6,37 @@ extension Notification.Name {
     static let macSidebarJump = Notification.Name("com.hanfour.peerdrop.mac.sidebarJump")
 }
 
+/// Raw values mirror `AppTab.sidebarKey` (shared with iOS) so the two shells stay in lockstep.
 enum MacSidebarSection: String, Hashable, CaseIterable, Identifiable {
+    case home
     case notes
-    case diaries
     case nearby
-    case trusted
-    case relay
+    case diaries
 
     var id: Self { self }
 
     var localizedName: String {
         switch self {
+        case .home:    return NSLocalizedString("Home", comment: "")
         case .notes:   return NSLocalizedString("Notes", comment: "")
-        case .diaries: return NSLocalizedString("Diaries", comment: "")
         case .nearby:  return NSLocalizedString("Nearby", comment: "")
-        case .trusted: return NSLocalizedString("Library", comment: "")
-        case .relay:   return NSLocalizedString("Relay", comment: "")
+        case .diaries: return NSLocalizedString("Diaries", comment: "")
         }
     }
 
     var icon: String {
         switch self {
+        case .home:    return "house"
         case .notes:   return "envelope.fill"
-        case .diaries: return "book.closed"
         case .nearby:  return "wifi"
-        case .trusted: return "checkmark.shield"
-        case .relay:   return "network"
+        case .diaries: return "book.closed"
         }
     }
+
+    /// The iOS-shell tab this section corresponds to (used for `NearbyTab`'s `Binding<AppTab>`).
+    var appTab: AppTab { AppTab(sidebarKey: rawValue) ?? .home }
+
+    init(appTab: AppTab) { self = MacSidebarSection(rawValue: appTab.sidebarKey) ?? .home }
 }
 
 struct MacSidebar: View {

@@ -4,9 +4,11 @@ import PeerDropNotes
 import PeerDropDiary
 
 struct MacContentView: View {
-    @State private var selection: MacSidebarSection? = .notes
-    @State private var notesPath: [NoteRecord] = []
+    @EnvironmentObject private var connectionManager: ConnectionManager
+    @State private var selection: MacSidebarSection? = .home
     @State private var openNoteID: String?
+    /// Bumped by the `.openNote` deep link so Notes pushes its inbox (see `ConversationsTab.inboxRequest`).
+    @State private var inboxRequest = 0
     @State private var diariesPath: [String] = []
     @State private var openDiaryID: String?
     @State private var openDiarySeq: Int?
@@ -18,7 +20,7 @@ struct MacContentView: View {
             MacSidebar(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 180, ideal: sidebarWidth, max: 360)
         } detail: {
-            MacDetailRouter(section: selection, notesPath: $notesPath, openNoteID: $openNoteID,
+            MacDetailRouter(selection: $selection, inboxRequest: inboxRequest, openNoteID: $openNoteID,
                              diariesPath: $diariesPath, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq)
                 .navigationSplitViewColumnWidth(min: 480, ideal: 600)
         }
@@ -40,22 +42,27 @@ struct MacContentView: View {
                 selection = section
             }
         }
+        // A relay invite link/push lands on Nearby, which hosts the RelayConnectView sheet.
+        .onReceive(connectionManager.$shouldShowRelayConnect) { show in
+            if show { selection = .nearby }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openNote)) { note in
             guard let id = note.userInfo?["id"] as? String else { return }
-            selection = .notes
+            selection = MacSidebarSection(appTab: AppTab.tab(forDeepLink: .openNote) ?? .notes)
             openNoteID = id
+            inboxRequest += 1
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDiary)) { note in
             guard let id = note.userInfo?["diaryId"] as? String else { return }
-            selection = .diaries
+            selection = MacSidebarSection(appTab: AppTab.tab(forDeepLink: .openDiary) ?? .diaries)
             openDiaryID = id
             openDiarySeq = note.userInfo?["seq"] as? Int
         }
-        // A pushed note-detail/diary path must not survive switching away
-        // from and back to its own section — otherwise the user lands back
-        // on a stale note/diary instead of the inbox/list.
+        // A pushed diary path must not survive switching away from and back
+        // to its own section — otherwise the user lands back on a stale
+        // diary instead of the list. (Notes/Home/Nearby own their stacks'
+        // state inside their views and are rebuilt on section switch.)
         .onChange(of: selection) { newValue in
-            if newValue != .notes { notesPath = [] }
             if newValue != .diaries { diariesPath = [] }
         }
     }

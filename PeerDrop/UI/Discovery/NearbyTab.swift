@@ -449,6 +449,10 @@ struct NearbyTab: View, PaperThemed {
             }
         }
         .onAppear {
+            // A relay deep link may have raised the flag before this tab was mounted (Mac sidebar).
+            if connectionManager.shouldShowRelayConnect, activeSheet == nil {
+                activeSheet = .relayConnect
+            }
             if isOnline, case .idle = connectionManager.state {
                 connectionManager.startDiscovery()
             }

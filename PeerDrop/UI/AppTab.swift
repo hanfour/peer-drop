@@ -13,4 +13,19 @@ enum AppTab: Int, CaseIterable {
         default: return nil
         }
     }
+
+    /// Stable string key shared with the Mac sidebar (`MacSidebarSection.rawValue`).
+    var sidebarKey: String {
+        switch self {
+        case .home: return "home"
+        case .notes: return "notes"
+        case .nearby: return "nearby"
+        case .diaries: return "diaries"
+        }
+    }
+
+    init?(sidebarKey: String) {
+        guard let tab = AppTab.allCases.first(where: { $0.sidebarKey == sidebarKey }) else { return nil }
+        self = tab
+    }
 }

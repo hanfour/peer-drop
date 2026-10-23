@@ -64,18 +64,16 @@ struct PeerDropCommands: Commands {
             .keyboardShortcut("1")
         }
 
-        // Sidebar section jumps (⌘⌥{1-5}).
+        // Sidebar section jumps (⌘⌥{1-4}).
         CommandGroup(after: .windowList) {
-            Button("Notes")   { postJump(.notes)   }
+            Button("Home")    { postJump(.home)    }
                 .keyboardShortcut("1", modifiers: [.command, .option])
-            Button("Diaries") { postJump(.diaries) }
+            Button("Notes")   { postJump(.notes)   }
                 .keyboardShortcut("2", modifiers: [.command, .option])
             Button("Nearby")  { postJump(.nearby)  }
                 .keyboardShortcut("3", modifiers: [.command, .option])
-            Button("Library") { postJump(.trusted) }
+            Button("Diaries") { postJump(.diaries) }
                 .keyboardShortcut("4", modifiers: [.command, .option])
-            Button("Relay")   { postJump(.relay)   }
-                .keyboardShortcut("5", modifiers: [.command, .option])
         }
 
         // Help menu.

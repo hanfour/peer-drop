@@ -16478,6 +16478,41 @@
         }
       }
     },
+    "Pick Home, Notes, Nearby, or Diaries from the sidebar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick Home, Notes, Nearby, or Diaries from the sidebar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "サイドバーからホーム・メモ・付近・日記を選択してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "사이드바에서 홈, 쪽지, 주변 또는 일기를 선택하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "从侧边栏选择主页、纸条、附近或日记。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從側邊欄選擇主頁、紙條、附近或日記。"
+          }
+        }
+      }
+    },
     "Pick Notes, Diaries, Nearby, Library, or Relay from the sidebar.": {
       "localizations": {
         "ja": {
