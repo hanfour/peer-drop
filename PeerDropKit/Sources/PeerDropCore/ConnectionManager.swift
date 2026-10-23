@@ -434,6 +434,40 @@ public final class ConnectionManager: ObservableObject {
                 .appendingPathComponent(PeerDropPersistence.scopedKey("Notes"), isDirectory: true)))
     }()
 
+    // MARK: - Notes outbox (Project C)
+
+    public private(set) lazy var noteOutbox: NoteOutboxStore = NoteOutboxStore()
+
+    public private(set) lazy var noteOutboxSender: NoteOutboxSender = NoteOutboxSender(
+        store: noteOutbox, notesStore: notesStore,
+        binding: { [weak self] contactID in
+            guard let c = self?.trustedContactStore.contacts.first(where: { $0.id == contactID }) else { return .none }
+            if c.pendingAccountBinding != nil { return .pending }
+            guard let accountId = c.accountId else { return .none }
+            return .verified(accountId: accountId)
+        },
+        wakeScheduling: true)
+
+    /// Queues a note the user explicitly sent from a friend thread and makes
+    /// one immediate delivery attempt. Returns nil when the contact has no
+    /// verified account binding (nothing is queued). Never called for text
+    /// that is merely sitting in the input field.
+    @MainActor @discardableResult
+    public func queueNote(text: String, toContact contactID: UUID) -> NoteOutboxEntry? {
+        guard !ScreenshotModeProvider.shared.isActive,
+              let c = trustedContactStore.contacts.first(where: { $0.id == contactID }),
+              c.pendingAccountBinding == nil, let accountId = c.accountId else { return nil }
+        let entry = noteOutbox.enqueue(contactID: c.id, accountId: accountId, expectedIdentityKey: c.identityPublicKey, text: text)
+        Task { await flushNoteOutbox() }
+        return entry
+    }
+
+    @MainActor
+    public func flushNoteOutbox() async {
+        guard !ScreenshotModeProvider.shared.isActive else { return }
+        await noteOutboxSender.flush()
+    }
+
     // MARK: - Diary (sub-project 3)
 
     public private(set) lazy var diaryStore: DiaryStore = {
@@ -1909,6 +1943,7 @@ public final class ConnectionManager: ObservableObject {
                 Task {
                     await syncNotes()
                     await notesExchangeDidBecomeActive()
+                    await flushNoteOutbox()
                 }
                 Task { await diaryStore.syncList() }
             }

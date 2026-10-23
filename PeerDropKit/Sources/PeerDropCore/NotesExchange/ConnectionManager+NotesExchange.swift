@@ -165,6 +165,7 @@ extension ConnectionManager {
         guard Self.notesShouldRetryOnPathChange(from: oldStatus, oldInterfaces: oldInterfaces,
                                                 to: newStatus, newInterfaces: newInterfaces) else { return }
         scheduleNotesBindingRetry()
+        Task { [weak self] in await self?.flushNoteOutbox() }   // network recovery: same hook, no second monitor
     }
 
     /// Debounced: a burst of path updates runs one retry (which is itself
@@ -465,7 +466,10 @@ extension ConnectionManager {
             }
         }
         if case .ready = state {
-            Task { [weak self] in await self?.retryPendingBindings() }
+            Task { [weak self] in
+                await self?.retryPendingBindings()
+                await self?.flushNoteOutbox()   // account ready
+            }
         }
     }
 
