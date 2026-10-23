@@ -11,4 +11,15 @@ public enum ChatDisplayName {
               !trimmed.isEmpty else { return nil }
         return trimmed
     }
+
+    /// The first candidate that is not blank (trimmed), or nil if all are.
+    /// Chat uses it as `preferred(liveName, storedName)`: a peer's identity is
+    /// fixed at handshake, so a message's stored name can be old or blank while
+    /// the live connection knows the current one.
+    public static func preferred(_ candidates: String?...) -> String? {
+        for candidate in candidates {
+            if let name = trimmed(candidate) { return name }
+        }
+        return nil
+    }
 }

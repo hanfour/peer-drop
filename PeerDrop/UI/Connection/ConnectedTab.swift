@@ -94,13 +94,18 @@ struct ConnectedTab: View {
         }
     }
 
+    /// A blank announced name shows a neutral phrase instead of an empty row and a blank avatar.
+    private func peerName(of peerConn: PeerConnection) -> String {
+        ChatDisplayName.trimmed(peerConn.peerIdentity.displayName) ?? String(localized: "Other person")
+    }
+
     private func activePeerRow(for peerConn: PeerConnection) -> some View {
         HStack {
-            PeerAvatar(name: peerConn.peerIdentity.displayName)
+            PeerAvatar(name: peerName(of: peerConn))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(peerConn.peerIdentity.displayName)
+                    Text(peerName(of: peerConn))
                         .font(.body.bold())
                     SecureChannelIndicator(peerConn: peerConn)
                 }

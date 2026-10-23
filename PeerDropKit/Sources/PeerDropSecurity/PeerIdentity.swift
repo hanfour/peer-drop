@@ -93,6 +93,15 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
 
     private static let localIDKey = "peerDropLocalIdentityID"
 
+    /// The name we announce to peers: the user's stored name, or the device name
+    /// when none is set. A stored name that is empty or only whitespace counts as
+    /// unset — `??` alone let a persisted "" (e.g. a cleared Mac settings field)
+    /// win, so peers received a blank name.
+    public static func resolveLocalName(stored: String?, fallback: String) -> String {
+        let trimmed = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
     /// Alias for `local()` — returns the current device's identity.
     @MainActor
     public static var current: PeerIdentity { local() }
@@ -109,8 +118,9 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
             return .standard
         }()
 
-        let name = defaults.string(forKey: "peerDropDisplayName")
-            ?? PlatformDependencies.shared.deviceName().currentName
+        let name = resolveLocalName(
+            stored: defaults.string(forKey: "peerDropDisplayName"),
+            fallback: PlatformDependencies.shared.deviceName().currentName)
 
         // Persist local identity ID so message history survives across launches
         let stableID: String

@@ -1,5 +1,6 @@
 import Foundation
 import PeerDropPlatform
+import PeerDropSecurity
 
 public struct UserProfile: Codable {
     public var displayName: String
@@ -12,8 +13,9 @@ public struct UserProfile: Codable {
 
     @MainActor
     public static var current: UserProfile {
-        let name = UserDefaults.standard.string(forKey: "peerDropDisplayName")
-            ?? PlatformDependencies.shared.deviceName().currentName
+        let name = PeerIdentity.resolveLocalName(
+            stored: UserDefaults.standard.string(forKey: "peerDropDisplayName"),
+            fallback: PlatformDependencies.shared.deviceName().currentName)
         let avatar = UserDefaults.standard.data(forKey: "peerDropAvatarData")
         return UserProfile(displayName: name, avatarData: avatar)
     }
