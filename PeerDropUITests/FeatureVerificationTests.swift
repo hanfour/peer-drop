@@ -10,6 +10,7 @@ final class FeatureVerificationTests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments += ["-peerDropIsOnline", "YES"]
         app.launch()
+        app.goToNearbyTab()
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))

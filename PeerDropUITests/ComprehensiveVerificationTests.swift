@@ -90,7 +90,7 @@ private extension XCUIApplication {
     // MARK: Connection State
 
     func waitForConnected(timeout: Int = 30) -> Bool {
-        let connectedTab = tabBars.buttons["Connected"]
+        let connectedTab = tabBars.buttons["Home"]
         for _ in 0..<timeout {
             if connectedTab.isSelected { return true }
             sleep(1)
@@ -230,6 +230,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
     private func launchDefault() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
     }
@@ -729,7 +730,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         // Cleanup
         app.goBackOnce()
         app.goBackOnce()
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         app.disconnectFromPeer()
         sleep(3)
@@ -763,7 +764,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         // Cleanup
         app.goBackOnce()
         app.goBackOnce()
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         app.disconnectFromPeer()
         sleep(3)
@@ -794,7 +795,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         sleep(10)
 
         // Check unread on the active peer row
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(1)
         screenshot("CHAT-03-03-unread-check")
 
@@ -1333,6 +1334,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -1398,6 +1400,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -1502,6 +1505,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -1667,7 +1671,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         // Verify connection survived
         // KNOWN LIMITATION: Switching from Connected tab to Nearby (for Settings)
         // may disrupt the connection in some cases, especially after export.
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(3)
         let activeRow = app.buttons["active-peer-row"]
         let stillConnected = activeRow.waitForExistence(timeout: 15)
@@ -1730,7 +1734,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         sleep(3)
 
         // Navigate to Library tab
-        app.switchToTab("Library")
+        app.switchToTab("Home")
         sleep(2)
         screenshot("LIB-01-01-library")
 
@@ -1764,7 +1768,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         sleep(2)
 
         // Navigate to Library tab
-        app.switchToTab("Library")
+        app.switchToTab("Home")
         sleep(2)
         screenshot("LIB-02-01-library")
 
@@ -1795,7 +1799,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
     /// LIB-03: Search — search bar filters devices (single)
     func testA_LIB03_Search() {
         launchDefault()
-        app.switchToTab("Library")
+        app.switchToTab("Home")
         sleep(2)
         screenshot("LIB-03-01-library")
 
@@ -1823,14 +1827,15 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         // Fresh launch — Library may be empty
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
 
-        app.switchToTab("Library")
+        app.switchToTab("Home")
         sleep(2)
         screenshot("LIB-04-01-library")
 
         // Check for empty state message
-        let emptyMsg = app.staticTexts["No saved devices"]
+        let emptyMsg = app.staticTexts["No friends yet"]
         let noRecords = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS[c] 'no saved' OR label CONTAINS[c] 'no devices' OR label CONTAINS[c] 'empty'")
         ).firstMatch
@@ -1857,14 +1862,14 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Nearby"].isSelected, "Nearby tab should be selected")
 
         // Connected tab
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         screenshot("UI-01-02-connected")
-        XCTAssertTrue(app.tabBars.buttons["Connected"].isSelected, "Connected tab should be selected")
+        XCTAssertTrue(app.tabBars.buttons["Home"].isSelected, "Connected tab should be selected")
 
         // Library tab
-        app.switchToTab("Library")
+        app.switchToTab("Home")
         screenshot("UI-01-03-library")
-        XCTAssertTrue(app.tabBars.buttons["Library"].isSelected, "Library tab should be selected")
+        XCTAssertTrue(app.tabBars.buttons["Home"].isSelected, "Library tab should be selected")
 
         // Back to Nearby
         app.switchToTab("Nearby")
@@ -1886,13 +1891,13 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         // Rapidly switch tabs while connected
         for i in 1...3 {
             app.switchToTab("Nearby")
-            app.switchToTab("Connected")
-            app.switchToTab("Library")
+            app.switchToTab("Home")
+            app.switchToTab("Home")
             screenshot("UI-02-tab-cycle-\(i)")
         }
 
         // Verify still connected
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         let sendFile = app.buttons["send-file-button"]
         XCTAssertTrue(sendFile.waitForExistence(timeout: 5), "Should still be connected")
@@ -1906,16 +1911,15 @@ final class ComprehensiveInitiatorTests: XCTestCase {
     func testA_UI03_ConnectedSections() {
         launchDefault()
 
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(2)
         screenshot("UI-03-01-connected-tab")
 
         // Check for section headers
-        let activeHeader = app.staticTexts["Active"]
-        let contactsHeader = app.staticTexts["Contacts"]
-        let noActiveMsg = app.staticTexts["No active connection"]
+        let activeHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
+        let contactsHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
 
-        print("[UI-03] Active=\(activeHeader.exists) Contacts=\(contactsHeader.exists) NoActive=\(noActiveMsg.exists)")
+        print("[UI-03] Connected=\(activeHeader.exists) Friends=\(contactsHeader.exists) NoActive=\(app.hasNoActiveConnection)")
         screenshot("UI-03-02-sections")
     }
 
@@ -2086,7 +2090,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         screenshot("EDGE-03-02-went-offline")
 
         // Verify we are disconnected — should NOT be in connected state anymore
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
 
@@ -2488,7 +2492,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         }
 
         // Verify UI is responsive
-        app.tabBars.buttons["Library"].tap()
+        app.tabBars.buttons["Home"].tap()
         sleep(1)
         app.tabBars.buttons["Nearby"].tap()
         sleep(1)
@@ -2503,6 +2507,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         // Launch with online mode
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         screenshot("EDGE-11-01-just-launched")
 
         // Immediately try to find and connect (don't wait for full discovery)
@@ -2560,7 +2565,7 @@ final class ComprehensiveInitiatorTests: XCTestCase {
         screenshot("EDGE-12-02-after-idle")
 
         // Verify still connected via tab state (most reliable)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         let stillConnectedViaTab = connectedTab.isSelected
         screenshot("EDGE-12-03-check-connection")
 
@@ -2682,6 +2687,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
     private func launchDefault() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
     }
@@ -2874,7 +2880,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         }
 
         // Navigate to chat and reply
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -2899,7 +2905,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
 
         // Disconnect from OUR side after 5s
         sleep(5)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.disconnectFromPeer()
@@ -2960,7 +2966,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         app.buttons["Accept"].tap()
         sleep(3)
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -2984,7 +2990,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         app.buttons["Accept"].tap()
         sleep(3)
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -3008,7 +3014,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         app.buttons["Accept"].tap()
         sleep(3)
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -3093,6 +3099,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("CHAT-07-B-01-chat-disabled")
@@ -3166,6 +3173,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("FILE-04-B-01-file-disabled")
@@ -3259,6 +3267,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("VOICE-04-B-01-voice-disabled")
@@ -3299,7 +3308,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         app.buttons["Accept"].tap()
         sleep(3)
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -3320,6 +3329,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -3341,6 +3351,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -3381,7 +3392,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         sleep(3)
         screenshot("SET-03-B-01-connected")
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -3451,9 +3462,9 @@ final class ComprehensiveAcceptorTests: XCTestCase {
 
         // Tab switch from acceptor side
         for i in 1...3 {
-            app.switchToTab("Library")
+            app.switchToTab("Home")
             app.switchToTab("Nearby")
-            app.switchToTab("Connected")
+            app.switchToTab("Home")
             screenshot("UI-02-B-tab-cycle-\(i)")
         }
 
@@ -3474,7 +3485,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
                 app.buttons["Accept"].tap()
                 sleep(3)
 
-                let connectedTab = app.tabBars.buttons["Connected"]
+                let connectedTab = app.tabBars.buttons["Home"]
                 if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
                 app.navigateToConnectionView()
                 app.navigateToChat()
@@ -3831,6 +3842,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         // Launch immediately — initiator will try to connect quickly
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         app.ensureOnline()
         screenshot("EDGE-11-B-01-launched")
 
@@ -3864,7 +3876,7 @@ final class ComprehensiveAcceptorTests: XCTestCase {
         screenshot("EDGE-12-B-02-after-idle")
 
         // Verify still connected via tab state (most reliable)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         let stillConnectedViaTab = connectedTab.isSelected
         screenshot("EDGE-12-B-03-check-connection")
 

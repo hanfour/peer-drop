@@ -40,7 +40,7 @@ private extension XCUIApplication {
     }
 
     func waitForConnected(timeout: Int = 30) -> Bool {
-        let connectedTab = tabBars.buttons["Connected"]
+        let connectedTab = tabBars.buttons["Home"]
         for _ in 0..<timeout {
             if connectedTab.isSelected { return true }
             sleep(1)
@@ -123,6 +123,7 @@ final class DisabledFeatureInitiatorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
 
         app.ensureOnline()
@@ -206,6 +207,7 @@ final class DisabledFeatureInitiatorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
 
         app.ensureOnline()
@@ -261,6 +263,7 @@ final class DisabledFeatureInitiatorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
 
         app.ensureOnline()
@@ -330,6 +333,7 @@ final class DisabledFeatureAcceptorTests: XCTestCase {
     func testB1_AcceptForDisabledButtons() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -349,6 +353,7 @@ final class DisabledFeatureAcceptorTests: XCTestCase {
     func testB2_AcceptAndReply() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -356,7 +361,7 @@ final class DisabledFeatureAcceptorTests: XCTestCase {
         app.buttons["Accept"].tap()
         sleep(3)
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -381,6 +386,7 @@ final class DisabledFeatureAcceptorTests: XCTestCase {
             "-peerDropIsOnline", "1"
         ]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("B3-01-chat-disabled")
@@ -392,7 +398,7 @@ final class DisabledFeatureAcceptorTests: XCTestCase {
         print("[B3] Accepted with chat disabled — incoming messages should be rejected")
 
         // Verify our own buttons are grayed out too
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         sleep(1)

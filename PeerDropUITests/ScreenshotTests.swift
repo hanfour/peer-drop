@@ -8,7 +8,10 @@ final class ScreenshotTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Labels asserted below are English; pin the locale so results don't depend on the simulator language.
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
+        app.goToNearbyTab()
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
@@ -27,7 +30,7 @@ final class ScreenshotTests: XCTestCase {
 
     /// Capture the Connected tab.
     func testCaptureConnectedTab() {
-        app.tabBars.buttons["Connected"].tap()
+        app.tabBars.buttons["Home"].tap()
         sleep(1)
 
         let screenshot = app.screenshot()
@@ -36,12 +39,12 @@ final class ScreenshotTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        XCTAssertTrue(app.navigationBars["Connected"].exists)
+        XCTAssertTrue(app.navigationBars["Home"].exists)
     }
 
     /// Capture the Library tab.
     func testCaptureLibraryTab() {
-        app.tabBars.buttons["Library"].tap()
+        app.tabBars.buttons["Home"].tap()
         sleep(1)
 
         let screenshot = app.screenshot()
@@ -50,12 +53,12 @@ final class ScreenshotTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        XCTAssertTrue(app.navigationBars["Library"].exists)
+        XCTAssertTrue(app.navigationBars["Home"].exists)
     }
 
     /// Capture the Quick Connect (manual connect) sheet.
     func testCaptureQuickConnect() {
-        let quickConnect = app.buttons["Quick Connect"]
+        let quickConnect = app.buttons["quick-connect-button"]
         XCTAssertTrue(quickConnect.waitForExistence(timeout: 3))
         quickConnect.tap()
 

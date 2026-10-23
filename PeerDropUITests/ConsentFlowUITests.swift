@@ -7,6 +7,8 @@ final class ConsentFlowUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Labels asserted below are English; pin the locale so the result doesn't depend on the simulator language.
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
 
         // Wait for tab bar to appear
@@ -17,16 +19,26 @@ final class ConsentFlowUITests: XCTestCase {
     func testAppLaunches() {
         XCTAssertTrue(app.tabBars.firstMatch.exists)
         XCTAssertTrue(app.tabBars.buttons["Nearby"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Connected"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Library"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Home"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Notes"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Diaries"].exists)
     }
 
-    func testNearbyTabIsDefault() {
-        XCTAssertTrue(app.navigationBars["PeerDrop"].waitForExistence(timeout: 3))
+    /// Home is the default tab since the four-tab overhaul (was Nearby/Notes).
+    func testHomeTabIsDefault() {
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 3))
+    }
+
+    func testTabsNavigateThroughAllFour() {
+        for name in ["Notes", "Nearby", "Diaries", "Home"] {
+            app.tabBars.buttons[name].tap()
+            XCTAssertTrue(app.tabBars.buttons[name].isSelected, "\(name) tab should be selected")
+        }
     }
 
     func testQuickConnectOpensManualConnect() {
-        let quickConnect = app.buttons["Quick Connect"]
+        app.tabBars.buttons["Nearby"].tap()
+        let quickConnect = app.buttons["quick-connect-button"]
         XCTAssertTrue(quickConnect.waitForExistence(timeout: 3))
         quickConnect.tap()
 
@@ -35,7 +47,8 @@ final class ConsentFlowUITests: XCTestCase {
     }
 
     func testManualConnectCanCancel() {
-        let quickConnect = app.buttons["Quick Connect"]
+        app.tabBars.buttons["Nearby"].tap()
+        let quickConnect = app.buttons["quick-connect-button"]
         XCTAssertTrue(quickConnect.waitForExistence(timeout: 3))
         quickConnect.tap()
 
@@ -48,13 +61,8 @@ final class ConsentFlowUITests: XCTestCase {
         XCTAssertTrue(dismissed)
     }
 
-    func testSwitchToConnectedTab() {
-        app.tabBars.buttons["Connected"].tap()
-        XCTAssertTrue(app.navigationBars["Connected"].waitForExistence(timeout: 3))
-    }
-
-    func testSwitchToLibraryTab() {
-        app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 3))
+    func testSwitchToHomeTab() {
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 3))
     }
 }

@@ -9,7 +9,10 @@ final class E2EIntegrationTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Labels asserted below are English; pin the locale so results don't depend on the simulator language.
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
+        app.goToNearbyTab()
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5), "Tab bar should appear on launch")
@@ -52,7 +55,7 @@ final class E2EIntegrationTests: XCTestCase {
     // MARK: - Test 3: Quick Connect (Manual Connect)
 
     func test03_QuickConnect() {
-        let quickConnect = app.buttons["Quick Connect"]
+        let quickConnect = app.buttons["quick-connect-button"]
         XCTAssertTrue(quickConnect.waitForExistence(timeout: 3))
         quickConnect.tap()
 
@@ -96,16 +99,16 @@ final class E2EIntegrationTests: XCTestCase {
 
     func test05_TabNavigation() {
         // Switch to Connected tab
-        app.tabBars.buttons["Connected"].tap()
-        XCTAssertTrue(app.navigationBars["Connected"].waitForExistence(timeout: 3))
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 3))
 
         // Verify empty state
-        let noConnection = app.staticTexts["No active connection"]
-        XCTAssertTrue(noConnection.waitForExistence(timeout: 3), "Should show no active connection")
+        // The old "No active connection" empty state is gone; Home simply has no connected row.
+        XCTAssertTrue(app.hasNoActiveConnection, "Should show no active connection")
 
         // Switch to Library tab
-        app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 3))
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 3))
 
         // Switch back to Nearby
         app.tabBars.buttons["Nearby"].tap()
@@ -155,10 +158,10 @@ final class E2EIntegrationTests: XCTestCase {
         let isRequesting = app.staticTexts["Requesting connection..."].exists
         let isConnecting = app.staticTexts["Connecting..."].exists
         let hasAlert = app.alerts.firstMatch.exists
-        let connectedTabSelected = app.tabBars.buttons["Connected"].isSelected
+        let connectedTabSelected = app.tabBars.buttons["Home"].isSelected
 
         // Check if we're now on the Connected tab (auto-switched after successful connection)
-        let connectedNavBar = app.navigationBars["Connected"].exists
+        let connectedNavBar = app.navigationBars["Home"].exists
         let hasConnectionView = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'iPhone'")
         ).firstMatch.exists
@@ -208,7 +211,7 @@ final class E2EIntegrationTests: XCTestCase {
 
         // 2. Connect
         peer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         var connected = false
         for _ in 0..<30 {
             if connectedTab.isSelected { connected = true; break }
@@ -287,7 +290,7 @@ final class E2EIntegrationTests: XCTestCase {
 
         // Wait for connection to be established (other device needs to accept)
         // The app auto-navigates to Connected tab on success
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         var connected = false
         for _ in 0..<30 {
             if connectedTab.isSelected {
@@ -415,7 +418,7 @@ final class E2EIntegrationTests: XCTestCase {
         addScreenshot("02_AfterAccept")
 
         // Navigate to Connected tab
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
@@ -459,7 +462,7 @@ final class E2EIntegrationTests: XCTestCase {
 
     /// Navigate from Connected list (Active section) into ConnectionView detail.
     private func navigateToConnectionView() {
-        let activeHeader = app.staticTexts["Active"]
+        let activeHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
         if activeHeader.waitForExistence(timeout: 5) {
             // New UI: Active section with peer row, tap to navigate to ConnectionView
             let peerRow = app.buttons["active-peer-row"]
@@ -486,14 +489,14 @@ final class E2EIntegrationTests: XCTestCase {
     /// - Swipe-to-delete on Contacts rows
     func test13_VerifyNewFeatures() throws {
         // 1. Check Connected tab empty/contacts state BEFORE connecting
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
         addScreenshot("F01_ConnectedTab_Before")
 
         // Should see either "No saved devices" (empty) or "Contacts" section (has records from prior tests)
-        let noSaved = app.staticTexts["No saved devices"]
-        let contactsHeader = app.staticTexts["Contacts"]
+        let noSaved = app.staticTexts["No friends yet"]
+        let contactsHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
         let hasEmptyOrContacts = noSaved.waitForExistence(timeout: 2) || contactsHeader.waitForExistence(timeout: 2)
         print("Empty state or Contacts: \(hasEmptyOrContacts)")
         addScreenshot("F02_ContactsOrEmpty")
@@ -579,7 +582,7 @@ final class E2EIntegrationTests: XCTestCase {
         addScreenshot("F08_ConnectedList")
 
         // Verify "Contacts" section header exists
-        let contactsSectionAgain = app.staticTexts["Contacts"]
+        let contactsSectionAgain = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
         if contactsSectionAgain.waitForExistence(timeout: 3) {
             print("Contacts section header verified!")
         }
@@ -650,26 +653,25 @@ final class E2EIntegrationTests: XCTestCase {
     // MARK: - Test 9: Library Tab (Empty State)
 
     func test09_LibraryEmptyState() {
-        app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 3))
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 3))
 
         // Check for search bar
         let searchField = app.searchFields.firstMatch
         // Library may or may not have devices yet, but the view should load
-        XCTAssertTrue(app.navigationBars["Library"].exists, "Library tab should show")
+        XCTAssertTrue(app.navigationBars["Home"].exists, "Library tab should show")
     }
 
     // MARK: - Test 10: Connected Tab Empty State
 
     func test10_ConnectedEmptyState() {
-        app.tabBars.buttons["Connected"].tap()
+        app.tabBars.buttons["Home"].tap()
 
         // Empty state shows "No saved devices" when no records exist,
         // or "No active connection" when records exist but not connected
-        let noSaved = app.staticTexts["No saved devices"]
-        let noConnection = app.staticTexts["No active connection"]
+        let noSaved = app.staticTexts["No friends yet"]
 
-        let foundEmpty = noSaved.waitForExistence(timeout: 3) || noConnection.waitForExistence(timeout: 3)
+        let foundEmpty = noSaved.waitForExistence(timeout: 3) || app.hasNoActiveConnection
         XCTAssertTrue(foundEmpty, "Should show empty state title")
     }
 }

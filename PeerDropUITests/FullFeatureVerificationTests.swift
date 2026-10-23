@@ -9,6 +9,7 @@ final class FullFeatureVerificationTests: XCTestCase {
         continueAfterFailure = true
         app = XCUIApplication()
         app.launch()
+        app.goToNearbyTab()
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
     }
@@ -168,7 +169,7 @@ final class FullFeatureVerificationTests: XCTestCase {
     }
 
     private func navigateToConnectionView() {
-        let activeHeader = app.staticTexts["Active"]
+        let activeHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
         if activeHeader.waitForExistence(timeout: 5) {
             let peerRow = app.buttons["active-peer-row"]
             if peerRow.waitForExistence(timeout: 3) {
@@ -223,7 +224,7 @@ final class FullFeatureVerificationTests: XCTestCase {
         print("[INITIATOR] Connection requested")
 
         // Wait for connected state (acceptor must accept)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         var connected = false
         for _ in 0..<30 {
             if connectedTab.isSelected { connected = true; break }
@@ -405,7 +406,7 @@ final class FullFeatureVerificationTests: XCTestCase {
         screenshot("TD-A-03-accepted")
 
         // 2. Navigate to Connected tab
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
 
         // Navigate into ConnectionView

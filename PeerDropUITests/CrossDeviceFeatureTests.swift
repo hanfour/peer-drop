@@ -23,6 +23,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
 
         if !CrossDeviceFeatureTests.appLaunched {
             app.launch()
+            app.goToNearbyTab()
             CrossDeviceFeatureTests.appLaunched = true
         } else {
             // App already running from previous test — just activate it
@@ -57,7 +58,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
 
         // Wait for connection to be accepted by Sim 1 (AcceptConnectionHelper)
         // Should auto-switch to Connected tab
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.navigationBars["Home"]
         let connected = connectedNav.waitForExistence(timeout: 30)
         XCTAssertTrue(connected, "Should transition to Connected tab after peer accepts")
 
@@ -270,11 +271,10 @@ final class CrossDeviceFeatureTests: XCTestCase {
         takeScreenshot("05-Disconnected")
 
         // Should show empty state or return to discovery
-        let noConnection = app.staticTexts["No active connection"]
         let nearbyTab = app.tabBars.buttons.element(boundBy: 0)
 
         // Either we see "No active connection" on Connected tab, or we switched to Nearby
-        let disconnected = noConnection.waitForExistence(timeout: 5) || nearbyTab.isSelected
+        let disconnected = app.buttons["active-peer-row"].waitForNonExistence(timeout: 5) || nearbyTab.isSelected
         XCTAssertTrue(disconnected, "Should show disconnected state")
     }
 
@@ -725,7 +725,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
         tapFirstPeer()
 
         // Wait for connection
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.navigationBars["Home"]
         guard connectedNav.waitForExistence(timeout: 30) else {
             XCTFail("Connection was not established")
             return

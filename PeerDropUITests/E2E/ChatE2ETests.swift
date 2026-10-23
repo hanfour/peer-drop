@@ -51,7 +51,7 @@ final class ChatE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         screenshot("02-chat-opened")
@@ -166,7 +166,7 @@ final class ChatE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         screenshot("02-chat-opened")
@@ -275,7 +275,7 @@ final class ChatE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         screenshot("02-chat-opened")
@@ -386,7 +386,7 @@ final class ChatE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
@@ -487,7 +487,7 @@ final class ChatE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
@@ -588,7 +588,7 @@ final class ChatE2EAcceptorTests: E2EAcceptorTestBase {
         )
 
         // Check if there's an unread indicator on the Connected tab
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         screenshot("03-unread-check")
 
         // Signal that we haven't opened chat

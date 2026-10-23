@@ -292,6 +292,7 @@ class MultiSimTestBase: XCTestCase {
         continueAfterFailure = true
         app = XCUIApplication()
         app.launch()
+        app.goToNearbyTab()
 
         // Wait for app to be ready
         XCTAssertTrue(
@@ -569,7 +570,7 @@ class MultiSimTestBase: XCTestCase {
 
     /// Wait for connection to be established (Connected tab selected)
     func waitForConnected(timeout: TimeInterval = TestTimeouts.connectionEstablish) -> Bool {
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         return waitUntil(timeout: timeout) { connectedTab.isSelected }
     }
 
@@ -773,5 +774,18 @@ class E2EAcceptorTestBase: MultiSimTestBase {
         print("[ACCEPTOR] Declined connection")
         // Wait for consent sheet to dismiss
         _ = waitUntil(timeout: TestTimeouts.uiStabilize) { !self.app.buttons["Decline"].exists }
+    }
+}
+
+extension XCUIApplication {
+    /// The app launches on the Home tab since the four-tab overhaul (Home, Notes, Nearby, Diaries);
+    /// these tests were written when Nearby was the launch tab, so select it right after launch.
+    /// Home lists live connections as `active-peer-row` buttons; none means not connected
+    /// (replaces the old Connected tab's "No active connection" empty state).
+    var hasNoActiveConnection: Bool { !buttons["active-peer-row"].exists }
+
+    func goToNearbyTab() {
+        let nearby = tabBars.buttons["Nearby"]
+        if nearby.waitForExistence(timeout: 10), !nearby.isSelected { nearby.tap() }
     }
 }
