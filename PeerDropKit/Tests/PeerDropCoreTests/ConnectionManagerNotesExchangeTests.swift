@@ -28,24 +28,63 @@ private struct EphemeralKey: LocalChannelIdentity {
     }
 }
 
-/// What the fake directory answers, plus every path it was asked for.
+/// What the fake directory answers (globally or per account id), every path
+/// it was asked for, and requests parked while `hold` is on.
 private final class DirectoryScript: @unchecked Sendable {
     enum Reply {
         case entry(accountId: String, identityKey: Data, signingKey: Data)
         case notFound
         case offline
+        case status(Int)
+        case malformed
     }
     static let shared = DirectoryScript()
     private let lock = NSLock()
     private var _reply: Reply = .notFound
+    private var _byAccount: [String: Reply] = [:]
     private var _requests: [String] = []
+    private var _hold = false
+    private var _parked: [(path: String, proto: FakeDirectoryProtocol)] = []
     var reply: Reply {
         get { lock.lock(); defer { lock.unlock() }; return _reply }
         set { lock.lock(); _reply = newValue; lock.unlock() }
     }
+    var hold: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _hold }
+        set { lock.lock(); _hold = newValue; lock.unlock() }
+    }
     var requests: [String] { lock.lock(); defer { lock.unlock() }; return _requests }
+    var parkedPaths: [String] { lock.lock(); defer { lock.unlock() }; return _parked.map(\.path) }
+    func setReply(_ r: Reply, for accountId: String) { lock.lock(); _byAccount[accountId] = r; lock.unlock() }
     func record(_ s: String) { lock.lock(); _requests.append(s); lock.unlock() }
-    func reset() { lock.lock(); _reply = .notFound; _requests = []; lock.unlock() }
+    func reply(forPath path: String) -> Reply {
+        lock.lock(); defer { lock.unlock() }
+        let id = path.split(separator: "/").last.map(String.init) ?? ""
+        return _byAccount[id] ?? _reply
+    }
+    /// Parks the request when holding; returns false to answer now.
+    func parkIfHolding(_ path: String, _ proto: FakeDirectoryProtocol) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard _hold else { return false }
+        _parked.append((path, proto))
+        return true
+    }
+    /// Answers every parked request for `accountId` with its current reply.
+    func release(accountId: String) {
+        lock.lock()
+        let matching = _parked.filter { $0.path.hasSuffix("/" + accountId) }
+        _parked.removeAll { $0.path.hasSuffix("/" + accountId) }
+        lock.unlock()
+        for item in matching {
+            let r = reply(forPath: item.path)
+            DispatchQueue.global().async { item.proto.deliver(r) }
+        }
+    }
+    func reset() {
+        lock.lock()
+        _reply = .notFound; _byAccount = [:]; _requests = []; _hold = false; _parked = []
+        lock.unlock()
+    }
 }
 
 private final class FakeDirectoryProtocol: URLProtocol {
@@ -55,11 +94,19 @@ private final class FakeDirectoryProtocol: URLProtocol {
     override func startLoading() {
         let url = request.url!
         DirectoryScript.shared.record(url.path + (url.query.map { "?" + $0 } ?? ""))
-        switch DirectoryScript.shared.reply {
+        if DirectoryScript.shared.parkIfHolding(url.path, self) { return }
+        deliver(DirectoryScript.shared.reply(forPath: url.path))
+    }
+    func deliver(_ reply: DirectoryScript.Reply) {
+        switch reply {
         case .offline:
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
         case .notFound:
             respond(404, Data(#"{"error":"not_found"}"#.utf8))
+        case let .status(code):
+            respond(code, Data(#"{"error":"server_error"}"#.utf8))
+        case .malformed:
+            respond(200, Data(#"{"unexpected":true}"#.utf8))
         case let .entry(accountId, identityKey, signingKey):
             respond(200, Data(#"{"accountId":"\#(accountId)","nickname":"peer","identityKey":"\#(identityKey.base64EncodedString())","signingKey":"\#(signingKey.base64EncodedString())","mailboxId":"m"}"#.utf8))
         }
@@ -309,12 +356,13 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
     /// Dials the CM as a new secure peer, gets accepted, secures the channel
     /// and warms both ratchet directions.
     private func connectPeer(advertise: Bool = true, helloKey: Data? = nil,
-                             expectFlagInHello: Bool = true) async throws -> ScriptedPeer {
-        let key = EphemeralKey()
-        let ident = PeerIdentity(id: UUID().uuidString, displayName: "Pat",
+                             expectFlagInHello: Bool = true,
+                             key fixedKey: EphemeralKey? = nil, id fixedID: String? = nil) async throws -> ScriptedPeer {
+        let key = fixedKey ?? EphemeralKey()
+        let ident = PeerIdentity(id: fixedID ?? UUID().uuidString, displayName: "Pat",
                                  identityPublicKey: helloKey ?? key.raw,
                                  supportsSecureChannel: true, supportsNotesExchange: advertise)
-        touchedPeers.append(ident.id)
+        if !touchedPeers.contains(ident.id) { touchedPeers.append(ident.id) }
         let socket = try await dialManager()
         try await socket.sendMessage(try PeerMessage.hello(identity: ident))
         try await socket.sendMessage(PeerMessage.connectionRequest(senderID: ident.id))
@@ -421,6 +469,9 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         XCTAssertNil(contact(peer)?.pendingAccountBinding)
         XCTAssertEqual(directoryLookups, ["/v3/directory/\(peerAccountId)"], "lookup must be by id, without bundle")
         XCTAssertEqual(peer.log.phases.filter { $0 == "reveal" }.count, 1, "reveal sent more than once")
+        // M7: nothing is owed once bound with our reveal sent: the tick stops.
+        let tickStopped = await poll { !self.cm._notesExchangeTickActiveForTesting(peer.identity.id) }
+        XCTAssertTrue(tickStopped, "tick still running in .bound")
     }
 
     // MARK: - Guard: origin, consent, keys, transport, flag
@@ -668,7 +719,7 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
 
         // Back online; the app comes to the foreground.
         setDirectoryValid(for: peer)
-        cm.notesExchangeDidBecomeActive()
+        await cm.notesExchangeDidBecomeActive()
         let bound = await poll { self.contact(peer)?.accountId == self.peerAccountId }
         XCTAssertTrue(bound, "foreground retry did not bind")
         XCTAssertNil(contact(peer)?.pendingAccountBinding)
@@ -824,6 +875,414 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
         XCTAssertTrue(bound, "account-ready retry did not complete the pending binding")
         try await drain(peer)
         XCTAssertNil(peer.log.first("reveal"), "revealed after the user cancelled")
+    }
+
+    // MARK: - Fix round 1
+
+    private func pendingContact(_ accountId: String, key: Data, signing: Data,
+                                receivedAt: Date = Date(), deviceId: String? = nil) -> TrustedContact {
+        TrustedContact(deviceId: deviceId ?? "dev-\(accountId)", displayName: accountId, identityPublicKey: key,
+                       trustLevel: .unknown,
+                       pendingAccountBinding: PendingAccountBinding(
+                           accountId: accountId, signingKey: signing,
+                           handshakeKeyHash: Data(SHA256.hash(data: key)), receivedAt: receivedAt))
+    }
+
+    private func lookups(_ accountId: String) -> Int {
+        directoryLookups.filter { $0.hasSuffix("/" + accountId) }.count
+    }
+
+    /// Pairs, sends a valid reveal for `accountId` and waits for `.verifying`.
+    @discardableResult
+    private func revealAndAwaitVerifying(_ peer: ScriptedPeer, accountId: String? = nil) async throws -> Data {
+        let cmNonce = try await pairIntents(peer)
+        try await peer.send(try peer.reveal(accountId: accountId ?? peerAccountId, cmNonce: cmNonce))
+        let verifying = await poll { self.state(peer) == .verifying }
+        XCTAssertTrue(verifying, "state=\(String(describing: state(peer)))")
+        return cmNonce
+    }
+
+    // I1: network recovery.
+
+    func testNetworkRecoveryDecision() {
+        typealias CM = ConnectionManager
+        XCTAssertTrue(CM.notesShouldRetryOnPathChange(from: .unsatisfied, oldInterfaces: ["en0"], to: .satisfied, newInterfaces: ["en0"]))
+        XCTAssertTrue(CM.notesShouldRetryOnPathChange(from: .requiresConnection, oldInterfaces: [], to: .satisfied, newInterfaces: ["pdp_ip0"]))
+        // Library Wi-Fi without internet is already `.satisfied`: a new interface
+        // (cellular, another Wi-Fi) while satisfied also retries.
+        XCTAssertTrue(CM.notesShouldRetryOnPathChange(from: .satisfied, oldInterfaces: ["en0"], to: .satisfied, newInterfaces: ["en0", "pdp_ip0"]))
+        XCTAssertFalse(CM.notesShouldRetryOnPathChange(from: .satisfied, oldInterfaces: ["en0"], to: .satisfied, newInterfaces: ["en0"]))
+        XCTAssertFalse(CM.notesShouldRetryOnPathChange(from: .satisfied, oldInterfaces: ["en0"], to: .unsatisfied, newInterfaces: []))
+        XCTAssertFalse(CM.notesShouldRetryOnPathChange(from: .unsatisfied, oldInterfaces: ["en0"], to: .unsatisfied, newInterfaces: ["en1"]))
+        // The first path at startup: the app-active retry covers it.
+        XCTAssertFalse(CM.notesShouldRetryOnPathChange(from: nil, oldInterfaces: [], to: .satisfied, newInterfaces: ["en0"]))
+    }
+
+    func testNetworkRecoveryTriggersOneDebouncedRetry() async throws {
+        cm.notesRetryDebounceNanoseconds = 150_000_000
+        let k = EphemeralKey().raw
+        let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let c = pendingContact(peerAccountId, key: k, signing: signing)
+        cm.trustedContactStore.add(c)
+        DirectoryScript.shared.reply = .entry(accountId: peerAccountId, identityKey: k, signingKey: signing)
+        for _ in 0..<5 {
+            cm.notesExchangeNetworkPathChanged(from: .unsatisfied, oldInterfaces: [], to: .satisfied, newInterfaces: ["en0"])
+        }
+        let bound = await poll { self.cm.trustedContactStore.find(byId: c.id)?.accountId == self.peerAccountId }
+        XCTAssertTrue(bound, "network recovery did not retry the pending binding")
+        XCTAssertEqual(lookups(peerAccountId), 1, "a burst of path updates must retry once")
+
+        // An unchanged satisfied path does not retry.
+        let d = pendingContact("PEER2346", key: EphemeralKey().raw, signing: signing)
+        cm.trustedContactStore.add(d)
+        cm.notesExchangeNetworkPathChanged(from: .satisfied, oldInterfaces: ["en0"], to: .satisfied, newInterfaces: ["en0"])
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(lookups("PEER2346"), 0)
+    }
+
+    // I2: pending TTL.
+
+    func testExpiredPendingClearedWithoutNetwork() async throws {
+        let now = Date()
+        cm.notesPendingBindingClock = { now }
+        let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let k1 = EphemeralKey().raw, k2 = EphemeralKey().raw
+        let old = pendingContact(peerAccountId, key: k1, signing: signing,
+                                 receivedAt: now.addingTimeInterval(-ConnectionManager.notesPendingBindingLifetime - 60))
+        let young = pendingContact("PEER2346", key: k2, signing: signing,
+                                   receivedAt: now.addingTimeInterval(-ConnectionManager.notesPendingBindingLifetime + 3600))
+        cm.trustedContactStore.add(old)
+        cm.trustedContactStore.add(young)
+        // Would bind if it were asked.
+        DirectoryScript.shared.setReply(.entry(accountId: peerAccountId, identityKey: k1, signingKey: signing), for: peerAccountId)
+        DirectoryScript.shared.setReply(.offline, for: "PEER2346")
+        XCTAssertEqual(ConnectionManager.notesPendingBindingLifetime, 7 * 24 * 3600)
+        await cm.retryPendingBindings()
+        XCTAssertNil(cm.trustedContactStore.find(byId: old.id)?.pendingAccountBinding, "expired pending kept")
+        XCTAssertNil(cm.trustedContactStore.find(byId: old.id)?.accountId, "expired pending was bound")
+        XCTAssertEqual(lookups(peerAccountId), 0, "expired pending must not reach the network")
+        XCTAssertNotNil(cm.trustedContactStore.find(byId: young.id)?.pendingAccountBinding, "young pending dropped on a transient error")
+        XCTAssertEqual(lookups("PEER2346"), 1)
+    }
+
+    func testExpiredPendingEndsLiveVerifying() async throws {
+        let peer = try await connectPeer()
+        DirectoryScript.shared.reply = .offline
+        try await revealAndAwaitVerifying(peer)
+        let pending = await poll { self.contact(peer)?.pendingAccountBinding != nil }
+        XCTAssertTrue(pending)
+        let before = directoryLookups.count
+        cm.notesPendingBindingClock = { Date().addingTimeInterval(ConnectionManager.notesPendingBindingLifetime + 60) }
+        await cm.retryPendingBindings()
+        XCTAssertEqual(state(peer), .failed(.verificationFailed), "UI still says verifying")
+        XCTAssertNil(contact(peer)?.pendingAccountBinding)
+        XCTAssertEqual(directoryLookups.count, before)
+    }
+
+    func testRetryKeepsPendingOnServerErrorsAndClearsOn404() async throws {
+        let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let cases: [(String, DirectoryScript.Reply)] = [
+            ("PEER2342", .status(401)), ("PEER2343", .status(403)), ("PEER2344", .status(429)),
+            ("PEER2347", .status(500)), ("PEER2348", .status(503)), ("PEER2349", .malformed),
+        ]
+        var ids: [UUID] = []
+        for (account, reply) in cases {
+            let c = pendingContact(account, key: EphemeralKey().raw, signing: signing)
+            cm.trustedContactStore.add(c)
+            ids.append(c.id)
+            DirectoryScript.shared.setReply(reply, for: account)
+        }
+        await cm.retryPendingBindings()
+        for (i, id) in ids.enumerated() {
+            XCTAssertNotNil(cm.trustedContactStore.find(byId: id)?.pendingAccountBinding, "\(cases[i].1) dropped pending")
+            XCTAssertNil(cm.trustedContactStore.find(byId: id)?.accountId)
+            XCTAssertGreaterThan(lookups(cases[i].0), 0)
+        }
+        for (account, _) in cases { DirectoryScript.shared.setReply(.notFound, for: account) }
+        await cm.retryPendingBindings()
+        for id in ids {
+            XCTAssertNil(cm.trustedContactStore.find(byId: id)?.pendingAccountBinding, "404 must clear pending")
+            XCTAssertNil(cm.trustedContactStore.find(byId: id)?.accountId)
+        }
+    }
+
+    func testContactChangedDuringRetryAwaitIsNotBound() async throws {
+        let k = EphemeralKey().raw
+        let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let c = pendingContact(peerAccountId, key: k, signing: signing)
+        cm.trustedContactStore.add(c)
+        DirectoryScript.shared.reply = .entry(accountId: peerAccountId, identityKey: k, signingKey: signing)
+        DirectoryScript.shared.hold = true
+        let cmRef = cm!
+        let retry = Task { @MainActor in await cmRef.retryPendingBindings() }
+        let parked = await poll { DirectoryScript.shared.parkedPaths.count == 1 }
+        XCTAssertTrue(parked)
+        // A newer exchange replaced the pending binding meanwhile.
+        let newer = PendingAccountBinding(accountId: "PEER2346", signingKey: signing,
+                                          handshakeKeyHash: Data(SHA256.hash(data: k)), receivedAt: Date())
+        cm.trustedContactStore.setPendingBinding(for: c.id, newer)
+        DirectoryScript.shared.hold = false
+        DirectoryScript.shared.setReply(.offline, for: "PEER2346")
+        DirectoryScript.shared.release(accountId: peerAccountId)
+        await retry.value
+        XCTAssertNil(cm.trustedContactStore.find(byId: c.id)?.accountId, "bound a contact that changed during the await")
+        XCTAssertEqual(cm.trustedContactStore.find(byId: c.id)?.pendingAccountBinding, newer)
+    }
+
+    // I3 (1)/(7): pinning denial at CM level.
+
+    func testKnownDeviceWithNewKeyMismatchDenied() async throws {
+        let id = UUID().uuidString
+        cm.trustedContactStore.add(TrustedContact(deviceId: id, displayName: "Pat", identityPublicKey: EphemeralKey().raw,
+                                                  trustLevel: .linked))
+        let peer = try await connectPeer(id: id)
+        guard case .mismatch = cm.connections[id]?.pinningVerdict else {
+            return XCTFail("verdict=\(String(describing: cm.connections[id]?.pinningVerdict))")
+        }
+        XCTAssertEqual(cm.pressExchangeNotes(with: id), .denied(.pinningMismatch))
+        try await peer.sendIntent()
+        try await drain(peer)
+        XCTAssertNil(state(peer), "intent on a mismatched connection made a session")
+        XCTAssertTrue(peer.log.payloads.isEmpty)
+    }
+
+    func testIntentWhilePinningNotCheckedIgnored() async throws {
+        let peer = try await connectPeer()
+        cm.connections[peer.identity.id]?.setPinningVerdict(.notChecked)
+        XCTAssertEqual(cm.pressExchangeNotes(with: peer.identity.id), .denied(.pinningNotEvaluated))
+        try await peer.sendIntent()
+        try await drain(peer)
+        XCTAssertNil(state(peer))
+        XCTAssertEqual(cm._notesExchangeSessionCountForTesting, 0)
+        XCTAssertTrue(peer.log.payloads.isEmpty)
+    }
+
+    // I3 (2): a late lookup after reconnect.
+
+    func testLateLookupAfterReconnectDoesNotTouchNewSession() async throws {
+        let key = EphemeralKey(), id = UUID().uuidString
+        let first = try await connectPeer(key: key, id: id)
+        setDirectoryValid(for: first)
+        DirectoryScript.shared.hold = true
+        try await revealAndAwaitVerifying(first)
+        let parked = await poll { DirectoryScript.shared.parkedPaths.count == 1 }
+        XCTAssertTrue(parked)
+        await cm.disconnect(from: id)
+        let gone = await poll { self.cm._notesExchangeSessionCountForTesting == 0 && self.state(first) == nil }
+        XCTAssertTrue(gone)
+
+        let second = try await connectPeer(key: key, id: id)
+        XCTAssertEqual(cm.pressExchangeNotes(with: id), .allowed)
+        XCTAssertEqual(state(second), .waitingForPeer)
+        DirectoryScript.shared.release(accountId: peerAccountId)
+        // Accepted decision: the proof completed in the first connection, so
+        // the binding still lands...
+        let bound = await poll { self.contact(second)?.accountId == self.peerAccountId }
+        XCTAssertTrue(bound)
+        // ...but the new session is untouched.
+        try await drain(second)
+        XCTAssertEqual(state(second), .waitingForPeer)
+        XCTAssertEqual(second.log.phases, ["intent"])
+    }
+
+    // I3 (3): the gate flips between pairing and the reveal.
+
+    func testGateFlipBeforeRevealSendsNoReveal() async throws {
+        cm._setAccountManagerForTesting(try await makeAccountManager(ready: false, hold: true))
+        let registering = cm.accountManager
+        Task { await registering.bootstrap() }
+        let isRegistering = await poll { registering.state == .registering }
+        XCTAssertTrue(isRegistering)
+
+        let flipped = try await connectPeer()
+        let replaced = try await connectPeer()
+        try await pairIntents(flipped, expectReveal: false)
+        try await pairIntents(replaced, expectReveal: false)
+        XCTAssertEqual(state(flipped), .exchanging)
+        XCTAssertEqual(state(replaced), .exchanging)
+
+        // (a) pinning turns into a mismatch; (b) the PC is replaced in the
+        // table without teardown.
+        cm.connections[flipped.identity.id]?.setPinningVerdict(.mismatch(stored: "a", received: "b"))
+        let original = try XCTUnwrap(cm.connections[replaced.identity.id])
+        let dummy = PeerConnection(peerID: replaced.identity.id,
+                                   connection: NWConnection(host: "127.0.0.1", port: 9, using: .tcp),
+                                   peerIdentity: replaced.identity, localIdentity: cm.localIdentity, state: .connected)
+        cm._setConnectionForTesting(peerID: replaced.identity.id, dummy)
+
+        cm._setAccountManagerForTesting(try await makeAccountManager(ready: true))
+        let failed = await poll { self.state(flipped) == .failed(.localRevealFailed) }
+        XCTAssertTrue(failed, "state=\(String(describing: state(flipped)))")
+        cm._setConnectionForTesting(peerID: replaced.identity.id, original)
+        try await drain(flipped)
+        try await drain(replaced)
+        XCTAssertNil(flipped.log.first("reveal"), "reveal sent after the gate flipped")
+        XCTAssertNil(replaced.log.first("reveal"), "reveal sent on a replaced connection")
+    }
+
+    // I3 (4): contact ambiguity.
+
+    func testAmbiguousContactsNeitherBindNorPend() async throws {
+        let scenarios: [(String, (ConnectionManagerNotesExchangeTests, ScriptedPeer) -> Void)] = [
+            ("two contacts with the key", { t, p in
+                t.cm.trustedContactStore.add(TrustedContact(deviceId: nil, displayName: "Dup", identityPublicKey: p.key.raw,
+                                                            trustLevel: .unknown))
+            }),
+            ("blocked contact", { t, p in
+                if let c = t.contact(p) { t.cm.trustedContactStore.setBlocked(c.id, blocked: true) }
+            }),
+            ("device id held under another key", { t, p in
+                for c in t.cm.trustedContactStore.contacts { t.cm.trustedContactStore.remove(c.id) }
+                t.cm.trustedContactStore.add(TrustedContact(deviceId: p.identity.id, displayName: "Old",
+                                                            identityPublicKey: EphemeralKey().raw, trustLevel: .linked))
+            }),
+        ]
+        for online in [true, false] {
+            for (name, setup) in scenarios {
+                let peer = try await connectPeer()
+                if online { setDirectoryValid(for: peer) } else { DirectoryScript.shared.reply = .offline }
+                setup(self, peer)
+                let cmNonce = try await pairIntents(peer)
+                try await peer.send(try peer.reveal(accountId: peerAccountId, cmNonce: cmNonce))
+                let failed = await poll { self.state(peer) == .failed(.verificationFailed) }
+                XCTAssertTrue(failed, "\(name) online=\(online): state=\(String(describing: state(peer)))")
+                XCTAssertNil(cm.trustedContactStore.find(byAccountId: peerAccountId), "\(name) online=\(online) bound")
+                XCTAssertTrue(cm.trustedContactStore.contacts.allSatisfy { $0.pendingAccountBinding == nil },
+                              "\(name) online=\(online) stored pending")
+                await cm.disconnect(from: peer.identity.id)
+                cm.trustedContactStore.removeAll()
+            }
+        }
+    }
+
+    // I3 (6): a second reveal.
+
+    func testSecondDifferentRevealIgnored() async throws {
+        let peer = try await connectPeer()
+        DirectoryScript.shared.reply = .offline
+        let cmNonce = try await revealAndAwaitVerifying(peer)
+        let pending = await poll { self.contact(peer)?.pendingAccountBinding != nil }
+        XCTAssertTrue(pending)
+        DirectoryScript.shared.setReply(.entry(accountId: "PEER2346", identityKey: peer.key.raw, signingKey: peer.signingKey),
+                                        for: "PEER2346")
+        try await peer.send(try peer.reveal(accountId: "PEER2346", cmNonce: cmNonce))
+        try await drain(peer)
+        XCTAssertEqual(lookups("PEER2346"), 0, "a second reveal reached the directory")
+        XCTAssertEqual(contact(peer)?.pendingAccountBinding?.accountId, peerAccountId)
+        XCTAssertNil(contact(peer)?.accountId)
+        XCTAssertEqual(state(peer), .verifying)
+    }
+
+    // M1: fail closed without a readable host.
+
+    func testTcpWithoutReadableHostDenied() async throws {
+        cm.notesExchangeRemoteHostOverride = { _ in nil }
+        let peer = try await connectPeer(expectFlagInHello: false)
+        XCTAssertEqual(cm.pressExchangeNotes(with: peer.identity.id), .denied(.notLocalDirect))
+        try await peer.sendIntent()
+        try await drain(peer)
+        XCTAssertNil(state(peer))
+        XCTAssertTrue(peer.log.payloads.isEmpty)
+    }
+
+    // M2: queued sends after teardown / overwrite.
+
+    func testTeardownDropsQueuedSends() async throws {
+        let peer = try await connectPeer()
+        let pc = try XCTUnwrap(cm.connections[peer.identity.id])
+        XCTAssertEqual(cm.pressExchangeNotes(with: peer.identity.id), .allowed)
+        cm.tearDownNotesExchange(for: pc)          // same main-actor turn
+        try await drain(peer)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(peer.log.payloads.isEmpty, "a queued frame went out after teardown: \(peer.log.phases)")
+    }
+
+    func testQueuedSendSkipsOverwrittenConnection() async throws {
+        let peer = try await connectPeer()
+        let pc = try XCTUnwrap(cm.connections[peer.identity.id])
+        XCTAssertEqual(cm.pressExchangeNotes(with: peer.identity.id), .allowed)
+        let dummy = PeerConnection(peerID: peer.identity.id,
+                                   connection: NWConnection(host: "127.0.0.1", port: 9, using: .tcp),
+                                   peerIdentity: peer.identity, localIdentity: cm.localIdentity, state: .connected)
+        cm._setConnectionForTesting(peerID: peer.identity.id, dummy)   // same turn
+        try await Task.sleep(nanoseconds: 300_000_000)
+        cm._setConnectionForTesting(peerID: peer.identity.id, pc)
+        try await drain(peer)
+        XCTAssertTrue(peer.log.payloads.isEmpty, "a queued frame went out on an overwritten connection")
+    }
+
+    // M4: unbind / hash mismatch end a live "verifying".
+
+    func testUnbindDuringVerifyingEndsSession() async throws {
+        let peer = try await connectPeer()
+        DirectoryScript.shared.reply = .offline
+        try await revealAndAwaitVerifying(peer)
+        let pending = await poll { self.contact(peer)?.pendingAccountBinding != nil }
+        XCTAssertTrue(pending)
+        cm.unbindNotes(contactID: try XCTUnwrap(contact(peer)).id)
+        XCTAssertEqual(state(peer), .failed(.verificationFailed))
+        XCTAssertNil(contact(peer)?.pendingAccountBinding)
+    }
+
+    func testUnbindDuringInFlightLookupWins() async throws {
+        let peer = try await connectPeer()
+        setDirectoryValid(for: peer)
+        DirectoryScript.shared.hold = true
+        try await revealAndAwaitVerifying(peer)
+        let parked = await poll { DirectoryScript.shared.parkedPaths.count == 1 }
+        XCTAssertTrue(parked)
+        cm.unbindNotes(contactID: try XCTUnwrap(contact(peer)).id)
+        XCTAssertEqual(state(peer), .failed(.verificationFailed))
+        DirectoryScript.shared.release(accountId: peerAccountId)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertNil(contact(peer)?.accountId, "an in-flight lookup bound after the user unbound")
+        XCTAssertNil(contact(peer)?.pendingAccountBinding)
+    }
+
+    func testRetryHashMismatchEndsLiveVerifying() async throws {
+        let peer = try await connectPeer()
+        DirectoryScript.shared.reply = .offline
+        try await revealAndAwaitVerifying(peer)
+        let pending = await poll { self.contact(peer)?.pendingAccountBinding != nil }
+        XCTAssertTrue(pending)
+        let old = try XCTUnwrap(contact(peer))
+        cm.trustedContactStore.remove(old.id)
+        cm.trustedContactStore.add(TrustedContact(deviceId: old.deviceId, displayName: old.displayName,
+                                                  identityPublicKey: EphemeralKey().raw, trustLevel: .unknown,
+                                                  pendingAccountBinding: old.pendingAccountBinding))
+        await cm.retryPendingBindings()
+        XCTAssertEqual(state(peer), .failed(.verificationFailed))
+    }
+
+    // M5: last-started verification wins.
+
+    func testNewerVerificationWinsOverOlderInFlight() async throws {
+        let key = EphemeralKey(), id = UUID().uuidString
+        let first = try await connectPeer(key: key, id: id)
+        DirectoryScript.shared.setReply(.entry(accountId: peerAccountId, identityKey: key.raw, signingKey: first.signingKey),
+                                        for: peerAccountId)
+        DirectoryScript.shared.hold = true
+        try await revealAndAwaitVerifying(first, accountId: peerAccountId)
+        let a = await poll { DirectoryScript.shared.parkedPaths.count == 1 }
+        XCTAssertTrue(a)
+        await cm.disconnect(from: id)
+        _ = await poll { self.cm._notesExchangeSessionCountForTesting == 0 }
+
+        let second = try await connectPeer(key: key, id: id)
+        DirectoryScript.shared.setReply(.entry(accountId: "PEER2346", identityKey: key.raw, signingKey: second.signingKey),
+                                        for: "PEER2346")
+        try await revealAndAwaitVerifying(second, accountId: "PEER2346")
+        let b = await poll { DirectoryScript.shared.parkedPaths.count == 2 }
+        XCTAssertTrue(b)
+
+        DirectoryScript.shared.release(accountId: "PEER2346")
+        let bound = await poll { self.contact(second)?.accountId == "PEER2346" }
+        XCTAssertTrue(bound)
+        XCTAssertEqual(state(second), .bound)
+        DirectoryScript.shared.release(accountId: peerAccountId)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(contact(second)?.accountId, "PEER2346", "an older lookup overwrote the newer binding")
+        XCTAssertNil(contact(second)?.pendingAccountBinding)
     }
 }
 

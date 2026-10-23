@@ -33,6 +33,29 @@ final class NotesExchangeSessionTests: XCTestCase {
         actions.filter { if case .sendReveal = $0 { return true } else { return false } }.count
     }
 
+    // MARK: - Ticks (fix round 1, M7)
+
+    func testNeedsTicksOnlyWhileWorkIsOwed() {
+        var s = S()
+        XCTAssertFalse(s.needsTicks)
+        _ = s.handle(.userPressed(nonce: n(1), now: t0))
+        XCTAssertTrue(s.needsTicks, "my intent can expire")
+        _ = s.handle(.receivedIntent(nonce: n(2), now: t0))     // account unknown: pair waits
+        XCTAssertTrue(s.needsTicks)
+        _ = s.handle(.receivedReveal(peerReveal(), now: t0))
+        _ = s.handle(.verificationSucceeded)
+        XCTAssertEqual(s.state, .bound)
+        XCTAssertTrue(s.needsTicks, "bound but my response is still owed: expiry must withdraw it")
+        _ = s.handle(.localAccountReady(myAccount, now: t0))     // reveal goes out
+        XCTAssertFalse(s.needsTicks, "bound and nothing owed")
+
+        var p = S()
+        _ = p.handle(.receivedIntent(nonce: n(3), now: t0))
+        XCTAssertTrue(p.needsTicks, "the peer's intent can expire")
+        _ = p.handle(.disconnected)
+        XCTAssertFalse(p.needsTicks)
+    }
+
     // MARK: - Brief-listed tests
 
     func testBothPressSendsReveal() {

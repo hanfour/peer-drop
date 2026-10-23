@@ -246,6 +246,15 @@ public final class ConnectionManager: ObservableObject {
     var notesExchangeAccountCancellable: AnyCancellable?
     var notesExchangeRetryInFlight = false
     var notesExchangeRetryRequested = false
+    /// Wall clock for pending-binding age (persists across launches; injectable).
+    var notesPendingBindingClock: () -> Date = { Date() }
+    /// Debounce before a network-recovery retry of pending bindings.
+    var notesRetryDebounceNanoseconds: UInt64 = 2_000_000_000
+    var notesRetryDebounceTask: Task<Void, Never>?
+    /// Latest live verification started per peer handshake key (M5:
+    /// last-started wins). Absent = none in flight / invalidated.
+    var notesVerificationGenerations: [Data: UInt64] = [:]
+    var notesVerificationCounter: UInt64 = 0
 
     /// The currently focused peer ID for UI interactions.
     @Published public var focusedPeerID: String?
@@ -1238,6 +1247,13 @@ public final class ConnectionManager: ObservableObject {
         Task { @MainActor [weak self] in
             guard let self else { return }
 
+            // Project C: confirm pending notes bindings once connectivity is back.
+            self.notesExchangeNetworkPathChanged(
+                from: self.lastNetworkPath?.status,
+                oldInterfaces: Set(self.lastNetworkPath?.availableInterfaces.map { $0.name } ?? []),
+                to: newPath.status,
+                newInterfaces: Set(newPath.availableInterfaces.map { $0.name }))
+
             guard let lastPath = self.lastNetworkPath else {
                 self.lastNetworkPath = newPath
                 return
@@ -1705,6 +1721,11 @@ public final class ConnectionManager: ObservableObject {
     /// Test-only: live notes-exchange sessions.
     public var _notesExchangeSessionCountForTesting: Int { notesExchangeSessions.count }
 
+    /// Test-only: whether any live session for `peerID` is ticking.
+    public func _notesExchangeTickActiveForTesting(_ peerID: String) -> Bool {
+        notesExchangeSessions.values.contains { $0.peerID == peerID && $0.tickTask != nil }
+    }
+
     /// Test-only: reconnect back-off attempts consumed so far.
     public func _reconnectAttemptCountForTesting() async -> Int {
         await reconnectController.currentAttempt
@@ -1883,9 +1904,12 @@ public final class ConnectionManager: ObservableObject {
                 // are unordered, so the inbox round can otherwise start
                 // before the `diaryStore` lazy below has installed
                 // `diaryKeyHandler` (see `syncNotes`' doc).
-                Task { await syncNotes() }
-                // Project C: confirm notes bindings received while offline.
-                notesExchangeDidBecomeActive()
+                // Project C: confirm notes bindings received while offline,
+                // after the notes sync.
+                Task {
+                    await syncNotes()
+                    await notesExchangeDidBecomeActive()
+                }
                 Task { await diaryStore.syncList() }
             }
             // Restart discovery when returning to foreground

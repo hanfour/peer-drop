@@ -65,12 +65,15 @@ import PeerDropProtocol
 /// - `.sendReveal`: build it with `NotesExchangeCrypto.makeReveal` using this
 ///   connection's handshake keys and the action's nonces. If that throws, feed
 ///   `.localRevealFailed` (never leave the session waiting).
-/// - `.verify`: call `NotesExchangeCrypto.verifyReveal` with this connection's
-///   handshake keys and the action's nonces, then check the directory
-///   (`entry.accountId.raw == accountId`, `entry.identityKey == peer handshake
-///   key`, `entry.signingKey == payload.signingKey`). These checks must pass
-///   BEFORE any binding, including a pending one, is persisted. Feed back
-///   `.verificationSucceeded` / `.verificationFailed`.
+/// - `.verify`: first the offline checks: `NotesExchangeCrypto.verifyReveal`
+///   with this connection's handshake keys and the action's nonces. Nothing is
+///   persisted unless they pass. Then the directory: if it answers, bind only
+///   when `entry.accountId.raw == accountId`, `entry.identityKey == peer
+///   handshake key` and `entry.signingKey == payload.signingKey`. If it cannot
+///   be reached, a pending binding may be persisted after the offline checks
+///   alone (spec §10.7). It is never bound until a later retry passes the same
+///   directory checks. Feed back `.verificationSucceeded` / `.verificationFailed`
+///   (nothing while the lookup is pending).
 public struct NotesExchangeSession: Sendable {
 
     public static let intentLifetime: TimeInterval = 600
@@ -187,6 +190,16 @@ public struct NotesExchangeSession: Sendable {
     private var declinedPeerNonce: Data?
 
     public init() {}
+
+    /// Whether a `tick` can still change anything: an unlocked intent may
+    /// expire, or a locked pair still owes my response (which my intent's
+    /// expiry withdraws). False once bound with my response sent, in every
+    /// other finished state, and after `disconnected`.
+    public var needsTicks: Bool {
+        guard !closed else { return false }
+        if isLocked { return myResponse == .none && canStillRespond && myIntent != nil }
+        return isOpen && (myIntent != nil || peerIntent != nil)
+    }
 
     /// The pair is frozen once either side has committed a response.
     private var isLocked: Bool { myResponse != .none || peerRevealAccepted }

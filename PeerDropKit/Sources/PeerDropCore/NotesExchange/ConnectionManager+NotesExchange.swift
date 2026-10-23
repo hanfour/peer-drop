@@ -26,6 +26,8 @@ final class NotesExchangeSessionBox {
     /// The peer reveal passed the offline checks and waits for the directory
     /// (live verification, or a persisted pending binding being retried).
     var awaitingDirectory: (accountId: String, handshakeKey: Data)?
+    /// Set on teardown: queued frames of this session never go out.
+    var tornDown = false
 
     init(connection: PeerConnection) {
         self.connection = connection
@@ -49,7 +51,13 @@ final class NotesExchangeSessionBox {
 ///    lookup by id without bundle → `entry.accountId`, `identityKey ==
 ///    handshake key`, `signingKey` all equal. Only then is anything bound.
 ///    A pending binding is persisted only after the offline checks passed and
-///    the directory was unreachable.
+///    the directory was unreachable; it is bound only after a retry passes
+///    the same directory checks, and it expires after
+///    `notesPendingBindingLifetime`. Retries run at app-active (after the
+///    notes sync), when the account becomes ready, and on network recovery.
+/// 4. Last-started wins: a live verification that is superseded by a newer
+///    one for the same handshake key, or invalidated by an unbind, changes
+///    nothing when it completes.
 ///
 /// Decision (plan item 8): the HELLO does not advertise the flag on relay
 /// (Task 1) nor on a tailnet TCP connection (`notesExchangeHelloIdentity`);
@@ -101,10 +109,20 @@ extension ConnectionManager {
         feedNotesExchange(.userCancelled, box: box, pc: pc)
     }
 
-    /// "取消紙條綁定": clears the account binding and any pending one.
+    /// "取消紙條綁定": clears the account binding and any pending one, voids
+    /// any in-flight lookup for the contact's key, and ends a live session
+    /// still showing "verifying" for it.
     public func unbindNotes(contactID: UUID) {
+        guard let contact = trustedContactStore.find(byId: contactID) else { return }
+        let key = contact.identityPublicKey
+        let pending = contact.pendingAccountBinding
         trustedContactStore.setAccountBinding(for: contactID, accountId: nil)
         trustedContactStore.setPendingBinding(for: contactID, nil)
+        let matches: (Data) -> Bool = { k in
+            k == key || (pending.map { Data(SHA256.hash(data: k)) == $0.handshakeKeyHash } ?? false)
+        }
+        notesVerificationGenerations = notesVerificationGenerations.filter { !matches($0.key) }
+        resolveLiveNotesVerification(event: .verificationFailed) { _, k in matches(k) }
     }
 
     /// Re-checks every pending binding against the directory. Success binds;
@@ -120,10 +138,46 @@ extension ConnectionManager {
         } while notesExchangeRetryRequested
     }
 
-    /// App became active: (re)observe the account and retry pending bindings.
-    func notesExchangeDidBecomeActive() {
+    /// App became active (called after `syncNotes()`): (re)observe the
+    /// account and retry pending bindings.
+    func notesExchangeDidBecomeActive() async {
         observeAccountForNotesExchange()
-        Task { [weak self] in await self?.retryPendingBindings() }
+        await retryPendingBindings()
+    }
+
+    /// How long a pending binding may wait for the directory (spec §10.7).
+    static let notesPendingBindingLifetime: TimeInterval = 7 * 24 * 3600
+
+    /// Network recovery (spec §4.2, §10.7: e.g. library Wi-Fi without
+    /// internet). Retries when the path becomes satisfied, or when the
+    /// interface set changes while satisfied (Wi-Fi without internet is
+    /// already "satisfied"). The first path seen at startup does not count.
+    nonisolated static func notesShouldRetryOnPathChange(from oldStatus: NWPath.Status?, oldInterfaces: Set<String>,
+                                                         to newStatus: NWPath.Status,
+                                                         newInterfaces: Set<String>) -> Bool {
+        guard let oldStatus, newStatus == .satisfied else { return false }
+        return oldStatus != .satisfied || oldInterfaces != newInterfaces
+    }
+
+    /// Called by the path monitor for every path update.
+    func notesExchangeNetworkPathChanged(from oldStatus: NWPath.Status?, oldInterfaces: Set<String>,
+                                         to newStatus: NWPath.Status, newInterfaces: Set<String>) {
+        guard Self.notesShouldRetryOnPathChange(from: oldStatus, oldInterfaces: oldInterfaces,
+                                                to: newStatus, newInterfaces: newInterfaces) else { return }
+        scheduleNotesBindingRetry()
+    }
+
+    /// Debounced: a burst of path updates runs one retry (which is itself
+    /// single-flight).
+    func scheduleNotesBindingRetry() {
+        notesRetryDebounceTask?.cancel()
+        let delay = notesRetryDebounceNanoseconds
+        notesRetryDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.notesRetryDebounceTask = nil
+            await self.retryPendingBindings()
+        }
     }
 
     // MARK: - Gate
@@ -146,13 +200,19 @@ extension ConnectionManager {
     }
 
     /// Local direct TCP only: every relay marker and every tailnet address
-    /// (Ruling 1) refuse.
+    /// (Ruling 1) refuse, and so does a connection with no readable remote
+    /// host (fail closed).
     func notesExchangeIsLocalDirect(_ pc: PeerConnection) -> Bool {
         if pc.id.hasPrefix("relay-") || pc.isRelayTransport || pc.isRelayPlaceholder
             || pc.transport is DataChannelTransport {
             return false
         }
-        return !notesExchangeRemoteHosts(of: pc.nwConnection).contains(where: Self.isTailnetHost)
+        return Self.notesHostsAreLocalDirect(notesExchangeRemoteHosts(of: pc.nwConnection))
+    }
+
+    /// At least one host, and none on the tailnet.
+    nonisolated static func notesHostsAreLocalDirect(_ hosts: [String]) -> Bool {
+        !hosts.isEmpty && !hosts.contains(where: isTailnetHost)
     }
 
     func notesExchangeRemoteHosts(of connection: NWConnection?) -> [String] {
@@ -179,10 +239,11 @@ extension ConnectionManager {
         return a == 100 && (64...127).contains(b)
     }
 
-    /// The HELLO identity for a TCP socket: no notes-exchange flag on tailnet.
+    /// The HELLO identity for a TCP socket: no notes-exchange flag on tailnet
+    /// or when no remote host is readable.
     func notesExchangeHelloIdentity(for connection: NWConnection) -> PeerIdentity {
-        notesExchangeRemoteHosts(of: connection).contains(where: Self.isTailnetHost)
-            ? localIdentity.withoutNotesExchange() : localIdentity
+        Self.notesHostsAreLocalDirect(notesExchangeRemoteHosts(of: connection))
+            ? localIdentity : localIdentity.withoutNotesExchange()
     }
 
     // MARK: - Receive
@@ -255,8 +316,11 @@ extension ConnectionManager {
     }
 
     private func tearDownNotesExchange(box: NotesExchangeSessionBox, key: ObjectIdentifier) {
+        box.tornDown = true
         box.tickTask?.cancel()
         box.tickTask = nil
+        box.sendTail?.cancel()
+        box.sendTail = nil
         box.awaitingDirectory = nil
         _ = box.session.handle(.disconnected)   // actions deliberately not executed
         notesExchangeSessions[key] = nil
@@ -310,11 +374,14 @@ extension ConnectionManager {
               let message = try? PeerMessage.notesExchange(payload, senderID: localIdentity.id)
         else { return false }
         let previous = box.sendTail
-        box.sendTail = Task { @MainActor [pc] in
+        box.sendTail = Task { @MainActor [weak self, pc, box] in
             _ = await previous?.value
-            // `secureChannel` is never cleared once set, so this send is
-            // always wrapped; checked again as defence in depth.
-            guard pc.secureChannel != nil, pc.secureChannelState == .secured else { return }
+            // Still this session's installed connection (not torn down or
+            // overwritten while queued). `secureChannel` is never cleared once
+            // set, so this send is always wrapped; checked again as defence
+            // in depth.
+            guard let self, !Task.isCancelled, !box.tornDown, self.connections[pc.id] === pc,
+                  pc.secureChannel != nil, pc.secureChannelState == .secured else { return }
             do { try await pc.sendMessage(message) } catch {
                 nxLogger.info("notesExchange send failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -335,15 +402,11 @@ extension ConnectionManager {
 
     // MARK: - Ticks
 
-    /// Ticks once per interval while an intent may be pending or a response
-    /// may still be owed; stops in the finished states.
+    /// Ticks once per interval only while a tick can change something (an
+    /// intent may expire or a response is still owed); stops otherwise,
+    /// including `.bound` with our reveal sent.
     func updateNotesExchangeTicker(box: NotesExchangeSessionBox, pc: PeerConnection) {
-        let active: Bool
-        switch box.session.state {
-        case .waitingForPeer, .peerWantsExchange, .exchanging, .verifying, .bound: active = true
-        case .idle, .expired, .peerUnavailable, .failed: active = false
-        }
-        if !active {
+        if !box.session.needsTicks {
             box.tickTask?.cancel()
             box.tickTask = nil
             return
@@ -425,9 +488,22 @@ extension ConnectionManager {
         else { return .verificationFailed }
         let peer = pc.peerIdentity
         box.awaitingDirectory = (accountId, theirs)
+        notesVerificationCounter += 1
+        let generation = notesVerificationCounter
+        notesVerificationGenerations[theirs] = generation
         Task { [weak self, weak box, weak pc] in
             guard let self else { return }
             let outcome = await self.checkNotesDirectory(accountId: accountId, handshakeKey: theirs, signingKey: signingKey)
+            // Superseded by a newer verification for this key, or voided by
+            // an unbind: change nothing, just end this session's wait.
+            guard self.notesVerificationGenerations[theirs] == generation else {
+                if let box, let pc, box.awaitingDirectory?.accountId == accountId {
+                    box.awaitingDirectory = nil
+                    self.feedNotesExchange(.verificationFailed, box: box, pc: pc)
+                }
+                return
+            }
+            self.notesVerificationGenerations[theirs] = nil
             let event: NotesExchangeSession.Event?
             switch outcome {
             case .verified:
@@ -496,8 +572,14 @@ extension ConnectionManager {
         guard let contact = resolveNotesContact(handshakeKey: handshakeKey, peer: peer) else { return false }
         trustedContactStore.setPendingBinding(for: contact.id, PendingAccountBinding(
             accountId: accountId, signingKey: signingKey,
-            handshakeKeyHash: Data(SHA256.hash(data: handshakeKey)), receivedAt: Date()))
+            handshakeKeyHash: Data(SHA256.hash(data: handshakeKey)), receivedAt: notesPendingBindingClock()))
         return true
+    }
+
+    /// Older than the lifetime, or dated implausibly far in the future (the
+    /// wall clock was moved back): either way it may not wait any longer.
+    func notesPendingBindingExpired(_ p: PendingAccountBinding) -> Bool {
+        abs(notesPendingBindingClock().timeIntervalSince(p.receivedAt)) > Self.notesPendingBindingLifetime
     }
 
     private func retryPendingBindingsOnce() async {
@@ -506,43 +588,54 @@ extension ConnectionManager {
         }
         for item in pending {
             let p = item.binding
-            guard Data(SHA256.hash(data: item.key)) == p.handshakeKeyHash,
+            // Matches the live session that produced this pending binding.
+            let sameReveal: (String, Data) -> Bool = { accountId, key in
+                accountId == p.accountId && Data(SHA256.hash(data: key)) == p.handshakeKeyHash
+            }
+            guard !notesPendingBindingExpired(p),
+                  Data(SHA256.hash(data: item.key)) == p.handshakeKeyHash,
                   NotesExchangeCrypto.isValidAccountId(p.accountId),
                   NotesExchangeCrypto.isAcceptableSigningKey(p.signingKey)
             else {
                 trustedContactStore.setPendingBinding(for: item.id, nil)
-                resolveLiveNotesVerification(accountId: p.accountId, handshakeKey: item.key, event: .verificationFailed)
+                resolveLiveNotesVerification(event: .verificationFailed, where: sameReveal)
                 continue
             }
+            // A live verification for this key is in flight: it is newer than
+            // this pending binding and decides.
+            guard notesVerificationGenerations[item.key] == nil else { continue }
             let outcome = await checkNotesDirectory(accountId: p.accountId, handshakeKey: item.key, signingKey: p.signingKey)
-            // The contact may have changed while we waited.
-            guard let now = trustedContactStore.find(byId: item.id), now.pendingAccountBinding == p,
+            // The contact may have changed, or a newer verification may have
+            // started, while we waited.
+            guard notesVerificationGenerations[item.key] == nil,
+                  let now = trustedContactStore.find(byId: item.id), now.pendingAccountBinding == p,
                   now.identityPublicKey == item.key else { continue }
             switch outcome {
             case .verified:
                 let unique = trustedContactStore.contacts.filter { $0.matchesKey(item.key) }.count == 1
                 if unique && !now.isBlocked {
                     trustedContactStore.setAccountBinding(for: item.id, accountId: p.accountId)
-                    resolveLiveNotesVerification(accountId: p.accountId, handshakeKey: item.key, event: .verificationSucceeded)
+                    resolveLiveNotesVerification(event: .verificationSucceeded, where: sameReveal)
                 } else {
                     trustedContactStore.setPendingBinding(for: item.id, nil)
-                    resolveLiveNotesVerification(accountId: p.accountId, handshakeKey: item.key, event: .verificationFailed)
+                    resolveLiveNotesVerification(event: .verificationFailed, where: sameReveal)
                 }
             case .rejected:
                 trustedContactStore.setPendingBinding(for: item.id, nil)
-                resolveLiveNotesVerification(accountId: p.accountId, handshakeKey: item.key, event: .verificationFailed)
+                resolveLiveNotesVerification(event: .verificationFailed, where: sameReveal)
             case .transient:
                 break
             }
         }
     }
 
-    /// Tells a live session still showing "verifying" for this reveal.
-    private func resolveLiveNotesVerification(accountId: String, handshakeKey: Data,
-                                              event: NotesExchangeSession.Event) {
+    /// Tells every live session still showing "verifying" for a matching
+    /// reveal (`accountId`, peer handshake key).
+    func resolveLiveNotesVerification(event: NotesExchangeSession.Event,
+                                      where matches: (String, Data) -> Bool) {
         for box in Array(notesExchangeSessions.values) {
-            guard let awaiting = box.awaitingDirectory, awaiting.accountId == accountId,
-                  awaiting.handshakeKey == handshakeKey, let pc = box.connection else { continue }
+            guard let awaiting = box.awaitingDirectory, matches(awaiting.accountId, awaiting.handshakeKey),
+                  let pc = box.connection else { continue }
             box.awaitingDirectory = nil
             feedNotesExchange(event, box: box, pc: pc)
         }
