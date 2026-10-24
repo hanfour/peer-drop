@@ -24,7 +24,6 @@ struct HomeTab: View, PaperThemed {
     #if os(iOS)
     @State private var showProfile = false
     @State private var showSettings = false
-    @State private var showConnection = false
     #endif
 
     private static let inviteURL = URL(string: "https://apps.apple.com/app/id6759594513")!
@@ -115,7 +114,6 @@ struct HomeTab: View, PaperThemed {
         #if os(iOS)
         .sheet(isPresented: $showProfile) { UserProfileView() }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(connectionManager) }
-        .navigationDestination(isPresented: $showConnection) { ConnectionView().environmentObject(connectionManager) }
         #endif
         .chatTargetDestination()
         .onAppear { bound.bind(connectionManager) }
@@ -208,32 +206,38 @@ struct HomeTab: View, PaperThemed {
         #endif
     }
 
+    @ViewBuilder
     private func directConnectedRow(_ record: DeviceRecord) -> some View {
-        Button {
-            #if os(iOS)
-            connectionManager.focus(on: connectionManager.connection(for: record)?.id ?? record.id)
-            showConnection = true
-            #else
-            openWindow(id: "chat", value: peerID(for: record))
-            #endif
-        } label: {
-            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: .online, connection: connectionManager.connection(for: record))
-        }
+        let row = FriendRow(record: record, name: connectionManager.displayName(for: record), presence: .online,
+                            connection: connectionManager.connection(for: record))
+        #if os(iOS)
+        // A connected friend opens straight into the chat; files and calls live there.
+        NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
+            .accessibilityIdentifier("active-peer-row")
+            .listRowBackground(paper(.incomingBubble))
+            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
+        #else
+        Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
         .listRowBackground(paper(.incomingBubble))
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                let id = connectionManager.connection(for: record)?.id ?? record.id
-                Task { await connectionManager.disconnect(from: id) }
-            } label: {
-                Label("Disconnect", systemImage: "xmark.circle.fill")
-            }
-            .tint(.orange)
-            forgetButton(record)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
+        #endif
+    }
+
+    @ViewBuilder
+    private func disconnectAndForget(_ record: DeviceRecord) -> some View {
+        Button {
+            let id = connectionManager.connection(for: record)?.id ?? record.id
+            Task { await connectionManager.disconnect(from: id) }
+        } label: {
+            Label("Disconnect", systemImage: "xmark.circle.fill")
         }
+        .tint(.orange)
+        forgetButton(record)
     }
 
     @ViewBuilder

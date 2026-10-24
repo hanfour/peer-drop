@@ -72,6 +72,18 @@ struct ChatView: View, PaperThemed {
         !isPeerHeadless && AlwaysConnectedPresentation.offersFileTransferAndCalls(isRendezvousConnection: isCrossNetworkPeer)
     }
 
+    @AppStorage("peerDropVoiceCallEnabled") private var voiceCallEnabled = true
+
+    /// A live direct connection to a peer that can take a call (not headless, not cross-network).
+    private var offersVoiceCall: Bool {
+        voiceCallEnabled && offersAttachments && !isPeerDisconnected
+    }
+
+    private func startVoiceCall() {
+        let target = connectionManager.connection(for: peerID)?.peerIdentity.id ?? peerID
+        Task { await connectionManager.voiceCallManager?.startCall(to: target) }
+    }
+
     /// Check if this peer is disconnected. A dropped peer's connection is removed
     /// from the manager (and the global state falls back to discovering), so a
     /// missing connection counts as disconnected unless a dial is in progress.
@@ -294,13 +306,21 @@ struct ChatView: View, PaperThemed {
                         case .alwaysConnectedSheet:
                             showAlwaysConnectedInfo = true
                         case .connectionView:
-                            connectionManager.focus(on: connectionManager.connection(for: peerID)?.id ?? peerID)
                             showConnectionInfo = true
                         }
                     } label: {
                         Image(systemName: "info.circle")
                     }
                     .accessibilityLabel(Text("Connection details"))
+                }
+            }
+            #endif
+            #if os(iOS)
+            if offersVoiceCall {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { startVoiceCall() } label: { Image(systemName: "phone.fill") }
+                        .accessibilityLabel(Text("Voice Call"))
+                        .accessibilityIdentifier("voice-call-button")
                 }
             }
             #endif
@@ -330,8 +350,9 @@ struct ChatView: View, PaperThemed {
                 .environmentObject(connectionManager)
         }
         #if os(iOS)
-        .navigationDestination(isPresented: $showConnectionInfo) {
-            ConnectionView().environmentObject(connectionManager)
+        .sheet(isPresented: $showConnectionInfo) {
+            ConnectionDetailsSheet(peerID: peerID, name: displayName)
+                .environmentObject(connectionManager)
         }
         #endif
         .onAppear {
