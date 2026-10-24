@@ -559,11 +559,11 @@ final class ConnectionManagerNotesExchangeTests: XCTestCase {
             pc.secureChannelState == .secured && peer.pc.secureChannelState == .secured && pc.pinningVerdict != .notChecked
         }
         XCTAssertTrue(secured, "relay channel never secured")
-        try await warmRelay(peer, unreadKey: pc.id)
+        try await warmRelay(peer, unreadKey: ident.id)
 
         XCTAssertEqual(cm.pressExchangeNotes(with: pc.id), .denied(.notLocalDirect))
         try await peer.sendIntent()
-        try await drain(peer, unreadKey: pc.id)
+        try await drain(peer, unreadKey: ident.id)
         XCTAssertNil(cm.notesExchangeStates[pc.id])
         XCTAssertTrue(peer.log.payloads.isEmpty, "notesExchange sent over relay")
     }

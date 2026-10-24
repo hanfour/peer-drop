@@ -947,6 +947,7 @@ public final class ConnectionManager: ObservableObject {
     /// Remove a peer connection.
     private func removeConnection(peerID: String) {
         bumpSecurityEpoch()
+        pendingPeerDeviceIds.removeValue(forKey: peerID)
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
             tearDownNotesExchange(for: removed)
@@ -2962,6 +2963,9 @@ public final class ConnectionManager: ObservableObject {
     private var relaySessionTimer: Task<Void, Never>?
     /// Holds the PeerConnection waiting for PIN verification before handshake.
     private var pendingRelayPeerConnection: PeerConnection?
+    /// Peer deviceIds received before the `relay-<code>` DeviceRecord existed
+    /// (PIN not yet confirmed); applied by `confirmRelayPIN`, dropped on removal.
+    private var pendingPeerDeviceIds: [String: String] = [:]
     /// Active BLE signaling instance.
     private(set) var bleSignaling: BLESignaling?
     /// In-progress invite accepts — prevents dual WS+APNs delivery from spawning parallel negotiations.
@@ -3338,6 +3342,9 @@ public final class ConnectionManager: ObservableObject {
     public func confirmRelayPIN() {
         guard let request = pendingRelayPIN else { return }
         RelayAuthenticator.storeFingerprint(request.remoteFingerprint, for: request.peerID, store: deviceStore)
+        if let stashed = pendingPeerDeviceIds.removeValue(forKey: request.peerID) {
+            deviceStore.updatePeerDeviceId(for: request.peerID, deviceId: stashed)
+        }
         pendingRelayPIN = nil
 
         // Resume the deferred handshake
@@ -3544,6 +3551,9 @@ public final class ConnectionManager: ObservableObject {
                                       origin: PeerConnection.MessageOrigin = .plaintext) {
         let peerID = peerConnection.id
         let boundSenderID = peerConnection.peerIdentity.id
+        // Thread key for chat storage: relay peers use their identity UUID once
+        // known so incoming and outgoing messages share one file.
+        let chatKey = ChatStorageKey.key(forConnection: peerConnection)
 
         switch message.type {
         case .disconnect:
@@ -3663,7 +3673,7 @@ public final class ConnectionManager: ObservableObject {
             } else {
                 savedMsg = chatManager.saveIncoming(
                     text: payload.text,
-                    peerID: peerID,
+                    peerID: chatKey,
                     peerName: peerConnection.peerIdentity.displayName,
                     senderName: payload.senderName,
                     replyToMessageID: payload.replyToMessageID,
@@ -3696,7 +3706,7 @@ public final class ConnectionManager: ObservableObject {
                 payload: payload,
                 // nil from a pre-H7 peer (or rejected bytes) keeps the old thumbnail-only behaviour.
                 fileData: payload.validatedFileData ?? Data(),
-                peerID: peerID,
+                peerID: chatKey,
                 peerName: peerConnection.peerIdentity.displayName
             )
             NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
@@ -3735,7 +3745,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode TypingIndicatorPayload")
                 return
             }
-            chatManager.setTyping(payload.isTyping, for: peerID)
+            chatManager.setTyping(payload.isTyping, for: chatKey)
 
         case .reaction:
             guard let payload = try? message.decodePayload(ReactionPayload.self) else {
@@ -3752,7 +3762,7 @@ public final class ConnectionManager: ObservableObject {
         case .chatReject:
             let reason = (try? message.decodePayload(RejectionPayload.self))?.reason // P1: rejection reason is optional, nil is acceptable
             let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
-            chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
+            chatManager.markLastOutgoingAsFailed(peerID: chatKey, errorText: errorText)
 
         case .ping:
             let pong = PeerMessage.pong(senderID: localIdentity.id)
@@ -3801,7 +3811,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MessageEditPayload")
                 return
             }
-            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: peerID, origin: .remotePeer)
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: chatKey, origin: .remotePeer)
 
         case .messageDelete:
             guard FeatureSettings.isChatEnabled else { return }
@@ -3809,7 +3819,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MessageDeletePayload")
                 return
             }
-            chatManager.applyDelete(messageID: payload.messageID, peerID: peerID, origin: .remotePeer)
+            chatManager.applyDelete(messageID: payload.messageID, peerID: chatKey, origin: .remotePeer)
 
         case .fileResume:
             guard let payload = try? message.decodePayload(FileResumePayload.self) else {
@@ -3830,8 +3840,15 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode DeviceIdExchangePayload")
                 return
             }
-            deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
-            logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+            if deviceStore.records.contains(where: { $0.id == peerConnection.id }) {
+                deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
+                logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+            } else {
+                // The `relay-<code>` record only exists once the PIN is
+                // confirmed; keep the id until then instead of dropping it.
+                pendingPeerDeviceIds[peerConnection.id] = payload.deviceId
+                logger.info("Stashed peerDeviceId for \(peerConnection.id) until the device record exists")
+            }
 
         case .hello:
             // Relay identity swap (audit round 17, live finding 2026-06-13):
@@ -4488,7 +4505,7 @@ public final class ConnectionManager: ObservableObject {
     public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
         guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
-        guard let peerConn = connections[peerID] else { return }
+        guard let peerConn = connection(for: peerID) else { return }
         // audit-#14 Stage 3: gate media sends the same way text sends are gated.
         // Local-only block — the message isn't persisted yet so there's nothing
         // to mark .failed; just refuse with a log.
@@ -4952,7 +4969,9 @@ public final class ConnectionManager: ObservableObject {
     /// are quality-of-life improvements rather than send blockers as
     /// of the 2026-05-21 hotfix — see `evaluateTrustGate` for history.
     public func isPeerTrustedForUserActions(peerID: String) -> Bool {
-        guard let peerConn = connections[peerID] else { return false }
+        // Alias-aware, like the send paths: relay peers are keyed
+        // "relay-<code>" while UI surfaces pass the identity UUID.
+        guard let peerConn = connection(for: peerID) else { return false }
         let publicKey = peerConn.peerIdentity.identityPublicKey
         let contact = publicKey.flatMap { trustedContactStore.find(byPublicKey: $0) }
         return Self.evaluateTrustGate(
