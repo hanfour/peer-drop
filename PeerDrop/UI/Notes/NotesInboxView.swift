@@ -17,6 +17,8 @@ struct NotesInboxView: View {
     @Binding var openNoteID: String?
     /// Verified-bound friends' accounts: their notes live in the thread, not here.
     var boundAccounts: Set<String> = []
+    /// Who counts as "in my circle"; everyone else lands in the 陌生人 section (local only).
+    var circle = CircleMembership()
     @Binding var path: [NoteRecord]
     @State private var showCompose = false
 
@@ -25,21 +27,19 @@ struct NotesInboxView: View {
             if case .ready = accountManager.state {} else {
                 AccountSectionView(accountManager: accountManager)
             }
-            let visible = NotesInboxFilter.inbox(store.inbox, boundAccounts: boundAccounts)
-            if visible.isEmpty {
+            let parts = StrangerBox.partition(store.inbox, boundAccounts: boundAccounts, circle: circle)
+            if parts.circle.isEmpty && parts.strangers.isEmpty {
                 emptyState
             } else {
-                ForEach(visible) { record in
-                    NavigationLink(value: record) { NoteRowView(record: record) }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) { Task { await store.delete(record) } } label: { Label("Delete Note", systemImage: "trash") }
-                        }
-                }
+                ForEach(parts.circle) { record in noteLink(record) }
+            }
+            if !parts.strangers.isEmpty {
+                strangersSection(parts.strangers)
             }
         }
         .navigationTitle("Notes")
         .navigationDestination(for: NoteRecord.self) { record in
-            NoteDetailView(record: record, store: store)
+            NoteDetailView(record: record, store: store, readIsLocalOnly: StrangerBox.readIsLocalOnly(record, circle: circle))
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -61,6 +61,25 @@ struct NotesInboxView: View {
         .onChange(of: openNoteID) { _ in openPendingNote() }
         .onChange(of: store.inbox) { _ in openPendingNote() }
         .onAppear { openPendingNote() }
+    }
+
+    private func noteLink(_ record: NoteRecord) -> some View {
+        NavigationLink(value: record) { NoteRowView(record: record) }
+            .swipeActions(edge: .trailing) {
+                Button(role: .destructive) { Task { await store.delete(record) } } label: { Label("Delete Note", systemImage: "trash") }
+            }
+    }
+
+    /// 陌生人: notes from people outside the circle. Local only: opening one sends nothing, and nobody is told.
+    private func strangersSection(_ notes: [NoteRecord]) -> some View {
+        let unread = notes.filter(\.isUnread).count
+        return Section {
+            ForEach(notes) { record in noteLink(record) }
+        } header: {
+            Text(unread > 0 ? String(format: String(localized: "Strangers (%lld unread)"), unread) : String(localized: "Strangers"))
+        } footer: {
+            Text("Notes from people you haven't connected with. Reading them is private to this device. The sender is never told.")
+        }
     }
 
     private func openPendingNote() {

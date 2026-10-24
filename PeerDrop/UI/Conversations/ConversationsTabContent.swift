@@ -19,6 +19,10 @@ struct ConversationsTabContent: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @StateObject private var bound = BoundFriendsModel()
     @State private var pendingNote: NoteRecord?
+    /// Local-only 「不接收匿名紙條」: hides anonymous notes on this device, nothing is uploaded.
+    @AppStorage(StrangerBox.hideAnonymousKey) private var hideAnonymous = false
+    /// Bumped when diary membership changes so the circle is recomputed.
+    @State private var diaryRevision = 0
 
     /// Inbox/tab-badge unread: notes that live in a bound friend's thread are counted on that
     /// friend's row instead (once overall).
@@ -27,20 +31,32 @@ struct ConversationsTabContent: View {
         bound.isReady ? bound.accounts : Set(BoundFriends.recordIDByAccount(connectionManager).keys)
     }
 
-    private func unread(_ accounts: Set<String>) -> ConversationsLogic.Unread {
-        ConversationsLogic.unread(total: store.unreadCount, boundUnread: store.boundUnreadIDs(accounts: accounts).count)
+    /// Friends, diary mates and people I sent a signed note to; everyone else is a stranger.
+    private func circle(_ accounts: Set<String>) -> CircleMembership {
+        _ = diaryRevision
+        return StrangerBox.membership(
+            friendAccounts: accounts,
+            diaryMemberLists: connectionManager.diaryStore.states.values.map { $0.meta.members },
+            sent: store.sent,
+            hideAnonymous: hideAnonymous)
+    }
+
+    /// Tab badge = friend rows + inbox remainder (strangers included). Hidden anonymous notes count nowhere.
+    private func unread(_ accounts: Set<String>, circle: CircleMembership) -> StrangerBox.Unread {
+        StrangerBox.unread(store.inbox, boundAccounts: accounts, circle: circle)
     }
 
     var body: some View {
         let accounts = boundAccounts
-        let counts = unread(accounts)
+        let circle = circle(accounts)
+        let counts = unread(accounts, circle: circle)
         return NavigationStack {
             ConversationsTab(inboxUnread: counts.inboxRemainder, onGoHome: onGoHome, inboxRequest: $inboxRequest,
                              threadRequest: $threadRequest,
                              onThreadUnavailable: { id in
                                  if let id, let record = store.note(id: id) { pendingNote = record }
                              }) {
-                NotesInboxHost(store: store, accountManager: accountManager, boundAccounts: accounts, note: $pendingNote)
+                NotesInboxHost(store: store, accountManager: accountManager, boundAccounts: accounts, circle: circle, note: $pendingNote)
             }
         }
         #if os(iOS)
@@ -48,12 +64,15 @@ struct ConversationsTabContent: View {
         #endif
         .onChange(of: openNoteID) { _ in resolve() }
         .onChange(of: store.inbox) { _ in resolve() }
+        .onReceive(connectionManager.diaryStore.$states) { _ in diaryRevision += 1 }
         .onAppear { bound.bind(connectionManager); resolve() }
     }
 
     private func resolve() {
         guard let id = openNoteID, let record = store.note(id: id) else { return }
         openNoteID = nil
+        // A hidden anonymous note stays hidden, even when its notification is tapped.
+        if NoteClassification.classify(note: record, circle: circle(boundAccounts)) == .hiddenAnonymous { return }
         // A note from a verified-bound friend belongs to that friend's thread, not the inbox.
         if case .thread(let recordID) = BoundFriends.destination(forNoteID: id, cm: connectionManager) {
             pendingNote = nil
@@ -79,6 +98,7 @@ struct NotesInboxHost: View {
     @ObservedObject var store: NotesStore
     @ObservedObject var accountManager: AccountManager
     var boundAccounts: Set<String> = []
+    var circle = CircleMembership()
     @Binding var note: NoteRecord?
     @State private var armed = false
 
@@ -88,10 +108,11 @@ struct NotesInboxHost: View {
             accountManager: accountManager,
             openNoteID: .constant(nil),
             boundAccounts: boundAccounts,
+            circle: circle,
             path: Binding(get: { note.map { [$0] } ?? [] }, set: { note = $0.last })
         )
         .navigationDestination(isPresented: Binding(get: { armed && note != nil }, set: { if !$0 { note = nil } })) {
-            if let record = note { NoteDetailView(record: record, store: store) }
+            if let record = note { NoteDetailView(record: record, store: store, readIsLocalOnly: StrangerBox.readIsLocalOnly(record, circle: circle)) }
         }
         .onAppear { DispatchQueue.main.async { armed = true } }
     }

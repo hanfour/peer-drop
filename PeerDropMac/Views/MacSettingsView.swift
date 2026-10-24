@@ -102,6 +102,7 @@ private struct ProfileSettingsTab: View {
             }
 
             AccountSectionView(accountManager: connectionManager.accountManager)
+            NotePreferencesSection(accountManager: connectionManager.accountManager)
             BlockListSection(store: connectionManager.notesStore)
         }
         .formStyle(.grouped)
