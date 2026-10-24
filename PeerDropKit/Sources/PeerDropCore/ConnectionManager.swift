@@ -266,6 +266,36 @@ public final class ConnectionManager: ObservableObject {
     /// Maximum number of simultaneous connections allowed.
     public let maxConnections = 5
 
+    // MARK: - Project E: rendezvous ("always connected") connections
+
+    /// Cross-network connections, keyed by `TrustedContact.deviceId` (the
+    /// friend's `PeerIdentity.id`). Kept OUT of `connections`: they never count
+    /// against `maxConnections`, never drive the global `state` or focus, and
+    /// `connection(for:)` returns one only once it is verified. See
+    /// `ConnectionManager+Rendezvous.swift`.
+    var rendezvousConnections: [String: PeerConnection] = [:]
+    /// Own cap for cross-network connections (= the opt-in limit).
+    public let maxRendezvousConnections = TrustedContactStore.maxRendezvousContacts
+    /// Strict secure-channel deadline, measured from install.
+    var rendezvousSecureChannelTimeoutNanoseconds: UInt64 = 5_000_000_000
+    /// iOS suspends a backgrounded app, so background closes every
+    /// cross-network connection; the Mac is not suspended and stays connected
+    /// (spec §4.4).
+    var rendezvousClosesOnBackground: Bool = {
+        #if os(iOS)
+        return true
+        #else
+        return false
+        #endif
+    }()
+    /// Seam handed to the rendezvous manager (weak back-reference: no cycle).
+    lazy var rendezvousBridge = RendezvousConnectionBridge(owner: self)
+    /// Created on the first foreground (not in screenshot mode).
+    public internal(set) var rendezvousManager: RendezvousManager?
+    var rendezvousLinkStatesCancellable: AnyCancellable?
+    /// Test-only override of where secure-channel / close outcomes go.
+    weak var rendezvousEventSinkForTesting: RendezvousConnectionEventSink?
+
     /// The currently focused connection, if any.
     var focusedConnection: PeerConnection? {
         guard let id = focusedPeerID else { return nil }
@@ -804,6 +834,13 @@ public final class ConnectionManager: ObservableObject {
             .dropFirst()
             .sink { [weak self] contacts in self?.reconcileNoteOutbox(with: contacts) }
             .store(in: &cancellables)
+        // Project E: opt-in / binding / key / block changes re-reconcile the
+        // rooms. `@Published` fires before the value is stored: hop first.
+        trustedContactStore.$contacts
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rendezvousManager?.contactsDidChange() }
+            .store(in: &cancellables)
 
         // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
         clipboardSyncManager.onClipboardChanged = { [weak self] payload in
@@ -845,7 +882,10 @@ public final class ConnectionManager: ObservableObject {
     /// persisting the bubble. Linear scan is fine: maxConnections ≤ 5.
     public func connection(for peerID: String) -> PeerConnection? {
         if let direct = connections[peerID] { return direct }
-        return connections.values.first { $0.peerIdentity.id == peerID }
+        if let alias = connections.values.first(where: { $0.peerIdentity.id == peerID }) { return alias }
+        // Project E: a cross-network connection, only once verified (pinned
+        // key + bound account), so a live send always has a secured channel.
+        return verifiedRendezvousConnection(for: peerID)
     }
 
     /// Chat-thread key for a saved device record.
@@ -855,7 +895,7 @@ public final class ConnectionManager: ObservableObject {
 
     /// Is `id` already taken — as a `connections` key or as the identity a
     /// connection is aliased to (what `connection(for:)` resolves)? (#161 M-2)
-    private func isPeerIDInUse(_ id: String, excluding: PeerConnection? = nil) -> Bool {
+    func isPeerIDInUse(_ id: String, excluding: PeerConnection? = nil) -> Bool {
         connections.contains { key, pc in
             pc !== excluding && (key == id || pc.peerIdentity.id == id)
         }
@@ -941,6 +981,7 @@ public final class ConnectionManager: ObservableObject {
 
         objectWillChange.send()
         onPeerConnected?(peerID)
+        notifyDirectConnectionsChanged()
     }
 
     /// Focus `peerID` only when nothing is focused or the focused peer is
@@ -967,6 +1008,7 @@ public final class ConnectionManager: ObservableObject {
         }
 
         objectWillChange.send()
+        notifyDirectConnectionsChanged()
     }
 
     private func handlePeerStateChange(peerID: String, newState: PeerConnectionState) {
@@ -2036,6 +2078,8 @@ public final class ConnectionManager: ObservableObject {
                 }
                 Task { await diaryStore.syncList() }
             }
+            // Project E: rejoin the rendezvous rooms.
+            rendezvousAppDidBecomeActive()
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
@@ -2061,6 +2105,9 @@ public final class ConnectionManager: ObservableObject {
             trustedContactStore.flushPendingSave()
             preKeyStore.flush()
             mailboxManager.stopPolling()
+            // Project E (iOS only): leave every room and close every
+            // cross-network connection quietly.
+            rendezvousAppDidEnterBackground()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
@@ -3455,6 +3502,12 @@ public final class ConnectionManager: ObservableObject {
     /// Disconnect from a specific peer.
     public func disconnect(from peerID: String) async {
         guard let peerConn = connection(for: peerID) else { return }
+        // Project E: a cross-network connection closes quietly (no frame) and
+        // never touches `connections` / focus / global state.
+        if peerConn.isRendezvous {
+            closeRendezvousConnection(peerConn)
+            return
+        }
         if peerID == focusedPeerID {
             activeConnection = nil
         }
@@ -3566,7 +3619,7 @@ public final class ConnectionManager: ObservableObject {
     /// bound connection: `peerID` (its `connections` key) and
     /// `boundSenderID` (its identity — equal to `peerID` for local
     /// connections, the post-HELLO real identity for `relay-*` ones).
-    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection,
+    func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection,
                                       origin: PeerConnection.MessageOrigin = .plaintext) {
         let peerID = peerConnection.id
         let boundSenderID = peerConnection.peerIdentity.id
