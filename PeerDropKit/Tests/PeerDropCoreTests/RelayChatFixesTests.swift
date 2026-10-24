@@ -194,13 +194,237 @@ final class RelayChatFixesTests: XCTestCase {
 
         cm.pendingRelayPIN = RelayPINRequest(pin: "123456", peerID: pc.id, remoteFingerprint: "fp-\(code)")
         try await client.sendMessage(try PeerMessage.deviceIdExchange(deviceId: "device-abc", senderID: pc.peerIdentity.id))
-        // Let the frame be processed (no record exists yet to observe).
-        try await Task.sleep(nanoseconds: 300_000_000)
+        // No record exists yet to observe, so poll the ordering sentinel: a text
+        // sent after the exchange is processed after it.
+        try await client.sendMessage(try text("sentinel", senderID: pc.peerIdentity.id))
+        let drained = await poll { (self.cm.chatManager.unreadCounts[pc.id] ?? 0) > 0 }
+        XCTAssertTrue(drained)
         XCTAssertNil(cm.deviceStore.records.first { $0.id == pc.id })
 
         cm.confirmRelayPIN()
         let applied = cm.deviceStore.records.first { $0.id == pc.id }?.peerDeviceId
         XCTAssertEqual(applied, "device-abc")
+    }
+
+    // MARK: - Review round 1
+
+    private func relayPair(code: String) async throws -> (pc: PeerConnection, client: NWConnection) {
+        let (server, client) = try await rawPair()
+        let pc = cm._installRelayPlaceholderForTesting(roomCode: code, connection: server)
+        touched.append(pc.id)
+        return (pc, client)
+    }
+
+    private func hello(_ real: PeerIdentity, via client: NWConnection, pc: PeerConnection) async throws {
+        touched.append(real.id)
+        try await client.sendMessage(try PeerMessage.hello(identity: real))
+        let swapped = await poll { pc.peerIdentity.id == real.id }
+        XCTAssertTrue(swapped)
+    }
+
+    // I1: chat-key resolution for records
+
+    func testOfflineRelayRecordWithPeerIdentityIdResolvesToIdentityFile() {
+        let id = UUID().uuidString
+        let rec = DeviceRecord(id: "relay-OFF1", displayName: "R", sourceType: "relay",
+                               lastConnected: Date(), peerIdentityId: id)
+        XCTAssertEqual(cm.chatKey(forRecord: rec), id)
+    }
+
+    func testOfflineRelayRecordWithoutPeerIdentityIdFallsBackToRecordID() {
+        let rec = DeviceRecord(id: "relay-OFF2", displayName: "R", sourceType: "relay", lastConnected: Date())
+        XCTAssertEqual(cm.chatKey(forRecord: rec), "relay-OFF2")
+    }
+
+    func testNonRelayRecordKeyUnaffected() {
+        let rec = DeviceRecord(id: "lan-1", displayName: "L", sourceType: "bonjour", lastConnected: Date())
+        XCTAssertEqual(cm.chatKey(forRecord: rec), "lan-1")
+    }
+
+    func testDeviceRecordJSONWithoutPeerIdentityIdDecodes() throws {
+        let old = DeviceRecord(id: "x", displayName: "X", sourceType: "relay", lastConnected: Date())
+        var obj = try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as! [String: Any]
+        obj.removeValue(forKey: "peerIdentityId")
+        let data = try JSONSerialization.data(withJSONObject: obj)
+        let back = try JSONDecoder().decode(DeviceRecord.self, from: data)
+        XCTAssertNil(back.peerIdentityId)
+        XCTAssertEqual(back.id, "x")
+    }
+
+    func testHelloSwapRecordsPeerIdentityIdOnExistingRelayRecord() async throws {
+        let (pc, client) = try await relayPair(code: "HS\(UUID().uuidString.prefix(5))")
+        cm.deviceStore.addOrUpdate(id: pc.id, displayName: pc.id, sourceType: "relay", host: nil, port: nil)
+        let real = legacyIdentity("Rita")
+        try await hello(real, via: client, pc: pc)
+        let applied = await poll { self.cm.deviceStore.records.first { $0.id == pc.id }?.peerIdentityId == real.id }
+        XCTAssertTrue(applied)
+    }
+
+    func testPeerIdentityIdStashedUntilPinConfirmationCreatesRecord() async throws {
+        let (pc, client) = try await relayPair(code: "SI\(UUID().uuidString.prefix(5))")
+        cm.pendingRelayPIN = RelayPINRequest(pin: "123456", peerID: pc.id, remoteFingerprint: "fp")
+        let real = legacyIdentity("Rita")
+        try await hello(real, via: client, pc: pc)
+        XCTAssertNil(cm.deviceStore.records.first { $0.id == pc.id })
+        cm.confirmRelayPIN()
+        XCTAssertEqual(cm.deviceStore.records.first { $0.id == pc.id }?.peerIdentityId, real.id)
+    }
+
+    // I2: forgetDevice removes both threads unless shared
+
+    private func seedThread(_ key: String, text: String) {
+        _ = cm.chatManager.saveIncoming(text: text, peerID: key, peerName: key)
+        cm.chatManager.flushAllPendingPersists()
+    }
+
+    private func threadHasMessages(_ key: String) -> Bool {
+        cm.chatManager.flushAllPendingPersists()
+        cm.chatManager.loadMessages(forPeer: key)
+        return !cm.chatManager.messages.isEmpty
+    }
+
+    func testForgetRelayDeviceDeletesRelayAndIdentityFiles() {
+        let identityID = UUID().uuidString, rid = "relay-FG\(UUID().uuidString.prefix(5))"
+        touched.append(contentsOf: [identityID, rid])
+        cm.deviceStore.addOrUpdate(id: rid, displayName: "Relay Friend", sourceType: "relay", host: nil, port: nil)
+        cm.deviceStore.setPeerIdentityId(for: rid, identityId: identityID)
+        seedThread(rid, text: "old")
+        seedThread(identityID, text: "new")
+        XCTAssertTrue(threadHasMessages(rid) && threadHasMessages(identityID))
+        cm.forgetDevice(id: rid)
+        XCTAssertFalse(threadHasMessages(rid))
+        XCTAssertFalse(threadHasMessages(identityID))
+        XCTAssertNil(cm.deviceStore.records.first { $0.id == rid })
+    }
+
+    func testForgetRelayDeviceKeepsIdentityFileSharedWithLocalRecord() {
+        let identityID = UUID().uuidString, rid = "relay-FK\(UUID().uuidString.prefix(5))"
+        touched.append(contentsOf: [identityID, rid])
+        cm.deviceStore.addOrUpdate(id: rid, displayName: "Relay Friend", sourceType: "relay", host: nil, port: nil)
+        cm.deviceStore.setPeerIdentityId(for: rid, identityId: identityID)
+        // The same friend also has a local-network record keyed by the identity UUID.
+        cm.deviceStore.addOrUpdate(id: identityID, displayName: "Friend LAN", sourceType: "bonjour", host: nil, port: nil)
+        seedThread(rid, text: "old")
+        seedThread(identityID, text: "shared history")
+        cm.forgetDevice(id: rid)
+        XCTAssertFalse(threadHasMessages(rid))
+        XCTAssertTrue(threadHasMessages(identityID), "shared identity history must survive")
+    }
+
+    // Minor tests
+
+    func testStashIgnoredForNonRelayConnection() async throws {
+        let (server, client) = try await rawPair()
+        // A plain (non-relay) connection that happens to have no DeviceRecord.
+        let ident = legacyIdentity("Lan")
+        let pc = PeerConnection(peerID: ident.id, transport: TCPTransport(connection: server),
+                                peerIdentity: ident, localIdentity: cm.localIdentity, state: .connected)
+        cm._addConnectionForTesting(pc)
+        touched.append(ident.id)
+        try await client.sendMessage(try PeerMessage.deviceIdExchange(deviceId: "dev-lan", senderID: ident.id))
+        try await client.sendMessage(try text("sentinel", senderID: ident.id))
+        _ = await poll { (self.cm.chatManager.unreadCounts[ident.id] ?? 0) > 0 }
+        // Registering the record later must not receive a stale stash.
+        cm.deviceStore.addOrUpdate(id: ident.id, displayName: "Lan", sourceType: "bonjour", host: nil, port: nil)
+        cm.pendingRelayPIN = RelayPINRequest(pin: "1", peerID: ident.id, remoteFingerprint: "fp")
+        cm.confirmRelayPIN()
+        XCTAssertNil(cm.deviceStore.records.first { $0.id == ident.id }?.peerDeviceId)
+    }
+
+    func testReconnectWithSameRelayCodeDoesNotApplyStaleStash() async throws {
+        let code = "ST\(UUID().uuidString.prefix(5))"
+        let (pc, client) = try await relayPair(code: code)
+        cm.pendingRelayPIN = RelayPINRequest(pin: "1", peerID: pc.id, remoteFingerprint: "fp")
+        try await client.sendMessage(try PeerMessage.deviceIdExchange(deviceId: "stale-dev", senderID: pc.peerIdentity.id))
+        try await client.sendMessage(try text("sentinel", senderID: pc.peerIdentity.id))
+        _ = await poll { (self.cm.chatManager.unreadCounts[pc.id] ?? 0) > 0 }
+        cm.rejectRelayPIN()
+        let gone = await poll { self.cm.connections[pc.id] == nil }
+        XCTAssertTrue(gone)
+
+        let (pc2, _) = try await relayPair(code: code)
+        cm.pendingRelayPIN = RelayPINRequest(pin: "2", peerID: pc2.id, remoteFingerprint: "fp2")
+        cm.confirmRelayPIN()
+        XCTAssertNotNil(cm.deviceStore.records.first { $0.id == pc2.id })
+        XCTAssertNil(cm.deviceStore.records.first { $0.id == pc2.id }?.peerDeviceId, "stale deviceId was applied")
+    }
+
+    func testAliasDoesNotRaiseTrustForSecureCapablePeerWithoutContact() async throws {
+        let (pc, client) = try await relayPair(code: "TR\(UUID().uuidString.prefix(5))")
+        let key = Data(repeating: 7, count: 32)
+        let real = PeerIdentity(id: UUID().uuidString, displayName: "Sec", identityPublicKey: key, supportsSecureChannel: true)
+        touched.append(real.id)
+        // Install the identity directly (HELLO would also create an .unknown contact).
+        pc.updatePeerIdentity(real)
+        _ = client
+        XCTAssertFalse(cm.isPeerTrustedForUserActions(peerID: pc.id))
+        XCTAssertFalse(cm.isPeerTrustedForUserActions(peerID: real.id))
+    }
+
+    func testNonRelayConnectionStoresUnderConnectionID() async throws {
+        let (server, client) = try await rawPair()
+        let ident = legacyIdentity("Lan")
+        let pc = PeerConnection(peerID: ident.id, transport: TCPTransport(connection: server),
+                                peerIdentity: ident, localIdentity: cm.localIdentity, state: .connected)
+        cm._addConnectionForTesting(pc)
+        touched.append(ident.id)
+        let mid = UUID().uuidString
+        try await client.sendMessage(try PeerMessage.textMessage(TextMessagePayload(text: "lan hi", senderName: "x", messageID: mid), senderID: ident.id))
+        let arrived = await poll { (self.cm.chatManager.unreadCounts[pc.id] ?? 0) > 0 }
+        XCTAssertTrue(arrived)
+        try await client.sendMessage(try PeerMessage.typingIndicator(TypingIndicatorPayload(isTyping: true, timestamp: Date()), senderID: ident.id))
+        let typing = await poll { self.cm.chatManager.isTyping(peerID: pc.id) }
+        XCTAssertTrue(typing)
+        try await client.sendMessage(try PeerMessage.messageEdit(MessageEditPayload(messageID: mid, newText: "edited"), senderID: ident.id))
+        let edited = await poll {
+            self.cm.chatManager.loadMessages(forPeer: pc.id)
+            return self.cm.chatManager.messages.first { $0.id == mid }?.text == "edited"
+        }
+        XCTAssertTrue(edited)
+        try await client.sendMessage(try PeerMessage.messageDelete(MessageDeletePayload(messageID: mid), senderID: ident.id))
+        let deleted = await poll {
+            self.cm.chatManager.loadMessages(forPeer: pc.id)
+            return self.cm.chatManager.messages.first { $0.id == mid }?.isDeleted == true
+        }
+        XCTAssertTrue(deleted)
+    }
+
+    func testRelayMediaRejectEditLandInIdentityFile() async throws {
+        let real = legacyIdentity("Rita")
+        let (pc, client) = try await swappedRelayPeer(real)
+        // media
+        let media = MediaMessagePayload(mediaType: .file, fileName: "a.txt", fileSize: 3, mimeType: "text/plain",
+                                        duration: nil, thumbnailData: nil, fileData: Data([1, 2, 3]))
+        try await client.sendMessage(try PeerMessage.mediaMessage(media, senderID: real.id))
+        let got = await poll { (self.cm.chatManager.unreadCounts[real.id] ?? 0) > 0 }
+        XCTAssertTrue(got, "media not stored under identity key")
+        XCTAssertEqual(cm.chatManager.unreadCounts[pc.id] ?? 0, 0)
+        // edit of an incoming text
+        let tid = UUID().uuidString
+        try await client.sendMessage(try PeerMessage.textMessage(TextMessagePayload(text: "v1", senderName: "x", messageID: tid), senderID: real.id))
+        _ = await poll { self.cm.chatManager.getUnreadMessageIDs(for: real.id).contains(tid) }
+        try await client.sendMessage(try PeerMessage.messageEdit(MessageEditPayload(messageID: tid, newText: "v2"), senderID: real.id))
+        let edited = await poll {
+            self.cm.chatManager.loadMessages(forPeer: real.id)
+            return self.cm.chatManager.messages.first { $0.id == tid }?.text == "v2"
+        }
+        XCTAssertTrue(edited, "edit not applied in identity file")
+        // chatReject marks the last outgoing failed in the identity file
+        cm.sendTextMessage("out", to: real.id)
+        let sent = await poll {
+            self.cm.chatManager.flushAllPendingPersists()
+            self.cm.chatManager.loadMessages(forPeer: real.id)
+            return self.cm.chatManager.messages.first { $0.text == "out" }?.status == .sent
+        }
+        XCTAssertTrue(sent)
+        try await client.sendMessage(PeerMessage.chatReject(senderID: real.id, reason: "featureDisabled"))
+        let failed = await poll {
+            self.cm.chatManager.loadMessages(forPeer: real.id)
+            return self.cm.chatManager.messages.first { $0.text == "out" }?.status == .failed
+        }
+        XCTAssertTrue(failed, "chatReject did not hit the identity file")
+        cm.chatManager.loadMessages(forPeer: pc.id)
+        XCTAssertTrue(cm.chatManager.messages.isEmpty)
     }
 }
 

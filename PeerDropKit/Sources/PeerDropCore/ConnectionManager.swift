@@ -848,6 +848,11 @@ public final class ConnectionManager: ObservableObject {
         return connections.values.first { $0.peerIdentity.id == peerID }
     }
 
+    /// Chat-thread key for a saved device record.
+    public func chatKey(forRecord record: DeviceRecord) -> String {
+        connection(for: record)?.peerIdentity.id ?? record.peerIdentityId ?? record.id
+    }
+
     /// Is `id` already taken — as a `connections` key or as the identity a
     /// connection is aliased to (what `connection(for:)` resolves)? (#161 M-2)
     private func isPeerIDInUse(_ id: String, excluding: PeerConnection? = nil) -> Bool {
@@ -890,6 +895,8 @@ public final class ConnectionManager: ObservableObject {
         // An overwritten connection loses its relay-placeholder marker: it is
         // no longer installed, and must never regain an identity swap.
         if let replaced = connections[peerID], replaced !== peerConnection {
+            pendingPeerDeviceIds.removeValue(forKey: peerID)
+            pendingPeerIdentityIds.removeValue(forKey: peerID)
             replaced.isRelayPlaceholder = false
             tearDownNotesExchange(for: replaced)
         }
@@ -948,6 +955,7 @@ public final class ConnectionManager: ObservableObject {
     private func removeConnection(peerID: String) {
         bumpSecurityEpoch()
         pendingPeerDeviceIds.removeValue(forKey: peerID)
+        pendingPeerIdentityIds.removeValue(forKey: peerID)
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
             tearDownNotesExchange(for: removed)
@@ -1785,6 +1793,12 @@ public final class ConnectionManager: ObservableObject {
     /// in the relay-path scenario that the 2026-05-21 hotfix unblocked.
     public func _setConnectionForTesting(peerID: String, _ peerConnection: PeerConnection) {
         connections[peerID] = peerConnection
+    }
+
+    /// Test-only: install `peerConnection` through the real `addConnection`
+    /// (wires the receive loop), as a plain non-relay connection.
+    public func _addConnectionForTesting(_ peerConnection: PeerConnection) {
+        addConnection(peerConnection)
     }
 
     /// Test-only: feed an inbound `NWConnection` (e.g. from a loopback
@@ -2966,6 +2980,8 @@ public final class ConnectionManager: ObservableObject {
     /// Peer deviceIds received before the `relay-<code>` DeviceRecord existed
     /// (PIN not yet confirmed); applied by `confirmRelayPIN`, dropped on removal.
     private var pendingPeerDeviceIds: [String: String] = [:]
+    /// Same for the peer's real identity id learned at the HELLO swap.
+    private var pendingPeerIdentityIds: [String: String] = [:]
     /// Active BLE signaling instance.
     private(set) var bleSignaling: BLESignaling?
     /// In-progress invite accepts — prevents dual WS+APNs delivery from spawning parallel negotiations.
@@ -3344,6 +3360,9 @@ public final class ConnectionManager: ObservableObject {
         RelayAuthenticator.storeFingerprint(request.remoteFingerprint, for: request.peerID, store: deviceStore)
         if let stashed = pendingPeerDeviceIds.removeValue(forKey: request.peerID) {
             deviceStore.updatePeerDeviceId(for: request.peerID, deviceId: stashed)
+        }
+        if let identityId = pendingPeerIdentityIds.removeValue(forKey: request.peerID) {
+            deviceStore.setPeerIdentityId(for: request.peerID, identityId: identityId)
         }
         pendingRelayPIN = nil
 
@@ -3843,12 +3862,13 @@ public final class ConnectionManager: ObservableObject {
             if deviceStore.records.contains(where: { $0.id == peerConnection.id }) {
                 deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
                 logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
-            } else {
+            } else if peerConnection.isRelayTransport {
                 // The `relay-<code>` record only exists once the PIN is
                 // confirmed; keep the id until then instead of dropping it.
                 pendingPeerDeviceIds[peerConnection.id] = payload.deviceId
                 logger.info("Stashed peerDeviceId for \(peerConnection.id) until the device record exists")
             }
+            // Non-relay connection without a record: nothing to attach it to (unchanged).
 
         case .hello:
             // Relay identity swap (audit round 17, live finding 2026-06-13):
@@ -3894,6 +3914,14 @@ public final class ConnectionManager: ObservableObject {
                 return
             }
             peerConnection.updatePeerIdentity(identity)
+            // Remember the real identity on the relay record so the offline
+            // thread (stored under the identity id) can be found again; stash
+            // it if the record only appears after PIN confirmation.
+            if peerConnection.isRelayTransport {
+                if !deviceStore.setPeerIdentityId(for: peerID, identityId: identity.id) {
+                    pendingPeerIdentityIds[peerID] = identity.id
+                }
+            }
             checkPeerTrust(peerIdentity: identity)
             triggerSecureChannelNegotiation(for: peerConnection)
             logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
@@ -4407,6 +4435,15 @@ public final class ConnectionManager: ObservableObject {
             trustedContactStore.remove(contact.id)
         }
         chatManager.deleteMessages(forPeer: id)
+        // A relay peer's post-HELLO history lives under its identity id. Delete
+        // it too, unless another record still maps to that identity (e.g. the
+        // same friend's local-network record keyed by the identity UUID).
+        if let identityId = record?.peerIdentityId, identityId != id {
+            let shared = deviceStore.records.contains {
+                $0.id != id && ($0.id == identityId || $0.peerIdentityId == identityId)
+            }
+            if !shared { chatManager.deleteMessages(forPeer: identityId) }
+        }
         deviceStore.remove(id: id)
     }
 

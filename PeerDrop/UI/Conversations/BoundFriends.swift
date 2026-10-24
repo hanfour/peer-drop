@@ -14,7 +14,7 @@ enum BoundFriends {
         recordIDByAccount(recordIDs: cm.deviceStore.records.map(\.id),
                           chatKey: { id in
                               guard let r = cm.deviceStore.records.first(where: { $0.id == id }) else { return id }
-                              return cm.connection(for: r)?.peerIdentity.id ?? id
+                              return cm.chatKey(forRecord: r)
                           },
                           binding: FriendBinding(connectionManager: cm))
     }

@@ -160,7 +160,7 @@ struct HomeTab: View, PaperThemed {
     }
 
     private func peerID(for record: DeviceRecord) -> String {
-        connectionManager.connection(for: record)?.peerIdentity.id ?? record.id
+        connectionManager.chatKey(forRecord: record)
     }
 
     private func connectedRow(_ record: DeviceRecord) -> some View {

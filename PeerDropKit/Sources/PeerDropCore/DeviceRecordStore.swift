@@ -50,7 +50,8 @@ public final class DeviceRecordStore: ObservableObject {
                     connectionCount: merged.connectionCount,
                     connectionHistory: merged.connectionHistory,
                     certificateFingerprint: merged.certificateFingerprint,
-                    peerDeviceId: merged.peerDeviceId
+                    peerDeviceId: merged.peerDeviceId,
+                    peerIdentityId: merged.peerIdentityId
                 )
                 records.append(finalRecord)
             } else {
@@ -170,6 +171,16 @@ public final class DeviceRecordStore: ObservableObject {
         guard let index = records.firstIndex(where: { $0.id == recordId }) else { return }
         records[index].peerDeviceId = deviceId
         save()
+    }
+
+    /// Remember a relay peer's real identity id (learned at the HELLO swap).
+    /// No-op when the record doesn't exist yet. Returns whether it was applied.
+    @discardableResult
+    public func setPeerIdentityId(for recordId: String, identityId: String) -> Bool {
+        guard let index = records.firstIndex(where: { $0.id == recordId }) else { return false }
+        records[index].peerIdentityId = identityId
+        save()
+        return true
     }
 
     /// Snapshot of current records (for device picker / UI lists).

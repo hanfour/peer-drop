@@ -17,6 +17,10 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
     public var connectionHistory: [Date] = []
     public var certificateFingerprint: String?
     public var peerDeviceId: String?  // UUID of the peer device — used for invite routing
+    /// Relay records only: the peer's real `PeerIdentity.id`, learned at the
+    /// HELLO swap. Chat history for a relay peer is stored under it, so an
+    /// offline record can still find its thread. Optional; old data decodes.
+    public var peerIdentityId: String?
 
     public init(
         id: String,
@@ -28,7 +32,8 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         connectionCount: Int = 0,
         connectionHistory: [Date] = [],
         certificateFingerprint: String? = nil,
-        peerDeviceId: String? = nil
+        peerDeviceId: String? = nil,
+        peerIdentityId: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -40,6 +45,7 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         self.connectionHistory = connectionHistory
         self.certificateFingerprint = certificateFingerprint
         self.peerDeviceId = peerDeviceId
+        self.peerIdentityId = peerIdentityId
     }
 
     public var relativeLastConnected: String {
@@ -61,5 +67,6 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         // drop it — a dropped pin reopens a MITM window on the next connection.
         self.certificateFingerprint = self.certificateFingerprint ?? other.certificateFingerprint
         self.peerDeviceId = self.peerDeviceId ?? other.peerDeviceId
+        self.peerIdentityId = self.peerIdentityId ?? other.peerIdentityId
     }
 }
