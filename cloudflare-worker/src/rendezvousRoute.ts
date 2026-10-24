@@ -40,23 +40,45 @@ export const RV_RATE_LIMIT_MAX = 12;
 export const RV_RATE_WINDOW_MS = 60_000;
 export const RV_FIRST_FRAME_TIMEOUT_MS = 5_000;
 /** Test hook: shrink the table cap. Production value stays 20_000. */
-export const rvTestHooks = { maxEntries: 20_000 };
+export const rvTestHooks = { maxEntries: 20_000, now: () => Date.now() };
 export function rvTableSizes() {
   return { attempts: attempts.size, ipHandshakes: ipHandshakes.size, ipUnauthOpen: ipUnauthOpen.size };
 }
 
-/** Key IPv6 by its /64 prefix (one subscriber = one /64); IPv4 unchanged. */
+/**
+ * Bucket key for per-IP caps. IPv4 unchanged. IPv6 is keyed by its /64 prefix
+ * (one subscriber = one /64), EXCEPT addresses that embed an IPv4 client,
+ * which are keyed as that IPv4 so distinct clients do not collapse into one
+ * bucket: IPv4-mapped (::ffff:a.b.c.d, dotted or hex), NAT64 64:ff9b::/96 and
+ * the deprecated IPv4-compatible ::a.b.c.d form.
+ */
 export function ipBucket(ip: string): string {
   if (!ip.includes(":")) return ip;
   let a = ip.toLowerCase();
   const zone = a.indexOf("%");
   if (zone >= 0) a = a.slice(0, zone);
-  const [headRaw, tailRaw] = a.split("::");
-  const head = headRaw ? headRaw.split(":") : [];
-  const tail = tailRaw !== undefined && tailRaw ? tailRaw.split(":") : [];
-  const fill = a.includes("::") ? Array(Math.max(0, 8 - head.length - tail.length)).fill("0") : [];
-  const groups = [...head, ...fill, ...tail].map((g) => (g || "0").replace(/^0+(?=.)/, ""));
-  return "v6:" + groups.slice(0, 4).join(":");
+  // Dotted-quad tail -> two hex groups.
+  const dotted = a.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (dotted) {
+    const [o1, o2, o3, o4] = dotted.slice(2).map(Number);
+    if ([o1, o2, o3, o4].some((o) => o > 255)) return "v6:invalid";
+    a = dotted[1] + ((o1 << 8) | o2).toString(16) + ":" + ((o3 << 8) | o4).toString(16);
+  }
+  const parts = a.split("::");
+  if (parts.length > 2) return "v6:invalid";
+  const head = parts[0] ? parts[0].split(":") : [];
+  const tail = parts.length === 2 && parts[1] ? parts[1].split(":") : [];
+  const fillCount = parts.length === 2 ? Math.max(0, 8 - head.length - tail.length) : 0;
+  const raw = [...head, ...Array(fillCount).fill("0"), ...tail];
+  if (raw.length !== 8) return "v6:invalid";
+  const g = raw.map((x) => parseInt(x || "0", 16));
+  if (g.some((x) => Number.isNaN(x) || x > 0xffff)) return "v6:invalid";
+  const v4 = `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`;
+  const zeros = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+  if (zeros(0, 5) && g[5] === 0xffff) return v4; // ::ffff:a.b.c.d
+  if (g[0] === 0x64 && g[1] === 0xff9b && zeros(2, 6)) return v4; // 64:ff9b::/96
+  if (zeros(0, 6) && (g[6] !== 0 || g[7] > 1)) return v4; // ::a.b.c.d (deprecated)
+  return "v6:" + g.slice(0, 4).map((x) => x.toString(16)).join(":");
 }
 const MAX_PENDING_FRAMES = 8;
 const MAX_PENDING_BYTES = 64 * 1024;
@@ -108,28 +130,38 @@ async function saltedHash(label: string, value: string): Promise<string> {
   return hex;
 }
 
+/** Drop entries from expired windows, then, only if still over the cap, the OLDEST (insertion order). */
+function evict(map: Map<string, any>, now: number, max: number, timed: boolean): void {
+  if (timed) {
+    for (const [k, v] of map) if (now - v.windowStart >= RV_RATE_WINDOW_MS) map.delete(k);
+  }
+  for (const k of map.keys()) {
+    if (map.size < max) break;
+    map.delete(k);
+  }
+}
+
 function sweep(now: number): void {
   const max = rvTestHooks.maxEntries;
   if (now - lastSweep < RV_RATE_WINDOW_MS && attempts.size < max && ipHandshakes.size < max && ipUnauthOpen.size < max) return;
   lastSweep = now;
-  for (const [k, v] of attempts) {
-    if (now - v.windowStart >= RV_RATE_WINDOW_MS) attempts.delete(k);
-  }
-  for (const [k, v] of ipHandshakes) {
-    if (now - v.windowStart >= RV_RATE_WINDOW_MS) ipHandshakes.delete(k);
-  }
-  if (attempts.size >= rvTestHooks.maxEntries) attempts.clear(); // memory guard
-  if (ipHandshakes.size >= rvTestHooks.maxEntries) ipHandshakes.clear();
-  if (ipUnauthOpen.size >= rvTestHooks.maxEntries) ipUnauthOpen.clear();
+  evict(attempts, now, max, true);
+  evict(ipHandshakes, now, max, true);
+  evict(ipUnauthOpen, now, max, false);
 }
 
-/** Returns true if this attempt is allowed (and counts it). */
+/** Set with fresh insertion position so Map order == window-start order. */
+function setFresh<V>(map: Map<string, V>, k: string, v: V): void {
+  map.delete(k);
+  map.set(k, v);
+}
+
 async function allowAttempt(kind: "ws" | "ice", ip: string, token: string, now: number): Promise<boolean> {
   sweep(now);
   const key = `${kind}:${await saltedHash("ip", ipBucket(ip))}:${await saltedHash("t", token)}`;
   const e = attempts.get(key);
   if (!e || now - e.windowStart >= RV_RATE_WINDOW_MS) {
-    attempts.set(key, { windowStart: now, count: 1 });
+    setFresh(attempts, key, { windowStart: now, count: 1 });
     return true;
   }
   if (e.count >= RV_RATE_LIMIT_MAX) return false;
@@ -148,7 +180,7 @@ async function admit(kind: "ws" | "ice", raw: string, ip: string): Promise<Admit
   if (kind === "ice" && typeof claim === "object" && claim !== null && !("v" in claim)) {
     (claim as { v?: number }).v = 1;
   }
-  const now = Date.now();
+  const now = rvTestHooks.now();
   // Rate-limit on the claimed token string before spending CPU on PoW.
   const claimedToken = (claim as { t?: unknown } | null)?.t;
   if (typeof claimedToken !== "string" || claimedToken.length > 64) return null;
@@ -163,11 +195,11 @@ async function admit(kind: "ws" | "ice", raw: string, ip: string): Promise<Admit
 /** Per-IP-hash gate: returns {deny} or a key to release the unauth slot with. */
 async function ipGate(ip: string): Promise<{ deny: boolean; key: string | null }> {
   if (!ip || ip === "unknown") return { deny: false, key: null };
-  const now = Date.now();
+  const now = rvTestHooks.now();
   sweep(now);
   const key = await saltedHash("ipcap", ipBucket(ip));
   const e = ipHandshakes.get(key);
-  if (!e || now - e.windowStart >= RV_RATE_WINDOW_MS) ipHandshakes.set(key, { windowStart: now, count: 1 });
+  if (!e || now - e.windowStart >= RV_RATE_WINDOW_MS) setFresh(ipHandshakes, key, { windowStart: now, count: 1 });
   else if (e.count >= IP_HANDSHAKES_PER_MIN) return { deny: true, key: null };
   else e.count++;
   const open = ipUnauthOpen.get(key) ?? 0;

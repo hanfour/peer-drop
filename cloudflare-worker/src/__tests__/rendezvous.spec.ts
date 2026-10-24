@@ -7,7 +7,7 @@ import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import vectors from "../../test-vectors/rendezvous-pow.json";
 import { verifyRendezvousClaim } from "../rendezvousPow";
-import { handleRendezvous, rvTestHooks, rvTableSizes } from "../rendezvousRoute";
+import { handleRendezvous, rvTestHooks, rvTableSizes, ipBucket } from "../rendezvousRoute";
 
 // runInDurableObject's generics trip TS2589; erase them.
 const runDO: (stub: any, fn: (inst: any, state: any) => any) => Promise<any> = runInDurableObject as any;
@@ -730,5 +730,53 @@ describe("round 2", () => {
     const r = await SELF.fetch("https://example.com/room", { method: "POST", headers: { "X-API-Key": "test-api-key-12345", "CF-Connecting-IP": freshIp() } });
     expect(r.status).toBe(201);
     expect((await env.ROOMS.list()).keys.length).toBeGreaterThan(before);
+  });
+});
+
+
+describe("round 3", () => {
+  it("ipBucket: IPv4-mapped (dotted, hex, mixed case, zone) keys as the underlying IPv4", () => {
+    const v4 = ipBucket("1.2.3.4");
+    expect(v4).toBe("1.2.3.4");
+    for (const f of ["::ffff:1.2.3.4", "::FFFF:1.2.3.4", "::ffff:0102:0304", "0:0:0:0:0:ffff:102:304", "::ffff:1.2.3.4%eth0", "64:ff9b::1.2.3.4", "64:ff9b::102:304"]) {
+      expect(ipBucket(f)).toBe(v4);
+    }
+    expect(ipBucket("::ffff:1.2.3.5")).not.toBe(v4);
+    expect(ipBucket("::ffff:5.6.7.8")).not.toBe(ipBucket("::ffff:1.2.3.4"));
+  });
+  it("ipBucket: plain IPv6 keeps /64 behaviour", () => {
+    expect(ipBucket("2001:db8:1:2:aaaa::1")).toBe(ipBucket("2001:DB8:1:2:0:0:0:ffff"));
+    expect(ipBucket("2001:db8:1:2::1")).not.toBe(ipBucket("2001:db8:1:3::1"));
+    expect(ipBucket("2001:db8:1:2::1").startsWith("v6:")).toBe(true);
+  });
+  it("overflow evicts stale entries only: an active bucket survives", async () => {
+    rvTestHooks.maxEntries = 40;
+    const t0 = Date.now();
+    try {
+      const timers = fakeTimers();
+      rvTestHooks.now = () => t0;
+      for (let i = 0; i < 35; i++) {
+        const sck = await directConnect(timers, `198.19.0.${i + 1}`);
+        sck.send("x"); await sck.waitFor(() => sck.closed !== null);
+      }
+      rvTestHooks.now = () => t0 + 61_000;
+      const x = "198.19.9.9";
+      const open: TestSocket[] = [];
+      for (let i = 0; i < 60; i++) {
+        const sck = await directConnect(timers, x);
+        sck.send("x"); await sck.waitFor(() => sck.closed !== null);
+      }
+      for (let i = 0; i < 8; i++) {
+        const sck = await directConnect(timers, `198.19.1.${i + 1}`);
+        sck.send("x"); await sck.waitFor(() => sck.closed !== null);
+      }
+      // X exhausted its 60 handshakes this window; the flood must not reset it.
+      const ninth = await directConnect(timers, x);
+      await ninth.waitFor(() => ninth.closed !== null, 1000);
+      expectGenericClose(ninth);
+      expect(open.every((o) => o.closed === null)).toBe(true);
+      expect(rvTableSizes().ipHandshakes).toBeLessThanOrEqual(41);
+      open.forEach((o) => o.ws.close(1000, "x"));
+    } finally { rvTestHooks.maxEntries = 20_000; rvTestHooks.now = () => Date.now(); }
   });
 });
