@@ -61,6 +61,35 @@ final class HomeCategoriesLogicTests: XCTestCase {
         XCTAssertEqual(sections(all3, query: "amy", categories: cats3).categories.first?.count, 2)
     }
 
+    func testSearchListsCategorizedFriendWithItsCategoryName() {
+        let all = [rec("a", "Amy"), rec("b", "Amber"), rec("c", "Cat")]
+        let s = sections(all, query: "am", categories: [cat("fam", "Family", ["a"])])
+        XCTAssertEqual(s.friends.map(\.id), ["b", "a"])          // sorted by name: Amber, Amy
+        XCTAssertEqual(s.friendCategoryNames, ["a": "Family"])
+        // A connected categorized match stays in 已連線 only.
+        let online = sections(all, online: ["a"], query: "am", categories: [cat("fam", "Family", ["a"])])
+        XCTAssertEqual(online.friends.map(\.id), ["b"])
+        XCTAssertEqual(online.connected.map(\.id), ["a"])
+        XCTAssertTrue(online.friendCategoryNames.isEmpty)
+    }
+
+    func testEmptyQueryKeepsCategorizedFriendsOut() {
+        let all = [rec("a", "Amy"), rec("b", "Bob")]
+        for q in ["", "   "] {
+            let s = sections(all, query: q, categories: [cat("fam", "Family", ["a"])])
+            XCTAssertEqual(s.friends.map(\.id), ["b"])
+            XCTAssertTrue(s.friendCategoryNames.isEmpty)
+        }
+    }
+
+    func testInlineNameSubmitDecision() {
+        XCTAssertEqual(InlineNameSubmit.decide(text: "  Family "), .create("Family"))
+        XCTAssertEqual(InlineNameSubmit.decide(text: ""), .cancel)
+        XCTAssertEqual(InlineNameSubmit.decide(text: "   "), .keepEditing)
+        XCTAssertEqual(InlineNameSubmit.decide(text: String(repeating: "x", count: 21)), .keepEditing)
+        XCTAssertEqual(InlineNameSubmit.decide(text: String(repeating: "x", count: 20)), .create(String(repeating: "x", count: 20)))
+    }
+
     func testEmptyCategoriesListedInStoreOrderWithoutQuery() {
         let cats = [cat("w", "Work", order: 0), cat("f", "Family", order: 1)]
         let s = sections([], categories: cats)

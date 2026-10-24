@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import PeerDropCore
 
@@ -19,6 +20,8 @@ struct CategoryDetailView: View, PaperThemed {
     @State private var addingFriends = false
     @State private var confirmDelete = false
     @State private var isConnecting = false
+    /// Bumped whenever the device records change (e.g. a member was forgotten), so the member list re-renders.
+    @State private var recordsVersion = 0
 
     private var category: FriendCategory? { store.categories.first { $0.id == categoryID } }
 
@@ -46,6 +49,7 @@ struct CategoryDetailView: View, PaperThemed {
 
     var body: some View {
         Group {
+            let _ = recordsVersion
             if let category {
                 content(category, members: members(of: category))
             } else {
@@ -55,6 +59,7 @@ struct CategoryDetailView: View, PaperThemed {
         .background(paper(.background).ignoresSafeArea())
         .paperMode(.live)
         .onChange(of: category == nil) { gone in if gone { dismiss() } }
+        .onReceive(connectionManager.deviceStore.$records.dropFirst()) { _ in recordsVersion &+= 1 }
     }
 
     private func content(_ category: FriendCategory, members: [Member]) -> some View {

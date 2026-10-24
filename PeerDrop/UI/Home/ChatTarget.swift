@@ -60,8 +60,12 @@ extension HomeListLogic {
         let connected: [DeviceRecord]
         /// Categories in store order; without a query all of them (empty ones too).
         let categories: [CategorySection]
-        /// Not-online friends that are in no category.
+        /// Not-online friends that are in no category. While searching, matching not-online friends that ARE
+        /// in a category are listed here too (sorted with the rest), so search always finds a friend.
         let friends: [DeviceRecord]
+        /// `record.id → category name` for the categorized friends listed in `friends` (search only), shown as
+        /// a caption on their row. Empty without a query.
+        var friendCategoryNames: [String: String] = [:]
     }
 
     /// `record.id → category id` for every record that is in a category. A record counts as a member when
@@ -91,7 +95,16 @@ extension HomeListLogic {
     ) -> HomeSections {
         let known = Set(categories.map(\.id))
         let base = sections(records: records, presence: presence, query: query, name: name)
-        let friends = base.friends.filter { categoryID($0).map { !known.contains($0) } ?? true }
+        let needle = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        let friends: [DeviceRecord]
+        var friendCategoryNames: [String: String] = [:]
+        if needle.isEmpty {
+            friends = base.friends.filter { categoryID($0).map { !known.contains($0) } ?? true }
+        } else {
+            friends = base.friends          // every matching not-online friend, categorized or not
+            let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+            for r in friends { if let id = categoryID(r), let n = names[id] { friendCategoryNames[r.id] = n } }
+        }
 
         let sortedAll = records.sorted {
             let c = name($0).localizedCaseInsensitiveCompare(name($1))
@@ -101,7 +114,6 @@ extension HomeListLogic {
         for r in sortedAll {
             if let id = categoryID(r), known.contains(id) { membersByCategory[id, default: []].append(r) }
         }
-        let needle = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
         let ordered = categories.sorted { $0.order == $1.order ? $0.id < $1.id : $0.order < $1.order }
         let cats: [CategorySection] = ordered.compactMap { c in
             let members = membersByCategory[c.id] ?? []
@@ -110,12 +122,26 @@ extension HomeListLogic {
             }
             return CategorySection(category: c, members: members)
         }
-        return HomeSections(connected: base.connected, categories: cats, friends: friends)
+        return HomeSections(connected: base.connected, categories: cats, friends: friends,
+                            friendCategoryNames: friendCategoryNames)
     }
 
     /// Same rule the store enforces (trimmed 1–20 characters), so the UI can disable the save button.
     static func isValidCategoryName(_ raw: String) -> Bool {
         FriendCategoryStore.validName(raw) != nil
+    }
+}
+
+/// What Return does in an inline category-name field: a valid name (trimmed 1–20) is created; an empty
+/// field cancels; anything else (blank spaces, too long) keeps the field open with the text for editing.
+enum InlineNameSubmit: Equatable {
+    case create(String)
+    case keepEditing
+    case cancel
+
+    static func decide(text: String) -> InlineNameSubmit {
+        if let name = FriendCategoryStore.validName(text) { return .create(name) }
+        return text.isEmpty ? .cancel : .keepEditing
     }
 }
 

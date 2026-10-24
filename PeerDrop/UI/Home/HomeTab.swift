@@ -493,7 +493,8 @@ struct HomeTab: View, PaperThemed {
         let connect: () -> Void = { _ = connectionManager.reconnect(to: record.id) }
         #if os(iOS)
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) {
-            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect)
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect,
+                      categoryName: snap.sections.friendCategoryNames[record.id])
         }
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(rowBackground)
@@ -505,7 +506,8 @@ struct HomeTab: View, PaperThemed {
         Button {
             openWindow(id: "chat", value: peerID(for: record))
         } label: {
-            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect)
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect,
+                      categoryName: snap.sections.friendCategoryNames[record.id])
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")
