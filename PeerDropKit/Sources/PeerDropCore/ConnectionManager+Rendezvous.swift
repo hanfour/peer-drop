@@ -342,7 +342,9 @@ extension ConnectionManager {
                   let claimedKey = claimed.identityPublicKey,
                   claimedKey == pc.peerIdentity.identityPublicKey,
                   pc.handshakePeerIdentityKey.map({ $0 == claimedKey }) ?? true else {
-                closeRendezvousConnection(pc, reason: .helloMismatch)
+                // Only an encrypted HELLO is the friend's own word; a
+                // plaintext one may be anyone's (never suspends).
+                closeRendezvousConnection(pc, reason: origin == .envelope ? .helloMismatch : .helloMismatchUnauthenticated)
                 return
             }
             return

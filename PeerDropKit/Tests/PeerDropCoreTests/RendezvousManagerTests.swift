@@ -945,25 +945,47 @@ final class PairedNegotiator: RendezvousNegotiator {
 
 extension RendezvousManagerTests {
 
-    func testKeyMismatchSuspendsRoomUntilTheKeyChanges() async {
-        let (c, _, n) = await negotiatingOfferer()
-        n.open()
-        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: .keyMismatch)
-        XCTAssertEqual(manager.lastFailureReason(for: c.id), .keyMismatch)
-        XCTAssertEqual(manager.roomCount, 0, "room left at once")
-        // Looks exactly like any other failure: unreachable, never "refused".
-        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
-        let made = factory.made.count
-        for _ in 0..<10 { clock.advance(60); manager.tick() }
-        XCTAssertEqual(factory.made.count, made, "no retry while suspended")
-        XCTAssertEqual(manager.roomCount, 0)
-        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
+    /// N-1: a handshake-key mismatch happens BEFORE key confirmation, so an
+    /// unauthenticated on-path party can cause it: never a suspension, only
+    /// the normal (capped) backoff.
+    func testKeyMismatchIsRecordedButNotSuspended() async { await assertRecordedAndRetried(.keyMismatch) }
+    func testUnauthenticatedHelloMismatchIsNotSuspended() async {
+        await assertRecordedAndRetried(.helloMismatchUnauthenticated)
+    }
 
-        // The pinned key changes (re-exchange): the suspension lifts.
-        contacts[0].identityPublicKey = RendezvousTestIdentity().raw
+    /// Suspended by an authenticated (envelope) HELLO mismatch after verify.
+    private func suspendedFriend() async -> TrustedContact {
+        let (c, _, _) = await securedOfferer()
+        manager.connectionDidClose(contactID: c.id, reason: .helloMismatch)
+        XCTAssertEqual(manager.roomCount, 0)
+        return c
+    }
+
+    func testClearSuspensionRejoins() async {
+        let c = await suspendedFriend()
+        manager.clearSuspension(contactID: c.id)
+        XCTAssertEqual(manager.roomCount, 1)
+    }
+
+    func testOptInToggleClearsSuspension() async {
+        _ = await suspendedFriend()
+        contacts[0].rendezvousEnabled = nil
+        manager.contactsDidChange()
+        contacts[0].rendezvousEnabled = true
         manager.contactsDidChange()
         XCTAssertEqual(manager.roomCount, 1)
-        XCTAssertEqual(factory.made.count, made + 1)
+    }
+
+    func testForegroundAfterFiveMinutesClearsSuspension() async {
+        _ = await suspendedFriend()
+        manager.appDidEnterBackground()
+        clock.advance(60)
+        manager.appDidBecomeActive()
+        XCTAssertEqual(manager.roomCount, 0, "still suspended after a short background")
+        manager.appDidEnterBackground()
+        clock.advance(RendezvousManager.suspensionForegroundReset + 1)
+        manager.appDidBecomeActive()
+        XCTAssertEqual(manager.roomCount, 1)
     }
 
     func testHelloMismatchAfterVerifySuspendsUntilTheDeviceIdChanges() async {

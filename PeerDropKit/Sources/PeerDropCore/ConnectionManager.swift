@@ -927,7 +927,9 @@ public final class ConnectionManager: ObservableObject {
 
     /// Focus on a specific peer connection.
     public func focus(on peerID: String) {
-        guard let conn = connection(for: peerID) else { return }
+        // Never a cross-network connection: focus drives file transfer,
+        // voice calls and the legacy focus-based sends (Task 5 M-1).
+        guard let conn = connection(for: peerID), !conn.isRendezvous else { return }
         focusedPeerID = conn.id
     }
 
@@ -3819,8 +3821,9 @@ public final class ConnectionManager: ObservableObject {
                 // 1-to-1 message receipt: only for OUR messages in THIS peer's
                 // thread (a peer may not mark another thread's messages).
                 let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                for msgID in payload.messageIDs
-                where chatManager.threadContains(messageID: msgID, peerID: chatKey, outgoingOnly: true) {
+                // One stored-thread read for the whole receipt (M-2).
+                let ours = chatManager.threadContains(messageIDs: Set(payload.messageIDs), peerID: chatKey, outgoingOnly: true)
+                for msgID in payload.messageIDs where ours.contains(msgID) {
                     chatManager.updateStatus(messageID: msgID, status: newStatus)
                 }
             }

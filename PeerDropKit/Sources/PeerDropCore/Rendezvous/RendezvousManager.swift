@@ -37,12 +37,19 @@ public enum RendezvousLinkState: Equatable {
 /// never sent, and never shown in a way that tells "they turned me off" apart
 /// from "they're offline" (presence stays offline / unreachable either way).
 public enum RendezvousConnectionFailure: Equatable, Sendable {
-    /// The handshake key is not the pinned contact key.
+    /// The handshake key is not the pinned contact key. Happens before key
+    /// confirmation (an on-path party can cause it), so it never suspends:
+    /// the session's capped backoff (≤ 300 s) applies instead.
     case keyMismatch
     /// Binding, opt-in or eligibility no longer holds.
     case bindingFailed
-    /// A HELLO claimed a key other than the pinned / handshake key.
+    /// An ENCRYPTED (authenticated, post-confirmation) HELLO claimed a key
+    /// other than the pinned / handshake key: the friend itself contradicts
+    /// its pinned identity.
     case helloMismatch
+    /// A PLAINTEXT HELLO claimed another key. Anyone on the path can send
+    /// one, so it never suspends.
+    case helloMismatchUnauthenticated
     /// No confirmed secure channel within the deadline.
     case timeout
     /// An envelope from the peer did not decrypt.
@@ -54,9 +61,11 @@ public enum RendezvousConnectionFailure: Equatable, Sendable {
     /// Closed (peer hung up, transport dropped, local disconnect).
     case connectionClosed
 
-    /// Pinned-identity contradictions: the room stays suspended until the
-    /// contact's key or device id changes (no retry loop against them).
-    public var suspendsRoom: Bool { self == .keyMismatch || self == .helloMismatch }
+    /// Only an AUTHENTICATED contradiction of the pinned identity suspends
+    /// the room (until the key / device id changes, the opt-in is toggled,
+    /// `clearSuspension`, or a foreground after `suspensionForegroundReset`).
+    /// Unauthenticated causes only back off, so they can't be a sticky DoS.
+    public var suspendsRoom: Bool { self == .helloMismatch }
 }
 
 @MainActor
@@ -204,7 +213,9 @@ public final class RendezvousManager: ObservableObject {
     private var lastFailures: [UUID: RendezvousConnectionFailure] = [:]
     /// Contacts suspended after a pinned-identity contradiction, with the
     /// key + device id they were suspended at.
-    private struct Suspension: Equatable { let key: Data; let deviceId: String? }
+    private struct Suspension: Equatable { let key: Data; let deviceId: String?; let at: Date }
+    /// A foreground this long after a suspension lifts it.
+    public static let suspensionForegroundReset: TimeInterval = 300
     private var suspensions: [UUID: Suspension] = [:]
     private var queue: [(Key, RendezvousSession.Event)] = []
     private var draining = false
@@ -249,6 +260,8 @@ public final class RendezvousManager: ObservableObject {
         if deferIfDraining({ [weak self] in self?.appDidBecomeActive() }) { return }
         guard !isForeground else { return }
         isForeground = true
+        let now = clock.now
+        suspensions = suspensions.filter { now.timeIntervalSince($0.value.at) <= Self.suspensionForegroundReset }
         ticker.start { [weak self] in self?.tick() }
         reconcile()
     }
@@ -311,7 +324,14 @@ public final class RendezvousManager: ObservableObject {
     private func recordFailure(_ reason: RendezvousConnectionFailure, contactID: UUID) {
         lastFailures[contactID] = reason
         guard reason.suspendsRoom, let c = contacts().first(where: { $0.id == contactID }) else { return }
-        suspensions[contactID] = Suspension(key: c.identityPublicKey, deviceId: c.deviceId)
+        suspensions[contactID] = Suspension(key: c.identityPublicKey, deviceId: c.deviceId, at: clock.now)
+    }
+
+    /// Lift a suspension (Task 6 hook, e.g. a "try again" action).
+    public func clearSuspension(contactID: UUID) {
+        if deferIfDraining({ [weak self] in self?.clearSuspension(contactID: contactID) }) { return }
+        guard suspensions.removeValue(forKey: contactID) != nil else { return }
+        reconcile()
     }
 
     /// Enabled + eligible + not suspended. A suspension lifts once the
@@ -319,7 +339,8 @@ public final class RendezvousManager: ObservableObject {
     private func currentActiveContacts() -> [TrustedContact] {
         let all = contacts()
         for (id, s) in suspensions {
-            guard let c = all.first(where: { $0.id == id }),
+            // Opt-in off (the user toggling it off/on) also lifts it.
+            guard let c = all.first(where: { $0.id == id }), c.isRendezvousEnabled,
                   c.identityPublicKey == s.key, c.deviceId == s.deviceId else {
                 suspensions[id] = nil
                 continue

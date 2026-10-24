@@ -1010,7 +1010,7 @@ extension ConnectionManagerRendezvousTests {
         XCTAssertEqual(recorder.secure.map(\.1), [false, false, false])
         let reasons = reasonsByContact()
         XCTAssertEqual(reasons[keyed.id], .keyMismatch)
-        XCTAssertEqual(reasons[helloed.id], .helloMismatch)
+        XCTAssertEqual(reasons[helloed.id], .helloMismatchUnauthenticated, "plaintext HELLO: not authenticated")
         XCTAssertEqual(reasons[optedOut.id], .bindingFailed)
         XCTAssertTrue(e3.closed)
     }
@@ -1024,6 +1024,48 @@ extension ConnectionManagerRendezvousTests {
         let closed = await poll { !self.recorder.closed.isEmpty }
         XCTAssertTrue(closed)
         XCTAssertEqual(recorder.closeReasons, [.helloMismatch])
+    }
+
+    // MARK: Round 2, M-1: focus never lands on a cross-network connection
+
+    func testFocusIgnoresRendezvousConnections() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        _ = try await installVerified(friend, key: key)
+        cm.focus(on: friend.deviceId!)
+        XCTAssertNil(cm.focusedPeerID)
+    }
+
+    // MARK: Round 2, M-2: one stored-thread read per frame
+
+    func testThreadContainsBatchReadsTheThreadOnce() throws {
+        let peerID = "batch-\(UUID().uuidString)"
+        touched.append(peerID)
+        let ours = (0..<5).map { cm.chatManager.saveOutgoing(text: "m\($0)", peerID: peerID, peerName: "P").id }
+        cm.chatManager.flushAllPendingPersists()
+        let before = cm.chatManager.threadDiskReadCount
+        let found = cm.chatManager.threadContains(messageIDs: Set(ours + ["foreign"]), peerID: peerID, outgoingOnly: true)
+        XCTAssertEqual(found, Set(ours))
+        XCTAssertEqual(cm.chatManager.threadDiskReadCount - before, 1)
+        for id in ours { XCTAssertTrue(cm.chatManager.threadContains(messageID: id, peerID: peerID, outgoingOnly: true)) }
+        XCTAssertFalse(cm.chatManager.threadContains(messageID: "foreign", peerID: peerID))
+    }
+
+    func testReceiptWithManyIDsReadsTheThreadOnce() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let id = friend.deviceId!
+        let (_, peer, _) = try await installVerified(friend, key: key)
+        let ours = (0..<5).map { cm.chatManager.saveOutgoing(text: "m\($0)", peerID: id, peerName: "Mika").id }
+        cm.chatManager.flushAllPendingPersists()
+        let before = cm.chatManager.threadDiskReadCount
+        try await peer.send(try PeerMessage.messageReceipt(
+            MessageReceiptPayload(messageIDs: ours, receiptType: .read, timestamp: Date()), senderID: id))
+        try await peer.send(text("marker", from: id))
+        _ = await poll { (self.cm.chatManager.unreadCounts[id] ?? 0) >= 1 }
+        XCTAssertEqual(cm.chatManager.threadDiskReadCount - before, 1)
+        cm.chatManager.loadMessages(forPeer: id)
+        for m in cm.chatManager.messages where ours.contains(m.id) { XCTAssertEqual(m.status, .read) }
     }
 
     // MARK: I-2 media goes to the chat's peer, not the focused one
