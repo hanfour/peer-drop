@@ -2088,6 +2088,41 @@
         }
       }
     },
+    "Connecting, not online yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting, not online yet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "接続中、まだオンラインではありません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "연결 중, 아직 온라인 아님"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "连接中，尚未上线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線中，尚未上線"
+          }
+        }
+      }
+    },
     "Connecting...": {
       "extractionState": "manual",
       "localizations": {

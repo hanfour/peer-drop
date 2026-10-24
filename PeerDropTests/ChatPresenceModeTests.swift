@@ -6,6 +6,13 @@ final class ChatPresenceModeTests: XCTestCase {
     func testOnlineIsLive() { XCTAssertEqual(ChatPresenceMode.mode(for: .online), .live) }
     func testNearbyIsNote() { XCTAssertEqual(ChatPresenceMode.mode(for: .nearby), .note) }
     func testOfflineIsNote() { XCTAssertEqual(ChatPresenceMode.mode(for: .offline), .note) }
+    /// Project E: only `.online` is live; `.connecting` never shows the live look or the info button.
+    func testOnlyOnlineIsLiveForEveryPresence() {
+        for p in PeerPresence.allCases {
+            XCTAssertEqual(ChatPresenceMode.mode(for: p) == .live, p == .online, "\(p)")
+            XCTAssertEqual(ChatPresenceMode.showsInfoButton(presence: p), p == .online, "\(p)")
+        }
+    }
 
     func testDisconnectedOverridesOnline() {
         XCTAssertEqual(ChatPresenceMode.mode(presence: .online, isDisconnected: true), .note)

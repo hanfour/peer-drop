@@ -77,6 +77,13 @@ final class HomeTabLogicTests: XCTestCase {
         XCTAssertTrue(text.contains(rel), text)
     }
 
+    /// Project E: a cross-network friend waiting / negotiating shows "Connecting...", no Connect pill.
+    func testSubtitleAndPillForCrossNetworkConnecting() {
+        XCTAssertEqual(FriendSubtitle.text(presence: .connecting, lastConnected: Date(), connectionCount: 4, source: "bonjour"),
+                       String(localized: "Connecting..."))
+        XCTAssertFalse(HomeListLogic.showsConnectPill(presence: .connecting, isConnecting: false))
+    }
+
     func testSubtitleOfflineNeverConnected() {
         XCTAssertEqual(FriendSubtitle.text(presence: .offline, lastConnected: Date(), connectionCount: 0, source: "bonjour"),
                        String(localized: "Not connected yet"))

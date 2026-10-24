@@ -11,12 +11,15 @@ extension PeerPresence {
         switch self {
         case .online: return String(localized: "Online")
         case .nearby: return String(localized: "Nearby, not connected")
+        case .connecting: return String(localized: "Connecting, not online yet")
         case .offline: return notesReachable ? String(localized: "Offline, you can send notes") : String(localized: "Offline")
         }
     }
 }
 
-/// Bottom-trailing status badge: filled dot (online), hollow ring (nearby), envelope square (offline + notes reachable), grey crescent (offline otherwise).
+/// Bottom-trailing status badge: filled dot (online), hollow ring (nearby), dashed ring
+/// (connecting across networks), envelope square (offline + notes reachable), grey crescent
+/// (offline otherwise).
 struct PresenceBadge: View, PaperThemed {
     @Environment(\.paperMode) var paperMode
     let presence: PeerPresence
@@ -26,6 +29,17 @@ struct PresenceBadge: View, PaperThemed {
 
     enum OfflineKind: Equatable { case notes, neutral }
     static func offlineKind(notesReachable: Bool) -> OfflineKind { notesReachable ? .notes : .neutral }
+
+    /// One shape per state, so state is never conveyed by colour alone.
+    enum Shape: Equatable, Hashable { case dot, ring, dashedRing, envelope, crescent }
+    static func shape(for presence: PeerPresence, notesReachable: Bool) -> Shape {
+        switch presence {
+        case .online: return .dot
+        case .nearby: return .ring
+        case .connecting: return .dashedRing
+        case .offline: return offlineKind(notesReachable: notesReachable) == .notes ? .envelope : .crescent
+        }
+    }
 
     static func diameter(forAvatarSize size: CGFloat) -> CGFloat { max(12, size * 0.36) }
     private var diameter: CGFloat { Self.diameter(forAvatarSize: avatarSize) }
@@ -42,6 +56,12 @@ struct PresenceBadge: View, PaperThemed {
                 Circle()
                     .fill(Color.white)
                     .overlay(Circle().strokeBorder(PaperTheme.color(.highlight), lineWidth: max(2, diameter * 0.2)))
+            case .connecting:
+                // Dashed grey ring: "on the way", distinct from the solid nearby ring.
+                Circle()
+                    .fill(Color.white)
+                    .overlay(Circle().strokeBorder(Color.gray, style: StrokeStyle(
+                        lineWidth: max(2, diameter * 0.2), dash: [max(1.5, diameter * 0.18)])))
             case .offline:
                 switch Self.offlineKind(notesReachable: notesReachable) {
                 case .notes:

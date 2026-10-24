@@ -28,9 +28,31 @@ final class PeerAvatarTests: XCTestCase {
     }
 
     func testPresenceAccessibilityLabelsDistinct() {
-        let labels = [PeerPresence.online, .nearby, .offline].map(\.accessibilityLabel)
-        XCTAssertEqual(Set(labels).count, 3)
+        let labels = PeerPresence.allCases.map(\.accessibilityLabel)
+        XCTAssertEqual(PeerPresence.allCases.count, 4)
+        XCTAssertEqual(Set(labels).count, PeerPresence.allCases.count)
         XCTAssertTrue(labels.allSatisfy { !$0.isEmpty })
+    }
+
+    /// Project E: "connecting" (waiting / negotiating across networks) is never "Online".
+    func testConnectingAccessibilityLabel() {
+        let label = PeerPresence.connecting.accessibilityLabel
+        XCTAssertEqual(label, String(localized: "Connecting, not online yet"))
+        XCTAssertNotEqual(label, PeerPresence.online.accessibilityLabel)
+        XCTAssertEqual(PeerPresence.connecting.accessibilityLabel(notesReachable: true), label)
+    }
+
+    /// Every state has its own shape: state is never conveyed by colour alone.
+    func testEveryPresenceHasADistinctBadgeShape() {
+        var shapes: [PresenceBadge.Shape] = []
+        for p in PeerPresence.allCases {
+            shapes.append(PresenceBadge.shape(for: p, notesReachable: false))
+            if p == .offline { shapes.append(PresenceBadge.shape(for: p, notesReachable: true)) }
+        }
+        XCTAssertEqual(shapes.count, 5)
+        XCTAssertEqual(Set(shapes).count, shapes.count, "\(shapes)")
+        XCTAssertEqual(PresenceBadge.shape(for: .connecting, notesReachable: false), .dashedRing)
+        XCTAssertEqual(PresenceBadge.shape(for: .connecting, notesReachable: true), .dashedRing)
     }
 
     /// Only a VERIFIED binding makes "you can send notes" true; an unbound offline friend's thread is locked.
@@ -65,7 +87,7 @@ final class PeerAvatarTests: XCTestCase {
 
     func testAccessibilityHiddenOnlyWithoutPresence() {
         XCTAssertTrue(PeerAvatar.isAccessibilityHidden(presence: nil))
-        for p in [PeerPresence.online, .nearby, .offline] {
+        for p in PeerPresence.allCases {
             XCTAssertFalse(PeerAvatar.isAccessibilityHidden(presence: p))
         }
         let text = PeerAvatar.accessibilityText(name: "Mika", presence: .offline)
