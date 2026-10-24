@@ -106,7 +106,15 @@ const realDeps: RvDeps = {
 // ---------------------------------------------------------------------------
 // In-memory rate limiter (NO KV). Per-isolate salt: nothing stable is stored.
 // ---------------------------------------------------------------------------
-const salt = crypto.getRandomValues(new Uint8Array(16));
+// Created lazily on first use: workerd forbids generating random values in the
+// global scope ("Disallowed operation called within global scope"), so a
+// module-level getRandomValues makes the Worker fail to start (wrangler dev)
+// and fail upload validation on deploy. vitest-pool-workers did not catch it.
+let salt: Uint8Array | null = null;
+function isolateSalt(): Uint8Array {
+  if (!salt) salt = crypto.getRandomValues(new Uint8Array(16));
+  return salt;
+}
 const attempts = new Map<string, { windowStart: number; count: number }>();
 const ipHandshakes = new Map<string, { windowStart: number; count: number }>();
 const ipUnauthOpen = new Map<string, number>();
@@ -121,9 +129,10 @@ async function sha256Hex(v: string): Promise<string> {
 
 async function saltedHash(label: string, value: string): Promise<string> {
   const v = new TextEncoder().encode(label + "\0" + value);
-  const buf = new Uint8Array(salt.length + v.length);
-  buf.set(salt, 0);
-  buf.set(v, salt.length);
+  const s = isolateSalt();
+  const buf = new Uint8Array(s.length + v.length);
+  buf.set(s, 0);
+  buf.set(v, s.length);
   const d = new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
   let hex = "";
   for (let i = 0; i < 8; i++) hex += d[i].toString(16).padStart(2, "0");
