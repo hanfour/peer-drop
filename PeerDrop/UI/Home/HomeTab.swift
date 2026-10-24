@@ -24,7 +24,12 @@ struct HomeTab: View, PaperThemed {
     #if os(iOS)
     @State private var showProfile = false
     @State private var showSettings = false
-    @State private var showConnection = false
+    @State private var isSearching = false
+    @State private var collapsed: Set<String> = []
+    @StateObject private var contacts = ContactsInviteModel()
+    @State private var inviting: ContactsInviteModel.Entry?
+    @State private var shareInvite: ContactsInviteModel.Entry?
+    @FocusState private var searchFocused: Bool
     #endif
 
     private static let inviteURL = URL(string: "https://apps.apple.com/app/id6759594513")!
@@ -66,10 +71,57 @@ struct HomeTab: View, PaperThemed {
         !connectionManager.deviceStore.records.isEmpty || !groupStore.groups.isEmpty
     }
 
+    private var rowBackground: Color {
+        #if os(iOS)
+        return .clear      // flat rows on the page, like a messenger friends list
+        #else
+        return paper(.incomingBubble)
+        #endif
+    }
+
     var body: some View {
         let snap = snapshot()
+        #if os(iOS)
+        VStack(spacing: 0) {
+            header
+            if isSearching { searchField }
+            friendsList(snap)
+        }
+        .background(paper(.background).ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .paperMode(.live)
+        .sheet(isPresented: $showGroupEditor) { GroupEditorView(groupStore: groupStore) }
+        .sheet(item: $alwaysConnectedTarget) { target in
+            AlwaysConnectedFriendSheet(peerID: target.peerID, name: target.name)
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showProfile) { UserProfileView() }
+        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(connectionManager) }
+        .sheet(item: $inviting) { entry in
+            InviteComposer(recipient: entry.phone) { inviting = nil }
+                .ignoresSafeArea()
+        }
+        .sheet(item: $shareInvite) { _ in ShareSheet(items: [InviteMessage.body()]) }
+        .chatTargetDestination()
+        .onAppear { bound.bind(connectionManager); contacts.refresh(); if contacts.canAsk { contacts.requestAccess() } }
+        #else
+        friendsList(snap)
+            .navigationTitle("Home")
+            .searchable(text: $query, prompt: Text("Search friends"))
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showGroupEditor) { GroupEditorView(groupStore: groupStore) }
+            .sheet(item: $alwaysConnectedTarget) { target in
+                AlwaysConnectedFriendSheet(peerID: target.peerID, name: target.name)
+                    .environmentObject(connectionManager)
+            }
+            .chatTargetDestination()
+            .onAppear { bound.bind(connectionManager) }
+        #endif
+    }
+
+    private func friendsList(_ snap: Snapshot) -> some View {
         let sections = snap.sections
-        List {
+        return List {
             selfRow
             if !hasAnyContent {
                 emptyState
@@ -80,46 +132,203 @@ struct HomeTab: View, PaperThemed {
                     .listRowBackground(Color.clear)
             }
             if !sections.connected.isEmpty {
-                Section {
-                    ForEach(sections.connected) { record in
-                        connectedRow(record)
-                    }
-                } header: { Text("Connected \(sections.connected.count)") }
+                section("connected", title: Text("Connected \(sections.connected.count)")) {
+                    ForEach(sections.connected) { record in connectedRow(record) }
+                }
             }
             if !sections.friends.isEmpty {
-                Section {
-                    ForEach(sections.friends) { record in
-                        friendRow(record, snap)
-                    }
-                } header: { Text("Friends \(sections.friends.count)") }
+                section("friends", title: Text("Friends \(sections.friends.count)")) {
+                    ForEach(sections.friends) { record in friendRow(record, snap) }
+                }
             }
             if hasAnyContent {
                 groupsSection
             }
+            #if os(iOS)
+            contactsSection
+            #endif
             inviteSection
         }
         #if os(iOS)
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
         #endif
         .scrollContentBackground(.hidden)
         .background(paper(.background).ignoresSafeArea())
         .paperMode(.live)
-        .navigationTitle("Home")
-        .searchable(text: $query, prompt: Text("Search friends"))
-        .toolbar { toolbarContent }
-        .sheet(isPresented: $showGroupEditor) { GroupEditorView(groupStore: groupStore) }
-        .sheet(item: $alwaysConnectedTarget) { target in
-            AlwaysConnectedFriendSheet(peerID: target.peerID, name: target.name)
-                .environmentObject(connectionManager)
-        }
-        #if os(iOS)
-        .sheet(isPresented: $showProfile) { UserProfileView() }
-        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(connectionManager) }
-        .navigationDestination(isPresented: $showConnection) { ConnectionView().environmentObject(connectionManager) }
-        #endif
-        .chatTargetDestination()
-        .onAppear { bound.bind(connectionManager) }
     }
+
+    /// A list section whose header collapses it (messenger style) on iOS; the plain grouped section on Mac.
+    @ViewBuilder
+    private func section<Content: View>(_ key: String, title: Text, @ViewBuilder content: () -> Content) -> some View {
+        #if os(iOS)
+        Section {
+            if !collapsed.contains(key) { content() }
+        } header: {
+            collapsibleHeader(key, title: title)
+        }
+        #else
+        Section { content() } header: { title }
+        #endif
+    }
+
+    #if os(iOS)
+    // MARK: - Messenger-style header, search, sections, contacts
+
+    private var header: some View {
+        HStack(spacing: 18) {
+            Text("Home")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(paper(.incomingText))
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            Button {
+                isSearching.toggle()
+                if isSearching { searchFocused = true } else { query = "" }
+            } label: { Image(systemName: "magnifyingglass") }
+                .accessibilityLabel(Text("Search friends"))
+            Button(action: onAddFriend) { Image(systemName: "person.badge.plus") }
+                .accessibilityLabel(Text("Add friend"))
+            Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                .accessibilityLabel(Text("Settings"))
+        }
+        .font(.title3)
+        .foregroundStyle(paper(.incomingText))
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(paper(.datePillText))
+            TextField(text: $query) { Text("Search friends") }
+                .focused($searchFocused)
+                .submitLabel(.search)
+            if !query.isEmpty {
+                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(paper(.datePillText)) }
+                    .accessibilityLabel(Text("Clear"))
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(paper(.incomingBubble)))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func collapsibleHeader(_ key: String, title: Text) -> some View {
+        let isCollapsed = collapsed.contains(key)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if isCollapsed { collapsed.remove(key) } else { collapsed.insert(key) }
+            }
+        } label: {
+            HStack {
+                title
+                    .font(.footnote)
+                    .foregroundStyle(paper(.datePillText))
+                Spacer()
+                Image(systemName: "chevron.up")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(paper(.datePillText))
+                    .rotationEffect(.degrees(isCollapsed ? 180 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .textCase(nil)
+        .accessibilityHint(Text(isCollapsed ? "Expand section" : "Collapse section"))
+    }
+
+    /// Phone contacts, laid out like a messenger's "contact friends": a section whose first row invites
+    /// someone by link, then every contact with an Invite button. Access is asked for once, the first
+    /// time Home appears; if it is declined the section says how to turn it on.
+    @ViewBuilder
+    private var contactsSection: some View {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = q.isEmpty ? contacts.entries : contacts.entries.filter { $0.name.localizedCaseInsensitiveContains(q) }
+        let title: Text = contacts.canList ? Text("Contacts \(shown.count)") : Text("Contacts")
+        section("contacts", title: title) {
+            if q.isEmpty { inviteByLinkRow }
+            if contacts.canList {
+                ForEach(shown) { entry in contactRow(entry) }
+            } else if !contacts.canAsk && q.isEmpty {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.crop.rectangle.stack")
+                            .font(.title3)
+                            .foregroundStyle(paper(.brand))
+                            .frame(width: 44, height: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Allow contacts access to invite friends")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(paper(.incomingText))
+                            Text("Your contacts stay on this phone and are never uploaded.")
+                                .font(.caption)
+                                .foregroundStyle(paper(.datePillText))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+                .accessibilityIdentifier("contacts-allow-row")
+            }
+        }
+    }
+
+    private var inviteByLinkRow: some View {
+        ShareLink(item: Self.inviteURL) {
+            HStack(spacing: 12) {
+                Image(systemName: "envelope")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(paper(.incomingText).opacity(0.85)))
+                    .accessibilityHidden(true)
+                Text("Invite friends to PeerDrop")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(paper(.incomingText))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(paper(.datePillText))
+                    .accessibilityHidden(true)
+            }
+        }
+        .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+        .accessibilityIdentifier("invite-by-link-row")
+    }
+
+    private func contactRow(_ entry: ContactsInviteModel.Entry) -> some View {
+        HStack(spacing: 12) {
+            PeerAvatar(name: entry.name, size: 44)
+                .accessibilityHidden(true)
+            Text(verbatim: entry.name)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(paper(.incomingText))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                if InviteComposer.canCompose, entry.phone != nil { inviting = entry } else { shareInvite = entry }
+            } label: {
+                Text("Invite")
+                    .font(.subheadline)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .overlay(Capsule().stroke(paper(.datePillText).opacity(0.5), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(paper(.incomingText))
+            .accessibilityLabel(Text("Invite \(entry.name)"))
+        }
+        .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+        .accessibilityIdentifier("contact-row")
+    }
+    #endif
 
     // MARK: - Toolbar
 
@@ -145,15 +354,25 @@ struct HomeTab: View, PaperThemed {
         #if os(iOS)
         return Button { showProfile = true } label: { content }
             .buttonStyle(.plain)
-            .listRowBackground(paper(.incomingBubble))
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         #else
-        return content.listRowBackground(paper(.incomingBubble))
+        return content.listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+        #endif
+    }
+
+    private var selfAvatarSize: CGFloat {
+        #if os(iOS)
+        return 58
+        #else
+        return 44
         #endif
     }
 
     private func selfRowContent(_ name: String) -> some View {
-        HStack(spacing: 12) {
-                PeerAvatar(name: name, size: 44)
+        HStack(spacing: 14) {
+                PeerAvatar(name: name, size: selfAvatarSize)
                 Text(name)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(paper(.incomingText))
@@ -195,45 +414,55 @@ struct HomeTab: View, PaperThemed {
         #if os(iOS)
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
             .accessibilityIdentifier("active-peer-row")
-            .listRowBackground(paper(.incomingBubble))
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
         #else
         Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
             .buttonStyle(.plain)
             .accessibilityIdentifier("active-peer-row")
-            .listRowBackground(paper(.incomingBubble))
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
         #endif
     }
 
+    @ViewBuilder
     private func directConnectedRow(_ record: DeviceRecord) -> some View {
-        Button {
-            #if os(iOS)
-            connectionManager.focus(on: connectionManager.connection(for: record)?.id ?? record.id)
-            showConnection = true
-            #else
-            openWindow(id: "chat", value: peerID(for: record))
-            #endif
-        } label: {
-            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: .online, connection: connectionManager.connection(for: record))
-        }
+        let row = FriendRow(record: record, name: connectionManager.displayName(for: record), presence: .online,
+                            connection: connectionManager.connection(for: record))
+        #if os(iOS)
+        // A connected friend opens straight into the chat; files and calls live there.
+        NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
+            .accessibilityIdentifier("active-peer-row")
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
+        #else
+        Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
-        .listRowBackground(paper(.incomingBubble))
+        .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                let id = connectionManager.connection(for: record)?.id ?? record.id
-                Task { await connectionManager.disconnect(from: id) }
-            } label: {
-                Label("Disconnect", systemImage: "xmark.circle.fill")
-            }
-            .tint(.orange)
-            forgetButton(record)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
+        #endif
+    }
+
+    @ViewBuilder
+    private func disconnectAndForget(_ record: DeviceRecord) -> some View {
+        Button {
+            let id = connectionManager.connection(for: record)?.id ?? record.id
+            Task { await connectionManager.disconnect(from: id) }
+        } label: {
+            Label("Disconnect", systemImage: "xmark.circle.fill")
         }
+        .tint(.orange)
+        forgetButton(record)
     }
 
     @ViewBuilder
@@ -247,7 +476,8 @@ struct HomeTab: View, PaperThemed {
             FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect)
         }
         .accessibilityIdentifier("saved-device-row")
-        .listRowBackground(paper(.incomingBubble))
+        .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #else
@@ -258,7 +488,8 @@ struct HomeTab: View, PaperThemed {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")
-        .listRowBackground(paper(.incomingBubble))
+        .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #endif
@@ -275,13 +506,14 @@ struct HomeTab: View, PaperThemed {
     // MARK: - Groups / invite / empty
 
     private var groupsSection: some View {
-        Section {
+        section("groups", title: Text("Groups")) {
             ForEach(groups) { group in
                 NavigationLink(destination: GroupDetailView(group: group)) {
                     GroupRow(group: group)
                 }
                 .accessibilityIdentifier("group-row")
-                .listRowBackground(paper(.incomingBubble))
+                .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { groupStore.remove(id: group.id) } label: {
                         Label("Delete", systemImage: "trash")
@@ -292,19 +524,24 @@ struct HomeTab: View, PaperThemed {
                 Label("New Group", systemImage: "plus.circle.fill")
                     .foregroundStyle(paper(.brand))
             }
-            .listRowBackground(paper(.incomingBubble))
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .accessibilityHint(Text("Creates a new device group"))
-        } header: { Text("Groups") }
+        }
     }
 
+    @ViewBuilder
     private var inviteSection: some View {
+        #if os(macOS)
         Section {
             ShareLink(item: Self.inviteURL) {
                 Label("Invite friends to PeerDrop", systemImage: "person.crop.circle.badge.plus")
                     .foregroundStyle(paper(.brand))
             }
-            .listRowBackground(paper(.incomingBubble))
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         }
+        #endif
     }
 
     private var emptyState: some View {
