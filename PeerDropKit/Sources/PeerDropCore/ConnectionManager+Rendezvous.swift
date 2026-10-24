@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 import SwiftUI
-#if canImport(UIKit) && os(iOS)
+#if os(iOS)
 import UIKit
 #endif
 import PeerDropProtocol

@@ -14,6 +14,11 @@ const runDO: (stub: any, fn: (inst: any, state: any) => any) => Promise<any> = r
 const GENERIC_CLOSE_CODE = 1008;
 const GENERIC_CLOSE_REASON = "denied";
 
+// Every connect mines a proof-of-work; shared CI runners are several times
+// slower than a laptop (a two-socket pair() took 5.8 s there), so the default
+// 5 s per-test budget is too tight for this file.
+vi.setConfig({ testTimeout: 30_000 });
+
 function b64u(bytes: Uint8Array): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
