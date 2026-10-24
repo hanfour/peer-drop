@@ -7,7 +7,10 @@ import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import vectors from "../../test-vectors/rendezvous-pow.json";
 import { verifyRendezvousClaim } from "../rendezvousPow";
+import { handleRendezvous } from "../rendezvousRoute";
 
+// runInDurableObject's generics trip TS2589; erase them.
+const runDO: (stub: any, fn: (inst: any, state: any) => any) => Promise<any> = runInDurableObject as any;
 const GENERIC_CLOSE_CODE = 1008;
 const GENERIC_CLOSE_REASON = "denied";
 
@@ -48,10 +51,12 @@ async function mine(token: string, hour: number): Promise<string> {
     if ((await leadingZeroBits(token, hour, n)) >= 16) return n;
   }
 }
-async function hello(token: string, opts: { hour?: number; nonce?: string } = {}): Promise<string> {
+async function hello(token: string, opts: { hour?: number; nonce?: string; s?: string } = {}): Promise<string> {
   const h = opts.hour ?? hourNow();
   const n = opts.nonce ?? (await mine(token, h));
-  return JSON.stringify({ v: 1, t: token, pow: { h, n } });
+  const o: any = { v: 1, t: token, pow: { h, n } };
+  if (opts.s !== undefined) o.s = opts.s;
+  return JSON.stringify(o);
 }
 
 let ipCounter = 0;
@@ -92,9 +97,9 @@ async function connect(ip = freshIp()): Promise<TestSocket> {
   expect(resp.status).toBe(101);
   return new TestSocket(resp.webSocket!);
 }
-async function join(token: string, ip = freshIp()): Promise<TestSocket> {
+async function join(token: string, ip = freshIp(), sid?: string): Promise<TestSocket> {
   const s = await connect(ip);
-  s.send(await hello(token));
+  s.send(await hello(token, { s: sid }));
   return s;
 }
 async function pair(token = randomToken()): Promise<{ a: TestSocket; b: TestSocket; token: string }> {
@@ -106,6 +111,11 @@ async function pair(token = randomToken()): Promise<{ a: TestSocket; b: TestSock
   expect(JSON.parse(b.messages.shift() as string)).toEqual({ t: "joined" });
   return { a, b, token };
 }
+function roomStub(token: string): any {
+  const ns = (env as any).RENDEZVOUS_ROOM;
+  return ns.get(ns.idFromName(token));
+}
+function sid(): string { return b64u(crypto.getRandomValues(new Uint8Array(16))); }
 function expectGenericClose(s: TestSocket) {
   expect(s.closed).toEqual({ code: GENERIC_CLOSE_CODE, reason: GENERIC_CLOSE_REASON });
 }
@@ -272,8 +282,8 @@ describe("/rv failures are indistinguishable", () => {
 describe("/rv idle cap (injected clock)", () => {
   it("closes all sockets after 2 h without frames, and not before", async () => {
     const { a, b, token } = await pair();
-    const stub = env.RENDEZVOUS_ROOM.get(env.RENDEZVOUS_ROOM.idFromName(token));
-    await runInDurableObject(stub, async (inst: any) => {
+    const stub = roomStub(token);
+    await runDO(stub, async (inst: any) => {
       const base = Date.now();
       inst.now = () => base + 119 * 60_000;
       inst.checkIdle();
@@ -289,8 +299,8 @@ describe("/rv idle cap (injected clock)", () => {
 
   it("a frame resets the idle timer", async () => {
     const { a, b, token } = await pair();
-    const stub = env.RENDEZVOUS_ROOM.get(env.RENDEZVOUS_ROOM.idFromName(token));
-    await runInDurableObject(stub, async (inst: any) => {
+    const stub = roomStub(token);
+    await runDO(stub, async (inst: any) => {
       const base = Date.now();
       inst.now = () => base + 100 * 60_000;
       inst.touch(inst.ctx.getWebSockets()[0]);
@@ -382,6 +392,9 @@ describe("existing routes unchanged", () => {
 describe("PRIVACY: no logging, no KV writes", () => {
   it("a full /rv session and /rv/ice call touch no console and no KV", async () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m));
+    const kvSpies = ([env.ROOMS, env.V2_STORE, env.METRICS] as any[]).flatMap((kv) =>
+      (["put", "delete"] as const).map((m) => vi.spyOn(kv, m)));
+    const dbSpy = vi.spyOn(env.ACCOUNTS_DB as any, "prepare");
     const snap = async () => ({
       rooms: (await env.ROOMS.list()).keys.map((k) => k.name).sort(),
       v2: (await env.V2_STORE.list()).keys.map((k) => k.name).sort(),
@@ -390,6 +403,8 @@ describe("PRIVACY: no logging, no KV writes", () => {
     const before = await snap();
 
     const { a, b, token } = await pair();
+    const session = await runDO(roomStub(token), async (_i: any, state: DurableObjectState) => state);
+    void session;
     a.send("x"); await b.nextMessage();
     const c = await join(token); await c.waitFor(() => c.closed !== null);
     const bad = await connect(); bad.send("garbage"); await bad.waitFor(() => bad.closed !== null);
@@ -407,5 +422,221 @@ describe("PRIVACY: no logging, no KV writes", () => {
     expect(after).toEqual(before);
     expect([...after.rooms, ...after.v2, ...after.metrics].some((k) => k.startsWith("wslog:"))).toBe(false);
     for (const s of spies) expect(s).not.toHaveBeenCalled();
+    for (const s of kvSpies) expect(s).not.toHaveBeenCalled();
+    expect(dbSpy).not.toHaveBeenCalled();
+    // DO storage stays empty after a full session (no data, no alarm).
+    const p2 = await pair();
+    p2.a.send("y"); await p2.b.nextMessage();
+    await runDO(roomStub(p2.token), async (_i: any, state: DurableObjectState) => {
+      expect((await state.storage.list()).size).toBe(0);
+      expect(await state.storage.getAlarm()).toBeNull();
+    });
+    p2.a.ws.close(1000, "x"); p2.b.ws.close(1000, "x");
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Fix round 1: canonical tokens, liveness, takeover, per-IP caps, hardening
+// ---------------------------------------------------------------------------
+function fakeTimers() {
+  let now = 0;
+  let nextId = 1;
+  const items = new Map<number, { at: number; fn: () => void }>();
+  return {
+    setTimeout: (fn: () => void, ms: number) => { const id = nextId++; items.set(id, { at: now + ms, fn }); return id as any; },
+    clearTimeout: (id: any) => { items.delete(id); },
+    advance(ms: number) {
+      const end = now + ms;
+      for (;;) {
+        let best: [number, { at: number; fn: () => void }] | null = null;
+        for (const e of items) if (e[1].at <= end && (!best || e[1].at < best[1].at)) best = e;
+        if (!best) break;
+        items.delete(best[0]);
+        now = best[1].at;
+        best[1].fn();
+      }
+      now = end;
+    },
+  };
+}
+async function directConnect(timers: ReturnType<typeof fakeTimers>, ip = freshIp()): Promise<TestSocket> {
+  const resp = await handleRendezvous(
+    new Request("https://example.com/rv", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } }),
+    env as any, "/rv",
+    { setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, livenessMs: 90_000, firstFrameMs: 5_000, hardCapMs: 7_200_000 },
+  );
+  expect(resp.status).toBe(101);
+  return new TestSocket(resp.webSocket!);
+}
+
+describe("M-1 canonical token encoding", () => {
+  it("rejects non-canonical spellings of the same 32 bytes", async () => {
+    const tok = randomToken();
+    const nonce = await mine(tok, hourNow());
+    const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const last = ALPHA.indexOf(tok[tok.length - 1]);
+    const claim = (t: string) => ({ v: 1, t, pow: { h: hourNow(), n: nonce } });
+    expect(await verifyRendezvousClaim(claim(tok), Date.now())).toBe(tok);
+    for (const flip of [1, 2, 3]) {
+      const variant = tok.slice(0, -1) + ALPHA[last ^ flip];
+      expect(await verifyRendezvousClaim(claim(variant), Date.now())).toBeNull();
+    }
+    expect(await verifyRendezvousClaim(claim(tok + "="), Date.now())).toBeNull();
+  });
+});
+
+describe("I-2 liveness bridge (injected timers)", () => {
+  it("pings keep the bridge alive; 90 s of silence closes it generically and peer gets left", async () => {
+    const timers = fakeTimers();
+    const token = randomToken();
+    const a = await directConnect(timers);
+    a.send(await hello(token));
+    const b = await join(token);
+    await a.waitFor(() => a.messages.length > 0);
+    await b.waitFor(() => b.messages.length > 0);
+    a.messages.length = 0; b.messages.length = 0;
+    for (let i = 0; i < 4; i++) {
+      timers.advance(60_000);
+      a.send("ping");
+      await a.waitFor(() => a.messages.length > i);
+    }
+    expect(a.closed).toBeNull();
+    timers.advance(91_000);
+    await a.waitFor(() => a.closed !== null);
+    expectGenericClose(a);
+    await b.waitFor(() => b.messages.some((m) => m === '{"t":"left"}'));
+    b.ws.close(1000, "x");
+  });
+});
+
+describe("I-2 DO eviction and takeover", () => {
+  it("a stale socket (no frames, no pings > 90 s) is evicted by a joiner; the live one is not", async () => {
+    const { a, b, token } = await pair();
+    await runDO(roomStub(token), async (inst: any) => {
+      const base = Date.now();
+      inst.now = () => base + 100_000;
+      const [w0] = inst.ctx.getWebSockets();
+      inst.touch(w0); // w0 is live "now"; w1 stays stale
+    });
+    const c = await join(token);
+    await c.waitFor(() => c.messages.length > 0);
+    expect(JSON.parse(c.messages[0] as string)).toEqual({ t: "joined" });
+    // Exactly one of a/b was evicted, the other survived and was told left then joined.
+    await new Promise((r) => setTimeout(r, 200));
+    const evicted = [a, b].filter((x) => x.closed !== null);
+    const live = [a, b].filter((x) => x.closed === null);
+    expect(evicted.length).toBe(1);
+    expectGenericClose(evicted[0]);
+    expect(live[0].messages.map((m) => JSON.parse(m as string).t)).toEqual(["left", "joined"]);
+    live[0].ws.close(1000, "x"); c.ws.close(1000, "x");
+  });
+
+  it("when both sockets are live a third is rejected and nobody is evicted", async () => {
+    const { a, b, token } = await pair();
+    const c = await join(token);
+    await c.waitFor(() => c.closed !== null);
+    expectGenericClose(c);
+    expect(a.closed).toBeNull(); expect(b.closed).toBeNull();
+    a.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+
+  it("same session id takes over the slot instantly: left then joined for the survivor, s never forwarded", async () => {
+    const token = randomToken();
+    const s1 = sid();
+    const a = await join(token, freshIp(), s1);
+    const b = await join(token, freshIp(), sid());
+    await a.waitFor(() => a.messages.length > 0);
+    await b.waitFor(() => b.messages.length > 0);
+    a.messages.length = 0; b.messages.length = 0;
+    const a2 = await join(token, freshIp(), s1);
+    await a.waitFor(() => a.closed !== null);
+    await a2.waitFor(() => a2.messages.length > 0);
+    await b.waitFor(() => b.messages.length >= 2);
+    expect(b.closed).toBeNull();
+    expect(b.messages.map((m) => JSON.parse(m as string).t)).toEqual(["left", "joined"]);
+    expect(JSON.parse(a2.messages[0] as string)).toEqual({ t: "joined" });
+    expect(JSON.stringify([...a2.messages, ...b.messages])).not.toContain(s1);
+    b.messages.length = 0;
+    a2.send("hi");
+    expect(await b.nextMessage()).toBe("hi");
+    a2.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+
+  it("a different session id does not take over", async () => {
+    const token = randomToken();
+    const a = await join(token, freshIp(), sid());
+    const b = await join(token, freshIp(), sid());
+    await a.waitFor(() => a.messages.length > 0);
+    const c = await join(token, freshIp(), sid());
+    await c.waitFor(() => c.closed !== null);
+    expectGenericClose(c);
+    expect(a.closed).toBeNull(); expect(b.closed).toBeNull();
+    a.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+
+  it("malformed session id is a generic failure", async () => {
+    const token = randomToken();
+    const s = await connect();
+    s.send(await hello(token, { s: "tooShort" }));
+    await s.waitFor(() => s.closed !== null);
+    expectGenericClose(s);
+  });
+});
+
+describe("I-4 per-IP caps", () => {
+  it("more than 60 handshakes/min from one IP are closed generically", async () => {
+    const ip = freshIp();
+    for (let i = 0; i < 60; i++) {
+      const s = await connect(ip);
+      s.send("x");
+      await s.waitFor(() => s.closed !== null);
+    }
+    // No first frame sent: without the cap this socket would stay open for 5 s.
+    const last = await connect(ip);
+    await last.waitFor(() => last.closed !== null, 1000);
+    expectGenericClose(last);
+  }, 30000);
+
+  it("more than 8 concurrent unauthenticated sockets from one IP: the 9th is closed generically", async () => {
+    const ip = freshIp();
+    const open: TestSocket[] = [];
+    for (let i = 0; i < 8; i++) open.push(await connect(ip));
+    const ninth = await connect(ip);
+    await ninth.waitFor(() => ninth.closed !== null);
+    expectGenericClose(ninth);
+    expect(open.every((o) => o.closed === null)).toBe(true);
+    // once they finish the handshake window the slots free up
+    open.forEach((o) => o.send("x"));
+    await Promise.all(open.map((o) => o.waitFor(() => o.closed !== null)));
+    const again = await connect(ip);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(again.closed).toBeNull();
+    again.send("x");
+  });
+});
+
+describe("M-3 / M-4 hardening", () => {
+  it("/rv/ice rejects a huge body generically", async () => {
+    const r = await SELF.fetch("https://example.com/rv/ice", { method: "POST", body: "x".repeat(100_000), headers: { "CF-Connecting-IP": freshIp() } });
+    expect(r.status).toBe(403);
+    expect(await r.text()).toBe('{"error":"denied"}');
+  });
+  it("pre-upstream frame buffer is byte capped", async () => {
+    const timers = fakeTimers();
+    const token = randomToken();
+    const a = await directConnect(timers);
+    a.send(await hello(token));
+    a.send("x".repeat(70_000));
+    await a.waitFor(() => a.closed !== null);
+    expectGenericClose(a);
+  });
+  it("literal 'ping' is auto-answered by the DO and never relayed", async () => {
+    const { a, b } = await pair();
+    a.send("ping");
+    expect(await a.nextMessage()).toBe("pong");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(b.messages.length).toBe(0);
+    a.ws.close(1000, "x"); b.ws.close(1000, "x");
   });
 });

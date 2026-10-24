@@ -1,4 +1,5 @@
 {
+ "clientHourRule": "Clients MUST use h = floor((unixSeconds - 600) / 3600) (10 min backdating) so modest clock skew and hour-boundary races stay inside the server window {cur-1, cur}. The server accepts ONLY cur and cur-1.",
  "description": "Rendezvous PoW vectors. PoW = SHA256(tokenBytes || UInt64BE(hour) || utf8(nonce)) with >=16 leading zero bits; hour must equal floor(nowSeconds/3600) or that minus 1. Token is base64url (no padding) of 32 bytes.",
  "difficultyBits": 16,
  "vectors": [
@@ -91,6 +92,26 @@
    "valid": false,
    "bitsReported": 0,
    "note": "empty nonce not allowed"
+  },
+  {
+   "name": "client rule at hour boundary (5 min after boundary -> previous hour)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "fr9a",
+   "nowSeconds": 1800003900,
+   "valid": true,
+   "bitsReported": 18,
+   "note": "now=B+300; client h=floor((now-600)/3600)=H; server cur=H+1 accepts cur-1"
+  },
+  {
+   "name": "client rule at hour boundary (11 min after boundary -> new hour)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500001,
+   "n": "g18h4",
+   "nowSeconds": 1800004260,
+   "valid": true,
+   "bitsReported": 16,
+   "note": "now=B+660; client h=floor((now-600)/3600)=H+1=cur"
   }
  ]
 }

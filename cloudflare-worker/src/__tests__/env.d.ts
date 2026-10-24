@@ -23,6 +23,5 @@ declare namespace Cloudflare {
     ACCOUNTS_DB: D1Database;
     ACCOUNT_INBOX: DurableObjectNamespace;
     DIARY_ROOM: DurableObjectNamespace;
-    RENDEZVOUS_ROOM: DurableObjectNamespace;
   }
 }
