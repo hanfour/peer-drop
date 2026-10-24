@@ -53,6 +53,15 @@ struct SettingsView: View {
                     Toggle("Relay", isOn: $relayEnabled)
                         .accessibilityHint("Connect to devices outside your local network via relay server")
                 } header: { Text("Connectivity") } footer: { Text("Disabled features will reject incoming requests automatically. Bluetooth Discovery requires restarting discovery.") }
+                Section {
+                    NavigationLink {
+                        AlwaysConnectedExplainerView()
+                    } label: {
+                        Text(LocalizedStringKey(AlwaysConnectedPresentation.explainerTitleKey))
+                    }
+                } header: {
+                    Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey))
+                }
                 if relayEnabled {
                     Section {
                         DisclosureGroup("Advanced Relay Settings", isExpanded: $showAdvancedRelay) {

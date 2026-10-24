@@ -113,6 +113,7 @@ private struct ProfileSettingsTab: View {
 
 private struct RelaySettingsTab: View {
     @AppStorage("peerDropRelayEnabled") private var relayEnabled: Bool = true
+    @State private var showAlwaysConnectedExplainer = false
     @AppStorage("peerDropWorkerURL") private var workerURL: String = ""
 
     var body: some View {
@@ -127,6 +128,14 @@ private struct RelaySettingsTab: View {
             }
 
             Section {
+                Button { showAlwaysConnectedExplainer = true } label: {
+                    Text(LocalizedStringKey(AlwaysConnectedPresentation.explainerTitleKey))
+                }
+            } header: {
+                Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey))
+            }
+
+            Section {
                 TextField("Worker URL", text: $workerURL, prompt: Text("https://peerdrop-signal.hanfourhuang.workers.dev"))
                     .textFieldStyle(.roundedBorder)
                 Text("Leave blank to use the bundled default. Restart the app after changing.")
@@ -138,5 +147,12 @@ private struct RelaySettingsTab: View {
         }
         .formStyle(.grouped)
         .padding()
+        .sheet(isPresented: $showAlwaysConnectedExplainer) {
+            NavigationStack {
+                AlwaysConnectedExplainerView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAlwaysConnectedExplainer = false } } }
+            }
+            .frame(minWidth: 420, minHeight: 480)
+        }
     }
 }

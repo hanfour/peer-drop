@@ -89,6 +89,9 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// Installed by `ConnectionManager.installRendezvousConnection`. Such a
     /// connection lives outside `connections` and never touches global state.
     var isRendezvous = false
+    /// Read-only view of `isRendezvous` for the UI layer (Task 6): file transfer
+    /// and calls are not offered over a cross-network connection.
+    public var isRendezvousConnection: Bool { isRendezvous }
     /// Contact the rendezvous connection was installed for.
     var rendezvousContactID: UUID?
     /// Secure channel up with exactly the pinned key and a verified binding.

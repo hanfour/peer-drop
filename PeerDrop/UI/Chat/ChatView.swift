@@ -47,6 +47,7 @@ struct ChatView: View, PaperThemed {
     @StateObject private var voiceRecorder = VoiceRecorder()
     #if os(iOS)
     @State private var showConnectionInfo = false
+    @State private var showAlwaysConnectedInfo = false
     #endif
 
     /// A headless peer (peerdrop-cli: a shell or AI agent) has no audio and no
@@ -58,6 +59,17 @@ struct ChatView: View, PaperThemed {
         }
         return connectionManager.connectedPeer?.id == peerID
             && (connectionManager.connectedPeer?.isHeadless ?? false)
+    }
+
+    /// The live connection is a cross-network ("always connected") one: chat only, no manual disconnect.
+    private var isCrossNetworkPeer: Bool {
+        connectionManager.connection(for: peerID)?.isRendezvousConnection == true
+    }
+
+    /// File, photo and voice-message affordances ride on file transfer, which a cross-network connection
+    /// does not carry in v1. Hidden (not disabled) so the composer stays honest; nearby/direct is unchanged.
+    private var offersAttachments: Bool {
+        !isPeerHeadless && AlwaysConnectedPresentation.offersFileTransferAndCalls(isRendezvousConnection: isCrossNetworkPeer)
     }
 
     /// Check if this peer is disconnected. A dropped peer's connection is removed
@@ -278,8 +290,13 @@ struct ChatView: View, PaperThemed {
             if showsConnectionInfo, ChatPresenceMode.showsInfoButton(presence: peerPresence) {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        connectionManager.focus(on: connectionManager.connection(for: peerID)?.id ?? peerID)
-                        showConnectionInfo = true
+                        switch AlwaysConnectedPresentation.infoDestination(isRendezvousConnection: isCrossNetworkPeer) {
+                        case .alwaysConnectedSheet:
+                            showAlwaysConnectedInfo = true
+                        case .connectionView:
+                            connectionManager.focus(on: connectionManager.connection(for: peerID)?.id ?? peerID)
+                            showConnectionInfo = true
+                        }
                     } label: {
                         Image(systemName: "info.circle")
                     }
@@ -302,6 +319,10 @@ struct ChatView: View, PaperThemed {
         #if os(iOS)
         .navigationDestination(isPresented: $showConnectionInfo) {
             ConnectionView().environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showAlwaysConnectedInfo) {
+            AlwaysConnectedFriendSheet(peerID: peerID, name: displayName)
+                .environmentObject(connectionManager)
         }
         #endif
         .onAppear {
@@ -722,7 +743,7 @@ struct ChatView: View, PaperThemed {
             HStack(spacing: 8) {
                 // + Attachment button — hidden for headless peers (a shell/agent
                 // has no useful file handling).
-                if !isPeerHeadless {
+                if offersAttachments {
                     Button {
                         showAttachmentMenu = true
                     } label: {
@@ -764,7 +785,7 @@ struct ChatView: View, PaperThemed {
                 // Send or Mic button. A headless peer can't play audio, so it
                 // gets no voice-message button — just send when there's text.
                 if messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    if !isPeerHeadless {
+                    if offersAttachments {
                         Button {
                             if voiceRecorder.isRecording {
                                 stopAndSendVoiceMessage()
