@@ -161,4 +161,24 @@ final class FriendCategoryStoreTests: XCTestCase {
         XCTAssertEqual(out[1].name, String(repeating: "x", count: 20))
         XCTAssertEqual(out[2].name, "Pad")
     }
+
+    func testMoveFollowsOnMoveSemanticsAndPersistsOrder() {
+        let s = makeStore()
+        let a = s.create(name: "A")!, b = s.create(name: "B")!, c = s.create(name: "C")!
+        s.move(order: 0, to: 3)          // A to the end
+        XCTAssertEqual(s.categories.map(\.name), ["B", "C", "A"])
+        s.move(order: 2, to: 0)          // A back to the front
+        XCTAssertEqual(s.categories.map(\.name), ["A", "B", "C"])
+        XCTAssertEqual(s.categories.map(\.order), [0, 1, 2])
+        XCTAssertEqual(makeStore().categories.map(\.id), [a.id, b.id, c.id])
+    }
+
+    func testReorderPutsListedIdsFirstAndKeepsTheRest() {
+        let s = makeStore()
+        let a = s.create(name: "A")!, b = s.create(name: "B")!, c = s.create(name: "C")!
+        s.reorder(ids: [c.id, a.id])
+        XCTAssertEqual(s.categories.map(\.name), ["C", "A", "B"])
+        XCTAssertEqual(s.categories.map(\.order), [0, 1, 2])
+        _ = b
+    }
 }
