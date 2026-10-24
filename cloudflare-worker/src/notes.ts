@@ -69,6 +69,7 @@ import { normalizeAccountId } from "./account";
 import { verifyPoW } from "./pow";
 import type { sendAPNs } from "./apns";
 import { fanOutPush } from "./push";
+import { readNotePush } from "./accountSettings";
 import type { DiaryMeta } from "./diaryRoom";
 
 export interface NotesAuth { deviceId: string; accountId: string }
@@ -96,6 +97,14 @@ export async function bumpQuota(kv: KVNamespace, key: string, limit: number, ttl
  * kind="diaryKey" relay below).
  */
 export async function fanOutNotePush(env: Env, recipientAccountId: string, itemId: string, deps: PushDeps): Promise<{ attempted: number }> {
+  // The recipient's global 「紙條通知」 setting is checked BEFORE anything is
+  // sent. Off means no push at all: not the visual alert, and not a silent
+  // substitute either. The note itself is already stored. An unreadable
+  // setting fails open (the old behaviour) rather than silently dropping a
+  // nudge the user still wants.
+  try {
+    if (!(await readNotePush(env, recipientAccountId))) return { attempted: 0 };
+  } catch { /* fail open */ }
   return fanOutPush(env, recipientAccountId, { alert: { "loc-key": "NOTE_RECEIVED" }, sound: "default", data: { type: "note", inboxItemId: itemId } }, deps);
 }
 

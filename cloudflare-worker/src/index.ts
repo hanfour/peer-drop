@@ -21,6 +21,7 @@ import type { TokenPayload } from "./deviceToken";
 import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
 import { verifyPoW } from "./pow";
 import { handleNotesRoute } from "./notes";
+import { handleAccountSettingsRoute } from "./accountSettings";
 import { handleDiaryRoute } from "./diary";
 import { handleRendezvous } from "./rendezvousRoute";
 import { buildIceServers } from "./turnIce";
@@ -1651,10 +1652,14 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     // batch (one transaction) so the two deletes can't land half-done.
     await db.batch([
       db.prepare("DELETE FROM account_devices WHERE account_id = ?1").bind(auth.accountId),
+      db.prepare("DELETE FROM account_settings WHERE account_id = ?1").bind(auth.accountId),
       db.prepare("DELETE FROM accounts WHERE account_id = ?1").bind(auth.accountId),
     ]);
     return new Response(null, { status: 204, headers: corsHeaders });
   }
+  const settingsResp = await handleAccountSettingsRoute(request, path, env, auth);
+  if (settingsResp) return settingsResp;
+
   const notesResp = await handleNotesRoute(request, url, path, env, auth, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) } });
   if (notesResp) return notesResp;
 
