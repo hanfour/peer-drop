@@ -9,7 +9,7 @@ import PeerDropSecurity
 @MainActor
 public final class FriendCategoryStore: ObservableObject {
     public static let maxCategories = 20
-    public static let maxNameLength = 20
+    nonisolated public static let maxNameLength = 20
     public static let fallbackName = "分類"
     static let migratedFlagKey = "peerDropCategoriesMigrated"
 
@@ -138,7 +138,8 @@ public final class FriendCategoryStore: ObservableObject {
 
     // MARK: - Helpers
 
-    private static func validName(_ raw: String) -> String? {
+    /// The trimmed name when it is a valid category name (1–20 characters, not only whitespace), else nil.
+    nonisolated public static func validName(_ raw: String) -> String? {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return (1...maxNameLength).contains(t.count) ? t : nil
     }

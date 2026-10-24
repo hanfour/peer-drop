@@ -15,13 +15,12 @@ final class ConversationsLogicTests: XCTestCase {
         return ConversationSummary(id: id, isGroup: group, lastMessage: msg, unread: unread)
     }
 
-    private func rows(records: [DeviceRecord], groups: [DeviceGroup] = [],
-                      peers: [String: ConversationSummary], groupSummaries: [String: ConversationSummary] = [:],
+    private func rows(records: [DeviceRecord],
+                      peers: [String: ConversationSummary],
                       query: String = "") -> [ConversationRowModel] {
         ConversationsLogic.rows(
-            records: records, groups: groups,
+            records: records,
             summaryForPeer: { peers[$0] ?? self.summary($0, at: nil) },
-            summaryForGroup: { groupSummaries[$0] ?? self.summary($0, group: true, at: nil) },
             query: query)
     }
 
@@ -41,14 +40,24 @@ final class ConversationsLogicTests: XCTestCase {
         XCTAssertEqual(r.map(\.sourceID), ["a"])
     }
 
-    func testGroupsMixedInAndEmptyGroupsHidden() {
-        let g1 = DeviceGroup(id: "g1", name: "Family")
-        let g2 = DeviceGroup(id: "g2", name: "Empty")
-        let r = rows(records: [rec("a", "Amy"), rec("b", "Bob")], groups: [g1, g2],
-                     peers: ["a": summary("a", at: 10), "b": summary("b", at: 30)],
-                     groupSummaries: ["g1": summary("g1", group: true, at: 20)])
-        XCTAssertEqual(r.map(\.name), ["Bob", "Family", "Amy"])
-        XCTAssertEqual(r.map(\.isGroup), [false, true, false])
+    func testGroupConversationsAreNotListed() {
+        // Old device-group chats (retired in F1) never become rows, even when a group has messages:
+        // only friends with a record are asked for a summary and listed.
+        var asked: [String] = []
+        let r = ConversationsLogic.rows(
+            records: [rec("a", "Amy"), rec("b", "Bob")],
+            summaryForPeer: { id in
+                asked.append(id)
+                switch id {
+                case "a": return self.summary("a", at: 10)
+                case "g1": return self.summary("g1", group: true, at: 20)   // a legacy group chat with messages
+                default: return self.summary(id, at: nil)
+                }
+            },
+            query: "")
+        XCTAssertEqual(Set(asked), ["a", "b"])
+        XCTAssertEqual(r.map(\.id), ["peer:a"])
+        XCTAssertTrue(r.allSatisfy { $0.id.hasPrefix("peer:") })
     }
 
     func testQueryMatchesNamesOnly() {
@@ -73,16 +82,10 @@ final class ConversationsLogicTests: XCTestCase {
         XCTAssertTrue(r.isEmpty)
     }
 
-    func testPeerAndGroupWithSameRawIDHaveDistinctRowIDs() {
-        let r = rows(records: [rec("x", "Amy")], groups: [DeviceGroup(id: "x", name: "Grp")],
-                     peers: ["x": summary("x", at: 10)], groupSummaries: ["x": summary("x", group: true, at: 20)])
-        XCTAssertEqual(Set(r.map(\.id)).count, 2)
-    }
-
     func testRowsUseResolvedName() {
         let r = ConversationsLogic.rows(
-            records: [rec("a", "relay-ab12")], groups: [],
-            summaryForPeer: { self.summary($0, at: 10) }, summaryForGroup: { self.summary($0, group: true, at: nil) },
+            records: [rec("a", "relay-ab12")],
+            summaryForPeer: { self.summary($0, at: 10) },
             query: "amy", name: { _ in "Amy" })
         XCTAssertEqual(r.map(\.name), ["Amy"])
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 import PeerDropCore
 
-/// 主頁: self row, connected / friends / groups, invite. Uses the `.live` look.
+/// 主頁: self row, connected / categories / friends (uncategorized), contacts, invite. Uses the `.live` look.
 /// Expects to be hosted in a NavigationStack (the container owns it).
 /// It registers the `ChatTarget` destination itself (`.chatTargetDestination()`), so the container must NOT add one.
 struct HomeTab: View, PaperThemed {
@@ -18,7 +18,16 @@ struct HomeTab: View, PaperThemed {
     @State private var query = ""
     /// Verified-bound record ids, refreshed on change signals (never recomputed per row).
     @StateObject private var bound = BoundFriendsModel()
-    @State private var showGroupEditor = false
+    /// Mirrors `categoryStore.categories` so a category change re-renders Home.
+    @State private var categories: [FriendCategory] = []
+    /// The "New category" row is an inline text field while true.
+    @State private var creatingCategory = false
+    /// Friend whose "Move to category…" sheet is open.
+    @State private var moveTarget: CategoryMoveTarget?
+    #if os(macOS)
+    @State private var openCategoryID: String?
+    @State private var showCategory = false
+    #endif
     /// Friend whose "Always connected" sheet is open (Project E).
     @State private var alwaysConnectedTarget: AlwaysConnectedTarget?
     #if os(iOS)
@@ -34,13 +43,13 @@ struct HomeTab: View, PaperThemed {
 
     private static let inviteURL = URL(string: "https://apps.apple.com/app/id6759594513")!
 
-    private var groupStore: DeviceGroupStore { connectionManager.groupStore }
+    private var categoryStore: FriendCategoryStore { connectionManager.categoryStore }
 
     /// Presence is resolved once per body update from a single `presenceSources()` snapshot.
     private struct Snapshot {
         let presence: [String: PeerPresence]
         let connecting: Set<String>
-        let sections: (connected: [DeviceRecord], friends: [DeviceRecord])
+        let sections: HomeListLogic.HomeSections
         /// Records whose friend has a VERIFIED notes binding (offline thread still accepts notes).
         let notesReachable: Set<String>
     }
@@ -57,18 +66,17 @@ struct HomeTab: View, PaperThemed {
             if let a = r.peerDeviceId { ids.insert(a) }
             if p != .online, !ids.isDisjoint(with: sources.connecting) { connecting.insert(r.id) }
         }
-        let sections = HomeListLogic.sections(records: records, presence: { map[$0.id] ?? .offline }, query: query,
-                                              name: { connectionManager.displayName(for: $0) })
+        // Membership is checked across every alias of a friend, so two records of one person share a category.
+        let assignment = HomeListLogic.categoryIDs(for: records, categories: categories,
+                                                   aliases: { connectionManager.notificationAliasIDs(for: [$0.id]) })
+        let sections = HomeListLogic.homeSections(records: records, presence: { map[$0.id] ?? .offline }, query: query,
+                                                  name: { connectionManager.displayName(for: $0) },
+                                                  categories: categories, categoryID: { assignment[$0.id] })
         return Snapshot(presence: map, connecting: connecting, sections: sections, notesReachable: bound.reachableRecordIDs)
     }
 
-    private var groups: [DeviceGroup] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return q.isEmpty ? groupStore.groups : groupStore.groups.filter { $0.name.localizedCaseInsensitiveContains(q) }
-    }
-
     private var hasAnyContent: Bool {
-        !connectionManager.deviceStore.records.isEmpty || !groupStore.groups.isEmpty
+        !connectionManager.deviceStore.records.isEmpty || !categories.isEmpty
     }
 
     private var rowBackground: Color {
@@ -90,7 +98,7 @@ struct HomeTab: View, PaperThemed {
         .background(paper(.background).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .paperMode(.live)
-        .sheet(isPresented: $showGroupEditor) { GroupEditorView(groupStore: groupStore) }
+        .categorySheets(store: categoryStore, moveTarget: $moveTarget)
         .sheet(item: $alwaysConnectedTarget) { target in
             AlwaysConnectedFriendSheet(peerID: target.peerID, name: target.name)
                 .environmentObject(connectionManager)
@@ -103,18 +111,26 @@ struct HomeTab: View, PaperThemed {
         }
         .sheet(item: $shareInvite) { _ in ShareSheet(items: [InviteMessage.body()]) }
         .chatTargetDestination()
+        .navigationDestination(for: CategoryRoute.self) { route in
+            CategoryDetailView(store: categoryStore, categoryID: route.id)
+        }
+        .onReceive(categoryStore.$categories) { categories = $0 }
         .onAppear { bound.bind(connectionManager); contacts.refresh(); if contacts.canAsk { contacts.requestAccess() } }
         #else
         friendsList(snap)
             .navigationTitle("Home")
             .searchable(text: $query, prompt: Text("Search friends"))
             .toolbar { toolbarContent }
-            .sheet(isPresented: $showGroupEditor) { GroupEditorView(groupStore: groupStore) }
+            .categorySheets(store: categoryStore, moveTarget: $moveTarget)
             .sheet(item: $alwaysConnectedTarget) { target in
                 AlwaysConnectedFriendSheet(peerID: target.peerID, name: target.name)
                     .environmentObject(connectionManager)
             }
             .chatTargetDestination()
+            .navigationDestination(isPresented: $showCategory) {
+                if let id = openCategoryID { CategoryDetailView(store: categoryStore, categoryID: id) }
+            }
+            .onReceive(categoryStore.$categories) { categories = $0 }
             .onAppear { bound.bind(connectionManager) }
         #endif
     }
@@ -125,7 +141,7 @@ struct HomeTab: View, PaperThemed {
             selfRow
             if !hasAnyContent {
                 emptyState
-            } else if sections.connected.isEmpty && sections.friends.isEmpty && groups.isEmpty && !query.isEmpty {
+            } else if sections.connected.isEmpty && sections.friends.isEmpty && sections.categories.isEmpty && !query.isEmpty {
                 Text("No results")
                     .foregroundStyle(paper(.datePillText))
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -136,13 +152,13 @@ struct HomeTab: View, PaperThemed {
                     ForEach(sections.connected) { record in connectedRow(record) }
                 }
             }
+            if hasAnyContent && (query.isEmpty || !sections.categories.isEmpty) {
+                categoriesSection(sections.categories)
+            }
             if !sections.friends.isEmpty {
                 section("friends", title: Text("Friends \(sections.friends.count)")) {
                     ForEach(sections.friends) { record in friendRow(record, snap) }
                 }
-            }
-            if hasAnyContent {
-                groupsSection
             }
             #if os(iOS)
             contactsSection
@@ -416,16 +432,18 @@ struct HomeTab: View, PaperThemed {
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
-            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
+            .friendEntries(open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand),
+                           moveToCategory: { moveTarget = moveTarget(for: record) })
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record); moveButton(record) }
         #else
         Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
             .buttonStyle(.plain)
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
-            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
+            .friendEntries(open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand),
+                           moveToCategory: { moveTarget = moveTarget(for: record) })
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record); moveButton(record) }
         #endif
     }
 
@@ -439,17 +457,19 @@ struct HomeTab: View, PaperThemed {
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
-            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
+            .friendEntries(open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand),
+                           moveToCategory: { moveTarget = moveTarget(for: record) })
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record); moveButton(record) }
         #else
         Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
         .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
-        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
+        .friendEntries(open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand),
+                           moveToCategory: { moveTarget = moveTarget(for: record) })
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record); moveButton(record) }
         #endif
     }
 
@@ -478,8 +498,9 @@ struct HomeTab: View, PaperThemed {
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
-        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
-        .swipeActions(edge: .trailing) { forgetButton(record) }
+        .friendEntries(open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand),
+                           moveToCategory: { moveTarget = moveTarget(for: record) })
+        .swipeActions(edge: .trailing) { forgetButton(record); moveButton(record) }
         #else
         Button {
             openWindow(id: "chat", value: peerID(for: record))
@@ -490,8 +511,9 @@ struct HomeTab: View, PaperThemed {
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
-        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
-        .swipeActions(edge: .trailing) { forgetButton(record) }
+        .friendEntries(open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand),
+                           moveToCategory: { moveTarget = moveTarget(for: record) })
+        .swipeActions(edge: .trailing) { forgetButton(record); moveButton(record) }
         #endif
     }
 
@@ -503,31 +525,88 @@ struct HomeTab: View, PaperThemed {
         }
     }
 
-    // MARK: - Groups / invite / empty
+    // MARK: - Categories / invite / empty
 
-    private var groupsSection: some View {
-        section("groups", title: Text("Groups")) {
-            ForEach(groups) { group in
-                NavigationLink(destination: GroupDetailView(group: group)) {
-                    GroupRow(group: group)
-                }
-                .accessibilityIdentifier("group-row")
-                .listRowBackground(rowBackground)
-            .listRowSeparator(.hidden)
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { groupStore.remove(id: group.id) } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
+    /// 分類: one row per category (name, count, bell-slash when muted) pushing its page, then "New category".
+    /// Shown even with no categories, so the first one can be made from here.
+    private func categoriesSection(_ rows: [HomeListLogic.CategorySection]) -> some View {
+        section("categories", title: Text("Categories")) {
+            ForEach(rows) { row in categoryRow(row) }
+            if query.isEmpty && categories.count < FriendCategoryStore.maxCategories {
+                newCategoryRow
+                    .listRowBackground(rowBackground)
+                    .listRowSeparator(.hidden)
             }
-            Button { showGroupEditor = true } label: {
-                Label("New Group", systemImage: "plus.circle.fill")
-                    .foregroundStyle(paper(.brand))
-            }
-            .listRowBackground(rowBackground)
-            .listRowSeparator(.hidden)
-            .accessibilityHint(Text("Creates a new device group"))
         }
+    }
+
+    /// "New category": tapping turns the row into a text field; Return creates, anything else restores the row.
+    @ViewBuilder
+    private var newCategoryRow: some View {
+        let icon = Image(systemName: "folder.badge.plus")
+            .font(.title3)
+            .foregroundStyle(paper(.brand))
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .frame(width: 44, height: 44)
+            .accessibilityHidden(true)
+        if creatingCategory {
+            HStack(spacing: 12) {
+                icon
+                InlineCategoryNameField(onCommit: { name in
+                    categoryStore.create(name: name)
+                    creatingCategory = false
+                }, onCancel: { creatingCategory = false })
+            }
+        } else {
+            Button { creatingCategory = true } label: {
+                HStack(spacing: 12) {
+                    icon
+                    Text("New category")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(paper(.brand))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("category-add")
+        }
+    }
+
+    @ViewBuilder
+    private func categoryRow(_ row: HomeListLogic.CategorySection) -> some View {
+        #if os(iOS)
+        NavigationLink(value: CategoryRoute(id: row.id)) {
+            CategoryRow(name: row.category.name, count: row.count, notificationsEnabled: row.category.notificationsEnabled)
+        }
+        .accessibilityIdentifier("category-row")
+        .listRowBackground(rowBackground)
+        .listRowSeparator(.hidden)
+        #else
+        Button {
+            openCategoryID = row.id
+            showCategory = true
+        } label: {
+            CategoryRow(name: row.category.name, count: row.count, notificationsEnabled: row.category.notificationsEnabled,
+                        showsChevron: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("category-row")
+        .listRowBackground(rowBackground)
+        .listRowSeparator(.hidden)
+        #endif
+    }
+
+    private func moveTarget(for record: DeviceRecord) -> CategoryMoveTarget {
+        CategoryMoveTarget(recordID: record.id, name: connectionManager.displayName(for: record),
+                           person: connectionManager.notificationAliasIDs(for: [record.id]))
+    }
+
+    private func moveButton(_ record: DeviceRecord) -> some View {
+        Button { moveTarget = moveTarget(for: record) } label: {
+            Label("Move to category…", systemImage: "folder")
+        }
+        .tint(.indigo)
     }
 
     @ViewBuilder
@@ -566,11 +645,6 @@ struct HomeTab: View, PaperThemed {
                     .background(Capsule().fill(paper(.brand)))
             }
             .buttonStyle(.borderless)
-            Button { showGroupEditor = true } label: {
-                Label("New Group", systemImage: "plus.circle")
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(paper(.brand))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
@@ -579,15 +653,19 @@ struct HomeTab: View, PaperThemed {
     }
 }
 
-/// Entry points to the "Always connected" sheet from a friend row: long-press / right-click menu, a leading
-/// swipe, and a VoiceOver custom action (so it is reachable without gestures; the Mac menu is keyboard-reachable too).
+/// Entry points from a friend row: the long-press / right-click menu holds "Always connected" and
+/// "Move to category…"; a leading swipe opens "Always connected" (the trailing swipe carries the move);
+/// both are VoiceOver custom actions too (reachable without gestures; the Mac menu is keyboard-reachable).
 private extension View {
-    func alwaysConnectedEntry(for record: DeviceRecord, open: @escaping (AlwaysConnectedTarget) -> Void,
-                              target: AlwaysConnectedTarget, tint: Color) -> some View {
+    func friendEntries(open: @escaping (AlwaysConnectedTarget) -> Void, target: AlwaysConnectedTarget, tint: Color,
+                       moveToCategory: @escaping () -> Void) -> some View {
         self
             .contextMenu {
                 Button { open(target) } label: {
                     Label(LocalizedStringKey(AlwaysConnectedPresentation.titleKey), systemImage: "dot.radiowaves.left.and.right")
+                }
+                Button(action: moveToCategory) {
+                    Label("Move to category…", systemImage: "folder")
                 }
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -597,5 +675,14 @@ private extension View {
                 .tint(tint)
             }
             .accessibilityAction(named: Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey))) { open(target) }
+            .accessibilityAction(named: Text("Move to category…"), moveToCategory)
+    }
+
+    /// The "Move to category…" sheet, shared by both platforms.
+    func categorySheets(store: FriendCategoryStore, moveTarget: Binding<CategoryMoveTarget?>) -> some View {
+        self
+            .sheet(item: moveTarget) { target in
+                MoveToCategorySheet(store: store, target: target)
+            }
     }
 }

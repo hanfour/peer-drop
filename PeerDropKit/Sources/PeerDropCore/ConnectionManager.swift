@@ -5364,7 +5364,7 @@ extension ConnectionManager {
     /// device records sharing an id / `peerDeviceId` / `peerIdentityId` (plus
     /// each record's `chatKey(forRecord:)`), and trusted contacts pinning the
     /// same identity public key (their `deviceId` is the `PeerIdentity.id`).
-    func notificationAliasIDs(for ids: [String]) -> [String] {
+    public func notificationAliasIDs(for ids: [String]) -> [String] {
         // An empty id must never act as a bridge between two different people.
         var known = Set(ids.filter { !$0.isEmpty })
         let records = deviceStore.records

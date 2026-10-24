@@ -2,26 +2,23 @@ import Foundation
 import PeerDropCore
 import PeerDropNotes
 
-/// A display-ready row of the 紙條 list.
+/// A display-ready row of the 紙條 list (one per friend; the old device-group chats are retired in F1).
 struct ConversationRowModel: Identifiable, Equatable {
-    /// `peer:<record id>` or `group:<group id>` (unique across both kinds).
+    /// `peer:<record id>`.
     let id: String
-    /// DeviceRecord.id or DeviceGroup.id.
+    /// DeviceRecord.id.
     let sourceID: String
-    let isGroup: Bool
     let name: String
     let summary: ConversationSummary
 }
 
 /// Pure list logic for the 紙條 tab (no SwiftUI, unit-testable).
 enum ConversationsLogic {
-    /// Friends (with a `DeviceRecord`) and groups that have at least one message or note, newest first.
-    /// Chat files without a matching record/group are not listed. `query` matches names only.
+    /// Friends (with a `DeviceRecord`) that have at least one message or note, newest first.
+    /// Chat files without a matching record are not listed. `query` matches names only.
     static func rows(
         records: [DeviceRecord],
-        groups: [DeviceGroup],
         summaryForPeer: (String) -> ConversationSummary,
-        summaryForGroup: (String) -> ConversationSummary,
         query: String,
         name: (DeviceRecord) -> String = { $0.displayName }
     ) -> [ConversationRowModel] {
@@ -30,12 +27,7 @@ enum ConversationsLogic {
         for r in records where matches(name(r), needle) {
             let s = summaryForPeer(r.id)
             guard s.lastMessage != nil || s.lastNote != nil else { continue }
-            result.append(ConversationRowModel(id: "peer:\(r.id)", sourceID: r.id, isGroup: false, name: name(r), summary: s))
-        }
-        for g in groups where matches(g.name, needle) {
-            let s = summaryForGroup(g.id)
-            guard s.lastMessage != nil else { continue }
-            result.append(ConversationRowModel(id: "group:\(g.id)", sourceID: g.id, isGroup: true, name: g.name, summary: s))
+            result.append(ConversationRowModel(id: "peer:\(r.id)", sourceID: r.id, name: name(r), summary: s))
         }
         return result.sorted {
             let a = $0.summary.lastActivity ?? .distantPast
