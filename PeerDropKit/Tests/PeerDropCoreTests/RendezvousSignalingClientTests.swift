@@ -335,6 +335,24 @@ final class RendezvousSignalingClientTests: XCTestCase {
         XCTAssertTrue(http.requests.isEmpty)
     }
 
+    /// Round 2 (c): close() cancels an in-flight `/rv/ice` request.
+    func testCloseCancelsInFlightICERequest() async {
+        let gated = GatedRVHTTP()
+        let c = RendezvousSignalingClient(
+            token: token, day: day, peerKey: peer.key, provider: IdentityRendezvousSecretProvider(identity: me),
+            sessionTags: tags, baseURL: base, socketFactory: factory, http: gated,
+            clock: { [unowned self] in self.now })
+        clients.append(c)
+        c.connect()
+        await rvWaitUntil { self.factory.sockets.count == 1 }
+        let fetch = Task { await c.fetchICEServers() }
+        await rvWaitUntil { gated.started }
+        c.close()
+        let servers = await fetch.value
+        XCTAssertEqual(servers, [])
+        XCTAssertTrue(gated.cancelled, "the request task was cancelled")
+    }
+
     func testICEFailuresFallBackToEmpty() async {
         let (c, _) = await connected()
         http.result = .success((Data(#"{"error":"denied"}"#.utf8), 403))

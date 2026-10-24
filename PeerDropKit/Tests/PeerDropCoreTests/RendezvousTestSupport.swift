@@ -70,6 +70,29 @@ final class FakeRVHTTP: RendezvousHTTPPoster, @unchecked Sendable {
     }
 }
 
+/// POST that hangs until cancelled; records whether it saw cancellation.
+final class GatedRVHTTP: RendezvousHTTPPoster, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _started = false
+    private var _cancelled = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    var started: Bool { lock.lock(); defer { lock.unlock() }; return _started }
+    var cancelled: Bool { lock.lock(); defer { lock.unlock() }; return _cancelled }
+    func post(url: URL, body: Data) async throws -> (Data, Int) {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                lock.lock()
+                _started = true
+                if _cancelled { lock.unlock(); c.resume() } else { waiter = c; lock.unlock() }
+            }
+        } onCancel: {
+            lock.lock(); _cancelled = true; let w = waiter; waiter = nil; lock.unlock()
+            w?.resume()
+        }
+        throw CancellationError()
+    }
+}
+
 struct FailingRVSolver: RendezvousPoWSolving {
     struct Boom: Error {}
     func solve(token: Data, hour: Int) async throws -> String { throw Boom() }

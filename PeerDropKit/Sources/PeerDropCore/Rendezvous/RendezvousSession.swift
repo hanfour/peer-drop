@@ -19,7 +19,7 @@ import Foundation
 //   - Reconnect: exponential backoff 1 s → 300 s cap plus jitter 0…30 s. The
 //     FIRST join after foreground/enable is immediate (controller ruling R-a,
 //     amending plan Ruling 7: jitter costs latency, it does not defeat
-//     correlation). A socket that stayed up > 60 s before failing resets the
+//     correlation). A socket healthy > 60 s before failing resets the
 //     failure counter (R-b), so long healthy waits don't inflate backoff.
 //   - Role: the party with the lexicographically smaller agreement key offers.
 
@@ -99,7 +99,7 @@ public struct RendezvousSession: Equatable {
     public static let secureChannelTimeout: TimeInterval = 5
     public static let maxJitter: TimeInterval = 30
     public static let maxBackoff: TimeInterval = 300
-    /// A socket open longer than this before failing resets the backoff (R-b).
+    /// A socket healthy (handshake completed) longer than this before failing resets the backoff (R-b).
     public static let healthySocketResetAfter: TimeInterval = 60
     /// Peer ICE candidates accepted per negotiation attempt (minor 11).
     public static let maxRemoteICECandidates = 64
@@ -208,8 +208,10 @@ public struct RendezvousSession: Equatable {
     public private(set) var signalingDeadline: Date?
     public private(set) var negotiationDeadline: Date?
     public private(set) var secureDeadline: Date?
-    /// When the current signaling socket was opened (nil when none).
-    public private(set) var socketOpenedAt: Date?
+    /// When the current socket proved healthy: the Worker accepted it, a peer
+    /// joined and our handshake completed (`signalingReady`). A connect that
+    /// hangs never sets it, so it still backs off to the cap (round 2, d).
+    public private(set) var healthySince: Date?
     /// Peer ICE candidates delivered in the current attempt (capped).
     public private(set) var remoteICECount = 0
 
@@ -320,6 +322,7 @@ public struct RendezvousSession: Equatable {
         case .signalingReady:
             guard peerPresent, !signalingReady else { return [] }
             signalingReady = true
+            if healthySince == nil { healthySince = now }
             return [.sendSignal(RendezvousSignal.ready.encoded())]
         case .signal(let data):
             guard peerPresent, signalingReady else { return [] }
@@ -424,13 +427,14 @@ public struct RendezvousSession: Equatable {
             // Signaling is done: leave the room (nothing else is sent).
             return socketOpen ? leave() : []
         case .installFailed:
-            guard !secured else { return [] }
+            // Even when already secured (the installer reported OK synchronously
+            // and then refused): nothing is installed, so fail explicitly.
             return fail(.installRejected, now: now, context: context, extra: [.closeConnection, .leaveRoom])
         case .connectionLost:
             return fail(.connectionLost, now: now, context: context, extra: [.closeConnection, .leaveRoom])
         case .signalingClosed:
             socketOpen = false
-            socketOpenedAt = nil
+            healthySince = nil
             return []  // the connection, not the room, matters now
         case .tick:
             if !secured, let d = secureDeadline, now >= d {
@@ -448,7 +452,7 @@ public struct RendezvousSession: Equatable {
     private mutating func join(now: Date) -> [Action] {
         phase = .waiting
         socketOpen = true
-        socketOpenedAt = now
+        healthySince = nil
         resetPeer()
         return [.joinRoom(token: token)]
     }
@@ -478,7 +482,7 @@ public struct RendezvousSession: Equatable {
     private mutating func leave() -> [Action] {
         guard socketOpen else { return [] }
         socketOpen = false
-        socketOpenedAt = nil
+        healthySince = nil
         return [.leaveRoom]
     }
 
@@ -495,7 +499,7 @@ public struct RendezvousSession: Equatable {
     }
 
     private mutating func fail(_ reason: RendezvousFailureReason, now: Date, context: Context, extra: [Action]) -> [Action] {
-        if let opened = socketOpenedAt, now.timeIntervalSince(opened) > Self.healthySocketResetAfter {
+        if let opened = healthySince, now.timeIntervalSince(opened) > Self.healthySocketResetAfter {
             consecutiveFailures = 0  // R-b: the socket was healthy for > 60 s
         }
         var actions: [Action] = []
@@ -503,7 +507,7 @@ public struct RendezvousSession: Equatable {
             if a == .leaveRoom { actions += leave() } else { actions.append(a) }
         }
         socketOpen = false
-        socketOpenedAt = nil
+        healthySince = nil
         resetPeer()
         negotiationDeadline = nil
         secureDeadline = nil

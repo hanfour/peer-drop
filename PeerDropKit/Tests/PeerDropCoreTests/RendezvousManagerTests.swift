@@ -103,13 +103,17 @@ final class FakeInstaller: RendezvousConnectionInstaller {
     private(set) var installs: [(transport: TransportProtocol, contact: TrustedContact)] = []
     private(set) var uninstalls: [UUID] = []
     var onInstall: ((TrustedContact) -> Void)?
+    var onUninstall: ((TrustedContact) -> Void)?
     func install(transport: TransportProtocol, contact: TrustedContact) -> Bool {
+        onInstall?(contact)
         guard accept else { return false }
         installs.append((transport, contact))
-        onInstall?(contact)
         return true
     }
-    func uninstall(contact: TrustedContact) { uninstalls.append(contact.id) }
+    func uninstall(contact: TrustedContact) {
+        uninstalls.append(contact.id)
+        onUninstall?(contact)
+    }
 }
 
 final class FakeRVClock: RendezvousClock {
@@ -333,6 +337,31 @@ final class RendezvousManagerTests: XCTestCase {
         XCTAssertTrue(t.closed)
         XCTAssertEqual(manager.roomCount, 0)
         XCTAssertEqual(manager.linkState(for: c.id), .inactive)
+    }
+
+    /// Round 2 (b): installer reports OK synchronously and then refuses.
+    func testInstallRefusedAfterSynchronousSecureOKFails() async {
+        let (c, _, n) = await negotiatingOfferer()
+        installer.accept = false
+        installer.onInstall = { [unowned self] c in self.manager.secureChannelDidComplete(contactID: c.id, ok: true) }
+        n.open()
+        XCTAssertTrue(n.closed)
+        XCTAssertEqual(manager.sessionStates(for: c.id).values.first, .failed(.installRejected))
+        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
+        XCTAssertTrue(installer.uninstalls.isEmpty, "never installed")
+    }
+
+    /// Round 2 (c): contacts changing during reconcile's first drain (here the
+    /// connection layer's uninstall disables the contact) must not let a stale
+    /// `active` list recreate a room.
+    func testContactsChangedDuringReconcileDrainAreReRead() async {
+        let (_, _, _) = await securedOfferer()
+        let made = factory.made.count
+        installer.onUninstall = { [unowned self] _ in self.contacts[0].rendezvousEnabled = nil }
+        contacts[0].identityPublicKey = RendezvousTestIdentity().raw  // key change, flag still set
+        manager.contactsDidChange()
+        XCTAssertEqual(factory.made.count, made, "no room for a just-disabled contact")
+        XCTAssertEqual(manager.roomCount, 0)
     }
 
     func testBackgroundInsideInstallClosesEverything() async {

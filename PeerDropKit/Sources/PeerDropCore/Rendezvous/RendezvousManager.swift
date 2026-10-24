@@ -294,9 +294,8 @@ public final class RendezvousManager: ObservableObject {
     private func reconcile() {
         if deferIfDraining({ [weak self] in self?.reconcile() }) { return }
         let now = clock.now
-        let all = contacts()
-        let active = Self.activeContacts(all)
-        let byID = Dictionary(uniqueKeysWithValues: active.map { ($0.id, $0) })
+        let before = Self.activeContacts(contacts())
+        let byID = Dictionary(uniqueKeysWithValues: before.map { ($0.id, $0) })
 
         // Drop rooms of contacts that are gone, disabled, ineligible or re-keyed.
         for (key, room) in rooms {
@@ -308,6 +307,10 @@ public final class RendezvousManager: ObservableObject {
         }
         drain()
         removeClosedRooms(forgetTokens: false)
+
+        // Re-read: closing rooms above can call back into the connection layer
+        // (e.g. `uninstall`), which may change the contacts (round 2, c).
+        let active = Self.activeContacts(contacts())
 
         if isForeground {
             let days = RendezvousToken.daysToJoin(now: now)

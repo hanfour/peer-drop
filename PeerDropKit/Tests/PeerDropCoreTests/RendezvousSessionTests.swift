@@ -422,8 +422,9 @@ final class RendezvousSessionTests: XCTestCase {
 
     // MARK: - Ruling R-b: healthy socket resets backoff
 
-    /// Three quick failures, then a socket that stays up. Exactly 60 s does
-    /// not reset (failure 4 ⇒ 8 s); more than 60 s resets (failure 1 ⇒ 1 s).
+    /// Three quick failures, then a socket that completes a handshake at 7 s
+    /// and stays up. Exactly 60 s healthy does not reset (failure 4 ⇒ 8 s);
+    /// more than 60 s resets (failure 1 ⇒ 1 s).
     func testSocketHealthyOverSixtySecondsResetsBackoff() {
         var s = waiting()                          // joined at 0
         _ = s.handle(.signalingClosed, now: base)  // f1, retry at 1
@@ -432,6 +433,8 @@ final class RendezvousSessionTests: XCTestCase {
         _ = s.handle(.tick, now: at(3))
         _ = s.handle(.signalingClosed, now: at(3)) // f3, retry at 7
         XCTAssertEqual(s.handle(.tick, now: at(7)), [.joinRoom(token: token)])
+        _ = s.handle(.peerJoined, now: at(7))
+        _ = s.handle(.signalingReady, now: at(7))  // healthy clock starts here
         var exactly = s
         XCTAssertEqual(exactly.handle(.signalingClosed, now: at(67)), [.scheduleRetry(at: at(75))])
         XCTAssertEqual(exactly.consecutiveFailures, 4)
@@ -445,8 +448,35 @@ final class RendezvousSessionTests: XCTestCase {
         _ = s.handle(.tick, now: at(1))
         _ = s.handle(.signalingClosed, now: at(1))
         _ = s.handle(.tick, now: at(3))            // joined at 3, failures 2
+        _ = s.handle(.peerJoined, now: at(3))
+        _ = s.handle(.signalingReady, now: at(3))  // healthy since 3
+        _ = s.handle(.peerLeft, now: at(4))        // socket stays up
         _ = s.handle(.peerJoined, now: at(100))
         XCTAssertEqual(s.handle(.tick, now: at(105)), [.leaveRoom, .scheduleRetry(at: at(106))])
+    }
+
+    /// Round 2 (d): a connect that hangs (no handshake ever) against an
+    /// unreachable Worker is not "healthy" — backoff keeps growing to the cap.
+    func testHangingConnectDoesNotResetBackoff() {
+        var s = waiting()
+        var now = base
+        for _ in 0..<12 {
+            now = now.addingTimeInterval(500)  // socket "open" for 500 s, never handshakes
+            let a = s.handle(.signalingClosed, now: now)
+            guard case .scheduleRetry(let at)? = a.last else { return XCTFail("\(a)") }
+            now = at
+            XCTAssertEqual(s.handle(.tick, now: now), [.joinRoom(token: token)])
+        }
+        XCTAssertEqual(s.consecutiveFailures, 12)
+        let a = s.handle(.signalingClosed, now: now.addingTimeInterval(500))
+        XCTAssertEqual(a, [.scheduleRetry(at: now.addingTimeInterval(500 + 300))])
+    }
+
+    /// Round 2 (b): the installer reported OK synchronously, then refused.
+    func testInstallFailedAfterSecuredStillFails() {
+        var s = secured()
+        XCTAssertEqual(s.handle(.installFailed, now: at(1)), [.closeConnection, .scheduleRetry(at: at(2))])
+        XCTAssertEqual(s.state, .failed(.installRejected))
     }
 
     // MARK: - Minor 11: remote ICE cap

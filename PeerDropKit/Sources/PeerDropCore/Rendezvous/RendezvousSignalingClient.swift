@@ -149,6 +149,9 @@ public final class RendezvousSignalingClient: RendezvousSignalingTransport {
     private var receivedValidSealed = false
     private var lastPingAt: Date?
     private var powCache: (hour: Int, nonce: String)?
+    /// In-flight `/rv/ice` fetches; `close()` cancels them (and with them the
+    /// URLSession request), so a downgrade stops a request already under way.
+    private var iceTasks: [UUID: Task<[RendezvousICEServer], Never>] = [:]
 
     public init(
         token: Data,
@@ -298,6 +301,9 @@ public final class RendezvousSignalingClient: RendezvousSignalingTransport {
     }
 
     private func teardown() {
+        let tasks = iceTasks.values
+        iceTasks = [:]
+        tasks.forEach { $0.cancel() }
         handshake = nil
         cipher = nil
         receivedValidSealed = false
@@ -314,6 +320,18 @@ public final class RendezvousSignalingClient: RendezvousSignalingTransport {
     /// retire) never solves PoW for, nor POSTs, its token again.
     public func fetchICEServers() async -> [RendezvousICEServer] {
         guard phase == .open else { return [] }
+        let id = UUID()
+        let task = Task { [weak self] () -> [RendezvousICEServer] in
+            await self?.performICEFetch() ?? []
+        }
+        iceTasks[id] = task
+        let servers = await task.value
+        iceTasks[id] = nil
+        return phase == .open ? servers : []
+    }
+
+    private func performICEFetch() async -> [RendezvousICEServer] {
+        guard phase == .open else { return [] }
         let hour = RendezvousProofOfWork.currentHour(now: clock())
         let nonce: String
         if let c = powCache, c.hour == hour {
@@ -327,7 +345,7 @@ public final class RendezvousSignalingClient: RendezvousSignalingTransport {
         guard let encoded = try? RendezvousToken.encoded(token),
               let body = try? JSONSerialization.data(withJSONObject: ["t": encoded, "pow": ["h": hour, "n": nonce]])
         else { return [] }
-        guard phase == .open else { return [] }
+        guard phase == .open, !Task.isCancelled else { return [] }
         guard let (data, status) = try? await http.post(url: baseURL.appendingPathComponent("rv/ice"), body: body),
               status == 200 else { return [] }
         return Self.parseICEServers(data)
