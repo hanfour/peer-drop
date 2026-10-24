@@ -293,6 +293,11 @@ public final class ConnectionManager: ObservableObject {
     /// Created on the first foreground (not in screenshot mode).
     public internal(set) var rendezvousManager: RendezvousManager?
     var rendezvousLinkStatesCancellable: AnyCancellable?
+    /// Test-only: build the manager over fakes instead of `.live`.
+    var rendezvousManagerFactoryForTesting: (() -> RendezvousManager)?
+    /// Last scene phase delivered to `handleScenePhaseChange` (nil: none yet;
+    /// on Mac the first `.active` never arrives — see `startRendezvousIfForeground`).
+    var lastScenePhase: ScenePhase?
     /// Test-only override of where secure-channel / close outcomes go.
     weak var rendezvousEventSinkForTesting: RendezvousConnectionEventSink?
 
@@ -2057,6 +2062,7 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - App Lifecycle
 
     public func handleScenePhaseChange(_ phase: ScenePhase) {
+        lastScenePhase = phase
         switch phase {
         case .active:
             endBackgroundTask()
@@ -4435,7 +4441,8 @@ public final class ConnectionManager: ObservableObject {
 
     public func sendClipboardSync(_ payload: ClipboardSyncPayload, to peerID: String) {
         guard FeatureSettings.isClipboardSyncEnabled else { return }
-        guard let peerConn = connection(for: peerID) else { return }
+        // Never over a cross-network connection (clipboard is face to face).
+        guard let peerConn = connection(for: peerID), !peerConn.isRendezvous else { return }
         guard let msg = try? PeerMessage.clipboardSync(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for clipboardSync")
             return

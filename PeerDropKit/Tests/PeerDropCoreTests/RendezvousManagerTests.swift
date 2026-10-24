@@ -1070,3 +1070,23 @@ extension RendezvousManagerTests {
         XCTAssertEqual(manager.lastFailureReason(for: c.id), .keyMismatch)
     }
 }
+
+// MARK: - Final review: no 1 Hz ticker without active contacts
+
+extension RendezvousManagerTests {
+    func testTickerRunsOnlyWhileContactsAreActive() {
+        manager.appDidBecomeActive()
+        XCTAssertFalse(ticker.running, "no eligible contact: no ticker")
+        addFriend()
+        manager.contactsDidChange()
+        XCTAssertTrue(ticker.running)
+        contacts[0].rendezvousEnabled = nil
+        manager.contactsDidChange()
+        XCTAssertEqual(manager.roomCount, 0)
+        XCTAssertFalse(ticker.running, "last contact gone: ticker stops")
+        manager.appDidEnterBackground()
+        contacts[0].rendezvousEnabled = true
+        manager.contactsDidChange()
+        XCTAssertFalse(ticker.running, "never in background")
+    }
+}

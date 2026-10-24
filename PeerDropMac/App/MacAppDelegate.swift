@@ -86,6 +86,8 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, ObservableObject, U
     @objc private func systemDidWake() {
         logger.info("System woke from sleep — restarting discovery")
         connectionManager?.restartDiscovery()
+        // Project E: resume rendezvous after sleep (sockets died meanwhile).
+        connectionManager?.startRendezvousIfForeground()
     }
 
     /// Finder drop / open-with / URL-scheme handler. Two URL classes

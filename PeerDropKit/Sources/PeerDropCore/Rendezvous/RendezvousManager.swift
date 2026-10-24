@@ -264,8 +264,7 @@ public final class RendezvousManager: ObservableObject {
         isForeground = true
         let now = clock.now
         suspensions = suspensions.filter { now.timeIntervalSince($0.value.at) <= Self.suspensionForegroundReset }
-        ticker.start { [weak self] in self?.tick() }
-        reconcile()
+        reconcile()   // starts the ticker if any room exists
     }
 
     /// Closes every socket and connection; sends nothing.
@@ -434,6 +433,18 @@ public final class RendezvousManager: ObservableObject {
         }
         removeClosedRooms(forgetTokens: true)
         publishLinkStates()
+        updateTicker()
+    }
+
+    /// The 1 Hz ticker runs only in the foreground while a room exists
+    /// (waiting, negotiating, connected or backing off); zero active
+    /// contacts ⇒ no timer. Re-evaluated on every reconcile.
+    private func updateTicker() {
+        if isForeground && !rooms.isEmpty {
+            ticker.start { [weak self] in self?.tick() }
+        } else {
+            ticker.stop()
+        }
     }
 
     private func createRoom(contact: TrustedContact, day: Int) {

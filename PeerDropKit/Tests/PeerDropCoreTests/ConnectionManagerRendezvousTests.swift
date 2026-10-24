@@ -1240,3 +1240,72 @@ extension ConnectionManagerRendezvousTests {
         XCTAssertFalse(peer.inbox.contains { $0.type == .textMessage }, "rendezvous friend gets no group send")
     }
 }
+
+// MARK: - Final review fixes
+
+extension ConnectionManagerRendezvousTests {
+
+    /// A manager over fakes (no network), NOT attached: the CM's factory seam attaches it.
+    private func fakeManager() -> RendezvousManager {
+        RendezvousManager(
+            contacts: { [weak cm] in cm?.trustedContactStore.contacts ?? [] },
+            secrets: IdentityRendezvousSecretProvider(identity: RendezvousTestIdentity()),
+            direct: cm.rendezvousBridge, installer: cm.rendezvousBridge,
+            signaling: FakeSignalingFactory(), negotiators: PipeNegotiatorFactory(),
+            clock: FakeRVClock(Date()), jitter: FixedRVJitter(), ticker: ManualRVTicker(),
+            sessionTags: RendezvousSessionTagStore())
+    }
+
+    /// I-1 (Mac): the first `.active` never reaches `.onChange` on Mac, so the
+    /// app starts rendezvous explicitly. Idempotent; one manager.
+    func testStartRendezvousIfForegroundCreatesAndStartsExactlyOnce() throws {
+        let friend = try addFriend()
+        var made = 0
+        cm.rendezvousManagerFactoryForTesting = { [unowned self] in made += 1; return self.fakeManager() }
+        XCTAssertNil(cm.rendezvousManager)
+        cm.startRendezvousIfForeground()
+        cm.startRendezvousIfForeground()
+        XCTAssertEqual(made, 1)
+        let m = try XCTUnwrap(cm.rendezvousManager)
+        XCTAssertTrue(m.isForeground)
+        XCTAssertEqual(m.roomCount, 1)
+        XCTAssertEqual(m.linkState(for: friend.id), .connecting)
+    }
+
+    func testStartRendezvousIfForegroundDoesNothingWhenBackgrounded() {
+        var made = 0
+        cm.rendezvousManagerFactoryForTesting = { [unowned self] in made += 1; return self.fakeManager() }
+        cm.handleScenePhaseChange(.background)
+        cm.startRendezvousIfForeground()
+        XCTAssertEqual(made, 0)
+        XCTAssertNil(cm.rendezvousManager)
+    }
+
+    /// The toggle path creates the manager if it does not exist yet.
+    func testEnsureRendezvousManagerCreatesWhenNil() {
+        var made = 0
+        cm.rendezvousManagerFactoryForTesting = { [unowned self] in made += 1; return self.fakeManager() }
+        let a = cm.ensureRendezvousManager()
+        let b = cm.ensureRendezvousManager()
+        XCTAssertNotNil(a)
+        XCTAssertTrue(a === b)
+        XCTAssertEqual(made, 1)
+    }
+
+    /// Defense in depth: transport-host (file / call) and clipboard paths
+    /// never get a cross-network connection.
+    func testTransportHostAndClipboardRefuseRendezvousConnections() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let id = friend.deviceId!
+        let (_, peer, _) = try await installVerified(friend, key: key)
+        XCTAssertNotNil(cm.connection(for: id))
+        XCTAssertNil(cm.messageChannel(for: id))
+        UserDefaults.standard.set(true, forKey: "peerDropClipboardSyncEnabled")
+        cm.sendClipboardSync(ClipboardSyncPayload(contentType: .text, textContent: "secret"), to: id)
+        try await peer.send(text("marker", from: id))
+        _ = await poll { (self.cm.chatManager.unreadCounts[id] ?? 0) >= 1 }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(peer.inbox.contains { $0.type == .clipboardSync })
+    }
+}

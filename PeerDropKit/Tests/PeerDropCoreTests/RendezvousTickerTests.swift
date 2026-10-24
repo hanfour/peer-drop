@@ -50,8 +50,13 @@ final class RendezvousTickerTests: XCTestCase {
             var onDirectConnectionsChanged: (() -> Void)?
             func hasDirectConnection(to contact: TrustedContact) -> Bool { false }
         }
+        // The ticker only runs while a contact is active (final review).
+        var c = TrustedContact(deviceId: "dev-t", displayName: "T", identityPublicKey: RendezvousTestIdentity().raw,
+                               trustLevel: .verified, accountId: "acct-t")
+        c.rendezvousEnabled = true
+        let contact = c
         var manager: RendezvousManager? = RendezvousManager(
-            contacts: { [] }, secrets: IdentityRendezvousSecretProvider(identity: RendezvousTestIdentity()),
+            contacts: { [contact] }, secrets: IdentityRendezvousSecretProvider(identity: RendezvousTestIdentity()),
             direct: NoDirect(), installer: FakeInstaller(), signaling: FakeSignalingFactory(),
             negotiators: FakeNegotiatorFactory())
         manager?.appDidBecomeActive()

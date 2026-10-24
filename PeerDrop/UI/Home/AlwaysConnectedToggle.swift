@@ -320,17 +320,21 @@ struct AlwaysConnectedToggleSection: View {
 
     private func turnOn() {
         guard let contact else { return }
+        // Create-if-needed: the manager may not exist yet (e.g. Mac cold launch).
         let outcome = P.apply(enabled: true, contactID: contact.id, store: store,
-                              clearSuspension: { connectionManager.rendezvousManager?.clearSuspension(contactID: $0) },
-                              contactsDidChange: { connectionManager.rendezvousManager?.contactsDidChange() })
+                              clearSuspension: { connectionManager.ensureRendezvousManager()?.clearSuspension(contactID: $0) },
+                              contactsDidChange: {
+                                  connectionManager.startRendezvousIfForeground()
+                                  connectionManager.ensureRendezvousManager()?.contactsDidChange()
+                              })
         failureKey = P.messageKey(for: outcome)
     }
 
     private func turnOff() {
         guard let contact else { return }
         _ = P.apply(enabled: false, contactID: contact.id, store: store,
-                    clearSuspension: { connectionManager.rendezvousManager?.clearSuspension(contactID: $0) },
-                    contactsDidChange: { connectionManager.rendezvousManager?.contactsDidChange() })
+                    clearSuspension: { connectionManager.ensureRendezvousManager()?.clearSuspension(contactID: $0) },
+                    contactsDidChange: { connectionManager.ensureRendezvousManager()?.contactsDidChange() })
         failureKey = nil
     }
 }

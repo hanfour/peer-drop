@@ -1,5 +1,9 @@
 import Foundation
 import Combine
+import SwiftUI
+#if canImport(UIKit) && os(iOS)
+import UIKit
+#endif
 import PeerDropProtocol
 import PeerDropSecurity
 import PeerDropTransport
@@ -101,6 +105,23 @@ extension ConnectionManager {
 
     // MARK: - Lifecycle
 
+    /// Start (or resume) rendezvous if the app is in the foreground; never in
+    /// the background. Idempotent. For launch paths that miss the first
+    /// `.active` scene phase (Mac `onAppear`) and for wake from sleep.
+    public func startRendezvousIfForeground() {
+        guard rendezvousAppIsForeground else { return }
+        rendezvousAppDidBecomeActive()
+    }
+
+    var rendezvousAppIsForeground: Bool {
+        if lastScenePhase == .background { return false }
+        #if canImport(UIKit) && os(iOS)
+        return UIApplication.shared.applicationState != .background
+        #else
+        return true
+        #endif
+    }
+
     /// Foreground: start (or resume) the rendezvous manager.
     func rendezvousAppDidBecomeActive() {
         guard !ScreenshotModeProvider.shared.isActive else { return }
@@ -115,9 +136,17 @@ extension ConnectionManager {
         for pc in Array(rendezvousConnections.values) { removeRendezvousConnection(pc) }
     }
 
+    /// The manager, created if needed (not started). Used by the opt-in
+    /// toggle, which must work even before the first foreground start.
     @discardableResult
-    func ensureRendezvousManager() -> RendezvousManager? {
+    public func ensureRendezvousManager() -> RendezvousManager? {
         if let m = rendezvousManager { return m }
+        guard !ScreenshotModeProvider.shared.isActive else { return nil }
+        if let make = rendezvousManagerFactoryForTesting {
+            let m = make()
+            attachRendezvousManager(m)
+            return m
+        }
         #if canImport(WebRTC)
         let m = RendezvousManager.live(
             contacts: { [weak self] in self?.trustedContactStore.contacts ?? [] },

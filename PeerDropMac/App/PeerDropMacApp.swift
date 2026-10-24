@@ -162,6 +162,9 @@ struct PeerDropMacApp: App {
                     // an .onChange callback, so we need an explicit
                     // initial start.
                     connectionManager.startDiscovery()
+                    // Project E: same first-`.active` gap for rendezvous
+                    // ("always connected") rooms.
+                    connectionManager.startRendezvousIfForeground()
 
                     // Pivot 2026-09: purge legacy pet residue once per install.
                     LegacyPetDataCleanup.runInBackgroundIfNeeded()
