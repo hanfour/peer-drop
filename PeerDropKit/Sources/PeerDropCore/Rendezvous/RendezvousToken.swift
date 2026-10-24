@@ -22,7 +22,9 @@ public enum RendezvousCryptoError: Error, Equatable {
 
 // MARK: - Injection points
 
-/// Supplies the static X25519 DH with a friend. Production uses
+/// Supplies the static X25519 DH with a friend. `peerKey` must be the friend's
+/// X25519 AGREEMENT key (`TrustedContact.identityPublicKey`) — never an
+/// Ed25519 signing key. Production uses
 /// `IdentityRendezvousSecretProvider` (backed by `IdentityKeyManager.shared`);
 /// tests use in-memory keys so the keychain is never touched.
 public protocol RendezvousSecretProvider {

@@ -12,7 +12,13 @@ import CryptoKit
 // Nonce (12) = UInt32BE(direction) ‖ UInt64BE(counter)
 //     direction 0x01 = party with the lexicographically smaller key, 0x02 = other.
 // AAD = "rv-sig-v1" ‖ UInt64BE(day) ‖ sessionID (16) ‖ direction byte of the SENDER.
-// Key = HKDF<SHA256>(DH, salt "peerdrop-rv-signal-v1", info = token info layout).
+// Signaling key = HKDF<SHA256>(DH, salt "peerdrop-rv-signal-v1", info = token info layout).
+// Session key (the actual AEAD key) = HKDF<SHA256>(ikm: signaling key,
+//     salt: sessionID(16), info: "rv-sig-session-v1" ‖ UInt64BE(day), L: 32).
+// The session key is what makes restarting the counter at 0 safe: a new
+// handshake has a fresh local r ⇒ fresh sessionID ⇒ fresh key, so a
+// (key, nonce) pair never repeats. INVARIANT: one local r ⇒ at most one
+// cipher. `accept` is single-use; never rebuild a cipher from an old local r.
 //
 // Session binding / replay (decision):
 //   Each side sends one plaintext hello `{"t":"hello","r":"<8 random bytes b64url>"}`
@@ -24,8 +30,17 @@ import CryptoKit
 //   reflection. A replayed old hello therefore can only make the handshake fail
 //   (denial of service), never inject signaling. Within a session the receive
 //   counter must strictly increase (gaps allowed, repeats/regressions refused).
-//   A handshake accepts exactly one peer hello; on a new 'joined' or any later
-//   hello the caller must discard the cipher and start a NEW handshake (new r).
+//
+// Rule for the connection layer (Task 4):
+//   - Start a new handshake (fresh r) ONLY on a `{"t":"joined"}` control frame,
+//     and send our hello only after `joined`.
+//   - Drop any hello that arrives while a handshake is already completed —
+//     never rebind an existing cipher to a new peer r.
+//   - If the first sealed frame fails AEAD, or no valid sealed frame arrives
+//     within ~5 s, discard the cipher and CLOSE the socket. The Worker's
+//     "any close = session over" contract then yields a fresh `joined` on both
+//     sides, which starts a new handshake with new r on both ends.
+//   - Never rebuild a cipher from an old local r.
 
 public enum RendezvousSignalingError: Error, Equatable {
     case invalidHello
@@ -63,6 +78,21 @@ public enum RendezvousSignalingCrypto {
         try RendezvousKeyOrder.validate(myKey: myKey, peerKey: peerKey)
         return try signalingKey(sharedSecret: provider.sharedSecret(withPeerAgreementKey: peerKey),
                                 myKey: myKey, peerKey: peerKey, day: day)
+    }
+
+    public static let sessionKeyInfoLabel = "rv-sig-session-v1"
+
+    /// Per-session AEAD key: HKDF<SHA256>(ikm: signalingKey(day), salt: sessionID(16),
+    /// info: "rv-sig-session-v1" ‖ UInt64BE(day), L: 32). Every handshake gets a
+    /// fresh local `r`, hence a fresh sessionID, hence a fresh key — so restarting
+    /// the counter at 0 never repeats a (key, nonce) pair.
+    public static func sessionKey(signalingKey: SymmetricKey, sessionID: Data, day: Int) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: signalingKey,
+            salt: sessionID,
+            info: Data(sessionKeyInfoLabel.utf8) + bigEndian8(UInt64(max(day, 0))),
+            outputByteCount: 32
+        )
     }
 
     public static func localDirection(myKey: Data, peerKey: Data) throws -> RendezvousDirection {
@@ -106,8 +136,9 @@ public enum RendezvousHello {
     }
 }
 
-/// One handshake per peer join. Generates our fresh contribution once and
-/// turns exactly one peer hello into a cipher bound to this session.
+/// One handshake per `joined`. Generates our fresh contribution once and turns
+/// exactly one peer hello into a cipher bound to this session (one local r ⇒
+/// at most one cipher). See the file header for the Task 4 reset rule.
 public final class RendezvousSignalingHandshake {
     public let day: Int
     public let helloFrame: String
@@ -140,9 +171,10 @@ public final class RendezvousSignalingHandshake {
         guard !completed else { throw RendezvousSignalingError.handshakeAlreadyCompleted }
         guard let peer = RendezvousHello.parse(peerHelloFrame) else { throw RendezvousSignalingError.invalidHello }
         guard peer != localContribution else { throw RendezvousSignalingError.reflectedHello }
-        completed = true
         let sid = RendezvousSignalingCrypto.sessionID(local: localContribution, peer: peer, localDirection: localDirection)
-        return try RendezvousSignalingCipher(key: key, localDirection: localDirection, day: day, sessionID: sid)
+        let cipher = try RendezvousSignalingCipher(key: key, localDirection: localDirection, day: day, sessionID: sid)
+        completed = true  // only once a cipher actually exists for our r
+        return cipher
     }
 }
 
@@ -159,14 +191,16 @@ public final class RendezvousSignalingCipher: @unchecked Sendable {
     private var nextSendCounter: UInt64
     private var lastReceivedCounter: UInt64?
 
-    /// `initialSendCounter` exists for overflow tests only.
+    /// `key` is the per-day SIGNALING key; the AEAD key is always the per-session
+    /// key derived from it and `sessionID`, so no construction path can skip it.
+    /// `initialSendCounter` exists for tests only.
     init(key: SymmetricKey, localDirection: RendezvousDirection, day: Int, sessionID: Data,
          initialSendCounter: UInt64 = 0) throws {
         guard sessionID.count == RendezvousSignalingCrypto.sessionIDLength else {
             throw RendezvousSignalingError.invalidSessionID
         }
         guard day >= 0 else { throw RendezvousCryptoError.invalidEpoch }
-        self.key = key
+        self.key = RendezvousSignalingCrypto.sessionKey(signalingKey: key, sessionID: sessionID, day: day)
         self.localDirection = localDirection
         self.day = day
         self.sessionID = sessionID

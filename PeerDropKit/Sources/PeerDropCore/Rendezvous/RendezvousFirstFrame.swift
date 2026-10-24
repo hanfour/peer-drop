@@ -14,6 +14,7 @@ public enum RendezvousFirstFrame {
     }
 
     /// Solves the PoW for `now` (client hour rule) and builds the frame.
+    /// CPU-bound (~65k SHA-256 on average): call it OFF the main actor.
     public static func build(token: Data, now: Date, sessionTags: RendezvousSessionTagStore) throws -> String {
         let encodedToken = try RendezvousToken.encoded(token)  // validates length
         let hour = RendezvousProofOfWork.currentHour(now: now)
@@ -55,6 +56,9 @@ public enum RendezvousFirstFrame {
 /// two different tokens (that would link two rooms to one client). Issued tags
 /// are remembered for the whole run, even after `forget`, so a tag is never
 /// handed out twice. In-memory only; never logged.
+///
+/// Usage (Task 4): keep exactly ONE store per process (app run) and call
+/// `forget(tokens:)` for days that are no longer joined.
 public final class RendezvousSessionTagStore: @unchecked Sendable {
     public static let tagByteCount = 16
 

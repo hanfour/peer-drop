@@ -11,6 +11,8 @@ import CryptoKit
 /// client uses `floor((now − 600)/3600)` so hour-boundary races and ±10 min
 /// skew stay in that window. Nonce: 1…64 UTF-16 code units (JS `length`).
 ///
+/// `solve` is CPU-bound — always run it off the main actor.
+///
 /// Honest limit (plan Ruling 8): 16 bits is cheap for an attacker; this is a
 /// speed bump, not an abuse ceiling.
 public enum RendezvousProofOfWork {

@@ -33,6 +33,36 @@ final class RendezvousFirstFrameTests: XCTestCase {
         XCTAssertTrue(frame.hasSuffix(#""s":"AAECAwQFBgcICQoLDA0ODw"}"#))
     }
 
+    func testSharedInteropFixtureBuildsByteForByte() throws {
+        // cloudflare-worker/test-vectors/rendezvous-first-frame.json is also
+        // asserted by the Worker's vitest (verifyRendezvousClaim/parseSessionId).
+        struct Fixture: Decodable {
+            struct Expected: Decodable { let t: String; let h: Int; let n: String; let s: String }
+            let nowSeconds: Int
+            let frame: String
+            let expected: Expected
+        }
+        let url = URL(fileURLWithPath: "\(#filePath)")
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("cloudflare-worker/test-vectors/rendezvous-first-frame.json")
+        guard let data = FileManager.default.contents(atPath: url.path) else {
+            XCTFail("Shared first-frame fixture missing at \(url.path)")
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let fx = try JSONDecoder().decode(Fixture.self, from: data)
+        let fixtureToken = Data((0..<32).map { UInt8(($0 * 7) % 256) })
+        let built = try RendezvousFirstFrame.build(
+            token: fixtureToken, now: Date(timeIntervalSince1970: TimeInterval(fx.nowSeconds)),
+            sessionTags: RendezvousSessionTagStore(random: CountingRandom(seed: 0)))
+        XCTAssertEqual(built, fx.frame)
+        XCTAssertEqual(try RendezvousToken.encoded(fixtureToken), fx.expected.t)
+        XCTAssertEqual(RendezvousProofOfWork.currentHour(now: Date(timeIntervalSince1970: TimeInterval(fx.nowSeconds))), fx.expected.h)
+        XCTAssertTrue(RendezvousProofOfWork.verifyClaim(
+            tokenBytes: fixtureToken, hour: fx.expected.h, nonce: fx.expected.n,
+            now: Date(timeIntervalSince1970: TimeInterval(fx.nowSeconds))))
+        XCTAssertEqual(fx.expected.s, "AAECAwQFBgcICQoLDA0ODw")
+    }
+
     func testFirstFrameRejectsBadToken() {
         let tags = RendezvousSessionTagStore()
         XCTAssertThrowsError(try RendezvousFirstFrame.build(token: Data(count: 31), now: now, sessionTags: tags))

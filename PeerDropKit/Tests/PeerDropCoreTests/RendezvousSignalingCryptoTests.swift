@@ -260,11 +260,122 @@ final class RendezvousSignalingCryptoTests: XCTestCase {
         }
     }
 
+    // MARK: - Per-session key (fix round 1, CRITICAL 1)
+
+    func testSessionKeyKnownAnswer() throws {
+        // Python reference: HKDF-SHA256(ikm=signalingKey, salt=sessionID,
+        // info="rv-sig-session-v1" || UInt64BE(day)), L=32.
+        let sig = SymmetricKey(data: Data(hex: "1fca3ce9b667206eaf3f77f88fce8f1da2cf565c938c57aeaa730586c6f413ef"))
+        let sk = RendezvousSignalingCrypto.sessionKey(signalingKey: sig, sessionID: Data(0..<16), day: 20000)
+        XCTAssertEqual(sk.rawData.hexString, "a8b3e158d47abdf29e0b5e2c2a01ddcc2b0d7e563b147810bddab58ca19a9bba")
+    }
+
+    func testSealedFrameKnownAnswer() throws {
+        // Independent Python `cryptography` ChaCha20Poly1305 reference with the
+        // documented nonce/AAD layout. Pins key derivation, nonce prefix, AAD
+        // (incl. the SENDER's direction byte) and wire order.
+        let sig = SymmetricKey(data: Data(hex: "1fca3ce9b667206eaf3f77f88fce8f1da2cf565c938c57aeaa730586c6f413ef"))
+        let sid = Data(0..<16)
+        let small = try RendezvousSignalingCipher(key: sig, localDirection: .smallerKey, day: 20000, sessionID: sid)
+        XCTAssertEqual(try small.seal(Data("offer".utf8)).hexString,
+                       "0000000000000000a3fd2658082270f310c61943b1cbe48784048358d9")
+        let large = try RendezvousSignalingCipher(key: sig, localDirection: .largerKey, day: 20000, sessionID: sid,
+                                                  initialSendCounter: 5)
+        let w = try large.seal(Data("offer".utf8))
+        XCTAssertEqual(w.hexString, "00000000000000052fdba8f1d162177da97befede3396960c8d2d228f2")
+        XCTAssertEqual(try small.open(w), Data("offer".utf8))
+    }
+
+    func testRehandshakeSameDaySamePlaintextGivesDifferentCiphertext() throws {
+        // Would catch dropping the sessionID from the key: same key + same
+        // nonce (counter 0) would give identical bodies (two-time pad).
+        let a = RendezvousTestIdentity(), b = RendezvousTestIdentity()
+        let pa = IdentityRendezvousSecretProvider(identity: a), pb = IdentityRendezvousSecretProvider(identity: b)
+        var bodies: [Data] = []
+        for _ in 0..<2 {
+            let ha = try RendezvousSignalingHandshake(provider: pa, peerKey: b.raw, day: day)
+            let hb = try RendezvousSignalingHandshake(provider: pb, peerKey: a.raw, day: day)
+            let ca = try ha.accept(peerHelloFrame: hb.helloFrame)
+            let w = try ca.seal(Data("identical plaintext".utf8))
+            XCTAssertEqual(Array(w.prefix(8)), [0, 0, 0, 0, 0, 0, 0, 0])
+            // Ciphertext only (no tag): the tag differs anyway because the
+            // sessionID is in the AAD; the keystream XOR is what must differ.
+            bodies.append(Data(w.dropFirst(8).dropLast(16)))
+        }
+        XCTAssertEqual(bodies[0].count, 19)
+        XCTAssertNotEqual(bodies[0], bodies[1], "same key+nonce across sessions (two-time pad)")
+    }
+
+    func testFramesFromOneSessionDoNotOpenInAnother() throws {
+        // Same identities, two sessions on the same day.
+        let a = RendezvousTestIdentity(), b = RendezvousTestIdentity()
+        let pa = IdentityRendezvousSecretProvider(identity: a), pb = IdentityRendezvousSecretProvider(identity: b)
+        func session() throws -> (RendezvousSignalingCipher, RendezvousSignalingCipher) {
+            let ha = try RendezvousSignalingHandshake(provider: pa, peerKey: b.raw, day: day)
+            let hb = try RendezvousSignalingHandshake(provider: pb, peerKey: a.raw, day: day)
+            return (try ha.accept(peerHelloFrame: hb.helloFrame), try hb.accept(peerHelloFrame: ha.helloFrame))
+        }
+        let (a1, b1) = try session()
+        let (a2, b2) = try session()
+        let f1 = try a1.seal(Data("x".utf8))
+        let f2 = try a2.seal(Data("x".utf8))
+        XCTAssertThrowsError(try b2.open(f1)) { XCTAssertEqual($0 as? RendezvousSignalingError, .authenticationFailed) }
+        XCTAssertThrowsError(try b1.open(f2)) { XCTAssertEqual($0 as? RendezvousSignalingError, .authenticationFailed) }
+        XCTAssertNoThrow(try b1.open(f1))
+        XCTAssertNoThrow(try b2.open(f2))
+    }
+
+    func testAADUsesSenderDirectionByte() throws {
+        // A frame whose AAD carries the RECEIVER's direction (swapped) must fail.
+        let sig = SymmetricKey(size: .bits256), sid = Data(repeating: 3, count: 16)
+        let receiver = try RendezvousSignalingCipher(key: sig, localDirection: .largerKey, day: 9, sessionID: sid)
+        let sk = RendezvousSignalingCrypto.sessionKey(signalingKey: sig, sessionID: sid, day: 9)
+        func forge(aadDirection: UInt8) throws -> Data {
+            let nonce = try ChaChaPoly.Nonce(data: Data([0, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0, 1]))
+            let aad = Data("rv-sig-v1".utf8) + Data([0, 0, 0, 0, 0, 0, 0, 9]) + sid + Data([aadDirection])
+            let box = try ChaChaPoly.seal(Data("m".utf8), using: sk, nonce: nonce, authenticating: aad)
+            return Data([0, 0, 0, 0, 0, 0, 0, 1]) + box.ciphertext + box.tag
+        }
+        XCTAssertThrowsError(try receiver.open(try forge(aadDirection: 0x02)))
+        XCTAssertEqual(try receiver.open(try forge(aadDirection: 0x01)), Data("m".utf8))
+    }
+
+    func testConcurrentSealsUseUniqueCountersAndAllOpen() throws {
+        let (alice, bob, _, _) = try connectedPair()
+        let n = 2000
+        let lock = NSLock()
+        var frames: [Data] = []
+        DispatchQueue.concurrentPerform(iterations: n) { i in
+            let w = try! alice.seal(Data("frame \(i)".utf8))
+            lock.lock(); frames.append(w); lock.unlock()
+        }
+        func counter(_ w: Data) -> UInt64 { w.prefix(8).reduce(0) { ($0 << 8) | UInt64($1) } }
+        let counters = frames.map(counter)
+        XCTAssertEqual(Set(counters).count, n)
+        XCTAssertEqual(Set(counters), Set((0..<UInt64(n))))
+        for w in frames.sorted(by: { counter($0) < counter($1) }) {
+            XCTAssertNoThrow(try bob.open(w))
+        }
+    }
+
     func testReferenceSemanticsPreventNonceReuse() throws {
         let (alice, _, _, _) = try connectedPair()
         let alias = alice
         let w0 = try alice.seal(Data("a".utf8))
         let w1 = try alias.seal(Data("b".utf8))
         XCTAssertNotEqual(w0.prefix(8), w1.prefix(8))
+    }
+}
+
+extension Data {
+    init(hex: String) {
+        var d = Data()
+        var i = hex.startIndex
+        while i < hex.endIndex {
+            let j = hex.index(i, offsetBy: 2)
+            d.append(UInt8(hex[i..<j], radix: 16)!)
+            i = j
+        }
+        self = d
     }
 }
