@@ -88,13 +88,14 @@ struct ChatBubbleView: View {
     var onReaction: ((String) -> Void)?
     var onEdit: ((String, String) -> Void)?
     var onDelete: ((String) -> Void)?
+    var onReply: (() -> Void)?
     let runStart: Bool
     let senderFallbackName: String
     /// The peer's current name from the live connection; wins over the name stored
     /// with the message (identity is fixed at handshake, so stored names can be old or blank).
     let liveSenderName: String?
 
-    init(message: ChatMessage, chatManager: ChatManager? = nil, runStart: Bool = true, senderFallbackName: String = String(localized: "Other person"), liveSenderName: String? = nil, onReaction: ((String) -> Void)? = nil, onEdit: ((String, String) -> Void)? = nil, onDelete: ((String) -> Void)? = nil) {
+    init(message: ChatMessage, chatManager: ChatManager? = nil, runStart: Bool = true, senderFallbackName: String = String(localized: "Other person"), liveSenderName: String? = nil, onReaction: ((String) -> Void)? = nil, onEdit: ((String, String) -> Void)? = nil, onDelete: ((String) -> Void)? = nil, onReply: (() -> Void)? = nil) {
         self.runStart = runStart
         self.senderFallbackName = senderFallbackName
         self.liveSenderName = liveSenderName
@@ -103,6 +104,7 @@ struct ChatBubbleView: View {
         self.onReaction = onReaction
         self.onEdit = onEdit
         self.onDelete = onDelete
+        self.onReply = onReply
     }
 
     private var isVoicePlaying: Bool {
@@ -193,6 +195,14 @@ struct ChatBubbleView: View {
                         showReactionPicker = true
                     } label: {
                         Label("React", systemImage: "face.smiling")
+                    }
+
+                    if let onReply, !message.isDeleted {
+                        Button {
+                            onReply()
+                        } label: {
+                            Label("Reply", systemImage: "arrowshape.turn.up.left")
+                        }
                     }
 
                     if message.canEditOrDelete {

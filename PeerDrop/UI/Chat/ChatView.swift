@@ -141,16 +141,17 @@ struct ChatView: View {
                                         messageID: messageID,
                                         to: peerID
                                     )
-                                }
+                                },
+                                onReply: { replyingToMessage = message }
                             )
                             .id(message.id)
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    replyingToMessage = message
-                                } label: {
-                                    Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                            .swipeToReply(isEnabled: !message.isDeleted, isDeleted: message.isDeleted) {
+                                replyingToMessage = message
+                            }
+                            .accessibilityActions {
+                                if !message.isDeleted {
+                                    Button("Reply") { replyingToMessage = message }
                                 }
-                                .tint(PaperTheme.color(.actionFill))
                             }
                         }
                     }
@@ -392,6 +393,9 @@ struct ChatView: View {
                     .foregroundStyle(PaperTheme.color(.inputPlaceholder))
             }
         }
+        // The accent bar is a shape with no intrinsic height and would otherwise grow to fill
+        // all the space the chat offers, turning this strip into a half-screen block.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(PaperTheme.color(.datePillFill))
