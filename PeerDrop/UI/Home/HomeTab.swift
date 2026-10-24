@@ -103,7 +103,7 @@ struct HomeTab: View, PaperThemed {
         }
         .sheet(item: $shareInvite) { _ in ShareSheet(items: [InviteMessage.body()]) }
         .chatTargetDestination()
-        .onAppear { bound.bind(connectionManager); contacts.refresh() }
+        .onAppear { bound.bind(connectionManager); contacts.refresh(); if contacts.canAsk { contacts.requestAccess() } }
         #else
         friendsList(snap)
             .navigationTitle("Home")
@@ -239,27 +239,29 @@ struct HomeTab: View, PaperThemed {
         .accessibilityHint(Text(isCollapsed ? "Expand section" : "Collapse section"))
     }
 
-    /// Phone contacts with an Invite button each. Asking for access is a row, not a prompt on launch.
+    /// Phone contacts, laid out like a messenger's "contact friends": a section whose first row invites
+    /// someone by link, then every contact with an Invite button. Access is asked for once, the first
+    /// time Home appears; if it is declined the section says how to turn it on.
     @ViewBuilder
     private var contactsSection: some View {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let shown = q.isEmpty ? contacts.entries : contacts.entries.filter { $0.name.localizedCaseInsensitiveContains(q) }
-        if contacts.canList {
-            if !shown.isEmpty {
-                section("contacts", title: Text("Contacts \(shown.count)")) {
-                    ForEach(shown) { entry in contactRow(entry) }
-                }
-            }
-        } else if contacts.canAsk && q.isEmpty {
-            Section {
-                Button { contacts.requestAccess() } label: {
+        let title: Text = contacts.canList ? Text("Contacts \(shown.count)") : Text("Contacts")
+        section("contacts", title: title) {
+            if q.isEmpty { inviteByLinkRow }
+            if contacts.canList {
+                ForEach(shown) { entry in contactRow(entry) }
+            } else if !contacts.canAsk && q.isEmpty {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "person.crop.rectangle.stack")
                             .font(.title3)
                             .foregroundStyle(paper(.brand))
                             .frame(width: 44, height: 44)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Invite people from your contacts")
+                            Text("Allow contacts access to invite friends")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(paper(.incomingText))
                             Text("Your contacts stay on this phone and are never uploaded.")
@@ -270,9 +272,34 @@ struct HomeTab: View, PaperThemed {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
                 .accessibilityIdentifier("contacts-allow-row")
             }
         }
+    }
+
+    private var inviteByLinkRow: some View {
+        ShareLink(item: Self.inviteURL) {
+            HStack(spacing: 12) {
+                Image(systemName: "envelope")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(paper(.incomingText).opacity(0.85)))
+                    .accessibilityHidden(true)
+                Text("Invite friends to PeerDrop")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(paper(.incomingText))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(paper(.datePillText))
+                    .accessibilityHidden(true)
+            }
+        }
+        .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+        .accessibilityIdentifier("invite-by-link-row")
     }
 
     private func contactRow(_ entry: ContactsInviteModel.Entry) -> some View {
@@ -298,6 +325,7 @@ struct HomeTab: View, PaperThemed {
             .accessibilityLabel(Text("Invite \(entry.name)"))
         }
         .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .accessibilityIdentifier("contact-row")
     }
     #endif
@@ -327,8 +355,10 @@ struct HomeTab: View, PaperThemed {
         return Button { showProfile = true } label: { content }
             .buttonStyle(.plain)
             .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         #else
         return content.listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         #endif
     }
 
@@ -385,6 +415,7 @@ struct HomeTab: View, PaperThemed {
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
         #else
@@ -392,6 +423,7 @@ struct HomeTab: View, PaperThemed {
             .buttonStyle(.plain)
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
         #endif
@@ -406,6 +438,7 @@ struct HomeTab: View, PaperThemed {
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
         #else
@@ -413,6 +446,7 @@ struct HomeTab: View, PaperThemed {
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
         .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { disconnectAndForget(record) }
@@ -443,6 +477,7 @@ struct HomeTab: View, PaperThemed {
         }
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #else
@@ -454,6 +489,7 @@ struct HomeTab: View, PaperThemed {
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #endif
@@ -477,6 +513,7 @@ struct HomeTab: View, PaperThemed {
                 }
                 .accessibilityIdentifier("group-row")
                 .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { groupStore.remove(id: group.id) } label: {
                         Label("Delete", systemImage: "trash")
@@ -488,6 +525,7 @@ struct HomeTab: View, PaperThemed {
                     .foregroundStyle(paper(.brand))
             }
             .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
             .accessibilityHint(Text("Creates a new device group"))
         }
     }
@@ -501,6 +539,7 @@ struct HomeTab: View, PaperThemed {
                     .foregroundStyle(paper(.brand))
             }
             .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
         }
         #endif
     }
