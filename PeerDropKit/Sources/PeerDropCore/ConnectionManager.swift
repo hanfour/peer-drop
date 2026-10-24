@@ -426,6 +426,9 @@ public final class ConnectionManager: ObservableObject {
     public let deviceStore = DeviceRecordStore()
     public let chatManager = ChatManager()
     public let groupStore = DeviceGroupStore()
+    /// Friend categories (Project F1). Built from the legacy `groupStore.groups`
+    /// so old DeviceGroups migrate once into categories.
+    public let categoryStore: FriendCategoryStore
     public let clipboardSyncManager = ClipboardSyncManager()
     public let trustedContactStore = TrustedContactStore(
         storageKey: PeerDropPersistence.scopedKey("trusted-contacts"))
@@ -809,8 +812,12 @@ public final class ConnectionManager: ObservableObject {
 
     public init(
         policyStore: SecurityPolicyStore? = nil,
-        cryptoMetrics: CryptoHardeningMetrics? = nil
+        cryptoMetrics: CryptoHardeningMetrics? = nil,
+        categoryStore: FriendCategoryStore? = nil
     ) {
+        self.categoryStore = categoryStore ?? FriendCategoryStore(
+            storageKey: PeerDropPersistence.scopedKey("categories"),
+            legacyGroups: groupStore.groups)
         // One-time migration off the pre-6.1 MailboxClient-only UserDefaults
         // key onto the canonical `WorkerURL.defaultsKey`, before anything
         // below reads the worker base URL.
@@ -2659,7 +2666,9 @@ public final class ConnectionManager: ObservableObject {
                     break
                 }
                 transition(to: .incomingRequest)
-                NotificationManager.shared.postIncomingConnection(from: peerIdentity.displayName)
+                NotificationManager.shared.postIncomingConnection(
+                    from: peerIdentity.displayName,
+                    muted: !shouldPresentNotification(forIdentity: peerIdentity))
                 pendingIncomingRequest = IncomingRequest(
                     peerIdentity: peerIdentity,
                     connection: connection
@@ -3774,7 +3783,8 @@ public final class ConnectionManager: ObservableObject {
                     timestamp: payload.timestamp
                 )
             }
-            NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text)
+            NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.text,
+                                                        muted: !shouldPresentNotification(for: peerConnection))
             sendDeliveryReceipt(for: savedMsg.id, to: peerConnection, groupID: payload.groupID)
 
         case .mediaMessage:
@@ -3800,7 +3810,8 @@ public final class ConnectionManager: ObservableObject {
                 peerID: chatKey,
                 peerName: peerConnection.peerIdentity.displayName
             )
-            NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
+            NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName,
+                                                        muted: !shouldPresentNotification(for: peerConnection))
             sendDeliveryReceipt(for: savedMedia.id, to: peerConnection)
 
         case .messageReceipt:
@@ -3898,7 +3909,8 @@ public final class ConnectionManager: ObservableObject {
             clipboardSyncManager.applyReceivedClipboard(payload)
             NotificationManager.shared.postChatMessage(
                 from: peerConnection.peerIdentity.displayName,
-                text: NSLocalizedString("Clipboard synced", comment: "")
+                text: NSLocalizedString("Clipboard synced", comment: ""),
+                muted: !shouldPresentNotification(for: peerConnection)
             )
 
         case .messageEdit:
@@ -5310,5 +5322,65 @@ public actor RetryController {
     /// Get the current attempt count without incrementing.
     var currentAttempt: Int {
         attemptCount
+    }
+}
+
+// MARK: - Friend categories: per-category notification mute (Project F1)
+
+extension ConnectionManager {
+    /// Is any of `ids` in a category whose notifications are off? Callers pass
+    /// every alias of the friend (see `notificationAliasIDs(for:)`).
+    public func isNotificationMuted(forPeer ids: [String]) -> Bool {
+        !categoryStore.notificationsEnabled(forAnyOf: ids)
+    }
+
+    /// Should a LOCAL notification (banner/sound) be presented for the friend
+    /// known by `ids`? Expands `ids` to all of the friend's aliases first, so a
+    /// category holding one record mutes the same person's other records too.
+    /// Muting never affects message handling or unread counts.
+    public func shouldPresentNotification(forPeer ids: [String]) -> Bool {
+        !isNotificationMuted(forPeer: notificationAliasIDs(for: ids))
+    }
+
+    /// Same decision for the peer on a live connection: its connections key,
+    /// its identity id, its chat thread key and any contact pinning its key.
+    func shouldPresentNotification(for connection: PeerConnection) -> Bool {
+        shouldPresentNotification(forIdentity: connection.peerIdentity,
+                                  extraIDs: [connection.id, ChatStorageKey.key(forConnection: connection)])
+    }
+
+    /// Same decision for a peer identity (e.g. an incoming connection request
+    /// that has no `PeerConnection` yet).
+    func shouldPresentNotification(forIdentity identity: PeerIdentity, extraIDs: [String] = []) -> Bool {
+        var ids = [identity.id] + extraIDs
+        if let key = identity.identityPublicKey,
+           let deviceID = trustedContactStore.find(byPublicKey: key)?.deviceId {
+            ids.append(deviceID)
+        }
+        return shouldPresentNotification(forPeer: ids)
+    }
+
+    /// Every id the friend behind `ids` may be stored under, as a closure over:
+    /// device records sharing an id / `peerDeviceId` / `peerIdentityId` (plus
+    /// each record's `chatKey(forRecord:)`), and trusted contacts pinning the
+    /// same identity public key (their `deviceId` is the `PeerIdentity.id`).
+    func notificationAliasIDs(for ids: [String]) -> [String] {
+        var known = Set(ids)
+        let records = deviceStore.records
+        let contacts = trustedContactStore.contacts
+        var changed = true
+        while changed {
+            changed = false
+            for record in records {
+                let recordIDs = [record.id, record.peerDeviceId, record.peerIdentityId].compactMap { $0 }
+                guard !known.isDisjoint(with: recordIDs) else { continue }
+                for id in recordIDs + [chatKey(forRecord: record)] where known.insert(id).inserted { changed = true }
+            }
+            let keys = Set(contacts.filter { $0.deviceId.map(known.contains) ?? false }.map(\.identityPublicKey))
+            for contact in contacts where keys.contains(contact.identityPublicKey) {
+                if let id = contact.deviceId, known.insert(id).inserted { changed = true }
+            }
+        }
+        return Array(known)
     }
 }

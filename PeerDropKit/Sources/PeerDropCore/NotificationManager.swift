@@ -12,7 +12,10 @@ public final class NotificationManager {
         } catch { return false }
     }
 
-    public func postIncomingConnection(from peerName: String) {
+    /// `muted`: the peer's friend category has notifications off — skip the
+    /// local banner/sound only (the caller still handles the event itself).
+    public func postIncomingConnection(from peerName: String, muted: Bool = false) {
+        guard !muted else { return }
         guard UserDefaults.standard.bool(forKey: "peerDropNotificationsEnabled") else { return }
         let content = UNMutableNotificationContent()
         content.title = "Incoming Connection"
@@ -22,7 +25,8 @@ public final class NotificationManager {
         UNUserNotificationCenter.current().add(request)
     }
 
-    public func postChatMessage(from peerName: String, text: String) {
+    public func postChatMessage(from peerName: String, text: String, muted: Bool = false) {
+        guard !muted else { return }
         guard UserDefaults.standard.bool(forKey: "peerDropNotificationsEnabled") else { return }
         let content = UNMutableNotificationContent()
         content.title = peerName
@@ -32,7 +36,8 @@ public final class NotificationManager {
         UNUserNotificationCenter.current().add(request)
     }
 
-    public func postTransferComplete(fileName: String, success: Bool) {
+    public func postTransferComplete(fileName: String, success: Bool, muted: Bool = false) {
+        guard !muted else { return }
         guard UserDefaults.standard.bool(forKey: "peerDropNotificationsEnabled") else { return }
         let content = UNMutableNotificationContent()
         content.title = success ? "Transfer Complete" : "Transfer Failed"
