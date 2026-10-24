@@ -13,6 +13,7 @@ declare namespace Cloudflare {
 		SIGNALING_ROOM: DurableObjectNamespace<import("./src/index").SignalingRoom>;
 		PREKEY_STORE: DurableObjectNamespace<import("./src/index").PreKeyStore>;
 		DEVICE_INBOX: DurableObjectNamespace<import("./src/index").DeviceInbox>;
+		RENDEZVOUS_ROOM: DurableObjectNamespace<import("./src/index").RendezvousRoom>;
 	}
 }
 interface Env extends Cloudflare.Env {}

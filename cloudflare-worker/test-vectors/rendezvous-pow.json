@@ -1,0 +1,96 @@
+{
+ "description": "Rendezvous PoW vectors. PoW = SHA256(tokenBytes || UInt64BE(hour) || utf8(nonce)) with >=16 leading zero bits; hour must equal floor(nowSeconds/3600) or that minus 1. Token is base64url (no padding) of 32 bytes.",
+ "difficultyBits": 16,
+ "vectors": [
+  {
+   "name": "valid current hour",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "asfh",
+   "nowSeconds": 1800000000,
+   "valid": true,
+   "bitsReported": 16,
+   "note": ""
+  },
+  {
+   "name": "valid previous hour",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 499999,
+   "n": "b6mm",
+   "nowSeconds": 1800000000,
+   "valid": true,
+   "bitsReported": 16,
+   "note": ""
+  },
+  {
+   "name": "wrong hour (two hours back)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 499998,
+   "n": "c4iz",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 16,
+   "note": "PoW itself valid, hour outside window"
+  },
+  {
+   "name": "wrong hour (future)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500001,
+   "n": "c37cd",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 18,
+   "note": "PoW itself valid, hour in future"
+  },
+  {
+   "name": "insufficient bits (15 exactly)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "dyis",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 15,
+   "note": "15 leading zero bits"
+  },
+  {
+   "name": "insufficient bits (low)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "0",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 2,
+   "note": ""
+  },
+  {
+   "name": "wrong token (nonce mined for another token)",
+   "token": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+   "h": 500000,
+   "n": "elsl",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 3,
+   "note": ""
+  },
+  {
+   "name": "nonce encoding edge (non-ASCII utf8)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "é🙂-1g1a",
+   "nowSeconds": 1800000000,
+   "valid": true,
+   "bitsReported": 16,
+   "note": "nonce hashed as UTF-8 bytes"
+  },
+  {
+   "name": "nonce encoding edge (empty nonce, rejected as invalid shape)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 0,
+   "note": "empty nonce not allowed"
+  }
+ ]
+}

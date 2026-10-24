@@ -1,0 +1,411 @@
+/**
+ * Anonymous rendezvous room (/rv) and ICE route (/rv/ice) — Project E, Task 2.
+ * PRIVACY is the point: these tests assert that nothing about the request
+ * (IP, token, headers) is logged or written to KV.
+ */
+import { SELF, env, runInDurableObject } from "cloudflare:test";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import vectors from "../../test-vectors/rendezvous-pow.json";
+import { verifyRendezvousClaim } from "../rendezvousPow";
+
+const GENERIC_CLOSE_CODE = 1008;
+const GENERIC_CLOSE_REASON = "denied";
+
+function b64u(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function randomToken(): string {
+  return b64u(crypto.getRandomValues(new Uint8Array(32)));
+}
+function fromB64u(s: string): Uint8Array {
+  const p = s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4);
+  return Uint8Array.from(atob(p), (c) => c.charCodeAt(0));
+}
+function hourNow(): number {
+  return Math.floor(Date.now() / 3_600_000);
+}
+async function leadingZeroBits(token: string, hour: number, nonce: string): Promise<number> {
+  const t = fromB64u(token);
+  const n = new TextEncoder().encode(nonce);
+  const buf = new Uint8Array(t.length + 8 + n.length);
+  buf.set(t, 0);
+  new DataView(buf.buffer).setBigUint64(t.length, BigInt(hour), false);
+  buf.set(n, t.length + 8);
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
+  let z = 0;
+  for (const b of h) {
+    if (b === 0) { z += 8; continue; }
+    z += Math.clz32(b) - 24;
+    break;
+  }
+  return z;
+}
+async function mine(token: string, hour: number): Promise<string> {
+  for (let i = 0; ; i++) {
+    const n = "n" + i.toString(36);
+    if ((await leadingZeroBits(token, hour, n)) >= 16) return n;
+  }
+}
+async function hello(token: string, opts: { hour?: number; nonce?: string } = {}): Promise<string> {
+  const h = opts.hour ?? hourNow();
+  const n = opts.nonce ?? (await mine(token, h));
+  return JSON.stringify({ v: 1, t: token, pow: { h, n } });
+}
+
+let ipCounter = 0;
+function freshIp(): string {
+  ipCounter++;
+  return `203.0.113.${(ipCounter % 250) + 1}`;
+}
+
+class TestSocket {
+  messages: (string | ArrayBuffer)[] = [];
+  closed: { code: number; reason: string } | null = null;
+  private waiters: (() => void)[] = [];
+  constructor(public ws: WebSocket) {
+    ws.accept();
+    ws.addEventListener("message", (e) => { this.messages.push(e.data as string | ArrayBuffer); this.wake(); });
+    ws.addEventListener("close", (e) => { this.closed = { code: e.code, reason: e.reason }; this.wake(); });
+  }
+  private wake() { const w = this.waiters; this.waiters = []; w.forEach((f) => f()); }
+  async waitFor(pred: () => boolean, ms = 4000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!pred()) {
+      const left = end - Date.now();
+      if (left <= 0) throw new Error("timeout waiting; messages=" + JSON.stringify(this.messages) + " closed=" + JSON.stringify(this.closed));
+      await new Promise<void>((res) => { this.waiters.push(res); setTimeout(res, Math.min(left, 50)); });
+    }
+  }
+  async nextMessage(): Promise<string | ArrayBuffer> {
+    await this.waitFor(() => this.messages.length > 0);
+    return this.messages.shift()!;
+  }
+  send(d: string | ArrayBuffer) { this.ws.send(d); }
+}
+
+async function connect(ip = freshIp()): Promise<TestSocket> {
+  const resp = await SELF.fetch("https://example.com/rv", {
+    headers: { Upgrade: "websocket", "CF-Connecting-IP": ip },
+  });
+  expect(resp.status).toBe(101);
+  return new TestSocket(resp.webSocket!);
+}
+async function join(token: string, ip = freshIp()): Promise<TestSocket> {
+  const s = await connect(ip);
+  s.send(await hello(token));
+  return s;
+}
+async function pair(token = randomToken()): Promise<{ a: TestSocket; b: TestSocket; token: string }> {
+  const a = await join(token);
+  const b = await join(token);
+  await a.waitFor(() => a.messages.length > 0);
+  await b.waitFor(() => b.messages.length > 0);
+  expect(JSON.parse(a.messages.shift() as string)).toEqual({ t: "joined" });
+  expect(JSON.parse(b.messages.shift() as string)).toEqual({ t: "joined" });
+  return { a, b, token };
+}
+function expectGenericClose(s: TestSocket) {
+  expect(s.closed).toEqual({ code: GENERIC_CLOSE_CODE, reason: GENERIC_CLOSE_REASON });
+}
+
+afterEach(() => { vi.restoreAllMocks(); });
+
+describe("PoW rule + shared vectors", () => {
+  for (const v of (vectors as any).vectors) {
+    it(`vector: ${v.name}`, async () => {
+      const ok = await verifyRendezvousClaim(
+        { v: 1, t: v.token, pow: { h: v.h, n: v.n } },
+        v.nowSeconds * 1000,
+      );
+      expect(ok !== null).toBe(v.valid);
+    });
+  }
+  it("has at least 5 vectors", () => {
+    expect((vectors as any).vectors.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("/rv pairing and relay", () => {
+  it("pairs two sockets, sends joined to both, blind-relays text and binary", async () => {
+    const { a, b } = await pair();
+    a.send("hello from a");
+    expect(await b.nextMessage()).toBe("hello from a");
+    b.send("not json {{{ at all");
+    expect(await a.nextMessage()).toBe("not json {{{ at all");
+    const bin = new Uint8Array([0, 1, 2, 250, 251]).buffer;
+    a.send(bin);
+    const got = (await b.nextMessage()) as ArrayBuffer;
+    expect(Array.from(new Uint8Array(got))).toEqual([0, 1, 2, 250, 251]);
+    a.ws.close(1000, "bye"); b.ws.close(1000, "bye");
+  });
+
+  it("sends left to the remaining socket when one closes", async () => {
+    const { a, b } = await pair();
+    a.ws.close(1000, "done");
+    expect(JSON.parse((await b.nextMessage()) as string)).toEqual({ t: "left" });
+    b.ws.close(1000, "done");
+  });
+
+  it("rooms are isolated per token", async () => {
+    const p1 = await pair();
+    const p2 = await pair();
+    p1.a.send("only p1");
+    expect(await p1.b.nextMessage()).toBe("only p1");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(p2.a.messages.length + p2.b.messages.length).toBe(0);
+    for (const s of [p1.a, p1.b, p2.a, p2.b]) s.ws.close(1000, "x");
+  });
+
+  it("answers ping with pong", async () => {
+    const { a, b } = await pair();
+    a.send("ping");
+    expect(await a.nextMessage()).toBe("pong");
+    expect(b.messages.length).toBe(0);
+    a.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+
+  it("third socket is rejected with the generic close and does not evict anyone", async () => {
+    const { a, b, token } = await pair();
+    // Make both existing sockets "old" is irrelevant: DO must never evict.
+    const c = await join(token);
+    await c.waitFor(() => c.closed !== null);
+    expectGenericClose(c);
+    a.send("still alive");
+    expect(await b.nextMessage()).toBe("still alive");
+    expect(a.closed).toBeNull();
+    expect(b.closed).toBeNull();
+    a.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+});
+
+describe("/rv failures are indistinguishable", () => {
+  async function failureOf(frame: string | ArrayBuffer | null, ip = freshIp()): Promise<TestSocket> {
+    const s = await connect(ip);
+    if (frame !== null) s.send(frame);
+    await s.waitFor(() => s.closed !== null, 8000);
+    return s;
+  }
+
+  it("bad JSON, bad version, bad token, bad hour, bad PoW, oversize, binary first frame", async () => {
+    const tok = randomToken();
+    const goodNonce = await mine(tok, hourNow());
+    const cases: (string | ArrayBuffer)[] = [
+      "not json",
+      JSON.stringify({ v: 2, t: tok, pow: { h: hourNow(), n: goodNonce } }),
+      JSON.stringify({ v: 1, t: "short", pow: { h: hourNow(), n: "x" } }),
+      JSON.stringify({ v: 1, t: b64u(new Uint8Array(31)), pow: { h: hourNow(), n: "x" } }),
+      JSON.stringify({ v: 1, t: tok + "=", pow: { h: hourNow(), n: goodNonce } }),
+      JSON.stringify({ v: 1, t: tok, pow: { h: hourNow() - 2, n: await mine(tok, hourNow() - 2) } }),
+      JSON.stringify({ v: 1, t: tok, pow: { h: hourNow() + 1, n: await mine(tok, hourNow() + 1) } }),
+      JSON.stringify({ v: 1, t: tok, pow: { h: hourNow(), n: "0" } }),
+      JSON.stringify({ v: 1, t: tok, pow: { h: String(hourNow()), n: goodNonce } }),
+      JSON.stringify({ v: 1, t: tok, pow: { h: hourNow(), n: goodNonce }, pad: "x".repeat(600) }),
+      new Uint8Array([1, 2, 3]).buffer,
+    ];
+    const seen = new Set<string>();
+    for (const c of cases) {
+      const s = await failureOf(c);
+      expectGenericClose(s);
+      seen.add(`${s.closed!.code}|${s.closed!.reason}`);
+    }
+    expect(seen.size).toBe(1);
+  });
+
+  it("accepts a previous-hour PoW", async () => {
+    const tok = randomToken();
+    const s = await connect();
+    s.send(await hello(tok, { hour: hourNow() - 1 }));
+    const t = await join(tok);
+    await s.waitFor(() => s.messages.length > 0);
+    expect(JSON.parse(s.messages[0] as string)).toEqual({ t: "joined" });
+    s.ws.close(1000, "x"); t.ws.close(1000, "x");
+  });
+
+  it("closes with the generic close when no first frame arrives within 5 s", async () => {
+    const s = await failureOf(null);
+    expectGenericClose(s);
+  }, 15000);
+
+  it("rate limit: 13th attempt for the same (ip, token) is closed generically", async () => {
+    const ip = freshIp();
+    const tok = randomToken();
+    const nonce = await mine(tok, hourNow());
+    const frame = JSON.stringify({ v: 1, t: tok, pow: { h: hourNow(), n: nonce } });
+    // 12 attempts: some pair, some hit "room full" - all consume the budget.
+    for (let i = 0; i < 12; i++) {
+      const s = await connect(ip);
+      s.send(frame);
+      await new Promise((r) => setTimeout(r, 30));
+      s.ws.close(1000, "x");
+    }
+    await new Promise((r) => setTimeout(r, 200)); // let the room empty
+    // Control: a different IP with the same token is admitted and stays open.
+    const control = await connect(freshIp());
+    control.send(frame);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(control.closed).toBeNull();
+    control.ws.close(1000, "x");
+    await new Promise((r) => setTimeout(r, 200));
+    // The 13th attempt from the original IP would be admitted (room is empty)
+    // were it not rate limited, so a generic close proves the limiter fired.
+    const last = await connect(ip);
+    last.send(frame);
+    await last.waitFor(() => last.closed !== null);
+    expectGenericClose(last);
+  });
+
+  it("rate limit does not leak through the shared 'room' KV bucket and uses no KV", async () => {
+    const before = await env.ROOMS.list({ prefix: "rl:" });
+    const ip = freshIp();
+    for (let i = 0; i < 3; i++) {
+      const s = await connect(ip);
+      s.send("garbage");
+      await s.waitFor(() => s.closed !== null);
+    }
+    const after = await env.ROOMS.list({ prefix: "rl:" });
+    expect(after.keys.length).toBe(before.keys.length);
+  });
+});
+
+describe("/rv idle cap (injected clock)", () => {
+  it("closes all sockets after 2 h without frames, and not before", async () => {
+    const { a, b, token } = await pair();
+    const stub = env.RENDEZVOUS_ROOM.get(env.RENDEZVOUS_ROOM.idFromName(token));
+    await runInDurableObject(stub, async (inst: any) => {
+      const base = Date.now();
+      inst.now = () => base + 119 * 60_000;
+      inst.checkIdle();
+      expect(inst.ctx.getWebSockets().length).toBe(2);
+      inst.now = () => base + 2 * 3600_000 + 1000;
+      inst.checkIdle();
+    });
+    await a.waitFor(() => a.closed !== null);
+    await b.waitFor(() => b.closed !== null);
+    expectGenericClose(a);
+    expectGenericClose(b);
+  });
+
+  it("a frame resets the idle timer", async () => {
+    const { a, b, token } = await pair();
+    const stub = env.RENDEZVOUS_ROOM.get(env.RENDEZVOUS_ROOM.idFromName(token));
+    await runInDurableObject(stub, async (inst: any) => {
+      const base = Date.now();
+      inst.now = () => base + 100 * 60_000;
+      inst.touch(inst.ctx.getWebSockets()[0]);
+      inst.now = () => base + 200 * 60_000; // 100 min after the touch
+      inst.checkIdle();
+      expect(inst.ctx.getWebSockets().length).toBe(2);
+    });
+    a.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+});
+
+describe("POST /rv/ice", () => {
+  async function postIce(body: unknown, headers: Record<string, string> = {}): Promise<Response> {
+    return SELF.fetch("https://example.com/rv/ice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": freshIp(), ...headers },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  }
+
+  it("returns ICE config without Authorization and without any room token", async () => {
+    const t = randomToken();
+    const r = await postIce({ t, pow: { h: hourNow(), n: await mine(t, hourNow()) } });
+    expect(r.status).toBe(200);
+    const j = (await r.json()) as any;
+    expect(Array.isArray(j.iceServers)).toBe(true);
+    expect(j.iceServers.length).toBeGreaterThan(0);
+    expect(Object.keys(j)).toEqual(["iceServers"]);
+    expect(JSON.stringify(j)).not.toContain(t);
+    expect(r.headers.get("Set-Cookie")).toBeNull();
+  });
+
+  it("all failures return the identical status and body", async () => {
+    const t = randomToken();
+    const good = await mine(t, hourNow());
+    const bodies: unknown[] = [
+      "not json",
+      { t, pow: { h: hourNow(), n: "0" } },
+      { t: "short", pow: { h: hourNow(), n: good } },
+      { t, pow: { h: hourNow() - 2, n: await mine(t, hourNow() - 2) } },
+      { t, pow: { h: hourNow(), n: good }, pad: "x".repeat(600) },
+      {},
+    ];
+    const seen = new Set<string>();
+    for (const b of bodies) {
+      const r = await postIce(b);
+      seen.add(`${r.status}|${await r.text()}`);
+    }
+    expect(seen.size).toBe(1);
+    expect([...seen][0].startsWith("403|")).toBe(true);
+  });
+
+  it("rate limited after 12 attempts per (ip, token), with the same generic failure", async () => {
+    const ip = freshIp();
+    const t = randomToken();
+    const body = { t, pow: { h: hourNow(), n: await mine(t, hourNow()) } };
+    for (let i = 0; i < 12; i++) {
+      const r = await postIce(body, { "CF-Connecting-IP": ip });
+      expect(r.status).toBe(200);
+    }
+    const r = await postIce(body, { "CF-Connecting-IP": ip });
+    const bad = await postIce("nope", { "CF-Connecting-IP": ip });
+    expect(r.status).toBe(403);
+    expect(await r.text()).toBe(await bad.text());
+  });
+});
+
+describe("existing routes unchanged", () => {
+  it("POST /room still requires auth", async () => {
+    const r = await SELF.fetch("https://example.com/room", { method: "POST" });
+    expect(r.status).toBe(401);
+  });
+  it("POST /room/:code/ice still requires auth", async () => {
+    const r = await SELF.fetch("https://example.com/room/ABCDEF/ice", { method: "POST" });
+    expect(r.status).toBe(401);
+  });
+  it("/room is still rate limited via KV and /rv traffic does not consume that bucket", async () => {
+    const ip = "198.51.100.77";
+    for (let i = 0; i < 40; i++) {
+      const s = await SELF.fetch("https://example.com/rv", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } });
+      const ts = new TestSocket(s.webSocket!);
+      ts.ws.close(1000, "x");
+    }
+    const r = await SELF.fetch("https://example.com/room", { method: "POST", headers: { "X-API-Key": "test-api-key-12345", "CF-Connecting-IP": ip } });
+    expect(r.status).toBe(201);
+  });
+});
+
+describe("PRIVACY: no logging, no KV writes", () => {
+  it("a full /rv session and /rv/ice call touch no console and no KV", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m));
+    const snap = async () => ({
+      rooms: (await env.ROOMS.list()).keys.map((k) => k.name).sort(),
+      v2: (await env.V2_STORE.list()).keys.map((k) => k.name).sort(),
+      metrics: (await env.METRICS.list()).keys.map((k) => k.name).sort(),
+    });
+    const before = await snap();
+
+    const { a, b, token } = await pair();
+    a.send("x"); await b.nextMessage();
+    const c = await join(token); await c.waitFor(() => c.closed !== null);
+    const bad = await connect(); bad.send("garbage"); await bad.waitFor(() => bad.closed !== null);
+    a.ws.close(1000, "x");
+    await b.nextMessage();
+    b.ws.close(1000, "x");
+    const t = randomToken();
+    await SELF.fetch("https://example.com/rv/ice", {
+      method: "POST",
+      body: JSON.stringify({ t, pow: { h: hourNow(), n: await mine(t, hourNow()) } }),
+    });
+    await SELF.fetch("https://example.com/rv/ice", { method: "POST", body: "junk" });
+
+    const after = await snap();
+    expect(after).toEqual(before);
+    expect([...after.rooms, ...after.v2, ...after.metrics].some((k) => k.startsWith("wslog:"))).toBe(false);
+    for (const s of spies) expect(s).not.toHaveBeenCalled();
+  });
+});
