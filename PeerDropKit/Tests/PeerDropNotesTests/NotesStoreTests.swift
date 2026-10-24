@@ -456,6 +456,18 @@ final class NotesStoreTests: XCTestCase {
         do { _ = try await store.send(text: "x", to: "TESTRCPT", anonymous: true); XCTFail() } catch { XCTAssertEqual(error as? NotesStoreError, .recipientHasNoKeys) }
         do { _ = try await store.send(text: String(repeating: "x", count: 2_001), to: "TESTRCPT", anonymous: true); XCTFail() } catch { XCTAssertEqual(error as? NotesStoreError, .textTooLong) }
     }
+    func testMarkReadLocallySendsNothingToTheServerAndSurvivesReload() async throws {
+        let env = try NoteCrypto.seal(text: "hi", recipient: try me.entry(), signer: nil)
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAE", env)]))]
+        await store.sync()
+        let requestsBefore = TestURLProtocol.requests.count
+        await store.markRead(store.inbox[0].id, notifyServer: false)
+        XCTAssertNotNil(store.inbox[0].readAt)
+        XCTAssertEqual(store.unreadCount, 0)
+        XCTAssertEqual(TestURLProtocol.requests.count, requestsBefore, "opening a stranger's note must not touch the network")
+        store.load()
+        XCTAssertNotNil(store.inbox[0].readAt, "still read after reload from disk")
+    }
     func testMarkReadDeleteBlockReport() async throws {
         let env = try NoteCrypto.seal(text: "hi", recipient: try me.entry(), signer: nil)
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAE", env)]))]

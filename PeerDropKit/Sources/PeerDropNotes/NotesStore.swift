@@ -481,14 +481,15 @@ public final class NotesStore: ObservableObject {
 
     // MARK: - Inbox actions (local first, server best-effort)
 
-    public func markRead(_ id: String) async {
+    /// `notifyServer: false` is for notes from strangers: reading them is purely local (no request at all).
+    public func markRead(_ id: String, notifyServer: Bool = true) async {
         guard let i = inbox.firstIndex(where: { $0.id == id }), inbox[i].readAt == nil else { return }
         inbox[i].readAt = Date()
         if !isMock {
             do { try storage.save(inbox[i]) } catch { lastError = error.localizedDescription }
         }
         recount()
-        if !isMock { try? await client.markRead(id: id) }
+        if !isMock, notifyServer { try? await client.markRead(id: id) }
     }
 
     public func delete(_ record: NoteRecord) async {

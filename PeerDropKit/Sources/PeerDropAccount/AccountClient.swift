@@ -151,6 +151,21 @@ public actor AccountClient {
         return r.nickname
     }
 
+    /// `GET /v3/account/settings` -> `notePush` (true when the account never changed it).
+    public func fetchNotePush() async throws -> Bool {
+        struct R: Decodable { let notePush: Bool }
+        let r: R = try await request("GET", "v3/account/settings", body: Optional<EmptyBody>.none)
+        return r.notePush
+    }
+
+    /// `PUT /v3/account/settings` with exactly `{"notePush": Bool}`; returns the stored value.
+    public func updateNotePush(_ on: Bool) async throws -> Bool {
+        struct Body: Encodable { let notePush: Bool }
+        struct R: Decodable { let notePush: Bool }
+        let r: R = try await request("PUT", "v3/account/settings", body: Body(notePush: on))
+        return r.notePush
+    }
+
     public func lookup(handle: String, includeBundle: Bool) async throws -> DirectoryEntry? {
         let escaped = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? handle
         let path = "v3/directory/\(escaped)" + (includeBundle ? "?bundle=1" : "")
