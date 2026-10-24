@@ -127,13 +127,20 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         let searching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         return List {
-            inboxRow
             if rowModels.isEmpty {
-                if !hasLoaded { EmptyView() } else if searching { noResults } else { emptyState }
+                // Own section: a transparent empty-state row in the same section
+                // leaves the inbox card with a squared-off bottom edge.
+                Section { inboxRow }
+                Section {
+                    if !hasLoaded { EmptyView() } else if searching { noResults } else { emptyState }
+                }
             } else {
-                ForEach(rowModels) { model in
-                    row(model, presence: presenceMap[model.sourceID])
-                        .listRowBackground(paper(.incomingBubble))
+                Section {
+                    inboxRow
+                    ForEach(rowModels) { model in
+                        row(model, presence: presenceMap[model.sourceID])
+                            .listRowBackground(paper(.incomingBubble))
+                    }
                 }
             }
         }
