@@ -19703,37 +19703,37 @@
         }
       }
     },
-    "Turning it off is quiet. Nothing is sent to your friend; you simply stop showing as online to them.": {
+    "Turning it off is quiet. Nothing is announced to your friend; you simply stop showing as online to them.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turning it off is quiet. Nothing is sent to your friend; you simply stop showing as online to them."
+            "value": "Turning it off is quiet. Nothing is announced to your friend; you simply stop showing as online to them."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "オフにしても静かに切り替わります。友だちには何も送られず、相手側でオンライン表示にならなくなるだけです。"
+            "value": "オフにしても静かに切り替わります。友だちへの告知は何もなく、相手側でオンライン表示にならなくなるだけです。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "끄면 조용히 바뀌어요. 친구에게는 아무것도 전달되지 않고, 상대방 쪽에서 내가 온라인으로 표시되지 않을 뿐이에요."
+            "value": "끄면 조용히 바뀌어요. 친구에게 따로 알리지 않고, 상대방 쪽에서 내가 온라인으로 표시되지 않을 뿐이에요."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关闭时是悄悄的，不会通知朋友；你只是不再在他那边显示在线。"
+            "value": "关闭时是悄悄的，不会对朋友做任何宣告；你只是不再在他那边显示在线。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "關閉時是悄悄的，不會通知朋友；你只是不再於他那邊顯示在線。"
+            "value": "關閉時是悄悄的，不會對朋友做任何宣告；你只是不再於他那邊顯示在線。"
           }
         }
       }
@@ -19808,37 +19808,72 @@
         }
       }
     },
-    "Our server does not store who your friends are, and your chats are end-to-end encrypted. Someone watching network traffic live could, in theory, guess that two devices are connecting to each other because they join at the same moment.": {
+    "We don't store who your friends are, and chats are end-to-end encrypted. But we (or anyone who can watch our servers' live traffic, such as Cloudflare) could notice that two devices join at the same moment and infer that they are in touch.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Our server does not store who your friends are, and your chats are end-to-end encrypted. Someone watching network traffic live could, in theory, guess that two devices are connecting to each other because they join at the same moment."
+            "value": "We don't store who your friends are, and chats are end-to-end encrypted. But we (or anyone who can watch our servers' live traffic, such as Cloudflare) could notice that two devices join at the same moment and infer that they are in touch."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "サーバーにはあなたの友だちが誰かは保存されず、チャットの内容はエンドツーエンドで暗号化されます。ただし、ネットワークの通信をリアルタイムで監視できる人がいれば、2 台の端末が同じ瞬間に接続することから、互いにつながっていると推測できる可能性が理論上はあります。"
+            "value": "サーバーにはあなたの友だちが誰かは保存されず、チャットの内容はエンドツーエンドで暗号化されます。ただし、私たち（またはCloudflareのように、サーバーの通信をリアルタイムで監視できる人）は、2台の端末が同じ瞬間に接続したことに気づき、やりとりがあると推測できる可能性があります。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "서버에는 친구가 누구인지 저장되지 않고, 채팅 내용은 종단 간 암호화돼요. 다만 네트워크 트래픽을 실시간으로 지켜보는 사람이 있다면, 두 기기가 같은 시각에 접속하는 것을 보고 서로 연결 중이라고 추측할 수 있는 가능성이 이론상 있어요."
+            "value": "친구가 누구인지는 저장하지 않고, 채팅은 종단 간 암호화돼요. 다만 우리(또는 Cloudflare처럼 우리 서버의 실시간 트래픽을 볼 수 있는 누구든)는 두 기기가 같은 순간에 접속하는 것을 알아채고 서로 연락하는 사이라고 추측할 수 있어요."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "我们的服务器不会储存你的朋友是谁，聊天内容也是端到端加密。不过，如果有人实时监看网络流量，理论上可以从两台设备在同一时间连线，推测出它们正在互相连线。"
+            "value": "我们不会储存你的朋友是谁，聊天内容也是端到端加密。不过，我们（或任何能实时监看我们服务器流量的人，例如 Cloudflare）可能会注意到两台设备在同一时间连上，进而推测它们有往来。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "我們的伺服器不會儲存你的朋友是誰，聊天內容也是端對端加密。不過，如果有人即時監看網路流量，理論上可以從兩台裝置在同一時間連線，推測出它們正在互相連線。"
+            "value": "我們不會儲存你的朋友是誰，聊天內容也是端對端加密。不過，我們（或任何能即時監看我們伺服器流量的人，例如 Cloudflare）可能會注意到兩台裝置在同一時間連上，進而推測它們有往來。"
+          }
+        }
+      }
+    },
+    "Always connected. Not available right now. You can turn it off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. Not available right now. You can turn it off."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。いまは使えませんが、オフにできます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 지금은 사용할 수 없지만 끌 수 있어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。目前无法使用，你可以把它关闭。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。目前無法使用，你可以把它關閉。"
           }
         }
       }

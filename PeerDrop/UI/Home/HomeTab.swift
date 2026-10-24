@@ -196,14 +196,14 @@ struct HomeTab: View, PaperThemed {
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(paper(.incomingBubble))
-            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record))
+            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
         #else
         Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
             .buttonStyle(.plain)
             .accessibilityIdentifier("active-peer-row")
             .listRowBackground(paper(.incomingBubble))
-            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record))
+            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
         #endif
     }
@@ -222,7 +222,7 @@ struct HomeTab: View, PaperThemed {
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
         .listRowBackground(paper(.incomingBubble))
-        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record))
+        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
@@ -248,7 +248,7 @@ struct HomeTab: View, PaperThemed {
         }
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
-        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record))
+        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #else
         Button {
@@ -259,7 +259,7 @@ struct HomeTab: View, PaperThemed {
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
-        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record))
+        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #endif
     }
@@ -346,7 +346,7 @@ struct HomeTab: View, PaperThemed {
 /// swipe, and a VoiceOver custom action (so it is reachable without gestures; the Mac menu is keyboard-reachable too).
 private extension View {
     func alwaysConnectedEntry(for record: DeviceRecord, open: @escaping (AlwaysConnectedTarget) -> Void,
-                              target: AlwaysConnectedTarget) -> some View {
+                              target: AlwaysConnectedTarget, tint: Color) -> some View {
         self
             .contextMenu {
                 Button { open(target) } label: {
@@ -357,7 +357,7 @@ private extension View {
                 Button { open(target) } label: {
                     Label(LocalizedStringKey(AlwaysConnectedPresentation.titleKey), systemImage: "dot.radiowaves.left.and.right")
                 }
-                .tint(.indigo)
+                .tint(tint)
             }
             .accessibilityAction(named: Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey))) { open(target) }
     }

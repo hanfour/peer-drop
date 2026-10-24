@@ -1024,4 +1024,49 @@ extension RendezvousManagerTests {
         XCTAssertEqual(manager.lastFailureReason(for: c.id), .installRefused)
         XCTAssertNotEqual(manager.roomCount, 0, "refusal is not a suspension")
     }
+
+    // MARK: Task 6 fix round 1 (I3): lastFailures lifecycle
+
+    func testFailureClearedWhenOptInTurnedOff() async {
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: .keyMismatch)
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .keyMismatch)
+        contacts[0].rendezvousEnabled = nil
+        manager.contactsDidChange()
+        XCTAssertNil(manager.lastFailureReason(for: c.id))
+    }
+
+    func testFailureClearedWhenKeyOrDeviceIdChanges() async {
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: .keyMismatch)
+        contacts[0].deviceId = "dev-changed-\(UUID().uuidString)"
+        manager.contactsDidChange()
+        XCTAssertNil(manager.lastFailureReason(for: c.id))
+    }
+
+    func testFailureClearedByClearSuspension() async {
+        let c = await suspendedFriend()
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .helloMismatch)
+        manager.clearSuspension(contactID: c.id)
+        XCTAssertNil(manager.lastFailureReason(for: c.id))
+    }
+
+    func testFailureClearedOnSuccessfulConnect() async {
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: .timeout)
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .timeout)
+        manager.secureChannelDidComplete(contactID: c.id, ok: true)
+        XCTAssertNil(manager.lastFailureReason(for: c.id))
+    }
+
+    func testFailureSurvivesUnrelatedContactChange() async {
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: .keyMismatch)
+        manager.contactsDidChange()
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .keyMismatch)
+    }
 }

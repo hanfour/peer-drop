@@ -47,8 +47,8 @@ struct ChatView: View, PaperThemed {
     @StateObject private var voiceRecorder = VoiceRecorder()
     #if os(iOS)
     @State private var showConnectionInfo = false
-    @State private var showAlwaysConnectedInfo = false
     #endif
+    @State private var showAlwaysConnectedInfo = false
 
     /// A headless peer (peerdrop-cli: a shell or AI agent) has no audio and no
     /// useful file handling, so the chat hides the attach + voice-message
@@ -304,6 +304,15 @@ struct ChatView: View, PaperThemed {
                 }
             }
             #endif
+            if AlwaysConnectedPresentation.showsChatButton(bindingIsVerified: thread.binding == .verified) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showAlwaysConnectedInfo = true } label: {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                    }
+                    .accessibilityLabel(Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey)))
+                    .accessibilityIdentifier("always-connected-button")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 ExchangeNotesButton(peerID: peerID, peerName: displayName,
                                     bindingState: thread.binding, contactID: thread.contactID)
@@ -316,13 +325,13 @@ struct ChatView: View, PaperThemed {
                 }
             }
         }
-        #if os(iOS)
-        .navigationDestination(isPresented: $showConnectionInfo) {
-            ConnectionView().environmentObject(connectionManager)
-        }
         .sheet(isPresented: $showAlwaysConnectedInfo) {
             AlwaysConnectedFriendSheet(peerID: peerID, name: displayName)
                 .environmentObject(connectionManager)
+        }
+        #if os(iOS)
+        .navigationDestination(isPresented: $showConnectionInfo) {
+            ConnectionView().environmentObject(connectionManager)
         }
         #endif
         .onAppear {

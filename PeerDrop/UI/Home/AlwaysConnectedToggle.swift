@@ -22,6 +22,9 @@ enum AlwaysConnectedPresentation {
         case on(Link)
         /// Off, and 5 other friends already use it.
         case limitReached
+        /// The flag is on but the friend is not eligible right now (e.g. a re-exchange is pending): the only
+        /// thing the toggle can do is turn it off, so a slot can never be stuck.
+        case disableOnly
     }
 
     /// Result of trying to flip the toggle.
@@ -39,7 +42,7 @@ enum AlwaysConnectedPresentation {
     static func state(contact: TrustedContact, enabledCount: Int, rendezvousState: RendezvousLinkState,
                       eligible: Bool? = nil) -> State {
         let isEligible = eligible ?? (contact.accountId != nil && contact.pendingAccountBinding == nil && !contact.isBlocked)
-        guard isEligible else { return .unavailableNotBound }
+        guard isEligible else { return contact.isRendezvousEnabled ? .disableOnly : .unavailableNotBound }
         if contact.isRendezvousEnabled {
             switch rendezvousState {
             case .connected: return .on(.online)
@@ -53,14 +56,16 @@ enum AlwaysConnectedPresentation {
 
     static func isToggleInteractive(_ s: State) -> Bool {
         switch s {
-        case .off, .on: return true
+        case .off, .on, .disableOnly: return true
         case .unavailableNotBound, .limitReached: return false
         }
     }
 
     static func toggleIsOn(_ s: State) -> Bool {
-        if case .on = s { return true }
-        return false
+        switch s {
+        case .on, .disableOnly: return true
+        default: return false
+        }
     }
 
     static func enabledCount(in store: TrustedContactStore) -> Int {
@@ -73,9 +78,12 @@ enum AlwaysConnectedPresentation {
     /// is a quiet downgrade: store flag cleared, then any suspension lifted so a later re-enable starts clean.
     @MainActor
     static func apply(enabled: Bool, contactID: UUID, store: TrustedContactStore,
-                      clearSuspension: (UUID) -> Void) -> Outcome {
+                      clearSuspension: (UUID) -> Void, contactsDidChange: () -> Void) -> Outcome {
         do {
             try store.setRendezvousEnabled(for: contactID, enabled)
+            // The store's publisher fires before the new value is readable, so tell the manager explicitly:
+            // joining / leaving the room happens now, not at the next tick.
+            contactsDidChange()
             if !enabled { clearSuspension(contactID) }
             return .applied
         } catch RendezvousOptInError.limitExceeded {
@@ -91,7 +99,8 @@ enum AlwaysConnectedPresentation {
         switch outcome {
         case .limitReached: return limitReachedKey
         case .unavailable: return unavailableKey
-        case .applied, .unknownContact: return nil
+        case .unknownContact: return unavailableKey
+        case .applied: return nil
         }
     }
 
@@ -106,13 +115,18 @@ enum AlwaysConnectedPresentation {
         isRendezvousConnection ? .alwaysConnectedSheet : .connectionView
     }
 
-    /// The neutral "key may have changed" item: local diagnostics only, and only for key-related causes.
+    /// The neutral "key may have changed" item: local diagnostics only, and only for the AUTHENTICATED
+    /// contradiction (`helloMismatch`). `keyMismatch` / unauthenticated HELLO can be caused by anyone on the
+    /// path, so they show nothing.
     static func showsKeyChangedItem(reason: RendezvousConnectionFailure?) -> Bool {
-        switch reason {
-        case .keyMismatch, .helloMismatch, .helloMismatchUnauthenticated: return true
-        default: return false
-        }
+        reason == .helloMismatch
     }
+
+    /// Chat toolbar button: whenever the thread has a verified binding, whatever the presence is.
+    static func showsChatButton(bindingIsVerified: Bool) -> Bool { bindingIsVerified }
+
+    /// A live non-cross-network connection to the friend exists.
+    static func isDirectConnection(live: Bool, isRendezvous: Bool) -> Bool { live && !isRendezvous }
 
     // MARK: - Strings (English source text is the catalog key)
 
@@ -132,29 +146,32 @@ enum AlwaysConnectedPresentation {
     static let statusOnlineKey = "Connected across networks"
 
     /// Visible status line of a turned-on friend; nil when there is nothing to report.
-    static func statusKey(_ s: State) -> String? {
+    /// A friend connected nearby/direct is connected: the "not connected" line would be false, so it is hidden.
+    static func statusKey(_ s: State, directlyConnected: Bool = false) -> String? {
+        if directlyConnected, case .on(let l) = s, l != .online { return nil }
         switch s {
         case .on(.waiting): return statusWaitingKey
         case .on(.connecting): return statusConnectingKey
         case .on(.online): return statusOnlineKey
-        case .off, .unavailableNotBound, .limitReached: return nil
+        case .off, .unavailableNotBound, .limitReached, .disableOnly: return nil
         }
     }
 
     /// SF Symbol for the status line, so the state is never colour-only.
-    static func statusSymbol(_ s: State) -> String? {
+    static func statusSymbol(_ s: State, directlyConnected: Bool = false) -> String? {
+        if directlyConnected, case .on(let l) = s, l != .online { return nil }
         switch s {
         case .on(.waiting): return "clock"
         case .on(.connecting): return "arrow.triangle.2.circlepath"
         case .on(.online): return "checkmark.circle.fill"
-        case .off, .unavailableNotBound, .limitReached: return nil
+        case .off, .unavailableNotBound, .limitReached, .disableOnly: return nil
         }
     }
 
     /// Footnote paragraphs under the toggle, in order. Never empty.
     static func footnoteKeys(_ s: State) -> [String] {
         switch s {
-        case .unavailableNotBound: return [unavailableKey]
+        case .unavailableNotBound, .disableOnly: return [unavailableKey]
         case .off: return [explanationKey, chatOnlyKey]
         case .limitReached: return [limitReachedKey, explanationKey, chatOnlyKey]
         case .on(.waiting), .on(.connecting): return [explanationKey, chatOnlyKey]
@@ -162,8 +179,10 @@ enum AlwaysConnectedPresentation {
         }
     }
 
-    static func voiceOverKey(_ s: State) -> String {
+    static func voiceOverKey(_ s: State, directlyConnected: Bool = false) -> String {
+        if directlyConnected, case .on(let l) = s, l != .online { return voiceOverKey(.off) }
         switch s {
+        case .disableOnly: return "Always connected. Not available right now. You can turn it off."
         case .unavailableNotBound: return "Always connected. Not available yet. Exchange notes with this friend first."
         case .off: return "Always connected for this friend."
         case .limitReached: return "Always connected. The limit of 5 friends is reached."
@@ -175,7 +194,9 @@ enum AlwaysConnectedPresentation {
 
     static func localized(_ key: String) -> String { String(localized: String.LocalizationValue(key)) }
 
-    static func voiceOverText(_ s: State) -> String { localized(voiceOverKey(s)) }
+    static func voiceOverText(_ s: State, directlyConnected: Bool = false) -> String {
+        localized(voiceOverKey(s, directlyConnected: directlyConnected))
+    }
 
     // MARK: - Explainer
 
@@ -192,12 +213,12 @@ enum AlwaysConnectedPresentation {
         ]),
         ExplainerSection(headerKey: "Good to know", bodyKeys: [
             "You can keep up to 5 friends always connected at a time.",
-            "Turning it off is quiet. Nothing is sent to your friend; you simply stop showing as online to them.",
+            "Turning it off is quiet. Nothing is announced to your friend; you simply stop showing as online to them.",
             "When the app is not open, you fall back to notes.",
             chatOnlyKey,
         ]),
         ExplainerSection(headerKey: "What we can see", bodyKeys: [
-            "Our server does not store who your friends are, and your chats are end-to-end encrypted. Someone watching network traffic live could, in theory, guess that two devices are connecting to each other because they join at the same moment.",
+            "We don't store who your friends are, and chats are end-to-end encrypted. But we (or anyone who can watch our servers' live traffic, such as Cloudflare) could notice that two devices join at the same moment and infer that they are in touch.",
         ]),
     ]
 
@@ -206,8 +227,8 @@ enum AlwaysConnectedPresentation {
         var keys: [String] = [titleKey, explanationKey, unavailableKey, limitReachedKey, chatOnlyKey, keyChangedKey,
                               turnOffTitleKey, turnOffMessageKey, turnOffButtonKey, explainerTitleKey,
                               statusWaitingKey, statusConnectingKey, statusOnlineKey]
-        let states: [State] = [.unavailableNotBound, .off, .on(.waiting), .on(.connecting), .on(.online), .limitReached]
-        keys += states.map(voiceOverKey)
+        let states: [State] = [.unavailableNotBound, .off, .on(.waiting), .on(.connecting), .on(.online), .limitReached, .disableOnly]
+        keys += states.map { voiceOverKey($0) }
         for section in explainerSections { keys.append(section.headerKey); keys += section.bodyKeys }
         var seen = Set<String>()
         return keys.filter { seen.insert($0).inserted }
@@ -227,6 +248,12 @@ struct AlwaysConnectedToggleSection: View {
 
     @State private var confirmOff = false
     @State private var failureKey: String?
+
+    /// Live non-cross-network connection to this friend (nearby / direct).
+    private var directlyConnected: Bool {
+        let pc = connectionManager.connection(for: peerID)
+        return P.isDirectConnection(live: pc != nil, isRendezvous: pc?.isRendezvousConnection == true)
+    }
 
     private var contact: TrustedContact? {
         FriendBinding(connectionManager: connectionManager).contact(forChatPeerID: peerID)
@@ -250,10 +277,10 @@ struct AlwaysConnectedToggleSection: View {
                 Text(LocalizedStringKey(P.titleKey))
             }
             .disabled(!P.isToggleInteractive(s))
-            .accessibilityLabel(Text(verbatim: P.voiceOverText(s)))
+            .accessibilityLabel(Text(verbatim: P.voiceOverText(s, directlyConnected: directlyConnected)))
             .accessibilityIdentifier("always-connected-toggle")
 
-            if let key = P.statusKey(s), let symbol = P.statusSymbol(s) {
+            if let key = P.statusKey(s, directlyConnected: directlyConnected), let symbol = P.statusSymbol(s, directlyConnected: directlyConnected) {
                 Label {
                     Text(LocalizedStringKey(key)).fixedSize(horizontal: false, vertical: true)
                 } icon: {
@@ -272,6 +299,7 @@ struct AlwaysConnectedToggleSection: View {
                 }
             }
         }
+        .onChange(of: s) { _ in failureKey = nil }
         .confirmationDialog(Text(LocalizedStringKey(P.turnOffTitleKey)), isPresented: $confirmOff, titleVisibility: .visible) {
             Button(role: .destructive) { turnOff() } label: { Text(LocalizedStringKey(P.turnOffButtonKey)) }
             Button("Cancel", role: .cancel) {}
@@ -293,14 +321,16 @@ struct AlwaysConnectedToggleSection: View {
     private func turnOn() {
         guard let contact else { return }
         let outcome = P.apply(enabled: true, contactID: contact.id, store: store,
-                              clearSuspension: { connectionManager.rendezvousManager?.clearSuspension(contactID: $0) })
+                              clearSuspension: { connectionManager.rendezvousManager?.clearSuspension(contactID: $0) },
+                              contactsDidChange: { connectionManager.rendezvousManager?.contactsDidChange() })
         failureKey = P.messageKey(for: outcome)
     }
 
     private func turnOff() {
         guard let contact else { return }
         _ = P.apply(enabled: false, contactID: contact.id, store: store,
-                    clearSuspension: { connectionManager.rendezvousManager?.clearSuspension(contactID: $0) })
+                    clearSuspension: { connectionManager.rendezvousManager?.clearSuspension(contactID: $0) },
+                    contactsDidChange: { connectionManager.rendezvousManager?.contactsDidChange() })
         failureKey = nil
     }
 }

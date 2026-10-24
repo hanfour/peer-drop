@@ -115,20 +115,22 @@ final class AlwaysConnectedToggleStateTests: XCTestCase {
         defer { store.removeAll() }
         let friends = (0..<6).map { addBound(store, $0) }
         var cleared: [UUID] = []
+        var changed = 0
         for f in friends.prefix(5) {
-            XCTAssertEqual(P.apply(enabled: true, contactID: f.id, store: store, clearSuspension: { cleared.append($0) }), .applied)
+            XCTAssertEqual(P.apply(enabled: true, contactID: f.id, store: store, clearSuspension: { cleared.append($0) }, contactsDidChange: { changed += 1 }), .applied)
         }
         XCTAssertEqual(P.enabledCount(in: store), 5)
-        XCTAssertEqual(P.apply(enabled: true, contactID: friends[5].id, store: store, clearSuspension: { _ in }), .limitReached)
+        XCTAssertEqual(P.apply(enabled: true, contactID: friends[5].id, store: store, clearSuspension: { _ in }, contactsDidChange: {}), .limitReached)
         XCTAssertFalse(store.contacts.first { $0.id == friends[5].id }!.isRendezvousEnabled)
         XCTAssertEqual(P.state(contact: store.contacts.first { $0.id == friends[5].id }!, enabledCount: P.enabledCount(in: store),
                                rendezvousState: .inactive, eligible: true), .limitReached)
         // Existing one still toggles off, and the suspension is cleared (quiet downgrade).
         cleared.removeAll()
-        XCTAssertEqual(P.apply(enabled: false, contactID: friends[0].id, store: store, clearSuspension: { cleared.append($0) }), .applied)
+        XCTAssertEqual(P.apply(enabled: false, contactID: friends[0].id, store: store, clearSuspension: { cleared.append($0) }, contactsDidChange: { changed += 1 }), .applied)
         XCTAssertEqual(cleared, [friends[0].id])
+        XCTAssertGreaterThan(changed, 0)
         XCTAssertEqual(P.enabledCount(in: store), 4)
-        XCTAssertEqual(P.apply(enabled: true, contactID: friends[5].id, store: store, clearSuspension: { _ in }), .applied)
+        XCTAssertEqual(P.apply(enabled: true, contactID: friends[5].id, store: store, clearSuspension: { _ in }, contactsDidChange: {}), .applied)
     }
 
     func testUnboundAndUnknownEnableOutcomes() {
@@ -136,21 +138,81 @@ final class AlwaysConnectedToggleStateTests: XCTestCase {
         defer { store.removeAll() }
         let unbound = TrustedContact(deviceId: "d", displayName: "U", identityPublicKey: key(), trustLevel: .verified)
         store.add(unbound)
-        XCTAssertEqual(P.apply(enabled: true, contactID: unbound.id, store: store, clearSuspension: { _ in }), .unavailable)
-        XCTAssertEqual(P.apply(enabled: true, contactID: UUID(), store: store, clearSuspension: { _ in }), .unknownContact)
+        XCTAssertEqual(P.apply(enabled: true, contactID: unbound.id, store: store, clearSuspension: { _ in }, contactsDidChange: {}), .unavailable)
+        XCTAssertEqual(P.apply(enabled: true, contactID: UUID(), store: store, clearSuspension: { _ in }, contactsDidChange: {}), .unknownContact)
     }
 
     func testFailureOutcomeMessagesAreDistinctAndNonNil() {
         XCTAssertEqual(P.messageKey(for: .limitReached), P.limitReachedKey)
         XCTAssertEqual(P.messageKey(for: .unavailable), P.unavailableKey)
         XCTAssertNil(P.messageKey(for: .applied))
-        XCTAssertNil(P.messageKey(for: .unknownContact))
+        XCTAssertEqual(P.messageKey(for: .unknownContact), P.unavailableKey)
+    }
+
+    // MARK: Fix round 1
+
+    func testContactsDidChangeCalledAfterEveryAppliedWriteNeverOnRefusal() {
+        let store = makeStore()
+        defer { store.removeAll() }
+        let friends = (0..<6).map { addBound(store, $0) }
+        var changes: [Bool] = []   // enabled flag as stored at call time, per call
+        func apply(_ on: Bool, _ f: TrustedContact) -> P.Outcome {
+            P.apply(enabled: on, contactID: f.id, store: store, clearSuspension: { _ in },
+                    contactsDidChange: { changes.append(store.contacts.first { $0.id == f.id }!.isRendezvousEnabled) })
+        }
+        XCTAssertEqual(apply(true, friends[0]), .applied)
+        XCTAssertEqual(changes, [true], "called after the write, state already visible")
+        XCTAssertEqual(apply(false, friends[0]), .applied)
+        XCTAssertEqual(changes, [true, false])
+        for f in friends.prefix(5) { _ = apply(true, f) }
+        changes.removeAll()
+        XCTAssertEqual(apply(true, friends[5]), .limitReached)
+        XCTAssertEqual(changes, [], "a refused enable changes nothing")
+    }
+
+    func testEnabledButIneligibleKeepsDisableOnlyToggle() {
+        let store = makeStore()
+        defer { store.removeAll() }
+        let f = addBound(store, 1)
+        _ = P.apply(enabled: true, contactID: f.id, store: store, clearSuspension: { _ in }, contactsDidChange: {})
+        let enabled = store.contacts.first { $0.id == f.id }!
+        XCTAssertEqual(P.state(contact: enabled, enabledCount: 1, rendezvousState: .inactive, eligible: false), .disableOnly)
+        XCTAssertTrue(P.isToggleInteractive(.disableOnly))
+        XCTAssertTrue(P.toggleIsOn(.disableOnly))
+        XCTAssertEqual(P.footnoteKeys(.disableOnly), [P.unavailableKey])
+        XCTAssertNil(P.statusKey(.disableOnly))
+        // Off (and ineligible) stays unavailable and not interactive.
+        XCTAssertEqual(P.state(contact: contact(), enabledCount: 0, rendezvousState: .inactive, eligible: false), .unavailableNotBound)
+        // Turning it off from this state works and frees the slot.
+        XCTAssertEqual(P.apply(enabled: false, contactID: f.id, store: store, clearSuspension: { _ in }, contactsDidChange: {}), .applied)
+        XCTAssertEqual(P.enabledCount(in: store), 0)
+    }
+
+    func testDirectNearbyConnectionHidesWaitingStatusAndSpeaksNeutrally() {
+        for s in [P.State.on(.waiting), .on(.connecting)] {
+            XCTAssertNil(P.statusKey(s, directlyConnected: true))
+            XCTAssertNotNil(P.statusKey(s, directlyConnected: false))
+            XCTAssertEqual(P.voiceOverKey(s, directlyConnected: true), P.voiceOverKey(.off))
+        }
+        // Both directions of the pure decision.
+        XCTAssertTrue(P.isDirectConnection(live: true, isRendezvous: false))
+        XCTAssertFalse(P.isDirectConnection(live: true, isRendezvous: true))
+        XCTAssertFalse(P.isDirectConnection(live: false, isRendezvous: false))
+        // A cross-network online friend is not direct: status stays.
+        XCTAssertEqual(P.statusKey(.on(.online), directlyConnected: false), P.statusOnlineKey)
+        // Other states are unaffected by the direct flag.
+        XCTAssertNil(P.statusKey(.off, directlyConnected: true))
+    }
+
+    func testAlwaysConnectedChatButtonOnlyForVerifiedBindingRegardlessOfPresence() {
+        XCTAssertTrue(P.showsChatButton(bindingIsVerified: true))
+        XCTAssertFalse(P.showsChatButton(bindingIsVerified: false))
     }
 
     // MARK: strings / VoiceOver
 
     private var allStates: [P.State] {
-        [.unavailableNotBound, .off, .on(.waiting), .on(.connecting), .on(.online), .limitReached]
+        [.unavailableNotBound, .off, .on(.waiting), .on(.connecting), .on(.online), .limitReached, .disableOnly]
     }
 
     func testVoiceOverNonEmptyAndDistinctPerState() {
@@ -192,7 +254,8 @@ final class AlwaysConnectedToggleStateTests: XCTestCase {
     func testKeyChangedItemOnlyForKeyRelatedReasons() {
         let all: [RendezvousConnectionFailure] = [.keyMismatch, .bindingFailed, .helloMismatch, .helloMismatchUnauthenticated,
                                                   .timeout, .decryptFailed, .channelFailed, .installRefused, .connectionClosed]
-        let key: Set<RendezvousConnectionFailure> = [.keyMismatch, .helloMismatch, .helloMismatchUnauthenticated]
+        // Only an AUTHENTICATED contradiction: an on-path party can cause the others.
+        let key: Set<RendezvousConnectionFailure> = [.helloMismatch]
         for r in all { XCTAssertEqual(P.showsKeyChangedItem(reason: r), key.contains(r), "\(r)") }
         XCTAssertFalse(P.showsKeyChangedItem(reason: nil))
     }

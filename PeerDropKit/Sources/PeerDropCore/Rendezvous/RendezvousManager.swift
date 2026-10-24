@@ -211,6 +211,8 @@ public final class RendezvousManager: ObservableObject {
     private var rooms: [Key: Room] = [:]
     /// Last connection-layer failure per contact (in memory, never logged).
     private var lastFailures: [UUID: RendezvousConnectionFailure] = [:]
+    /// Key / device id the failure was recorded at: a change drops the diagnostic.
+    private var failureIdentities: [UUID: (key: Data, deviceId: String?)] = [:]
     /// Contacts suspended after a pinned-identity contradiction, with the
     /// key + device id they were suspended at.
     private struct Suspension: Equatable { let key: Data; let deviceId: String?; let at: Date }
@@ -296,6 +298,7 @@ public final class RendezvousManager: ObservableObject {
     /// The connection layer finished the pinned-key secure channel on an
     /// installed rendezvous connection (`ok == false`: mismatch, plaintext, timeout).
     public func secureChannelDidComplete(contactID: UUID, ok: Bool, reason: RendezvousConnectionFailure? = nil) {
+        if ok { lastFailures[contactID] = nil; failureIdentities[contactID] = nil }
         if !ok, let reason { recordFailure(reason, contactID: contactID) }
         for (key, room) in rooms where key.contactID == contactID && room.installed {
             enqueue(key, .secureChannelResult(ok: ok))
@@ -323,13 +326,17 @@ public final class RendezvousManager: ObservableObject {
 
     private func recordFailure(_ reason: RendezvousConnectionFailure, contactID: UUID) {
         lastFailures[contactID] = reason
-        guard reason.suspendsRoom, let c = contacts().first(where: { $0.id == contactID }) else { return }
+        let contact = contacts().first(where: { $0.id == contactID })
+        failureIdentities[contactID] = contact.map { ($0.identityPublicKey, $0.deviceId) }
+        guard reason.suspendsRoom, let c = contact else { return }
         suspensions[contactID] = Suspension(key: c.identityPublicKey, deviceId: c.deviceId, at: clock.now)
     }
 
     /// Lift a suspension (Task 6 hook, e.g. a "try again" action).
     public func clearSuspension(contactID: UUID) {
         if deferIfDraining({ [weak self] in self?.clearSuspension(contactID: contactID) }) { return }
+        lastFailures[contactID] = nil
+        failureIdentities[contactID] = nil
         guard suspensions.removeValue(forKey: contactID) != nil else { return }
         reconcile()
     }
@@ -338,6 +345,15 @@ public final class RendezvousManager: ObservableObject {
     /// contact's key or device id differs from the one it was suspended at.
     private func currentActiveContacts() -> [TrustedContact] {
         let all = contacts()
+        // The local diagnostic dies with the opt-in or the identity it was recorded for.
+        for id in Array(lastFailures.keys) {
+            guard let c = all.first(where: { $0.id == id }), c.isRendezvousEnabled,
+                  let at = failureIdentities[id], c.identityPublicKey == at.key, c.deviceId == at.deviceId else {
+                lastFailures[id] = nil
+                failureIdentities[id] = nil
+                continue
+            }
+        }
         for (id, s) in suspensions {
             // Opt-in off (the user toggling it off/on) also lifts it.
             guard let c = all.first(where: { $0.id == id }), c.isRendezvousEnabled,
@@ -543,7 +559,7 @@ public final class RendezvousManager: ObservableObject {
                 siblings(of: key).forEach { enqueue($0, .retire) }
             } else {
                 room.installed = false
-                lastFailures[key.contactID] = .installRefused
+                recordFailure(.installRefused, contactID: key.contactID)
                 enqueue(key, .installFailed)
             }
 
