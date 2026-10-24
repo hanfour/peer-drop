@@ -5365,20 +5365,21 @@ extension ConnectionManager {
     /// each record's `chatKey(forRecord:)`), and trusted contacts pinning the
     /// same identity public key (their `deviceId` is the `PeerIdentity.id`).
     func notificationAliasIDs(for ids: [String]) -> [String] {
-        var known = Set(ids)
+        // An empty id must never act as a bridge between two different people.
+        var known = Set(ids.filter { !$0.isEmpty })
         let records = deviceStore.records
         let contacts = trustedContactStore.contacts
         var changed = true
         while changed {
             changed = false
             for record in records {
-                let recordIDs = [record.id, record.peerDeviceId, record.peerIdentityId].compactMap { $0 }
+                let recordIDs = [record.id, record.peerDeviceId, record.peerIdentityId].compactMap { $0 }.filter { !$0.isEmpty }
                 guard !known.isDisjoint(with: recordIDs) else { continue }
-                for id in recordIDs + [chatKey(forRecord: record)] where known.insert(id).inserted { changed = true }
+                for id in recordIDs + [chatKey(forRecord: record)] where !id.isEmpty && known.insert(id).inserted { changed = true }
             }
-            let keys = Set(contacts.filter { $0.deviceId.map(known.contains) ?? false }.map(\.identityPublicKey))
+            let keys = Set(contacts.filter { $0.deviceId.map { !$0.isEmpty && known.contains($0) } ?? false }.map(\.identityPublicKey))
             for contact in contacts where keys.contains(contact.identityPublicKey) {
-                if let id = contact.deviceId, known.insert(id).inserted { changed = true }
+                if let id = contact.deviceId, !id.isEmpty, known.insert(id).inserted { changed = true }
             }
         }
         return Array(known)
