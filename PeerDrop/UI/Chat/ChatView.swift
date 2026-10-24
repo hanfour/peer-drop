@@ -66,9 +66,15 @@ struct ChatView: View {
             globalState: connectionManager.state)
     }
 
-    /// Peer name for copy; a missing/blank name falls back to a neutral phrase.
+    /// The name the live connection knows for this peer, if any and not blank.
+    private var liveName: String? {
+        ChatDisplayName.trimmed(connectionManager.connection(for: peerID)?.peerIdentity.displayName)
+    }
+
+    /// Peer name for copy and bubbles: the live connection's name first, then the
+    /// name this chat was opened with; blank falls back to a neutral phrase.
     private var displayName: String {
-        ChatDisplayName.trimmed(peerName) ?? String(localized: "Other person")
+        ChatDisplayName.preferred(liveName, peerName) ?? String(localized: "Other person")
     }
 
     /// Get disconnect reason for this peer.
@@ -114,6 +120,7 @@ struct ChatView: View {
                                 message: message,
                                 chatManager: chatManager,
                                 runStart: runStarts.contains(message.id),
+                                liveSenderName: liveName,
                                 onReaction: { emoji in
                                     connectionManager.sendReaction(
                                         emoji: emoji,
@@ -439,6 +446,7 @@ struct ChatView: View {
                             .font(.title2)
                             .foregroundStyle(PaperTheme.color(.inputPlaceholder))
                     }
+                    .paperIconButton()
                     .accessibilityLabel("Attach")
                 }
 
@@ -482,6 +490,7 @@ struct ChatView: View {
                                 .font(.title2)
                                 .foregroundStyle(voiceRecorder.isRecording ? Color.red : PaperTheme.color(.inputPlaceholder))
                         }
+                        .paperIconButton()
                         .accessibilityLabel(voiceRecorder.isRecording ? "Stop recording" : "Voice message")
                     }
                 } else {
@@ -492,6 +501,7 @@ struct ChatView: View {
                             .font(.title2)
                             .foregroundStyle(PaperTheme.color(.sendButton))
                     }
+                    .paperIconButton()
                     .accessibilityLabel("Send")
                 }
             }

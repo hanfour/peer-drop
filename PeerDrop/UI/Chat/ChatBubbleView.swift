@@ -90,10 +90,14 @@ struct ChatBubbleView: View {
     var onDelete: ((String) -> Void)?
     let runStart: Bool
     let senderFallbackName: String
+    /// The peer's current name from the live connection; wins over the name stored
+    /// with the message (identity is fixed at handshake, so stored names can be old or blank).
+    let liveSenderName: String?
 
-    init(message: ChatMessage, chatManager: ChatManager? = nil, runStart: Bool = true, senderFallbackName: String = String(localized: "Other person"), onReaction: ((String) -> Void)? = nil, onEdit: ((String, String) -> Void)? = nil, onDelete: ((String) -> Void)? = nil) {
+    init(message: ChatMessage, chatManager: ChatManager? = nil, runStart: Bool = true, senderFallbackName: String = String(localized: "Other person"), liveSenderName: String? = nil, onReaction: ((String) -> Void)? = nil, onEdit: ((String, String) -> Void)? = nil, onDelete: ((String) -> Void)? = nil) {
         self.runStart = runStart
         self.senderFallbackName = senderFallbackName
+        self.liveSenderName = liveSenderName
         self.message = message
         self.chatManager = chatManager
         self.onReaction = onReaction
@@ -280,7 +284,7 @@ struct ChatBubbleView: View {
     }
 
     private var senderDisplayName: String {
-        ChatDisplayName.trimmed(message.peerName) ?? senderFallbackName
+        ChatDisplayName.preferred(liveSenderName, message.peerName) ?? senderFallbackName
     }
 
     // MARK: - Reply Preview

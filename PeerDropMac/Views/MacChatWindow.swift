@@ -49,12 +49,14 @@ struct MacChatWindow: View {
         }
     }
 
-    /// Look up the peer's display name from `discoveredPeers`.
-    /// Falls back to a truncated peer ID if no match.
+    /// The peer's name: discovered peer, else the live connection's identity, else the
+    /// saved device record (so a disconnected, not-currently-discovered peer still has
+    /// its name), else a neutral phrase — never a raw device id.
     private var peerDisplayName: String {
-        if let peer = connectionManager.discoveredPeers.first(where: { $0.id == peerID }) {
-            return peer.displayName
-        }
-        return String(peerID.prefix(8))
+        ChatDisplayName.preferred(
+            connectionManager.discoveredPeers.first(where: { $0.id == peerID })?.displayName,
+            connectionManager.connection(for: peerID)?.peerIdentity.displayName,
+            connectionManager.deviceStore.records.first(where: { $0.id == peerID })?.displayName
+        ) ?? String(localized: "Other person")
     }
 }
