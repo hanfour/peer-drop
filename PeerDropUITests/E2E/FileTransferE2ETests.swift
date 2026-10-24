@@ -53,7 +53,7 @@ final class FileTransferE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("02-connection-view")
 
@@ -181,7 +181,7 @@ final class FileTransferE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("02-connection-view")
 
@@ -318,7 +318,7 @@ final class FileTransferE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
@@ -401,7 +401,7 @@ final class FileTransferE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
@@ -481,7 +481,7 @@ final class FileTransferE2EAcceptorTests: E2EAcceptorTestBase {
                                     app.staticTexts["Chat"].exists
         if !stillInConnectionView {
             // Navigate back if needed
-            let connectedTab = app.tabBars.buttons["Connected"]
+            let connectedTab = app.tabBars.buttons["Home"]
             connectedTab.tap()
             sleep(1)
             navigateToConnectionView()

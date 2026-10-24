@@ -1,4 +1,5 @@
 import SwiftUI
+import PeerDropCore
 
 /// Stable colour selection for `PeerAvatar`. `String.hashValue` is randomised per process,
 /// so the index comes from FNV-1a over the name's unicode scalars instead.
@@ -30,26 +31,78 @@ enum PeerAvatarPalette {
     }
 
     static let standard: [Color] = [.blue, .purple, .orange, .green, .pink, .teal]
+
+    /// MSN swatches. Blue is 0076D4 (not 0078D7) so white label reaches 4.5:1, same as the brand token.
+    static let swatches: [AvatarSwatch] = [
+        AvatarSwatch(fill: 0x0076D4, label: 0xFFFFFF),
+        AvatarSwatch(fill: 0x107C41, label: 0xFFFFFF),
+        AvatarSwatch(fill: 0xF9A825, label: 0x3A2A05),
+        AvatarSwatch(fill: 0xC50F1F, label: 0xFFFFFF),
+    ]
+
+    static func swatch(for name: String) -> AvatarSwatch {
+        swatches[index(for: name, count: swatches.count)]
+    }
+}
+
+struct AvatarSwatch: Equatable {
+    let fill: UInt32
+    let label: UInt32
+
+    var fillColor: Color { Color(hex: fill) }
+    var labelColor: Color { Color(hex: label) }
+}
+
+private extension Color {
+    init(hex: UInt32) {
+        self.init(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+}
+
+enum PeerAvatarShape {
+    static func cornerRadius(forSize size: CGFloat) -> CGFloat {
+        size >= 44 ? 16 : size * 0.36
+    }
 }
 
 struct PeerAvatar: View {
     let name: String
     static let defaultSize: CGFloat = 40
     var size: CGFloat = PeerAvatar.defaultSize
-    var palette: [Color] = PeerAvatarPalette.standard
+    /// nil = MSN swatches (white/dark label per swatch). A custom palette uses white initials.
+    var palette: [Color]? = nil
+    /// nil = no badge.
+    var presence: PeerPresence? = nil
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(color)
+            RoundedRectangle(cornerRadius: PeerAvatarShape.cornerRadius(forSize: size), style: .continuous)
+                .fill(fillColor)
                 .frame(width: size, height: size)
 
             Text(initials)
                 .font(initialsFont)
-                .foregroundStyle(.white)
+                .foregroundStyle(labelColor)
         }
-        .accessibilityLabel("Avatar for \(name)")
-        .accessibilityHidden(true)
+        .saturation(presence == .offline ? 0.35 : 1)
+        .overlay(alignment: .bottomTrailing) {
+            if let presence {
+                PresenceBadge(presence: presence, avatarSize: size)
+                    .offset(x: 2, y: 2)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.accessibilityText(name: name, presence: presence))
+        .accessibilityHidden(Self.isAccessibilityHidden(presence: presence))
+    }
+
+    /// Decorative (hidden) unless a presence state needs to be announced.
+    static func isAccessibilityHidden(presence: PeerPresence?) -> Bool { presence == nil }
+
+    static func accessibilityText(name: String, presence: PeerPresence?) -> String {
+        let base = String(format: String(localized: "Avatar for %@"), name)
+        guard let presence else { return base }
+        return "\(base), \(presence.accessibilityLabel)"
     }
 
     /// Default size keeps the original Dynamic-Type-scaling callout font;
@@ -68,7 +121,14 @@ struct PeerAvatar: View {
         return String(name.prefix(2)).uppercased()
     }
 
-    private var color: Color {
-        palette[PeerAvatarPalette.index(for: name, count: palette.count)]
+    private var fillColor: Color {
+        if let palette, !palette.isEmpty {
+            return palette[PeerAvatarPalette.index(for: name, count: palette.count)]
+        }
+        return PeerAvatarPalette.swatch(for: name).fillColor
+    }
+
+    private var labelColor: Color {
+        palette?.isEmpty ?? true ? PeerAvatarPalette.swatch(for: name).labelColor : .white
     }
 }

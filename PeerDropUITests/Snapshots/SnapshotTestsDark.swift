@@ -33,6 +33,9 @@ final class SnapshotTestsDark: XCTestCase {
         // Give extra time for iPad's floating tab bar to initialize
         sleep(5)
 
+        // The app now launches on Home; the numbered snapshots assume Nearby first.
+        navigateToTab("Nearby")
+
         // Just wait and don't assert - the app UI varies between iPhone and iPad
         // Screenshots will capture whatever state the app is in
     }
@@ -70,10 +73,10 @@ final class SnapshotTestsDark: XCTestCase {
     func test03_ConnectedTab_Dark() {
         setupMockConnection()
 
-        navigateToTab("Connected")
+        navigateToTab("Home")
         sleep(1)
 
-        let connectedTitle = app.navigationBars["Connected"]
+        let connectedTitle = app.navigationBars["Home"]
         XCTAssertTrue(connectedTitle.waitForExistence(timeout: 5))
 
         snapshot("03_ConnectedTab_Dark")
@@ -125,10 +128,10 @@ final class SnapshotTestsDark: XCTestCase {
 
     /// 07: Library tab with device groups and history
     func test07_LibraryTab_Dark() {
-        navigateToTab("Library")
+        navigateToTab("Home")
         sleep(1)
 
-        let libraryTitle = app.navigationBars["Library"]
+        let libraryTitle = app.navigationBars["Home"]
         XCTAssertTrue(libraryTitle.waitForExistence(timeout: 5))
 
         snapshot("07_LibraryTab_Dark")
@@ -200,7 +203,7 @@ final class SnapshotTestsDark: XCTestCase {
     private func setupMockConnection() {
         sleep(2)
 
-        navigateToTab("Connected")
+        navigateToTab("Home")
 
         let activePeerRow = app.buttons.matching(NSPredicate(format: "identifier == 'active-peer-row'")).firstMatch
         let connected = activePeerRow.waitForExistence(timeout: 5)
@@ -215,7 +218,7 @@ final class SnapshotTestsDark: XCTestCase {
     }
 
     private func navigateToConnectionView() -> Bool {
-        navigateToTab("Connected")
+        navigateToTab("Home")
         sleep(1)
 
         let activePeerRow = app.buttons.matching(NSPredicate(format: "identifier == 'active-peer-row'")).firstMatch

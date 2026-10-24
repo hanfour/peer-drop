@@ -76,7 +76,8 @@ struct MessageBubbleShape: Shape {
 
 // MARK: - Chat Bubble
 
-struct ChatBubbleView: View {
+struct ChatBubbleView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let message: ChatMessage
     let chatManager: ChatManager?
     @EnvironmentObject private var voicePlayer: VoicePlayer
@@ -127,7 +128,7 @@ struct ChatBubbleView: View {
                 if !message.isOutgoing && runStart {
                     Text(senderDisplayName)
                         .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(PaperTheme.color(.datePillText))
+                        .foregroundStyle(paper(.datePillText))
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .padding(.leading, 4)
@@ -184,7 +185,7 @@ struct ChatBubbleView: View {
                 .overlay {
                     if !message.isOutgoing {
                         MessageBubbleShape(isOutgoing: false)
-                            .stroke(PaperTheme.color(.border), lineWidth: 1)
+                            .stroke(paper(.border), lineWidth: 1)
                     }
                 }
                 .accessibilityElement(children: .combine)
@@ -303,7 +304,7 @@ struct ChatBubbleView: View {
     private var replyPreview: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(PaperTheme.color(.quoteBar))
+                .fill(paper(message.isOutgoing ? .outgoingQuoteBar : .quoteBar))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -334,11 +335,11 @@ struct ChatBubbleView: View {
     // MARK: - Bubble color
 
     private var textColor: Color {
-        PaperTheme.color(message.isOutgoing ? .outgoingText : .incomingText)
+        paper(message.isOutgoing ? .outgoingText : .incomingText)
     }
 
     private var bubbleColor: Color {
-        PaperTheme.color(message.isOutgoing ? .outgoingBubble : .incomingBubble)
+        paper(message.isOutgoing ? .outgoingBubble : .incomingBubble)
     }
 
     // MARK: - Status view
@@ -354,25 +355,25 @@ struct ChatBubbleView: View {
         case .sent:
             Image(systemName: "checkmark")
                 .font(.system(size: 9))
-                .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
+                .foregroundStyle(paper(PaperTheme.tick(for: message.status)))
         case .delivered:
             HStack(spacing: -4) {
                 Image(systemName: "checkmark")
                 Image(systemName: "checkmark")
             }
             .font(.system(size: 9))
-            .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
+            .foregroundStyle(paper(PaperTheme.tick(for: message.status)))
         case .read:
             HStack(spacing: -4) {
                 Image(systemName: "checkmark")
                 Image(systemName: "checkmark")
             }
             .font(.system(size: 9))
-            .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
+            .foregroundStyle(paper(PaperTheme.tick(for: message.status)))
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: message.status)))
+                .foregroundStyle(paper(PaperTheme.tick(for: message.status)))
         }
     }
 

@@ -14,6 +14,12 @@ struct MacChatWindow: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var toastMessage: String?
 
+    /// Matches ChatView's mode so the window ground switches with it.
+    private var windowMode: PaperMode {
+        ChatPresenceMode.mode(peerID: peerID, connectionManager: connectionManager)
+    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         // ChatView reads chatManager + peer metadata directly; we look
         // up the friendly display name from discoveredPeers (DeviceRecord
@@ -26,7 +32,8 @@ struct MacChatWindow: View {
         )
         .environmentObject(connectionManager)
         .frame(minWidth: 480, minHeight: 480)
-        .background(PaperTheme.color(.background))
+        .background(PaperTheme.color(.background, mode: windowMode))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: windowMode)
         .navigationTitle(peerDisplayName)
         // ConnectionManager.statusToast is only rendered by the iOS ContentView, so
         // on macOS chat errors (voice failure, file too large, reconnect) were silent.

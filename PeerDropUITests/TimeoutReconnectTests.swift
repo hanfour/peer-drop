@@ -44,7 +44,7 @@ private extension XCUIApplication {
     }
 
     func waitForConnected(timeout: Int = 30) -> Bool {
-        let connectedTab = tabBars.buttons["Connected"]
+        let connectedTab = tabBars.buttons["Home"]
         for _ in 0..<timeout {
             if connectedTab.isSelected { return true }
             sleep(1)
@@ -165,6 +165,7 @@ final class ReconnectInitiatorTests: XCTestCase {
     func testA1_DisconnectAndReconnect() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -277,6 +278,7 @@ final class ReconnectInitiatorTests: XCTestCase {
     func testA2_RemoteDisconnectReconnect() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -349,6 +351,7 @@ final class ReconnectInitiatorTests: XCTestCase {
     func testA3_RapidReconnectCycle() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -416,6 +419,7 @@ final class ReconnectAcceptorTests: XCTestCase {
     func testB1_AcceptDisconnectReaccept() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -444,7 +448,7 @@ final class ReconnectAcceptorTests: XCTestCase {
         }
 
         // ── Navigate to chat and reply ──
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -469,6 +473,7 @@ final class ReconnectAcceptorTests: XCTestCase {
     func testB2_DisconnectThenReaccept() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -481,7 +486,7 @@ final class ReconnectAcceptorTests: XCTestCase {
 
         // ── Wait a bit then disconnect from OUR side ──
         sleep(5)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.disconnectFromPeer()
@@ -522,6 +527,7 @@ final class ReconnectAcceptorTests: XCTestCase {
     func testB3_AcceptRapidReconnects() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
 
@@ -541,7 +547,7 @@ final class ReconnectAcceptorTests: XCTestCase {
             }
 
             // Navigate to chat and wait for message
-            let connectedTab = app.tabBars.buttons["Connected"]
+            let connectedTab = app.tabBars.buttons["Home"]
             if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
             app.navigateToConnectionView()
             app.navigateToChat()

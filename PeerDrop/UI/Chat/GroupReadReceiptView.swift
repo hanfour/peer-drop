@@ -3,7 +3,8 @@ import PeerDropCore
 import PeerDropSecurity
 
 /// Displays detailed read receipt status for a group message.
-struct GroupReadReceiptView: View {
+struct GroupReadReceiptView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let message: ChatMessage
     let members: [PeerIdentity]
 
@@ -25,7 +26,7 @@ struct GroupReadReceiptView: View {
 
                     HStack {
                         Label("Read", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(PaperTheme.color(.incomingText))
+                            .foregroundStyle(paper(.incomingText))
                         Spacer()
                         Text("\(readCount)/\(members.count)")
                             .foregroundStyle(.secondary)
@@ -91,7 +92,7 @@ struct GroupReadReceiptView: View {
                     Image(systemName: "checkmark")
                 }
                 .font(.caption)
-                .foregroundStyle(PaperTheme.color(.incomingText))
+                .foregroundStyle(paper(.incomingText))
             } else if status.deliveredTo.contains(memberID) {
                 // Delivered
                 HStack(spacing: -4) {

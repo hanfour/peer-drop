@@ -10,6 +10,7 @@ final class AcceptConnectionHelper: XCTestCase {
         continueAfterFailure = true
         app = XCUIApplication()
         app.launch()
+        app.goToNearbyTab()
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
@@ -28,8 +29,8 @@ final class AcceptConnectionHelper: XCTestCase {
         acceptButton.tap()
 
         // Verify we transition to Connected tab
-        let connectedNav = app.navigationBars["Connected"]
-        XCTAssertTrue(connectedNav.waitForExistence(timeout: 10), "Should auto-switch to Connected tab after accepting")
+        let connectedNav = app.buttons["active-peer-row"]
+        XCTAssertTrue(connectedNav.waitForExistence(timeout: 10), "Should show a connected row on Home after accepting")
 
         // Navigate into ConnectionView from Active section
         navigateToConnectionView()
@@ -41,10 +42,12 @@ final class AcceptConnectionHelper: XCTestCase {
         // Stay connected for 120 seconds to allow feature testing from the other device
         for i in 1...24 {
             sleep(5)
-            if app.staticTexts["Connected"].exists || connectedNav.exists {
+            // Still connected if the ConnectionView is showing or Home lists a connected row.
+            if app.staticTexts["Connected"].exists || app.staticTexts["Send File"].exists || connectedNav.exists {
                 continue
             }
-            if app.staticTexts["No active connection"].exists {
+            // Otherwise go to Home and confirm there is no connected row before declaring a disconnect.
+            if app.hasNoActiveConnection() {
                 print("[Sim1] Disconnected at interval \(i)")
                 break
             }
@@ -63,9 +66,9 @@ final class AcceptConnectionHelper: XCTestCase {
         acceptButton.tap()
 
         // Wait for connected state
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.buttons["active-peer-row"]
         guard connectedNav.waitForExistence(timeout: 10) else {
-            XCTFail("Did not transition to Connected tab")
+            XCTFail("No connected row appeared on Home")
             return
         }
 
@@ -152,9 +155,9 @@ final class AcceptConnectionHelper: XCTestCase {
         acceptButton.tap()
 
         // Wait for connected state
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.buttons["active-peer-row"]
         guard connectedNav.waitForExistence(timeout: 10) else {
-            XCTFail("Did not transition to Connected tab")
+            XCTFail("No connected row appeared on Home")
             return
         }
 
@@ -300,9 +303,9 @@ final class AcceptConnectionHelper: XCTestCase {
         acceptButton.tap()
 
         // Wait for connected state
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.buttons["active-peer-row"]
         guard connectedNav.waitForExistence(timeout: 10) else {
-            XCTFail("Did not transition to Connected tab")
+            XCTFail("No connected row appeared on Home")
             return
         }
 
@@ -368,7 +371,7 @@ final class AcceptConnectionHelper: XCTestCase {
         takeScreenshot("NF-01-Connected")
 
         // Verify Active section in Connected list
-        let activeHeader = app.staticTexts["Active"]
+        let activeHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
         XCTAssertTrue(activeHeader.waitForExistence(timeout: 5), "Active section should be visible")
         takeScreenshot("NF-01b-ActiveSection")
 
@@ -435,13 +438,13 @@ final class AcceptConnectionHelper: XCTestCase {
         takeScreenshot("NF-07-ConnectedList")
 
         // Verify "Contacts" section header
-        let contactsHeader = app.staticTexts["Contacts"]
+        let contactsHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
         if contactsHeader.waitForExistence(timeout: 3) {
             print("[Sim1] Contacts section header found!")
         }
 
         // Verify "Active" section
-        let activeHeaderAgain = app.staticTexts["Active"]
+        let activeHeaderAgain = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
         if activeHeaderAgain.exists {
             print("[Sim1] Active section found!")
         }
@@ -466,17 +469,16 @@ final class AcceptConnectionHelper: XCTestCase {
             acceptButton.tap()
             takeScreenshot("Reconnect-Sim1-Accept\(attempt)")
 
-            let connectedNav = app.navigationBars["Connected"]
+            let connectedNav = app.buttons["active-peer-row"]
             XCTAssertTrue(connectedNav.waitForExistence(timeout: 10),
-                          "Should auto-switch to Connected tab (attempt \(attempt))")
+                          "Should show a connected row on Home (attempt \(attempt))")
 
             print("[Sim1] Connected (attempt \(attempt))")
 
             if attempt == 1 {
                 // Wait for Sim 2 to disconnect us
-                let noActive = app.staticTexts["No active connection"]
                 for _ in 1...30 {
-                    if noActive.exists { break }
+                    if app.hasNoActiveConnection() { break }
                     sleep(2)
                 }
                 takeScreenshot("Reconnect-Sim1-Disconnected")
@@ -492,7 +494,7 @@ final class AcceptConnectionHelper: XCTestCase {
 
     /// Navigate from Connected list (Active section) into ConnectionView detail.
     private func navigateToConnectionView() {
-        let activeHeader = app.staticTexts["Active"]
+        let activeHeader = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Connected '")).firstMatch
         if activeHeader.waitForExistence(timeout: 5) {
             // New UI: Active section with peer row, tap to navigate to ConnectionView
             let peerRow = app.buttons["active-peer-row"]

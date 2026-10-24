@@ -239,6 +239,53 @@ public final class ChatManager: ObservableObject {
         }
     }
 
+    // MARK: - Conversation summaries (read-only)
+
+    /// Last on-disk message per conversation, keyed by file identity
+    /// (modification date, size, file number) so writes need no invalidation hooks.
+    private struct FileStamp: Equatable {
+        let modified: Date?
+        let size: Int64
+        let fileNumber: UInt64
+    }
+    private var summaryCache: [String: (stamp: FileStamp, last: ChatMessage?)] = [:]
+
+    private func lastMessageOnDisk(cacheKey: String, file: URL) -> ChatMessage? {
+        guard let attrs = try? fileManager.attributesOfItem(atPath: file.path) else {
+            summaryCache[cacheKey] = nil
+            return nil
+        }
+        let stamp = FileStamp(
+            modified: attrs[.modificationDate] as? Date,
+            size: (attrs[.size] as? NSNumber)?.int64Value ?? 0,
+            fileNumber: (attrs[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0)
+        if let cached = summaryCache[cacheKey], cached.stamp == stamp { return cached.last }
+        var last: ChatMessage?
+        if let raw = try? Data(contentsOf: file),
+           let data = try? encryptor.decrypt(raw),
+           let decoded = try? JSONDecoder().decode([ChatMessage].self, from: data) {
+            last = decoded.last
+        }
+        summaryCache[cacheKey] = (stamp, last)
+        return last
+    }
+
+    /// Read-only: never touches `messages`, `currentPeerID` or `activeChatPeerID`.
+    /// A cache miss costs a full decrypt + decode of the conversation history, so
+    /// callers must NOT call this per row inside a SwiftUI `body` evaluation;
+    /// build summaries in a view model / computed once per change instead.
+    public func summary(forPeer id: String) -> ConversationSummary {
+        let last = pendingMessages[id]?.last
+            ?? lastMessageOnDisk(cacheKey: "peer:\(id)", file: messagesFile(for: id))
+        return ConversationSummary(id: id, isGroup: false, lastMessage: last, unread: unreadCounts[id] ?? 0)
+    }
+
+    /// Same cost caveat as `summary(forPeer:)`: do not call per row in `body`.
+    public func summary(forGroup id: String) -> ConversationSummary {
+        let last = lastMessageOnDisk(cacheKey: "group:\(id)", file: groupMessagesFile(for: id))
+        return ConversationSummary(id: id, isGroup: true, lastMessage: last, unread: groupUnreadCount(for: id))
+    }
+
     public func deleteMessages(forPeer peerID: String) {
         // Cancel any in-flight debounced write and drop queued messages first, so
         // a pending persist can't recreate the file we're about to delete (a
@@ -246,6 +293,7 @@ public final class ChatManager: ObservableObject {
         persistTasks[peerID]?.cancel()
         persistTasks[peerID] = nil
         pendingMessages[peerID] = nil
+        summaryCache["peer:\(peerID)"] = nil
         // An already-dispatched background write must land before the delete, or
         // it could recreate the file afterwards.
         drainBackgroundPersists()
@@ -760,6 +808,7 @@ public final class ChatManager: ObservableObject {
     public func deleteGroupMessages(forGroup groupID: String) {
         let file = groupMessagesFile(for: groupID)
         try? fileManager.removeItem(at: file)
+        summaryCache["group:\(groupID)"] = nil
         groupMessages = []
     }
 

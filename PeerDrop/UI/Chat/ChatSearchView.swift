@@ -114,7 +114,8 @@ struct ChatSearchView: View {
 }
 
 /// Row for displaying a search result.
-struct SearchResultRow: View {
+struct SearchResultRow: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let message: ChatMessage
     let searchText: String
 
@@ -124,7 +125,7 @@ struct SearchResultRow: View {
             HStack {
                 Text(message.isOutgoing ? "You" : (message.senderName ?? message.peerName))
                     .font(.system(.subheadline, design: .rounded).bold())
-                    .foregroundStyle(PaperTheme.color(message.isOutgoing ? .datePillText : .incomingText))
+                    .foregroundStyle(paper(message.isOutgoing ? .datePillText : .incomingText))
 
                 Spacer()
 
@@ -169,7 +170,8 @@ struct SearchResultRow: View {
 }
 
 /// Text view that highlights matching portions.
-struct HighlightedText: View {
+struct HighlightedText: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let text: String
     let highlight: String
 
@@ -197,7 +199,7 @@ struct HighlightedText: View {
         let suffix = String(text.suffix(text.count - endIndex))
 
         return Text(prefix) +
-            Text(match).bold().underline().foregroundColor(PaperTheme.color(.incomingText)) +
+            Text(match).bold().underline().foregroundColor(paper(.incomingText)) +
             Text(suffix)
     }
 }

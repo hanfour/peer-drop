@@ -66,7 +66,7 @@ private extension XCUIApplication {
     }
 
     func waitForConnected(timeout: Int = 30) -> Bool {
-        let connectedTab = tabBars.buttons["Connected"]
+        let connectedTab = tabBars.buttons["Home"]
         for _ in 0..<timeout {
             if connectedTab.isSelected { return true }
             sleep(1)
@@ -132,6 +132,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         continueAfterFailure = true
         app = XCUIApplication()
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
     }
 
@@ -188,7 +189,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         // ── Step 6: Go back and disconnect ──
         app.goBackOnce() // back to ConnectionView
         app.goBackOnce() // back to Connected list
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         app.disconnectFromPeer()
         screenshot("S1-I-08-disconnected")
@@ -202,7 +203,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
             screenshot("S1-I-09-no-peer-for-reconnect")
             print("[S1-INIT] Peer not found for reconnect (Bonjour delay)")
             // Try via Connected tab contacts
-            app.switchToTab("Connected")
+            app.switchToTab("Home")
             sleep(1)
             let contactPeer = app.buttons.matching(NSPredicate(format: "label CONTAINS 'iPhone'")).firstMatch
             if contactPeer.waitForExistence(timeout: 5) {
@@ -240,7 +241,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         // ── Step 10: Final disconnect ──
         app.goBackOnce()
         app.goBackOnce()
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         app.disconnectFromPeer()
         screenshot("S1-I-13-final-disconnect")
@@ -267,7 +268,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
 
         // Should NOT end up on Connected tab
         sleep(5)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         let wasRejected = !connectedTab.isSelected
         screenshot("S2-I-02-after-rejection")
 
@@ -338,7 +339,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         sleep(1)
 
         // ── Verify ConnectionView shows NO action buttons ──
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(1)
         app.navigateToConnectionView()
         sleep(2)
@@ -374,7 +375,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         sleep(1)
 
         // ── Verify buttons are back ──
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(1)
         app.navigateToConnectionView()
         sleep(2)
@@ -399,7 +400,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         sleep(5)
         app.goBackOnce()
         app.goBackOnce()
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         app.disconnectFromPeer()
         sleep(3)
@@ -528,14 +529,14 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         for i in 1...3 {
             app.switchToTab("Nearby")
             screenshot("S6-I-tab-nearby-\(i)")
-            app.switchToTab("Connected")
+            app.switchToTab("Home")
             screenshot("S6-I-tab-connected-\(i)")
-            app.switchToTab("Library")
+            app.switchToTab("Home")
             screenshot("S6-I-tab-library-\(i)")
         }
 
         // ── Verify still connected after tab switching ──
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         app.navigateToConnectionView()
         let sendFile = app.staticTexts["Send File"]
         XCTAssertTrue(sendFile.waitForExistence(timeout: 5), "Should still be connected after tab switching")
@@ -616,7 +617,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         sleep(10) // Acceptor sends messages while we're away
 
         // ── Check unread badge ──
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(1)
         screenshot("S7-I-04-unread-check")
         // The active peer row should show an unread badge
@@ -704,7 +705,7 @@ final class TwoDeviceInitiatorTests: XCTestCase {
         if done.exists { done.tap() }
         sleep(1)
 
-        app.switchToTab("Connected")
+        app.switchToTab("Home")
         sleep(1)
         let activeRow = app.buttons["active-peer-row"]
         let stillConnected = activeRow.waitForExistence(timeout: 5)
@@ -732,6 +733,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         continueAfterFailure = true
         app = XCUIApplication()
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
     }
 
@@ -774,7 +776,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         screenshot("S1-A-03-accepted")
 
         // ── Step 2: Navigate to chat ──
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -855,12 +857,10 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         screenshot("S2-A-03-rejected")
 
         // Verify we're back to normal state (not connected)
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
-        let noConnection = app.staticTexts["No active connection"]
-        let noSaved = app.staticTexts["No saved devices"]
-        let notConnected = noConnection.exists || noSaved.exists
+        let notConnected = app.hasNoActiveConnection()
         screenshot("S2-A-04-not-connected")
 
         // Verify app is functional
@@ -887,7 +887,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         screenshot("S3-A-01-connected")
 
         // Navigate to connection view
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
 
@@ -996,7 +996,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
                 sleep(3)
 
                 // Navigate to chat to receive message
-                let connectedTab = app.tabBars.buttons["Connected"]
+                let connectedTab = app.tabBars.buttons["Home"]
                 if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
                 app.navigateToConnectionView()
                 app.navigateToChat()
@@ -1038,14 +1038,14 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         screenshot("S6-A-01-connected")
 
         // ── Navigate around while connected ──
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
 
         // Switch tabs rapidly
         for i in 1...3 {
-            app.switchToTab("Library")
+            app.switchToTab("Home")
             app.switchToTab("Nearby")
-            app.switchToTab("Connected")
+            app.switchToTab("Home")
             screenshot("S6-A-tab-cycle-\(i)")
         }
 
@@ -1079,7 +1079,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         sleep(3)
 
         // Navigate to chat
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()
@@ -1128,7 +1128,7 @@ final class TwoDeviceAcceptorTests: XCTestCase {
         screenshot("S8-A-01-connected")
 
         // Navigate to chat
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
         app.navigateToChat()

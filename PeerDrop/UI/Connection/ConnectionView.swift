@@ -1,6 +1,7 @@
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
+import PeerDropSecurity
 
 struct ConnectionView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
@@ -22,20 +23,34 @@ struct ConnectionView: View {
         }
     }
 
+    /// Live connection name wins over a relay placeholder / blank name.
+    private func shownName(_ peer: PeerIdentity) -> String {
+        ChatDisplayName.forRecord(recordName: peer.displayName,
+                                  liveName: connectionManager.connection(for: peer.id)?.peerIdentity.displayName)
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 20) {
                 if let peer = connectionManager.connectedPeer {
                     Spacer()
 
-                    PeerAvatar(name: peer.displayName)
+                    PeerAvatar(name: shownName(peer))
                         .scaleEffect(1.8)
                         .padding(.bottom, 8)
 
-                    Text(peer.displayName)
+                    Text(shownName(peer))
                         .font(.title2.bold())
 
                     StatusBadge(state: connectionManager.state)
+
+                    if let conn = connectionManager.connection(for: peer.id) {
+                        SecureChannelIndicator(peerConn: conn)
+                        if let ni = connectionManager.nearbyInteractionManager {
+                            // Keyed by the connection key, not peerIdentity.id.
+                            PeerProximityRow(manager: ni, peerID: conn.id)
+                        }
+                    }
 
                     Spacer()
 
@@ -101,7 +116,7 @@ struct ConnectionView: View {
                             ChatView(
                                 chatManager: connectionManager.chatManager,
                                 peerID: peer.id,
-                                peerName: peer.displayName
+                                peerName: shownName(peer)
                             )
                             .environmentObject(connectionManager)
                         }
@@ -155,7 +170,7 @@ struct ConnectionView: View {
         .animation(.easeInOut(duration: 0.25), value: showFilePicker)
         .sheet(isPresented: $showDisconnectConfirm) {
             if let peer = connectionManager.connectedPeer {
-                DisconnectSheet(peerName: peer.displayName) {
+                DisconnectSheet(peerName: shownName(peer)) {
                     connectionManager.disconnect()
                 }
             }
@@ -198,5 +213,32 @@ struct ConnectionView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityHint(disabled ? "\(label) is disabled. Enable in Settings." : "Double tap to \(label.lowercased())")
+    }
+}
+
+
+/// Distance / direction to the peer from Nearby Interaction (UWB devices only; absent otherwise).
+private struct PeerProximityRow: View {
+    @ObservedObject var manager: NearbyInteractionManager
+    let peerID: String
+
+    var body: some View {
+        if let proximity = manager.peerProximity[peerID] {
+            HStack(spacing: 4) {
+                if let distance = proximity.distance {
+                    Image(systemName: "ruler")
+                        .font(.system(size: 9))
+                    Text(String(format: "%.1f m", distance))
+                        .font(.caption2)
+                }
+                if let direction = proximity.direction {
+                    Image(systemName: "location.north.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.blue)
+                        .rotationEffect(.radians(Double(atan2(direction.x, direction.z))))
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
     }
 }

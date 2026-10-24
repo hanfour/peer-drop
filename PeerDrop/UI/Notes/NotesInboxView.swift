@@ -7,8 +7,9 @@ import UIKit
 import AppKit
 #endif
 
-/// The Notes tab (iOS) / sidebar section (Mac). Expects an enclosing
-/// `NavigationStack(path: $path)`.
+/// The notes inbox. Mac: sidebar section inside `NavigationStack(path: $path)`.
+/// iOS: pushed from the Notes tab's first row (via `NotesInboxHost`, which bridges
+/// the programmatic `path` write to a pushed `NoteDetailView`).
 struct NotesInboxView: View {
     @ObservedObject var store: NotesStore
     @ObservedObject var accountManager: AccountManager

@@ -141,7 +141,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         signalCheckpoint("connected")
         screenshot("02-connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
 
         XCTAssertTrue(sendFileButtonExists(timeout: 5), "Send File button should exist")
@@ -213,7 +213,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
             signalCheckpoint("retry-connected")
             screenshot("05-connected")
 
-            switchToTab("Connected")
+            switchToTab("Home")
             navigateToConnectionView()
             disconnectFromPeer()
         } else {
@@ -241,7 +241,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         signalCheckpoint("connected")
         screenshot("01-connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -256,7 +256,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         // Go back to Connected tab before disconnecting
         goBack() // Back to ConnectionView
         goBack() // Back to Connected list
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         disconnectFromPeer()
         signalCheckpoint("disconnected")
@@ -275,7 +275,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
             signalCheckpoint("reconnect-requested")
         } else {
             // Fallback: try from Connected tab's contacts
-            switchToTab("Connected")
+            switchToTab("Home")
             let contactPeer = app.buttons.matching(
                 NSPredicate(format: "label CONTAINS 'iPhone'")
             ).firstMatch
@@ -294,7 +294,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         signalCheckpoint("reconnected")
         screenshot("04-reconnected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         _ = verifyMessageExists(testMessage, timeout: 5)
@@ -320,7 +320,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -353,7 +353,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -396,7 +396,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -440,7 +440,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
 
         XCTAssertTrue(sendFileButtonExists(timeout: 5), "Send File button should exist")
@@ -477,7 +477,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
 
         XCTAssertTrue(sendFileButtonExists(timeout: 5), "Send File button should exist")
@@ -520,7 +520,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Get peer name for verification
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("02-connection-view")
 
@@ -531,12 +531,12 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         sleep(2)
 
         // Check Library/Connected tab for saved contact
-        switchToTab("Connected")
+        switchToTab("Home")
         sleep(2)
         screenshot("03-library-check")
 
         // Look for saved device in contacts section
-        let contactsSection = app.staticTexts["Contacts"]
+        let contactsSection = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Friends'")).firstMatch
         let hasContactsSection = contactsSection.waitForExistence(timeout: 5)
 
         // Look for iPhone in the contacts list
@@ -565,7 +565,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
 
         // Test all three tabs
         let nearbyTab = app.tabBars.buttons["Nearby"]
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
 
         // Nearby tab should be selected by default or we switch to it
         if !nearbyTab.isSelected {
@@ -608,7 +608,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("01-connection-view")
 
@@ -676,7 +676,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
 
         // First call attempt
@@ -703,7 +703,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
 
         // Navigate back to connection view if needed
         if !voiceCallButton.exists {
-            switchToTab("Connected")
+            switchToTab("Home")
             navigateToConnectionView()
         }
 
@@ -756,7 +756,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         screenshot("01-chat-view")
@@ -809,7 +809,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -862,7 +862,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -910,7 +910,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -1029,7 +1029,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         writeVerificationResult("connection-time", value: String(format: "%.3f", connectionTime))
 
         // Clean up
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         disconnectFromPeer()
         signalCheckpoint("test-complete")
@@ -1053,7 +1053,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         screenshot("02-chat-open")
@@ -1129,7 +1129,7 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("02-connection-view")
 
@@ -1141,8 +1141,8 @@ final class E2EInitiatorTests: E2EInitiatorTestBase {
             metrics.startTimer("tab-switch-\(i)")
             switchToTab("Nearby")
             _ = app.tabBars.buttons["Nearby"].waitForExistence(timeout: 2)
-            switchToTab("Connected")
-            _ = app.tabBars.buttons["Connected"].waitForExistence(timeout: 2)
+            switchToTab("Home")
+            _ = app.tabBars.buttons["Home"].waitForExistence(timeout: 2)
             metrics.stopTimer("tab-switch-\(i)")
         }
 
@@ -1258,7 +1258,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         XCTAssertTrue(waitForConnected(timeout: 30))
         signalCheckpoint("connected")
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             _ = waitUntil(timeout: TestTimeouts.uiStabilize) { connectedTab.isSelected }
@@ -1329,7 +1329,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
 
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             _ = waitUntil(timeout: TestTimeouts.uiStabilize) { connectedTab.isSelected }
@@ -1387,7 +1387,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
             signalCheckpoint("reconnect-accepted")
 
             // Now check if we can see the connection in UI
-            switchToTab("Connected")
+            switchToTab("Home")
 
             // Check if there's an active peer (indicates connection)
             let activePeer = app.buttons["active-peer-row"]
@@ -1398,7 +1398,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
             } else {
                 // Refresh and try once more
                 switchToTab("Nearby")
-                switchToTab("Connected")
+                switchToTab("Home")
 
                 if activePeer.waitForExistence(timeout: 5) {
                     print("[ACCEPTOR] Auto-reconnected on second check")
@@ -1429,7 +1429,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -1457,7 +1457,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -1503,7 +1503,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
 
         XCTAssertTrue(waitForCheckpoint("open-chat-now", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -1534,7 +1534,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
 
@@ -1564,7 +1564,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab2 = app.tabBars.buttons["Connected"]
+        let connectedTab2 = app.tabBars.buttons["Home"]
         if !connectedTab2.isSelected { connectedTab2.tap(); sleep(1) }
         navigateToConnectionView()
 
@@ -1601,7 +1601,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
         screenshot("01-connected")
 
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("02-connection-view")
 
@@ -1611,7 +1611,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
 
         // Navigate back and check library
         goBack()
-        switchToTab("Connected")
+        switchToTab("Home")
         sleep(2)
         screenshot("03-library-check")
 
@@ -1640,7 +1640,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
 
         // Test all three tabs
         let nearbyTab = app.tabBars.buttons["Nearby"]
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
 
         // Nearby tab should be selected by default or we switch to it
         if !nearbyTab.isSelected {
@@ -1781,7 +1781,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -1817,7 +1817,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -1861,7 +1861,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -1927,7 +1927,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         signalCheckpoint("connection-accepted")
         XCTAssertTrue(waitForCheckpoint("connected", timeout: 30))
 
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -2034,7 +2034,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -2074,7 +2074,7 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         screenshot("02-connection-view")
@@ -2087,8 +2087,8 @@ final class E2EAcceptorTests: E2EAcceptorTestBase {
             metrics.startTimer("tab-switch-\(i)")
             switchToTab("Nearby")
             _ = app.tabBars.buttons["Nearby"].waitForExistence(timeout: 2)
-            switchToTab("Connected")
-            _ = app.tabBars.buttons["Connected"].waitForExistence(timeout: 2)
+            switchToTab("Home")
+            _ = app.tabBars.buttons["Home"].waitForExistence(timeout: 2)
             metrics.stopTimer("tab-switch-\(i)")
         }
 

@@ -30,6 +30,9 @@ final class SnapshotTests: XCTestCase {
         // Give extra time for iPad's floating tab bar to initialize
         sleep(5)
 
+        // The app now launches on Home; the numbered snapshots assume Nearby first.
+        navigateToTab("Nearby")
+
         // Just wait and don't assert - the app UI varies between iPhone and iPad
         // Screenshots will capture whatever state the app is in
     }
@@ -65,17 +68,17 @@ final class SnapshotTests: XCTestCase {
         snapshot("02_NearbyTabGrid")
     }
 
-    /// 03: Connected tab showing active connections and contacts
+    /// 03: Home tab with connected section (formerly the Connected tab). Name kept for fastlane framing.
     func test03_ConnectedTab() {
         // First, set up mock connection by tapping a discovered peer
         setupMockConnection()
 
         // Navigate to Connected tab
-        navigateToTab("Connected")
+        navigateToTab("Home")
         sleep(1)
 
         // Should show active connection and contacts list
-        let connectedTitle = app.navigationBars["Connected"]
+        let connectedTitle = app.navigationBars["Home"]
         XCTAssertTrue(connectedTitle.waitForExistence(timeout: 5))
 
         snapshot("03_ConnectedTab")
@@ -147,12 +150,12 @@ final class SnapshotTests: XCTestCase {
         snapshot("06_VoiceCallView")
     }
 
-    /// 07: Library tab with device groups and history
+    /// 07: Home tab (friends + groups; formerly the Library tab). Name kept for fastlane framing.
     func test07_LibraryTab() {
-        navigateToTab("Library")
+        navigateToTab("Home")
         sleep(1)
 
-        let libraryTitle = app.navigationBars["Library"]
+        let libraryTitle = app.navigationBars["Home"]
         XCTAssertTrue(libraryTitle.waitForExistence(timeout: 5))
 
         snapshot("07_LibraryTab")
@@ -284,12 +287,13 @@ final class SnapshotTests: XCTestCase {
     /// 13: Group detail view (from Library tab)
     func test13_GroupDetail() {
         // Navigate to Library tab
-        navigateToTab("Library")
+        navigateToTab("Home")
         sleep(1)
 
         // Look for a group row to tap
         // In screenshot mode, there should be mock groups
-        let groupCell = app.cells.firstMatch
+        // Home's first cell is the self row, so target the group row by identifier.
+        let groupCell = app.descendants(matching: .any).matching(identifier: "group-row").firstMatch
         if groupCell.waitForExistence(timeout: 3) {
             groupCell.tap()
             sleep(1)
@@ -313,7 +317,7 @@ final class SnapshotTests: XCTestCase {
         sleep(2)
 
         // Navigate to Connected tab to verify connection is ready
-        navigateToTab("Connected")
+        navigateToTab("Home")
 
         // Wait for the active peer row to appear (indicates connection is established)
         let activePeerRow = app.buttons.matching(NSPredicate(format: "identifier == 'active-peer-row'")).firstMatch
@@ -333,7 +337,7 @@ final class SnapshotTests: XCTestCase {
     /// Navigate to ConnectionView and wait for connected state with action buttons.
     private func navigateToConnectionView() -> Bool {
         // Navigate to Connected tab
-        navigateToTab("Connected")
+        navigateToTab("Home")
         sleep(1)
 
         // Wait for and tap on active peer row

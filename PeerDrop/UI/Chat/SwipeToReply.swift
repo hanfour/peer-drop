@@ -47,7 +47,8 @@ enum SwipeReplyLogic {
     }
 }
 
-private struct SwipeToReplyModifier: ViewModifier {
+private struct SwipeToReplyModifier: ViewModifier, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let isEnabled: Bool
     let isDeleted: Bool
     let onReply: () -> Void
@@ -71,7 +72,7 @@ private struct SwipeToReplyModifier: ViewModifier {
                     let p = SwipeReplyLogic.progress(forTranslationWidth: dragWidth)
                     Image(systemName: "arrowshape.turn.up.left.fill")
                         .font(.body)
-                        .foregroundStyle(PaperTheme.color(.accent))
+                        .foregroundStyle(paper(.accent))
                         .opacity(p)
                         .scaleEffect(0.5 + 0.5 * p)
                         .offset(x: SwipeReplyLogic.rowOffset(forTranslationWidth: dragWidth) - 36)

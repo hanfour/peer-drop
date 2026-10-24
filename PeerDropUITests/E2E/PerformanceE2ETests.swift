@@ -95,7 +95,7 @@ final class PerformanceE2EInitiatorTests: E2EInitiatorTestBase {
         writeVerificationResult("connection-time", value: String(format: "%.3f", connectionTime))
 
         // Clean up
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         disconnectFromPeer()
         signalCheckpoint("test-complete")
@@ -123,7 +123,7 @@ final class PerformanceE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         screenshot("02-chat-open")
@@ -203,7 +203,7 @@ final class PerformanceE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         screenshot("02-connection-view")
 
@@ -215,8 +215,8 @@ final class PerformanceE2EInitiatorTests: E2EInitiatorTestBase {
             metrics.startTimer("tab-switch-\(i)")
             switchToTab("Nearby")
             _ = app.tabBars.buttons["Nearby"].waitForExistence(timeout: 2)
-            switchToTab("Connected")
-            _ = app.tabBars.buttons["Connected"].waitForExistence(timeout: 2)
+            switchToTab("Home")
+            _ = app.tabBars.buttons["Home"].waitForExistence(timeout: 2)
             metrics.stopTimer("tab-switch-\(i)")
         }
 
@@ -345,7 +345,7 @@ final class PerformanceE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to chat
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         navigateToChat()
@@ -389,7 +389,7 @@ final class PerformanceE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("01-connected")
 
         // Navigate to connection view
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         navigateToConnectionView()
         screenshot("02-connection-view")
@@ -402,8 +402,8 @@ final class PerformanceE2EAcceptorTests: E2EAcceptorTestBase {
             metrics.startTimer("tab-switch-\(i)")
             switchToTab("Nearby")
             _ = app.tabBars.buttons["Nearby"].waitForExistence(timeout: 2)
-            switchToTab("Connected")
-            _ = app.tabBars.buttons["Connected"].waitForExistence(timeout: 2)
+            switchToTab("Home")
+            _ = app.tabBars.buttons["Home"].waitForExistence(timeout: 2)
             metrics.stopTimer("tab-switch-\(i)")
         }
 

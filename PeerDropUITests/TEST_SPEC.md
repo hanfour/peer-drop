@@ -1,5 +1,8 @@
 # PeerDrop Comprehensive Test Specification
 
+> **Note (2026-10 four-tab overhaul):** the app now has Home / Notes / Nearby / Diaries. Every "Connected tab" / "Library tab" step below means the Home tab (connected rows = `active-peer-row`, friends = `saved-device-row`, groups = `group-row`). Tests tap `Home`; the app launches on Home, so two-device tests call `app.goToNearbyTab()` after launch. Simulator language must be English.
+
+
 > **Single source of truth** for all functional test scenarios.
 > Update this document with every feature change.
 

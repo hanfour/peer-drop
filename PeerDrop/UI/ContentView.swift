@@ -60,8 +60,11 @@ struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
     @EnvironmentObject var inboxService: InboxService
     @ObservedObject private var pushManager = PushNotificationManager.shared
-    @State private var selectedTab = 3
-    @State private var notesPath: [NoteRecord] = []
+    @State private var selectedTab: AppTab = .home
+    /// Last observed global connection state (iOS 16 `onChange` has no old value).
+    @State private var previousConnectionState: ConnectionState = .idle
+    /// Bumped by the `.openNote` deep link so the Notes tab pushes its inbox (see `ConversationsTab.inboxRequest`).
+    @State private var inboxRequest = 0
     @State private var openNoteID: String?
     @State private var diariesPath: [String] = []
     @State private var openDiaryID: String?
@@ -80,15 +83,24 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
         TabView(selection: $selectedTab) {
-            NotesTabContent(store: connectionManager.notesStore, accountManager: connectionManager.accountManager, openNoteID: $openNoteID, path: $notesPath)
-                .tabItem { Label("Notes", systemImage: "envelope.fill") }
-                .tag(3)
-                .accessibilityLabel("Notes")
+            NavigationStack {
+                HomeTab(onAddFriend: { selectedTab = .nearby })
+            }
+            .tabItem { Label("Home", systemImage: "house") }
+            .tag(AppTab.home)
+            .accessibilityLabel("Home")
+            .accessibilityHint("Your friends and connections")
 
-            DiaryTabContent(store: connectionManager.diaryStore, accountManager: connectionManager.accountManager, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq, path: $diariesPath)
-                .tabItem { Label("Diaries", systemImage: "book.closed") }
-                .tag(4)
-                .accessibilityLabel("Diaries")
+            ConversationsTabContent(
+                store: connectionManager.notesStore,
+                accountManager: connectionManager.accountManager,
+                openNoteID: $openNoteID,
+                inboxRequest: $inboxRequest,
+                onGoHome: { selectedTab = .home }
+            )
+            .tabItem { Label("Notes", systemImage: "envelope.fill") }
+            .tag(AppTab.notes)
+            .accessibilityLabel("Notes")
 
             NavigationStack {
                 NearbyTab(selectedTab: $selectedTab)
@@ -96,39 +108,27 @@ struct ContentView: View {
             .tabItem {
                 Label("Nearby", systemImage: "wifi")
             }
-            .tag(0)
+            .tag(AppTab.nearby)
             .accessibilityLabel("Nearby")
             .accessibilityHint("Discover Nearby Devices")
 
-            NavigationStack {
-                ConnectedTab()
-            }
-            .tabItem {
-                Label("Connected", systemImage: "link")
-            }
-            .tag(1)
-            .accessibilityLabel("Connected")
-            .accessibilityHint("View connected devices")
-
-            NavigationStack {
-                LibraryTab()
-            }
-            .tabItem {
-                Label("Library", systemImage: "archivebox")
-            }
-            .tag(2)
-            .accessibilityLabel("Library")
-            .accessibilityHint("View saved devices and groups")
+            DiaryTabContent(store: connectionManager.diaryStore, accountManager: connectionManager.accountManager, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq, path: $diariesPath)
+                .paperMode(.note)
+                .tabItem { Label("Diaries", systemImage: "book.closed") }
+                .tag(AppTab.diaries)
+                .accessibilityLabel("Diaries")
         }
+        .tint(PaperTheme.color(.brand))
         .modifier(TabBarOnlyModifier())  // Force tab bar on iPad
         .onReceive(NotificationCenter.default.publisher(for: .openNote)) { note in
             guard let id = note.userInfo?["id"] as? String else { return }
-            selectedTab = 3
+            selectedTab = AppTab.tab(forDeepLink: .openNote) ?? .notes
             openNoteID = id
+            inboxRequest += 1
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDiary)) { note in
             guard let id = note.userInfo?["diaryId"] as? String else { return }
-            selectedTab = 4
+            selectedTab = AppTab.tab(forDeepLink: .openDiary) ?? .diaries
             openDiaryID = id
             openDiarySeq = note.userInfo?["seq"] as? Int
         }
@@ -196,12 +196,12 @@ struct ContentView: View {
                 }
                 connectionManager.transition(to: .discovering)
                 connectionManager.restartDiscovery()
-                selectedTab = 0
+                selectedTab = .nearby
             }
             Button("Back to Discovery", role: .cancel) {
                 connectionManager.transition(to: .discovering)
                 connectionManager.restartDiscovery()
-                selectedTab = 0
+                selectedTab = .nearby
             }
         } message: {
             Text(errorMessage ?? "An unknown error occurred.")
@@ -212,10 +212,11 @@ struct ContentView: View {
         )) {
             OnboardingView()
         }
-        .onChange(of: connectionManager.state) { _ in
-            switch connectionManager.state {
-            case .connected, .transferring, .voiceCall:
-                selectedTab = 1
+        .onChange(of: connectionManager.state) { newState in
+            let oldState = previousConnectionState
+            previousConnectionState = newState
+            selectedTab = AppTab.tabAfterConnectionChange(from: oldState, to: newState, current: selectedTab)
+            switch newState {
             case .failed(let reason):
                 // Only show alert if not suppressed (e.g., ChatView handles it locally).
                 // Recommendation card is now persistent in NearbyTab.
@@ -374,24 +375,8 @@ struct ContentView: View {
     }
 }
 
-/// Notes tab body: owns the NavigationStack path so a notification tap can push a note,
-/// and observes the store so the tab badge updates.
-private struct NotesTabContent: View {
-    @ObservedObject var store: NotesStore
-    @ObservedObject var accountManager: AccountManager
-    @Binding var openNoteID: String?
-    @Binding var path: [NoteRecord]
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            NotesInboxView(store: store, accountManager: accountManager, openNoteID: $openNoteID, path: $path)
-        }
-        .badge(store.unreadCount)
-    }
-}
-
 /// Diary tab body: owns the NavigationStack path so a notification tap can push a diary,
-/// mirroring `NotesTabContent`.
+/// mirroring `ConversationsTabContent`.
 private struct DiaryTabContent: View {
     @ObservedObject var store: DiaryStore
     @ObservedObject var accountManager: AccountManager
@@ -402,6 +387,8 @@ private struct DiaryTabContent: View {
     var body: some View {
         NavigationStack(path: $path) {
             DiaryListView(store: store, accountManager: accountManager, openDiaryID: $openDiaryID, openDiarySeq: $openDiarySeq, path: $path)
+                .scrollContentBackground(.hidden)
+                .background(PaperTheme.color(.background, mode: .note).ignoresSafeArea())
         }
     }
 }

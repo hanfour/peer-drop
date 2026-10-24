@@ -42,4 +42,21 @@ final class ChatDisplayNamePreferredTests: XCTestCase {
         XCTAssertNil(ChatDisplayName.preferred(nil, "", "  \n"))
         XCTAssertNil(ChatDisplayName.preferred())
     }
+
+    func testForRecordKeepsRealStoredName() {
+        XCTAssertEqual(ChatDisplayName.forRecord(recordName: "Alice", liveName: "Bob"), "Alice")
+    }
+
+    func testForRecordRelayPlaceholderUsesLiveName() {
+        XCTAssertEqual(ChatDisplayName.forRecord(recordName: "relay-ab12", liveName: "Bob"), "Bob")
+    }
+
+    func testForRecordBlankUsesLiveName() {
+        XCTAssertEqual(ChatDisplayName.forRecord(recordName: "  ", liveName: "Bob"), "Bob")
+    }
+
+    func testForRecordRelayWithoutLiveKeepsStored() {
+        XCTAssertEqual(ChatDisplayName.forRecord(recordName: "relay-ab12", liveName: nil), "relay-ab12")
+        XCTAssertEqual(ChatDisplayName.forRecord(recordName: "relay-ab12", liveName: " "), "relay-ab12")
+    }
 }

@@ -2,7 +2,8 @@ import SwiftUI
 import PeerDropCore
 import PeerDropSecurity
 
-struct GroupChatView: View {
+struct GroupChatView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let group: DeviceGroup
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var messageText = ""
@@ -72,9 +73,9 @@ struct GroupChatView: View {
                 .disabled(!hasConnectedMembers)
                 .opacity(hasConnectedMembers ? 1.0 : 0.5)
         }
-        .background(PaperTheme.color(.background))
+        .background(paper(.background))
         // Local accent for the chat screen only; the app-wide tint is untouched.
-        .tint(PaperTheme.color(.accent))
+        .tint(paper(.accent))
         .navigationTitle(group.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -108,7 +109,7 @@ struct GroupChatView: View {
                     .frame(width: 8, height: 8)
                 Text("\(connectionStatus.connected)/\(connectionStatus.total) connected")
                     .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(PaperTheme.color(.datePillText))
+                    .foregroundStyle(paper(.datePillText))
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(connectionStatus.connected) of \(connectionStatus.total) members connected")
@@ -122,11 +123,11 @@ struct GroupChatView: View {
                 } label: {
                     Label("Connect More", systemImage: "link.badge.plus")
                         .font(.system(.caption, design: .rounded).weight(.medium))
-                        .foregroundStyle(PaperTheme.color(.incomingText))
+                        .foregroundStyle(paper(.incomingText))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(PaperTheme.color(.background), in: Capsule())
-                        .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+                        .background(paper(.background), in: Capsule())
+                        .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Double tap to connect to more group members")
@@ -134,24 +135,24 @@ struct GroupChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(PaperTheme.color(.datePillFill))
+        .background(paper(.datePillFill))
         .overlay(alignment: .bottom) {
-            Rectangle().fill(PaperTheme.color(.border)).frame(height: 1)
+            Rectangle().fill(paper(.border)).frame(height: 1)
         }
     }
 
     private var inputBar: some View {
         HStack(spacing: 8) {
-            TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(PaperTheme.color(.inputPlaceholder))) {
+            TextField(text: $messageText, prompt: Text(verbatim: "Aa").foregroundColor(paper(.inputPlaceholder))) {
                 Text("Message")
             }
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .rounded))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(PaperTheme.color(.inputFill))
+                .background(paper(.inputFill))
                 .clipShape(Capsule())
-                .overlay(Capsule().stroke(PaperTheme.color(.border), lineWidth: 1))
+                .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
                 .accessibilityLabel("Message")
                 .accessibilityHint(hasConnectedMembers ? "Type a message to the group" : "Connect to members first")
 
@@ -160,7 +161,7 @@ struct GroupChatView: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? PaperTheme.color(.inputPlaceholder) : PaperTheme.color(.sendButton))
+                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? paper(.inputPlaceholder) : paper(.sendButton))
             }
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .paperIconButton()
@@ -180,7 +181,8 @@ struct GroupChatView: View {
 
 // MARK: - Group Chat Bubble
 
-struct GroupChatBubbleView: View {
+struct GroupChatBubbleView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let message: ChatMessage
     let members: [PeerIdentity]
     let runStart: Bool
@@ -198,11 +200,11 @@ struct GroupChatBubbleView: View {
     @State private var showReadReceipts = false
 
     private var bubbleColor: Color {
-        PaperTheme.color(message.isOutgoing ? .outgoingBubble : .incomingBubble)
+        paper(message.isOutgoing ? .outgoingBubble : .incomingBubble)
     }
 
     private var textColor: Color {
-        PaperTheme.color(message.isOutgoing ? .outgoingText : .incomingText)
+        paper(message.isOutgoing ? .outgoingText : .incomingText)
     }
 
     var body: some View {
@@ -220,7 +222,7 @@ struct GroupChatBubbleView: View {
                 if !message.isOutgoing && runStart {
                     Text(senderDisplayName)
                         .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(PaperTheme.color(.datePillText))
+                        .foregroundStyle(paper(.datePillText))
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .padding(.leading, 4)
@@ -256,7 +258,7 @@ struct GroupChatBubbleView: View {
                 .overlay {
                     if !message.isOutgoing {
                         MessageBubbleShape(isOutgoing: false)
-                            .stroke(PaperTheme.color(.border), lineWidth: 1)
+                            .stroke(paper(.border), lineWidth: 1)
                     }
                 }
             }
@@ -286,7 +288,7 @@ struct GroupChatBubbleView: View {
         let deliveredCount = status?.deliveredTo.count ?? 0
         let readCount = status?.readBy.count ?? 0
         let totalMembers = members.count
-        let tickColor = PaperTheme.color(PaperTheme.tick(for: readCount > 0 ? .read : .delivered))
+        let tickColor = paper(PaperTheme.tick(for: readCount > 0 ? .read : .delivered))
 
         Group {
             switch message.status {
@@ -298,7 +300,7 @@ struct GroupChatBubbleView: View {
             case .sent:
                 Image(systemName: "checkmark")
                     .font(.caption2)
-                    .foregroundStyle(PaperTheme.color(PaperTheme.tick(for: .sent)))
+                    .foregroundStyle(paper(PaperTheme.tick(for: .sent)))
             case .delivered, .read:
                 HStack(spacing: 2) {
                     HStack(spacing: -3) {

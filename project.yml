@@ -188,8 +188,6 @@ targets:
           # are reachable (Apple Guideline 2.1 risk otherwise).
           # iOS-shaped tab containers — replaced by MacContentView/MacDetailRouter:
           - "Connection/ConnectionView.swift"    # iOS tab container; macOS uses MacContentView
-          - "Discovery/DiscoveryView.swift"      # iOS tab container
-          - "Connection/ConnectedTab.swift"      # iOS tab container
     dependencies:
       - package: PeerDropKit
         product: PeerDropPlatform

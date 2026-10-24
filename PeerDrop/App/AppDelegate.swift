@@ -44,7 +44,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": id ?? ""])
         case .diary(_, let diaryId, let seq):
             // Spec §4: tapping any diary notification opens that diary
-            // (selectedTab = 4 on iOS) and scrolls to `seq` when present.
+            // (selectedTab = .diaries on iOS) and scrolls to `seq` when present.
             var info: [String: Any] = ["diaryId": diaryId]
             if let seq { info["seq"] = seq }
             NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: info)

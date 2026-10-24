@@ -1,6 +1,7 @@
 import SwiftUI
 
-struct StatusToastView: View {
+struct StatusToastView: View, PaperThemed {
+    @Environment(\.paperMode) var paperMode
     let message: String
     let icon: String
     let iconColor: Color
@@ -19,11 +20,11 @@ struct StatusToastView: View {
             Text(message)
                 .font(.subheadline)
                 .lineLimit(2)
-                .foregroundStyle(PaperTheme.color(.incomingText))
+                .foregroundStyle(paper(.incomingText))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(PaperTheme.color(.datePillFill), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(paper(.datePillFill), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: Color.peerDropLabel.opacity(0.12), radius: 8, y: 4)
         .padding(.horizontal)
         .accessibilityElement(children: .combine)

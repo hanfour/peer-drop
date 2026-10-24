@@ -23,6 +23,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
 
         if !CrossDeviceFeatureTests.appLaunched {
             app.launch()
+            app.goToNearbyTab()
             CrossDeviceFeatureTests.appLaunched = true
         } else {
             // App already running from previous test — just activate it
@@ -57,7 +58,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
 
         // Wait for connection to be accepted by Sim 1 (AcceptConnectionHelper)
         // Should auto-switch to Connected tab
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.buttons["active-peer-row"]
         let connected = connectedNav.waitForExistence(timeout: 30)
         XCTAssertTrue(connected, "Should transition to Connected tab after peer accepts")
 
@@ -119,10 +120,10 @@ final class CrossDeviceFeatureTests: XCTestCase {
 
         // Re-check clipboard state (the button checks on appear/state change)
         // Navigate away and back to trigger clipboard check
-        let nearbyTab = app.tabBars.buttons.element(boundBy: 0)
+        let nearbyTab = app.tabBars.buttons["Nearby"]
         nearbyTab.tap()
         sleep(1)
-        let connectedTab = app.tabBars.buttons.element(boundBy: 1)
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
 
@@ -270,11 +271,10 @@ final class CrossDeviceFeatureTests: XCTestCase {
         takeScreenshot("05-Disconnected")
 
         // Should show empty state or return to discovery
-        let noConnection = app.staticTexts["No active connection"]
-        let nearbyTab = app.tabBars.buttons.element(boundBy: 0)
+        let nearbyTab = app.tabBars.buttons["Nearby"]
 
-        // Either we see "No active connection" on Connected tab, or we switched to Nearby
-        let disconnected = noConnection.waitForExistence(timeout: 5) || nearbyTab.isSelected
+        // Either Home shows no connected row, or we switched to Nearby
+        let disconnected = app.buttons["active-peer-row"].waitForNonExistence(timeout: 5) || nearbyTab.isSelected
         XCTAssertTrue(disconnected, "Should show disconnected state")
     }
 
@@ -622,21 +622,21 @@ final class CrossDeviceFeatureTests: XCTestCase {
         if backBtn.exists { backBtn.tap() }
         sleep(1)
 
-        // Navigate to Library tab (3rd tab, index 2)
-        let libraryTab = app.tabBars.buttons.element(boundBy: 2)
+        // Saved devices live in Home's Friends section (Library tab was merged into Home)
+        let libraryTab = app.tabBars.buttons["Home"]
         libraryTab.tap()
         sleep(1)
 
         takeScreenshot("09-LibraryTab")
 
         // Count device records — should be exactly 1 (no duplicates)
-        let cells = app.cells
+        let cells = app.buttons.matching(identifier: "saved-device-row")
         let cellCount = cells.count
         takeScreenshot("09-LibraryCellCount-\(cellCount)")
         XCTAssertEqual(cellCount, 1, "Library should have exactly 1 device record, not \(cellCount) duplicates")
 
         // Go back to Connected tab for cleanup
-        let connectedTab = app.tabBars.buttons.element(boundBy: 1)
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
 
@@ -705,7 +705,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
         }
 
         // Navigate to Connected tab to check
-        let connectedTab = app.tabBars.buttons.element(boundBy: 1)
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
         if app.staticTexts["File"].exists {
@@ -713,7 +713,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
         }
 
         // Need to connect — go to Nearby tab
-        let nearbyTab = app.tabBars.buttons.element(boundBy: 0)
+        let nearbyTab = app.tabBars.buttons["Nearby"]
         nearbyTab.tap()
         sleep(1)
 
@@ -725,7 +725,7 @@ final class CrossDeviceFeatureTests: XCTestCase {
         tapFirstPeer()
 
         // Wait for connection
-        let connectedNav = app.navigationBars["Connected"]
+        let connectedNav = app.buttons["active-peer-row"]
         guard connectedNav.waitForExistence(timeout: 30) else {
             XCTFail("Connection was not established")
             return

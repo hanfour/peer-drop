@@ -45,7 +45,7 @@ private extension XCUIApplication {
     }
 
     func waitForConnected(timeout: Int = 30) -> Bool {
-        let connectedTab = tabBars.buttons["Connected"]
+        let connectedTab = tabBars.buttons["Home"]
         for _ in 0..<timeout {
             if connectedTab.isSelected { return true }
             sleep(1)
@@ -131,6 +131,7 @@ final class TimeoutInitiatorTests: XCTestCase {
     func testA4_RequestTimeout() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("A4-00-discovery")
@@ -182,6 +183,7 @@ final class TimeoutInitiatorTests: XCTestCase {
     func testA5_NormalConnectionRegression() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("A5-00-discovery")
@@ -261,6 +263,7 @@ final class TimeoutAcceptorTests: XCTestCase {
     func testB4_ConsentAutoDismissOnTimeout() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("B4-00-discovery")
@@ -307,6 +310,7 @@ final class TimeoutAcceptorTests: XCTestCase {
     func testB5_NormalAcceptRegression() {
         app.launchArguments = ["-peerDropIsOnline", "1"]
         app.launch()
+        app.goToNearbyTab()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.ensureOnline()
         screenshot("B5-00-discovery")
@@ -321,7 +325,7 @@ final class TimeoutAcceptorTests: XCTestCase {
         print("[B5] Accepted connection")
 
         // Should be connected
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected { connectedTab.tap(); sleep(1) }
         app.navigateToConnectionView()
 

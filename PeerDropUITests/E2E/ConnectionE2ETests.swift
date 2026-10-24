@@ -59,7 +59,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
         signalCheckpoint("connected")
 
         // Step 5: Verify connection UI
-        switchToTab("Connected")
+        switchToTab("Home")
         sleep(1)
         navigateToConnectionView()
         screenshot("05-connection-view")
@@ -139,7 +139,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
         }
 
         // Verify we're not connected
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         XCTAssertFalse(connectedTab.isSelected, "Should not be connected after rejection")
         signalCheckpoint("rejection-handled")
         screenshot("05-rejection-handled")
@@ -157,7 +157,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
 
         guard let peer2 = findPeer(timeout: 20) else {
             // Try from Connected tab's recent connections
-            switchToTab("Connected")
+            switchToTab("Home")
             sleep(1)
             let recentPeer = app.buttons.matching(
                 NSPredicate(format: "label CONTAINS 'iPhone'")
@@ -189,7 +189,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
         signalCheckpoint("retry-connected")
 
         // Cleanup
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         disconnectFromPeer()
         signalCheckpoint("test-complete")
@@ -234,7 +234,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("01-connected")
 
         // Step 2: Send a message
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
 
@@ -278,7 +278,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
 
         guard let peer2 = findPeer(timeout: 30) else {
             // Try from Connected tab
-            switchToTab("Connected")
+            switchToTab("Home")
             let recentPeer = app.buttons.matching(
                 NSPredicate(format: "label CONTAINS 'iPhone'")
             ).firstMatch
@@ -307,7 +307,7 @@ final class ConnectionE2EInitiatorTests: E2EInitiatorTestBase {
         screenshot("06-reconnected")
 
         // Step 5: Verify chat history persists
-        switchToTab("Connected")
+        switchToTab("Home")
         navigateToConnectionView()
         navigateToChat()
         sleep(1)
@@ -366,7 +366,7 @@ final class ConnectionE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("03-connected")
 
         // Step 4: Verify connection UI
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
@@ -422,14 +422,12 @@ final class ConnectionE2EAcceptorTests: E2EAcceptorTestBase {
         screenshot("03-rejected")
 
         // Verify not connected
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         connectedTab.tap()
         sleep(1)
 
-        let noConnection = app.staticTexts["No active connection"]
-        let noSaved = app.staticTexts["No saved devices"]
         XCTAssertTrue(
-            noConnection.exists || noSaved.exists,
+            app.hasNoActiveConnection(),
             "Should show no connection after rejection"
         )
         screenshot("04-not-connected")
@@ -507,7 +505,7 @@ final class ConnectionE2EAcceptorTests: E2EAcceptorTestBase {
         )
 
         // Step 2: Navigate to chat and wait for message
-        let connectedTab = app.tabBars.buttons["Connected"]
+        let connectedTab = app.tabBars.buttons["Home"]
         if !connectedTab.isSelected {
             connectedTab.tap()
             sleep(1)
