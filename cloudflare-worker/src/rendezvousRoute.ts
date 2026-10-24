@@ -108,7 +108,7 @@ async function handleIce(request: Request, env: RvEnv): Promise<Response> {
   try {
     const buf = await request.arrayBuffer();
     if (buf.byteLength > RV_MAX_FRAME_BYTES) return denied();
-    raw = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    raw = new TextDecoder().decode(buf);
   } catch {
     return denied();
   }
@@ -138,7 +138,7 @@ function handleSocket(request: Request, env: RvEnv): Response {
   let done = false;
   let gotFirst = false;
   const pending: (string | ArrayBuffer)[] = [];
-  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let idleTimer: any;
 
   const finish = () => {
     if (done) return;
@@ -152,7 +152,7 @@ function handleSocket(request: Request, env: RvEnv): Response {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(finish, RV_IDLE_MS);
   };
-  const firstFrameTimer = setTimeout(finish, RV_FIRST_FRAME_TIMEOUT_MS);
+  const firstFrameTimer: any = setTimeout(finish, RV_FIRST_FRAME_TIMEOUT_MS);
 
   const connectUpstream = async (raw: string) => {
     const token = await admit("ws", raw, ip);
