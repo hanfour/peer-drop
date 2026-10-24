@@ -3,6 +3,13 @@
 //   GET  /rv      WebSocket; first text frame = {"v":1,"t":<token>,"pow":{h,n}}
 //   POST /rv/ice  body = {"t":<token>,"pow":{h,n}} -> STUN/TURN config
 //
+// CLIENT LIVENESS CONTRACT (binding for the Swift side):
+//   Clients MUST send the TEXT frame exactly "ping" at least every 30 s.
+//   Only text frames reach this bridge's listener; WebSocket-protocol pings
+//   (URLSessionWebSocketTask.sendPing) are handled by the runtime, never reach
+//   it, and do NOT count: such a client would be cut after 90 s of "silence".
+//   The 2 h hard cap cuts even active sessions: reconnect with the SAME `s`.
+//
 // PRIVACY CONTRACT (do not weaken):
 //   - never console.* anything, never write KV, never write `wslog:`;
 //   - nothing derived from the request (IP, headers, token) is persisted;
@@ -32,7 +39,25 @@ interface RvEnv {
 export const RV_RATE_LIMIT_MAX = 12;
 export const RV_RATE_WINDOW_MS = 60_000;
 export const RV_FIRST_FRAME_TIMEOUT_MS = 5_000;
-const MAX_TABLE_ENTRIES = 20_000;
+/** Test hook: shrink the table cap. Production value stays 20_000. */
+export const rvTestHooks = { maxEntries: 20_000 };
+export function rvTableSizes() {
+  return { attempts: attempts.size, ipHandshakes: ipHandshakes.size, ipUnauthOpen: ipUnauthOpen.size };
+}
+
+/** Key IPv6 by its /64 prefix (one subscriber = one /64); IPv4 unchanged. */
+export function ipBucket(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  let a = ip.toLowerCase();
+  const zone = a.indexOf("%");
+  if (zone >= 0) a = a.slice(0, zone);
+  const [headRaw, tailRaw] = a.split("::");
+  const head = headRaw ? headRaw.split(":") : [];
+  const tail = tailRaw !== undefined && tailRaw ? tailRaw.split(":") : [];
+  const fill = a.includes("::") ? Array(Math.max(0, 8 - head.length - tail.length)).fill("0") : [];
+  const groups = [...head, ...fill, ...tail].map((g) => (g || "0").replace(/^0+(?=.)/, ""));
+  return "v6:" + groups.slice(0, 4).join(":");
+}
 const MAX_PENDING_FRAMES = 8;
 const MAX_PENDING_BYTES = 64 * 1024;
 /** Client pings every 30 s; 90 s of total silence closes the bridge (one-sided liveness). */
@@ -65,6 +90,13 @@ const ipHandshakes = new Map<string, { windowStart: number; count: number }>();
 const ipUnauthOpen = new Map<string, number>();
 let lastSweep = 0;
 
+async function sha256Hex(v: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+  let hex = "";
+  for (const b of d) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
+
 async function saltedHash(label: string, value: string): Promise<string> {
   const v = new TextEncoder().encode(label + "\0" + value);
   const buf = new Uint8Array(salt.length + v.length);
@@ -77,7 +109,8 @@ async function saltedHash(label: string, value: string): Promise<string> {
 }
 
 function sweep(now: number): void {
-  if (now - lastSweep < RV_RATE_WINDOW_MS && attempts.size < MAX_TABLE_ENTRIES) return;
+  const max = rvTestHooks.maxEntries;
+  if (now - lastSweep < RV_RATE_WINDOW_MS && attempts.size < max && ipHandshakes.size < max && ipUnauthOpen.size < max) return;
   lastSweep = now;
   for (const [k, v] of attempts) {
     if (now - v.windowStart >= RV_RATE_WINDOW_MS) attempts.delete(k);
@@ -85,15 +118,15 @@ function sweep(now: number): void {
   for (const [k, v] of ipHandshakes) {
     if (now - v.windowStart >= RV_RATE_WINDOW_MS) ipHandshakes.delete(k);
   }
-  if (attempts.size >= MAX_TABLE_ENTRIES) attempts.clear(); // memory guard
-  if (ipHandshakes.size >= MAX_TABLE_ENTRIES) ipHandshakes.clear();
-  if (ipUnauthOpen.size >= MAX_TABLE_ENTRIES) ipUnauthOpen.clear();
+  if (attempts.size >= rvTestHooks.maxEntries) attempts.clear(); // memory guard
+  if (ipHandshakes.size >= rvTestHooks.maxEntries) ipHandshakes.clear();
+  if (ipUnauthOpen.size >= rvTestHooks.maxEntries) ipUnauthOpen.clear();
 }
 
 /** Returns true if this attempt is allowed (and counts it). */
 async function allowAttempt(kind: "ws" | "ice", ip: string, token: string, now: number): Promise<boolean> {
   sweep(now);
-  const key = `${kind}:${await saltedHash("ip", ip)}:${await saltedHash("t", token)}`;
+  const key = `${kind}:${await saltedHash("ip", ipBucket(ip))}:${await saltedHash("t", token)}`;
   const e = attempts.get(key);
   if (!e || now - e.windowStart >= RV_RATE_WINDOW_MS) {
     attempts.set(key, { windowStart: now, count: 1 });
@@ -132,7 +165,7 @@ async function ipGate(ip: string): Promise<{ deny: boolean; key: string | null }
   if (!ip || ip === "unknown") return { deny: false, key: null };
   const now = Date.now();
   sweep(now);
-  const key = await saltedHash("ipcap", ip);
+  const key = await saltedHash("ipcap", ipBucket(ip));
   const e = ipHandshakes.get(key);
   if (!e || now - e.windowStart >= RV_RATE_WINDOW_MS) ipHandshakes.set(key, { windowStart: now, count: 1 });
   else if (e.count >= IP_HANDSHAKES_PER_MIN) return { deny: true, key: null };
@@ -245,7 +278,8 @@ async function handleSocket(request: Request, env: RvEnv, deps: RvDeps): Promise
     if (adm === null || done) { finish(); return; }
     const stub = env.RENDEZVOUS_ROOM.get(env.RENDEZVOUS_ROOM.idFromName(adm.token));
     const headers: Record<string, string> = { Upgrade: "websocket" };
-    if (adm.sid) headers[RV_SESSION_HEADER] = adm.sid;
+    // Pass only SHA-256(token || s) (hex): the DO needs equality, never s itself.
+    if (adm.sid) headers[RV_SESSION_HEADER] = await sha256Hex(adm.token + adm.sid);
     let resp: Response;
     try {
       resp = await stub.fetch("https://rv.internal/connect", { headers });

@@ -5,6 +5,15 @@
 // bookkeeping (last-frame time, optional session id) lives in the
 // hibernation-safe socket attachment, not in storage.
 //
+// CLIENT LIVENESS CONTRACT (binding for the Swift side):
+//   - Clients MUST send the TEXT frame exactly "ping" at least every 30 s.
+//     Only that literal text frame counts (the DO auto-answers it "pong" and
+//     records an auto-response timestamp). WebSocket-PROTOCOL pings
+//     (URLSessionWebSocketTask.sendPing) never reach the Worker listener and do
+//     NOT count: such a client is cut after 90 s and looks stale to joiners.
+//   - A 2 h hard cap cuts even active sessions. Reconnect with the SAME
+//     session id `s` to take your slot back instantly.
+//
 // HONEST LIMITS (do not oversell in docs):
 //   - Pings count as frames. Liveness/idle is a ONE-SIDED signal ("this socket
 //     was heard from"), not proof the peer or user is present.
@@ -34,6 +43,8 @@ export class RendezvousRoom {
   ctx: DurableObjectState;
   /** Injectable clock (tests). */
   now: () => number = () => Date.now();
+  /** Staleness threshold; production value is RV_STALE_MS. Tests may shorten it. */
+  staleMs: number = RV_STALE_MS;
 
   constructor(ctx: DurableObjectState, _env: unknown) {
     this.ctx = ctx;
@@ -84,7 +95,7 @@ export class RendezvousRoom {
     const occupants = this.openSockets();
     if (occupants.length >= MAX_SOCKETS) {
       const t = this.now();
-      const stale = occupants.find((s) => t - this.lastSeen(s) > RV_STALE_MS);
+      const stale = occupants.find((s) => t - this.lastSeen(s) > this.staleMs);
       if (!stale) return new Response(null, { status: 409 });
       this.replace(stale);
     }

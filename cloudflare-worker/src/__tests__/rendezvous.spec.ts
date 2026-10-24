@@ -7,7 +7,7 @@ import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import vectors from "../../test-vectors/rendezvous-pow.json";
 import { verifyRendezvousClaim } from "../rendezvousPow";
-import { handleRendezvous } from "../rendezvousRoute";
+import { handleRendezvous, rvTestHooks, rvTableSizes } from "../rendezvousRoute";
 
 // runInDurableObject's generics trip TS2589; erase them.
 const runDO: (stub: any, fn: (inst: any, state: any) => any) => Promise<any> = runInDurableObject as any;
@@ -114,6 +114,12 @@ async function pair(token = randomToken()): Promise<{ a: TestSocket; b: TestSock
 function roomStub(token: string): any {
   const ns = (env as any).RENDEZVOUS_ROOM;
   return ns.get(ns.idFromName(token));
+}
+async function expectDoEmpty(token: string) {
+  await runDO(roomStub(token), async (_i: any, state: any) => {
+    expect((await state.storage.list()).size).toBe(0);
+    expect(await state.storage.getAlarm()).toBeNull();
+  });
 }
 function sid(): string { return b64u(crypto.getRandomValues(new Uint8Array(16))); }
 function expectGenericClose(s: TestSocket) {
@@ -403,8 +409,6 @@ describe("PRIVACY: no logging, no KV writes", () => {
     const before = await snap();
 
     const { a, b, token } = await pair();
-    const session = await runDO(roomStub(token), async (_i: any, state: DurableObjectState) => state);
-    void session;
     a.send("x"); await b.nextMessage();
     const c = await join(token); await c.waitFor(() => c.closed !== null);
     const bad = await connect(); bad.send("garbage"); await bad.waitFor(() => bad.closed !== null);
@@ -529,6 +533,7 @@ describe("I-2 DO eviction and takeover", () => {
     expect(evicted.length).toBe(1);
     expectGenericClose(evicted[0]);
     expect(live[0].messages.map((m) => JSON.parse(m as string).t)).toEqual(["left", "joined"]);
+    await expectDoEmpty(token);
     live[0].ws.close(1000, "x"); c.ws.close(1000, "x");
   });
 
@@ -560,6 +565,17 @@ describe("I-2 DO eviction and takeover", () => {
     b.messages.length = 0;
     a2.send("hi");
     expect(await b.nextMessage()).toBe("hi");
+    await expectDoEmpty(token);
+    // N-2: the DO only ever sees a token-bound hash of s, never s itself.
+    await runDO(roomStub(token), async (inst: any) => {
+      for (const w of inst.ctx.getWebSockets()) {
+        const att = w.deserializeAttachment();
+        if (att?.s !== undefined) {
+          expect(att.s).not.toBe(s1);
+          expect(att.s).toMatch(/^[0-9a-f]{64}$/);
+        }
+      }
+    });
     a2.ws.close(1000, "x"); b.ws.close(1000, "x");
   });
 
@@ -638,5 +654,81 @@ describe("M-3 / M-4 hardening", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(b.messages.length).toBe(0);
     a.ws.close(1000, "x"); b.ws.close(1000, "x");
+  });
+});
+
+
+describe("round 2", () => {
+  it("N-1: text 'ping' through the Worker updates the auto-response timestamp, and a ping-only socket is not evicted", async () => {
+    const { a, b, token } = await pair();
+    await runDO(roomStub(token), async (inst: any) => { inst.staleMs = 400; });
+    await new Promise((r) => setTimeout(r, 300));
+    a.send("ping");
+    await a.waitFor(() => a.messages.length > 0);
+    await new Promise((r) => setTimeout(r, 250));
+    a.send("ping");
+    await a.waitFor(() => a.messages.length > 1);
+    await runDO(roomStub(token), async (inst: any) => {
+      const all = inst.ctx.getWebSockets();
+      // getWebSockets() order is not accept order: find the socket that was pinged.
+      const pinged = all.filter((w: any) => inst.ctx.getWebSocketAutoResponseTimestamp(w) !== null);
+      expect(pinged.length).toBe(1);
+      const [wa] = pinged;
+      const ts = inst.ctx.getWebSocketAutoResponseTimestamp(wa);
+      expect(ts).not.toBeNull();
+      expect(ts.getTime()).toBeGreaterThan(wa.deserializeAttachment().last);
+    });
+    // b has been silent > staleMs, a only pinged (<= 250 ms ago)
+    const c = await join(token);
+    await c.waitFor(() => c.messages.length > 0);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(b.closed).not.toBeNull();
+    expectGenericClose(b);
+    expect(a.closed).toBeNull();
+    a.ws.close(1000, "x"); c.ws.close(1000, "x");
+  });
+
+  it("N-3: tables stay bounded under a flood of distinct IPs", async () => {
+    rvTestHooks.maxEntries = 40;
+    try {
+      const timers = fakeTimers();
+      for (let i = 0; i < 120; i++) {
+        const sck = await directConnect(timers, `198.18.${Math.floor(i / 250)}.${i % 250}`);
+        void sck;
+      }
+      const sz = rvTableSizes();
+      expect(sz.attempts).toBeLessThanOrEqual(41);
+      expect(sz.ipHandshakes).toBeLessThanOrEqual(41);
+      expect(sz.ipUnauthOpen).toBeLessThanOrEqual(41);
+      timers.advance(10_000);
+    } finally { rvTestHooks.maxEntries = 20_000; }
+  });
+
+  it("N-3: IPv6 addresses in one /64 share the per-IP cap", async () => {
+    const timers = fakeTimers();
+    const open: TestSocket[] = [];
+    for (let i = 0; i < 8; i++) open.push(await directConnect(timers, `2001:db8:1:2:${i}::${i + 1}`));
+    const ninth = await directConnect(timers, "2001:db8:1:2:ffff:ffff:ffff:ffff");
+    await ninth.waitFor(() => ninth.closed !== null);
+    expectGenericClose(ninth);
+    const other = await directConnect(timers, "2001:db8:1:3::1"); // different /64
+    await new Promise((r) => setTimeout(r, 100));
+    expect(other.closed).toBeNull();
+    timers.advance(10_000);
+  });
+
+  it("N-4: positive control, KV/D1 spies and the list-diff do detect writes", async () => {
+    const put = vi.spyOn(env.ROOMS as any, "put");
+    await env.ROOMS.put("pc:test", "1");
+    expect(put).toHaveBeenCalledTimes(1);
+    await env.ROOMS.delete("pc:test");
+    const prep = vi.spyOn(env.ACCOUNTS_DB as any, "prepare");
+    env.ACCOUNTS_DB.prepare("SELECT 1");
+    expect(prep).toHaveBeenCalledTimes(1);
+    // A known-writing route changes the KV listing that the privacy test diffs.
+    const before = (await env.ROOMS.list()).keys.length;
+    const r = await SELF.fetch("https://example.com/room", { method: "POST", headers: { "X-API-Key": "test-api-key-12345", "CF-Connecting-IP": freshIp() } });
+    expect(r.status).toBe(201);
+    expect((await env.ROOMS.list()).keys.length).toBeGreaterThan(before);
   });
 });

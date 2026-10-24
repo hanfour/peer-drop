@@ -113,5 +113,6 @@
    "bitsReported": 16,
    "note": "now=B+660; client h=floor((now-600)/3600)=H+1=cur"
   }
- ]
+ ],
+ "clientContract": "Liveness: send the TEXT frame exactly \"ping\" at least every 30 s (server answers \"pong\"). WebSocket-protocol pings (URLSessionWebSocketTask.sendPing) do NOT count; silence >90 s closes the connection. 2 h hard cap cuts active sessions: reconnect with the SAME session id s. s = 16 random bytes base64url, fresh per (token, app run), never reused across tokens."
 }
