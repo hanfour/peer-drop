@@ -64,15 +64,24 @@ struct ConversationsTabContent: View {
         #endif
         .onChange(of: openNoteID) { _ in resolve() }
         .onChange(of: store.inbox) { _ in resolve() }
+        .onChange(of: store.inbox) { _ in markHiddenOnServer() }
+        .onChange(of: hideAnonymous) { _ in markHiddenOnServer() }
         .onReceive(connectionManager.diaryStore.$states) { _ in diaryRevision += 1 }
-        .onAppear { bound.bind(connectionManager); resolve() }
+        .onAppear { bound.bind(connectionManager); resolve(); markHiddenOnServer() }
+    }
+
+    /// Hidden anonymous notes are marked read on the server (so they can be evicted first); locally they stay unread.
+    private func markHiddenOnServer() {
+        let ids = StrangerBox.hiddenIDsToMarkOnServer(store.inbox, circle: circle(boundAccounts))
+        guard !ids.isEmpty else { return }
+        Task { for id in ids { await store.markReadOnServerOnly(id) } }
     }
 
     private func resolve() {
         guard let id = openNoteID, let record = store.note(id: id) else { return }
         openNoteID = nil
         // A hidden anonymous note stays hidden, even when its notification is tapped.
-        if NoteClassification.classify(note: record, circle: circle(boundAccounts)) == .hiddenAnonymous { return }
+        if !StrangerBox.opensFromNotification(record, circle: circle(boundAccounts)) { return }
         // A note from a verified-bound friend belongs to that friend's thread, not the inbox.
         if case .thread(let recordID) = BoundFriends.destination(forNoteID: id, cm: connectionManager) {
             pendingNote = nil
@@ -112,7 +121,7 @@ struct NotesInboxHost: View {
             path: Binding(get: { note.map { [$0] } ?? [] }, set: { note = $0.last })
         )
         .navigationDestination(isPresented: Binding(get: { armed && note != nil }, set: { if !$0 { note = nil } })) {
-            if let record = note { NoteDetailView(record: record, store: store, readIsLocalOnly: StrangerBox.readIsLocalOnly(record, circle: circle)) }
+            if let record = note { NoteDetailView(record: record, store: store) }
         }
         .onAppear { DispatchQueue.main.async { armed = true } }
     }

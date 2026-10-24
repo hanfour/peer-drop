@@ -100,11 +100,11 @@ export async function fanOutNotePush(env: Env, recipientAccountId: string, itemI
   // The recipient's global 「紙條通知」 setting is checked BEFORE anything is
   // sent. Off means no push at all: not the visual alert, and not a silent
   // substitute either. The note itself is already stored. An unreadable
-  // setting fails open (the old behaviour) rather than silently dropping a
-  // nudge the user still wants.
+  // setting fails CLOSED (no push): the user asked for quiet, and a missed
+  // nudge is picked up on the next foreground sync.
   try {
     if (!(await readNotePush(env, recipientAccountId))) return { attempted: 0 };
-  } catch { /* fail open */ }
+  } catch { return { attempted: 0 }; }
   return fanOutPush(env, recipientAccountId, { alert: { "loc-key": "NOTE_RECEIVED" }, sound: "default", data: { type: "note", inboxItemId: itemId } }, deps);
 }
 

@@ -4,8 +4,6 @@ import PeerDropNotes
 struct NoteDetailView: View {
     let record: NoteRecord
     @ObservedObject var store: NotesStore
-    /// True for notes from outside the circle: opening one stays on this device (no server read mark).
-    var readIsLocalOnly = false
     @Environment(\.dismiss) private var dismiss
     @State private var showBlockConfirm = false
     @State private var showReport = false
@@ -48,7 +46,7 @@ struct NoteDetailView: View {
                 }
             }
         }
-        .task { if current.isUnread { await store.markRead(current.id, notifyServer: !readIsLocalOnly) } }
+        .task { if current.isUnread { await store.markRead(current.id) } }
         .confirmationDialog("Block this sender?", isPresented: $showBlockConfirm, titleVisibility: .visible) {
             Button("Block Sender", role: .destructive) { Task { await block() } }
         } message: { Text("You will no longer receive notes from this sender, even anonymous ones.") }

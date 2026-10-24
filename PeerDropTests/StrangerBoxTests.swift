@@ -121,11 +121,26 @@ final class StrangerBoxTests: XCTestCase {
         XCTAssertTrue(m.hideAnonymous)
     }
 
-    func testReadingIsLocalOnlyForEverythingOutsideTheCircle() {
-        let c = circle()
-        XCTAssertFalse(StrangerBox.readIsLocalOnly(inbound("d", .verified(accountId: "DIARY001", nickname: nil)), circle: c))
-        XCTAssertTrue(StrangerBox.readIsLocalOnly(inbound("a", .anonymous), circle: c))
-        XCTAssertTrue(StrangerBox.readIsLocalOnly(inbound("s", .verified(accountId: "STRANGE1", nickname: nil)), circle: c))
-        XCTAssertTrue(StrangerBox.readIsLocalOnly(inbound("u", .unverified(accountId: "DIARY001")), circle: c))
+    func testHiddenUnreadAnonymousNotesAreMarkedOnTheServerButStayStored() {
+        let notes = sample + [inbound("anonRead", .anonymous, unread: false)]
+        let hideOn = circle(hide: true)
+        XCTAssertEqual(StrangerBox.hiddenIDsToMarkOnServer(notes, circle: hideOn), ["anon1", "anon2"])
+        XCTAssertTrue(StrangerBox.hiddenIDsToMarkOnServer(notes, circle: circle(hide: false)).isEmpty, "nothing is marked while anonymous notes are visible")
+        let store = NotesStore(mockInbox: notes, sent: [])
+        XCTAssertEqual(store.inbox.count, notes.count, "storage untouched")
+        XCTAssertEqual(StrangerBox.partition(store.inbox, boundAccounts: bound, circle: circle(hide: false)).strangers.filter { $0.sender == .anonymous }.count, 3, "un-hide restores them")
+    }
+
+    func testTappedNotificationForAHiddenAnonymousNoteIsIgnored() {
+        let anon = inbound("a", .anonymous)
+        XCTAssertFalse(StrangerBox.opensFromNotification(anon, circle: circle(hide: true)))
+        XCTAssertTrue(StrangerBox.opensFromNotification(anon, circle: circle(hide: false)))
+        XCTAssertTrue(StrangerBox.opensFromNotification(inbound("s", .verified(accountId: "STRANGE1", nickname: nil)), circle: circle(hide: true)))
+    }
+
+    func testStrangerNotesAreNotExemptFromNormalReading() async {
+        let store = NotesStore(mockInbox: [inbound("s", .verified(accountId: "STRANGE1", nickname: nil))], sent: [])
+        await store.markRead("s")   // the same call every note gets; the server read mark is applied for everyone
+        XCTAssertEqual(store.unreadCount, 0)
     }
 }

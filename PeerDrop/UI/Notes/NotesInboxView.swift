@@ -39,7 +39,7 @@ struct NotesInboxView: View {
         }
         .navigationTitle("Notes")
         .navigationDestination(for: NoteRecord.self) { record in
-            NoteDetailView(record: record, store: store, readIsLocalOnly: StrangerBox.readIsLocalOnly(record, circle: circle))
+            NoteDetailView(record: record, store: store)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -78,7 +78,7 @@ struct NotesInboxView: View {
         } header: {
             Text(unread > 0 ? String(format: String(localized: "Strangers (%lld unread)"), unread) : String(localized: "Strangers"))
         } footer: {
-            Text("Notes from people you haven't connected with. Reading them is private to this device. The sender is never told.")
+            Text("Notes from outside your circle, including all anonymous notes. The sender is never told whether you read them.")
         }
     }
 

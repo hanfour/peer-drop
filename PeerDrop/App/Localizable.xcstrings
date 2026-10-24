@@ -1,6 +1,111 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Notes from outside your circle, including all anonymous notes. The sender is never told whether you read them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes from outside your circle, including all anonymous notes. The sender is never told whether you read them."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圈子以外的人寄來的紙條，包含所有匿名紙條。對方不會知道你有沒有看過。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圈子以外的人寄来的纸条，包含所有匿名纸条。对方不会知道你有没有看过。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仲間以外の人からのメモで、匿名のメモもすべて含まれます。読んだかどうかは、相手には知らされません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 사람들 밖에서 온 쪽지이며, 익명 쪽지는 모두 여기에 들어와요. 읽었는지는 보낸 사람에게 알려지지 않아요."
+          }
+        }
+      }
+    },
+    "This only hides anonymous notes on this device. The sender is not told, and the notes stay stored here, so you can turn this off to see them again. You may still get a notification when one arrives; turn off Note notifications to stop all of them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This only hides anonymous notes on this device. The sender is not told, and the notes stay stored here, so you can turn this off to see them again. You may still get a notification when one arrives; turn off Note notifications to stop all of them."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這只會在這台裝置上隱藏匿名紙條。對方不會被告知，紙條仍保留在本機，關閉後即可再次看到。匿名紙條送達時你仍可能收到通知；若要全部不通知，請關閉「紙條通知」。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这只会在这台设备上隐藏匿名纸条。对方不会被告知，纸条仍保留在本机，关闭后即可再次看到。匿名纸条送达时你仍可能收到通知；若要全部不通知，请关闭“纸条通知”。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これは、この端末で匿名のメモを非表示にするだけです。相手には知らされず、メモも端末内に残るので、オフにすればまた表示されます。届いたときに通知が来ることがあります。すべて止めるには「メモの通知」をオフにしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에서만 익명 쪽지를 숨겨요. 보낸 사람에게는 알려지지 않고 쪽지도 기기에 그대로 남아 있어서, 끄면 다시 볼 수 있어요. 도착했을 때 알림이 올 수 있어요. 모두 받지 않으려면 '쪽지 알림'을 꺼 주세요."
+          }
+        }
+      }
+    },
+    "Couldn't change this setting right now. Please try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't change this setting right now. Please try again later."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前無法變更這項設定，請稍後再試。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前无法更改这项设置，请稍后再试。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "いまはこの設定を変更できません。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 이 설정을 변경할 수 없어요. 잠시 후 다시 시도해 주세요."
+          }
+        }
+      }
+    },
     "Strangers": {
       "extractionState": "manual",
       "localizations": {
@@ -67,41 +172,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "낯선 사람 (읽지 않음 %lld개)"
-          }
-        }
-      }
-    },
-    "Notes from people you haven't connected with. Reading them is private to this device. The sender is never told.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Notes from people you haven't connected with. Reading them is private to this device. The sender is never told."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "來自你還沒連結的人的紙條。閱讀只在這台裝置上進行，對方永遠不會知道。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "来自你还没连接的人的纸条。阅读只在这台设备上进行，对方永远不会知道。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "つながっていない人からのメモです。読んでも、この端末の中だけの出来事で、相手に知らされることはありません。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "아직 연결되지 않은 사람에게서 온 쪽지예요. 읽어도 이 기기 안에서만 처리되며, 보낸 사람에게는 알려지지 않아요."
           }
         }
       }
@@ -207,76 +277,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "익명 쪽지 받지 않기 (이 기기에서만 숨김)"
-          }
-        }
-      }
-    },
-    "This only hides anonymous notes on this device. The sender is not told, and the notes stay stored here, so you can turn this off to see them again.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This only hides anonymous notes on this device. The sender is not told, and the notes stay stored here, so you can turn this off to see them again."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "這只會在這台裝置上隱藏匿名紙條。對方不會被告知，紙條仍保留在本機，關閉後即可再次看到。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这只会在这台设备上隐藏匿名纸条。对方不会被告知，纸条仍保留在本机，关闭后即可再次看到。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "これは、この端末で匿名のメモを非表示にするだけです。相手には知らされず、メモも端末内に残るので、オフにすればまた表示されます。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 기기에서만 익명 쪽지를 숨겨요. 보낸 사람에게는 알려지지 않고 쪽지도 기기에 그대로 남아 있어서, 끄면 다시 볼 수 있어요."
-          }
-        }
-      }
-    },
-    "Couldn't change this setting. Please check your connection and try again.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't change this setting. Please check your connection and try again."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "無法變更這項設定，請檢查連線後再試一次。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法更改这项设置，请检查网络连接后重试。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "この設定を変更できませんでした。接続を確認して、もう一度お試しください。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 설정을 변경하지 못했어요. 연결을 확인하고 다시 시도해 주세요."
           }
         }
       }

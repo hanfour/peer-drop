@@ -56,8 +56,15 @@ enum StrangerBox {
                          hideAnonymous: hideAnonymous)
     }
 
-    /// Opening a note from outside the circle never reaches the server (not even the inbox read mark).
-    static func readIsLocalOnly(_ note: NoteRecord, circle: CircleMembership) -> Bool {
-        NoteClassification.classify(note: note, circle: circle) != .circle
+    /// A tapped notification opens its note unless the note is a hidden anonymous one (it stays hidden).
+    static func opensFromNotification(_ note: NoteRecord, circle: CircleMembership) -> Bool {
+        NoteClassification.classify(note: note, circle: circle) != .hiddenAnonymous
+    }
+
+    /// Hidden anonymous notes that are not yet read on the SERVER. They get a server read mark (never
+    /// visible to senders) so the inbox's unread-first eviction can reclaim them, while staying stored
+    /// and unread on this device.
+    static func hiddenIDsToMarkOnServer(_ notes: [NoteRecord], circle: CircleMembership) -> [String] {
+        notes.filter { $0.isUnread && NoteClassification.classify(note: $0, circle: circle) == .hiddenAnonymous }.map(\.id)
     }
 }

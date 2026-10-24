@@ -4,8 +4,10 @@
 import { SELF, env } from "cloudflare:test";
 import { describe, it, expect, beforeAll, vi, afterEach } from "vitest";
 import { applyMigrations, applyMigrationFile } from "./d1";
-import { makeAccount, bearer, keyLane, sendNote, inboxOf } from "./notesHelpers";
-import { fanOutNotePush } from "../notes";
+import { makeAccount, bearer, keyLane, sendNote, inboxOf, getChallenge, solvePoW, fakeEnvelope } from "./notesHelpers";
+import { createDiaryOk, joinByLink, fakeCipher } from "./diaryHelpers";
+import { handleNotesRoute, fanOutNotePush, ulid } from "../notes";
+import { handleDiaryRoute } from "../diary";
 import type { Env } from "../index";
 
 beforeAll(async () => { await applyMigrations(env.ACCOUNTS_DB); });
@@ -142,14 +144,15 @@ describe("fanOutNotePush honours the recipient's notePush setting", () => {
     }
   });
 
-  it("fails open: an unreadable setting never blocks the push", async () => {
+  it("fails closed: an unreadable setting sends no push (the note is already stored)", async () => {
     const b = await makeAccount("dev-aset-push-0004");
     await seedDevice(b.accountId, "dev-aset-push-0004-d", "tok-4");
     const realDb = env.ACCOUNTS_DB;
     const flaky = { prepare(sql: string) { if (sql.includes("account_settings")) throw new Error("d1 down"); return realDb.prepare(sql); } };
     const s = spy();
     const res = await fanOutNotePush({ ...fakeEnv(), ACCOUNTS_DB: flaky } as unknown as Env, b.accountId, "01ITEM0000000000000000000A", s.deps);
-    expect(res.attempted).toBe(1);
+    expect(res).toEqual({ attempted: 0 });
+    expect(s.calls.length).toBe(0);
   });
 
   it("the note itself is still delivered and stored when push is off", async () => {
@@ -159,5 +162,73 @@ describe("fanOutNotePush honours the recipient's notePush setting", () => {
     expect(r.status).toBe(201);
     const { id } = await r.json() as { id: string };
     expect((await inboxOf(b)).items.map((i) => i.id)).toEqual([id]);
+  });
+});
+
+describe("route-level push behaviour with notePush=false", () => {
+  const fakeEnv = () => ({ ...env, APNS_KEY_P8: "fake", APNS_KEY_ID: "k", APNS_TEAM_ID: "t", APNS_BUNDLE_ID: "com.hanfour.peerdrop" }) as unknown as Env;
+  async function seedDevice(accountId: string, deviceId: string, token: string) {
+    await env.ACCOUNTS_DB.prepare("INSERT INTO account_devices (account_id, device_id, platform, bound_at) VALUES (?1, ?2, 'ios', 1)").bind(accountId, deviceId).run();
+    await env.V2_STORE.put(`device:${deviceId}`, JSON.stringify({ pushToken: token, platform: "ios" }));
+  }
+  function spy() {
+    const calls: unknown[][] = [];
+    const send = async (...args: unknown[]) => { calls.push(args); return { ok: true, status: 200 }; };
+    return { calls, deps: { push: { send: send as never, topicFor: () => "com.hanfour.peerdrop" } } };
+  }
+  async function postNote(sender: { accountId: string; token: string; deviceId: string }, recipientId: string, deps: ReturnType<typeof spy>["deps"], extra: Record<string, unknown> = {}) {
+    const headers = { Authorization: `Bearer ${sender.token}`, "Content-Type": "application/json" };
+    const envelope = fakeEnvelope();
+    const challenge = await getChallenge(headers);
+    const nonce = await solvePoW(challenge, recipientId, envelope);
+    const path = `/v3/notes/${recipientId}`;
+    const req = new Request(`https://example.com${path}`, { method: "POST", headers, body: JSON.stringify({ envelope, pow: { challenge, nonce }, ...extra }) });
+    const resp = await handleNotesRoute(req, new URL(req.url), path, fakeEnv(), { deviceId: sender.deviceId, accountId: sender.accountId }, deps);
+    if (!resp) throw new Error("null route");
+    return resp;
+  }
+
+  it("POST /v3/notes to a notePush=false recipient: stored, zero sends", async () => {
+    const a = await makeAccount("dev-aset-rt-0001"), b = await makeAccount("dev-aset-rt-0002");
+    await seedDevice(b.accountId, "dev-aset-rt-0002-d", "tok-b");
+    await put(bearer(b), { notePush: false });
+    const s = spy();
+    expect((await postNote(a, b.accountId, s.deps)).status).toBe(201);
+    expect(s.calls.length).toBe(0);
+    expect((await inboxOf(b)).items.length).toBe(1);
+  });
+
+  it("control: the same POST to a notePush=true recipient does send", async () => {
+    const a = await makeAccount("dev-aset-rt-0003"), b = await makeAccount("dev-aset-rt-0004");
+    await seedDevice(b.accountId, "dev-aset-rt-0004-d", "tok-b2");
+    const s = spy();
+    expect((await postNote(a, b.accountId, s.deps)).status).toBe(201);
+    expect(s.calls.length).toBe(1);
+  });
+
+  it("diaryKey relay still sends its silent push when notePush=false", async () => {
+    const owner = await makeAccount("dev-aset-rt-0005"), member = await makeAccount("dev-aset-rt-0006");
+    const { diaryId, inviteCode } = await createDiaryOk(owner);
+    await joinByLink(bearer(member), diaryId, inviteCode);
+    await seedDevice(member.accountId, "dev-aset-rt-0006-d", "tok-m");
+    await put(bearer(member), { notePush: false });
+    const s = spy();
+    expect((await postNote(owner, member.accountId, s.deps, { kind: "diaryKey", diaryId })).status).toBe(201);
+    expect(s.calls.length).toBe(1);
+    expect(s.calls[0][1]).toEqual({ contentAvailable: true, customData: { type: "diaryKey" } });
+  });
+
+  it("diary event pushes still go out when notePush=false", async () => {
+    const owner = await makeAccount("dev-aset-rt-0007"), b = await makeAccount("dev-aset-rt-0008");
+    const { diaryId, inviteCode } = await createDiaryOk(owner);
+    await joinByLink(bearer(b), diaryId, inviteCode);
+    await seedDevice(b.accountId, "dev-aset-rt-0008-d", "tok-b3");
+    await put(bearer(b), { notePush: false });
+    const s = spy();
+    const path = `/v3/diaries/${diaryId}/events`;
+    const req = new Request(`https://example.com${path}`, { method: "POST", body: JSON.stringify({ eventId: ulid(), type: "entry", payloadCipher: fakeCipher() }) });
+    const resp = await handleDiaryRoute(req, new URL(req.url), path, fakeEnv(), { deviceId: "dx", accountId: owner.accountId }, s.deps);
+    expect(resp?.status).toBe(201);
+    expect(s.calls.length).toBe(1);
   });
 });

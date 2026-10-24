@@ -26,16 +26,16 @@ final class NotePushSettingTests: XCTestCase {
     }
 
     func testDefaultsToOnWithNoCache() {
-        let m = NotePushSetting(service: FakeSettings(), defaults: defaults)
+        let m = NotePushSetting(service: FakeSettings(), defaults: defaults, accountId: "A")
         XCTAssertTrue(m.notePush)
     }
 
     func testRefreshAdoptsServerValueAndCachesIt() async {
-        let m = NotePushSetting(service: FakeSettings(stored: false), defaults: defaults)
+        let m = NotePushSetting(service: FakeSettings(stored: false), defaults: defaults, accountId: "A")
         await m.refresh()
         XCTAssertFalse(m.notePush)
         // a new model (e.g. next launch, offline) starts from the last known value
-        let again = NotePushSetting(service: FakeSettings(stored: true, failure: AccountClientError.http(500)), defaults: defaults)
+        let again = NotePushSetting(service: FakeSettings(stored: true, failure: AccountClientError.http(500)), defaults: defaults, accountId: "A")
         XCTAssertFalse(again.notePush)
         await again.refresh()
         XCTAssertFalse(again.notePush, "a failed refresh must not change what is shown")
@@ -43,27 +43,27 @@ final class NotePushSettingTests: XCTestCase {
 
     func testSetSucceedsAndPersists() async {
         let fake = FakeSettings()
-        let m = NotePushSetting(service: fake, defaults: defaults)
+        let m = NotePushSetting(service: fake, defaults: defaults, accountId: "A")
         await m.set(false)
         XCTAssertFalse(m.notePush)
         XCTAssertNil(m.lastError)
         let writes = await fake.writes
         XCTAssertEqual(writes, [false])
-        XCTAssertFalse(NotePushSetting(service: FakeSettings(), defaults: defaults).notePush)
+        XCTAssertFalse(NotePushSetting(service: FakeSettings(), defaults: defaults, accountId: "A").notePush)
     }
 
     func testFailedSetLeavesLocalStateAndCacheUnchanged() async {
         let fake = FakeSettings(stored: true, failure: AccountClientError.http(503))
-        let m = NotePushSetting(service: fake, defaults: defaults)
+        let m = NotePushSetting(service: fake, defaults: defaults, accountId: "A")
         await m.set(false)
         XCTAssertTrue(m.notePush, "optimistic change must revert when the server call fails")
         XCTAssertNotNil(m.lastError)
-        XCTAssertTrue(NotePushSetting(service: FakeSettings(failure: AccountClientError.http(503)), defaults: defaults).notePush, "cache untouched")
+        XCTAssertTrue(NotePushSetting(service: FakeSettings(failure: AccountClientError.http(503)), defaults: defaults, accountId: "A").notePush, "cache untouched")
     }
 
     func testFailedSetFromOffRevertsToOff() async {
         let fake = FakeSettings(stored: false)
-        let m = NotePushSetting(service: fake, defaults: defaults)
+        let m = NotePushSetting(service: fake, defaults: defaults, accountId: "A")
         await m.refresh()
         XCTAssertFalse(m.notePush)
         await fake.setFailure(AccountClientError.rateLimited)
@@ -73,7 +73,7 @@ final class NotePushSettingTests: XCTestCase {
 
     func testObservedValueIsOptimisticWhileRequestIsInFlight() async {
         let gate = GatedSettings()
-        let m = NotePushSetting(service: gate, defaults: defaults)
+        let m = NotePushSetting(service: gate, defaults: defaults, accountId: "A")
         let task = Task { await m.set(false) }
         await gate.waitUntilWriteStarts()
         XCTAssertFalse(m.notePush, "UI flips immediately")
@@ -84,9 +84,22 @@ final class NotePushSettingTests: XCTestCase {
         XCTAssertFalse(m.isUpdating)
     }
 
+    func testCacheIsPerAccount() async {
+        let m = NotePushSetting(service: FakeSettings(), defaults: defaults, accountId: "A")
+        await m.set(false)
+        XCTAssertFalse(NotePushSetting(service: FakeSettings(), defaults: defaults, accountId: "A").notePush)
+        XCTAssertTrue(NotePushSetting(service: FakeSettings(), defaults: defaults, accountId: "B").notePush)
+        m.useAccount("B")
+        XCTAssertTrue(m.notePush, "switching account must not show the previous account's choice")
+        m.useAccount("A")
+        XCTAssertFalse(m.notePush)
+        m.useAccount(nil)
+        XCTAssertTrue(m.notePush)
+    }
+
     func testSecondSetWhileUpdatingIsIgnored() async {
         let gate = GatedSettings()
-        let m = NotePushSetting(service: gate, defaults: defaults)
+        let m = NotePushSetting(service: gate, defaults: defaults, accountId: "A")
         let first = Task { await m.set(false) }
         await gate.waitUntilWriteStarts()
         await m.set(true)
