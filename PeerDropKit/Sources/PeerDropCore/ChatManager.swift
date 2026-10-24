@@ -492,6 +492,21 @@ public final class ChatManager: ObservableObject {
             .map { $0.id }
     }
 
+    /// Read-only: is `messageID` in `peerID`'s 1-to-1 thread (queued, loaded
+    /// or on disk)? `outgoingOnly`: and is it one of ours. Never touches
+    /// `messages`, `currentPeerID` or `activeChatPeerID`.
+    public func threadContains(messageID: String, peerID: String, outgoingOnly: Bool = false) -> Bool {
+        func match(_ m: ChatMessage) -> Bool { m.id == messageID && (!outgoingOnly || m.isOutgoing) }
+        if pendingMessages[peerID]?.contains(where: match) == true { return true }
+        if currentPeerID == peerID, allMessagesForCurrentPeer.contains(where: match) || messages.contains(where: match) {
+            return true
+        }
+        guard let raw = try? Data(contentsOf: messagesFile(for: peerID)),
+              let decrypted = try? encryptor.decrypt(raw),
+              let stored = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) else { return false }
+        return stored.contains(where: match)
+    }
+
     public func message(byID messageID: String) -> ChatMessage? {
         messages.first { $0.id == messageID }
     }

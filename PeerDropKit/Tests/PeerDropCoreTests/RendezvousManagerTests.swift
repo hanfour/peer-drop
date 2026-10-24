@@ -940,3 +940,66 @@ final class PairedNegotiator: RendezvousNegotiator {
         hub.offerers[id] = nil
     }
 }
+
+// MARK: - Task 5 fix round 1, I-4: local failure reasons and suspension
+
+extension RendezvousManagerTests {
+
+    func testKeyMismatchSuspendsRoomUntilTheKeyChanges() async {
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: .keyMismatch)
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .keyMismatch)
+        XCTAssertEqual(manager.roomCount, 0, "room left at once")
+        // Looks exactly like any other failure: unreachable, never "refused".
+        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
+        let made = factory.made.count
+        for _ in 0..<10 { clock.advance(60); manager.tick() }
+        XCTAssertEqual(factory.made.count, made, "no retry while suspended")
+        XCTAssertEqual(manager.roomCount, 0)
+        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
+
+        // The pinned key changes (re-exchange): the suspension lifts.
+        contacts[0].identityPublicKey = RendezvousTestIdentity().raw
+        manager.contactsDidChange()
+        XCTAssertEqual(manager.roomCount, 1)
+        XCTAssertEqual(factory.made.count, made + 1)
+    }
+
+    func testHelloMismatchAfterVerifySuspendsUntilTheDeviceIdChanges() async {
+        let (c, _, _) = await securedOfferer()
+        manager.connectionDidClose(contactID: c.id, reason: .helloMismatch)
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .helloMismatch)
+        let made = factory.made.count
+        for _ in 0..<10 { clock.advance(60); manager.tick() }
+        XCTAssertEqual(factory.made.count, made)
+        XCTAssertEqual(manager.roomCount, 0)
+        contacts[0].deviceId = "dev-new-\(UUID().uuidString)"
+        manager.contactsDidChange()
+        XCTAssertEqual(manager.roomCount, 1)
+    }
+
+    private func assertRecordedAndRetried(_ reason: RendezvousConnectionFailure, line: UInt = #line) async {
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: false, reason: reason)
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), reason, line: line)
+        XCTAssertEqual(manager.linkState(for: c.id), .unreachable, line: line)
+        let made = factory.made.count
+        clock.advance(1); manager.tick()
+        XCTAssertEqual(factory.made.count, made + 1, "\(reason): rejoins after backoff", line: line)
+    }
+
+    func testTimeoutIsRecordedButRetried() async { await assertRecordedAndRetried(.timeout) }
+    func testDecryptFailureIsRecordedButRetried() async { await assertRecordedAndRetried(.decryptFailed) }
+    func testBindingFailureIsRecordedButRetried() async { await assertRecordedAndRetried(.bindingFailed) }
+    func testChannelFailureIsRecordedButRetried() async { await assertRecordedAndRetried(.channelFailed) }
+
+    func testInstallRefusalIsRecorded() async {
+        installer.accept = false
+        let (c, _, n) = await negotiatingOfferer()
+        n.open()
+        XCTAssertEqual(manager.lastFailureReason(for: c.id), .installRefused)
+        XCTAssertNotEqual(manager.roomCount, 0, "refusal is not a suspension")
+    }
+}

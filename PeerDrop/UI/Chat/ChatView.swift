@@ -840,7 +840,8 @@ struct ChatView: View, PaperThemed {
             fileData: data,
             mimeType: "image/jpeg",
             duration: nil,
-            thumbnailData: thumbData
+            thumbnailData: thumbData,
+            to: peerID
         )
     }
 
@@ -860,7 +861,8 @@ struct ChatView: View, PaperThemed {
                         fileData: data,
                         mimeType: "image/jpeg",
                         duration: nil,
-                        thumbnailData: thumbData
+                        thumbnailData: thumbData,
+                        to: peerID
                     )
                 }
             }
@@ -893,7 +895,8 @@ struct ChatView: View, PaperThemed {
             fileData: data,
             mimeType: mimeType,
             duration: nil,
-            thumbnailData: nil
+            thumbnailData: nil,
+            to: peerID
         )
     }
 
@@ -953,7 +956,8 @@ struct ChatView: View, PaperThemed {
             fileData: data,
             mimeType: "audio/mp4",
             duration: duration,
-            thumbnailData: nil
+            thumbnailData: nil,
+            to: peerID
         )
 
         // Clean up temp file

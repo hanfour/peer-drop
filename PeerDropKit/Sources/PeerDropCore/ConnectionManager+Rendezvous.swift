@@ -17,18 +17,24 @@ import PeerDropTransport
 //   `rendezvousSecureChannelTimeoutNanoseconds` of install; otherwise the
 //   connection is closed (never `.fallbackPlaintext`);
 // - it is `verified` (online, sendable, returned by `connection(for:)`) only
-//   when `.secured` AND the handshake key == the pinned contact key AND
-//   `FriendBinding.verifiedAccount != nil`;
+//   when `.secured` AND the handshake key == the pinned contact key AND the
+//   contact is still opted in / eligible AND `FriendBinding.verifiedAccount
+//   != nil` AND the peer's first envelope has decrypted (key confirmation:
+//   the handshake is static-static DH over a CLAIMED key, so `.secured` alone
+//   is reachable by someone who only knows the pinned PUBLIC key);
 // - a HELLO whose claimed key differs (from the pinned or handshake key)
 //   closes it; a HELLO never re-points the identity;
 // - only chat frames, encrypted, from a verified connection are dispatched.
 // Every close is quiet (`cancel()`: no farewell frame). Nothing here logs.
+// Failure causes go to the manager as `RendezvousConnectionFailure` (local,
+// in-memory diagnostics only).
 
 /// Outcomes the connection layer reports to the rendezvous manager.
 @MainActor
 public protocol RendezvousConnectionEventSink: AnyObject {
-    func secureChannelDidComplete(contactID: UUID, ok: Bool)
-    func connectionDidClose(contactID: UUID)
+    /// `reason` is set when `ok == false`.
+    func secureChannelDidComplete(contactID: UUID, ok: Bool, reason: RendezvousConnectionFailure?)
+    func connectionDidClose(contactID: UUID, reason: RendezvousConnectionFailure?)
 }
 
 extension RendezvousManager: RendezvousConnectionEventSink {}
@@ -73,11 +79,16 @@ extension ConnectionManager {
 
     // MARK: - Direct connections (DirectConnectionChecker)
 
-    /// A direct (nearby / manual relay) connection to the contact's device id.
-    /// Looks at `connections` only, so a rendezvous connection never counts.
+    /// A live direct (nearby / manual relay) connection to the contact's
+    /// device id. Looks at `connections` only, so a rendezvous connection
+    /// never counts; dead / failed members don't count either.
     func hasDirectConnection(to contact: TrustedContact) -> Bool {
         guard let id = contact.deviceId, !id.isEmpty else { return false }
-        return isPeerIDInUse(id)
+        return hasActiveDirectConnection(peerID: id)
+    }
+
+    func hasActiveDirectConnection(peerID id: String) -> Bool {
+        connections.contains { key, pc in (key == id || pc.peerIdentity.id == id) && pc.state.isActive }
     }
 
     /// Called whenever `connections` changes. Always async: the manager's
@@ -155,11 +166,12 @@ extension ConnectionManager {
     /// The store's current copy of `contact`, if it may be auto-connected now:
     /// opted in and eligible (bound account, no pending claim, not blocked,
     /// unique key, device id), with the same key and device id the manager saw.
-    private func currentRendezvousContact(_ contact: TrustedContact) -> TrustedContact? {
+    /// Eligibility includes a device id unique among contacts (I-3).
+    private func currentRendezvousContact(id: UUID, key: Data?, deviceId: String?) -> TrustedContact? {
         let all = trustedContactStore.contacts
-        guard let c = all.first(where: { $0.id == contact.id }),
-              c.identityPublicKey == contact.identityPublicKey,
-              c.deviceId == contact.deviceId,
+        guard let c = all.first(where: { $0.id == id }),
+              c.identityPublicKey == key,
+              c.deviceId == deviceId,
               c.isRendezvousEnabled,
               TrustedContactStore.isRendezvousEligible(c, among: all) else { return nil }
         return c
@@ -173,10 +185,10 @@ extension ConnectionManager {
     /// through `secureChannelDidComplete`.
     @discardableResult
     public func installRendezvousConnection(transport: TransportProtocol, contact: TrustedContact) -> PeerConnection? {
-        guard let c = currentRendezvousContact(contact),
+        guard let c = currentRendezvousContact(id: contact.id, key: contact.identityPublicKey, deviceId: contact.deviceId),
               let deviceID = c.deviceId,
               !deviceID.hasPrefix("relay-"),
-              !isPeerIDInUse(deviceID),
+              !hasActiveDirectConnection(peerID: deviceID),
               rendezvousConnections[deviceID] == nil,
               !rendezvousConnections.values.contains(where: { $0.rendezvousContactID == c.id }),
               rendezvousConnections.count < maxRendezvousConnections else { return nil }
@@ -205,15 +217,15 @@ extension ConnectionManager {
         }
         pc.onDisconnected = { [weak self, weak pc] in
             guard let self, let pc else { return }
-            self.closeRendezvousConnection(pc)
+            self.closeRendezvousConnection(pc, reason: pc.envelopeDecryptFailed ? .decryptFailed : .connectionClosed)
         }
         pc.onSecureChannelEstablished = { [weak self, weak pc] _ in
             guard let self, let pc else { return }
-            self.verifyRendezvousConnection(pc)
+            self.rendezvousSecureChannelUp(pc)
         }
         pc.onStrictSecureChannelFailure = { [weak self, weak pc] in
             guard let self, let pc else { return }
-            self.closeRendezvousConnection(pc)
+            self.closeRendezvousConnection(pc, reason: pc.strictSecureChannelTimedOut ? .timeout : .channelFailed)
         }
 
         rendezvousConnections[deviceID] = pc
@@ -221,11 +233,12 @@ extension ConnectionManager {
         pc.startReceiving()
 
         // Deadline from install, independent of the handshake's own timer.
+        // Covers key confirmation too: no confirmed channel in time ⇒ closed.
         let timeout = rendezvousSecureChannelTimeoutNanoseconds
         Task { @MainActor [weak self, weak pc] in
             try? await Task.sleep(nanoseconds: timeout)
             guard let self, let pc, !pc.rendezvousVerified else { return }
-            self.closeRendezvousConnection(pc)
+            self.closeRendezvousConnection(pc, reason: .timeout)
         }
         Task { @MainActor [weak pc] in
             await pc?.startSecureChannelNegotiation(peerSupportsSecureChannel: true)
@@ -242,32 +255,45 @@ extension ConnectionManager {
 
     // MARK: - Verification
 
-    /// Runs synchronously when the LocalSecureChannel comes up (before the
-    /// receive loop reads the next frame).
-    private func verifyRendezvousConnection(_ pc: PeerConnection) {
-        guard rendezvousConnections[pc.id] === pc, !pc.rendezvousVerified else { return }
-        let all = trustedContactStore.contacts
-        let contact = all.first { $0.id == pc.rendezvousContactID }
-        let pinned = pc.peerIdentity.identityPublicKey
-        let handshakeKey = pc.handshakePeerIdentityKey
-        let account = handshakeKey.flatMap { key in
-            FriendBinding(contacts: { all }, live: { _ in .secured(key) }).verifiedAccount(forChatPeerID: pc.id)
+    /// Why `pc` may not (or no longer) be trusted, or nil when it may.
+    /// Re-checked at channel-up AND at key confirmation (m-1).
+    private func rendezvousVerificationFailure(_ pc: PeerConnection) -> RendezvousConnectionFailure? {
+        guard let contactID = pc.rendezvousContactID, let pinned = pc.peerIdentity.identityPublicKey else {
+            return .bindingFailed
         }
-        guard pc.secureChannelState == .secured,
-              let pinned, let handshakeKey, handshakeKey == pinned,
-              let contact, contact.identityPublicKey == pinned,
-              let account, account.contactID == contact.id else {
-            closeRendezvousConnection(pc)
+        guard pc.secureChannelState == .secured, let handshakeKey = pc.handshakePeerIdentityKey else {
+            return .channelFailed
+        }
+        let all = trustedContactStore.contacts
+        // The contact itself changed (re-keyed, removed): a contact change,
+        // not a contradiction of the pinned identity.
+        guard let stored = all.first(where: { $0.id == contactID }), stored.identityPublicKey == pinned else {
+            return .bindingFailed
+        }
+        guard handshakeKey == pinned else { return .keyMismatch }
+        guard currentRendezvousContact(id: contactID, key: pinned, deviceId: pc.id) != nil,
+              let account = FriendBinding(contacts: { all }, live: { _ in .secured(handshakeKey) })
+                .verifiedAccount(forChatPeerID: pc.id),
+              account.contactID == contactID else { return .bindingFailed }
+        return nil
+    }
+
+    /// Runs synchronously when the LocalSecureChannel comes up (before the
+    /// receive loop reads the next frame). Passing the checks only makes the
+    /// connection AWAIT CONFIRMATION; it is not verified yet.
+    private func rendezvousSecureChannelUp(_ pc: PeerConnection) {
+        guard rendezvousConnections[pc.id] === pc, !pc.rendezvousVerified,
+              !pc.rendezvousAwaitingConfirmation else { return }
+        if let failure = rendezvousVerificationFailure(pc) {
+            closeRendezvousConnection(pc, reason: failure)
             return
         }
-        pc.setPinningVerdict(.matched)
-        pc.rendezvousVerified = true
-        reportRendezvousOutcome(pc, ok: true)
-        bumpSecurityEpoch()
-        objectWillChange.send()
+        pc.rendezvousAwaitingConfirmation = true
 
         // Double-Ratchet bootstrap (see `handleSecureChannelEstablished`): the
         // initiator sends one encrypted no-op so either side can send first.
+        // It is also the responder's key confirmation; the responder's own
+        // no-op (`sendResponderNoOpIfNeeded`) is the initiator's.
         if pc.secureChannel?.isInitiator == true {
             let senderID = localIdentity.id
             Task { @MainActor [weak pc] in
@@ -280,11 +306,33 @@ extension ConnectionManager {
         }
     }
 
+    /// The peer's first envelope decrypted: it holds the pinned key's private
+    /// half. Only now is the connection verified (online, sendable).
+    private func confirmRendezvousConnection(_ pc: PeerConnection) {
+        if let failure = rendezvousVerificationFailure(pc) {
+            closeRendezvousConnection(pc, reason: failure)
+            return
+        }
+        pc.rendezvousAwaitingConfirmation = false
+        pc.setPinningVerdict(.matched)
+        pc.rendezvousVerified = true
+        reportRendezvousOutcome(pc, ok: true, reason: nil)
+        bumpSecurityEpoch()
+        objectWillChange.send()
+    }
+
     // MARK: - Dispatch
 
     private func dispatchRendezvous(_ message: PeerMessage, on pc: PeerConnection,
                                     origin: PeerConnection.MessageOrigin) {
         guard rendezvousConnections[pc.id] === pc else { return }
+        // Key confirmation: the first decrypted envelope is consumed here
+        // (not processed), except a HELLO / disconnect, which keep their checks.
+        if pc.rendezvousAwaitingConfirmation, origin == .envelope {
+            confirmRendezvousConnection(pc)
+            guard rendezvousConnections[pc.id] === pc,
+                  message.type == .hello || message.type == .disconnect else { return }
+        }
         switch message.type {
         case .hello:
             // The claimed key must equal the pinned key (and the handshake key
@@ -294,14 +342,14 @@ extension ConnectionManager {
                   let claimedKey = claimed.identityPublicKey,
                   claimedKey == pc.peerIdentity.identityPublicKey,
                   pc.handshakePeerIdentityKey.map({ $0 == claimedKey }) ?? true else {
-                closeRendezvousConnection(pc)
+                closeRendezvousConnection(pc, reason: .helloMismatch)
                 return
             }
             return
         case .disconnect:
             // Peer hung up: close quietly; a direct connection with the same
             // key (if any) is never touched.
-            closeRendezvousConnection(pc)
+            closeRendezvousConnection(pc, reason: .connectionClosed)
             return
         default:
             break
@@ -317,23 +365,25 @@ extension ConnectionManager {
     /// Connection-layer close (failure, peer drop, timeout, user disconnect):
     /// quiet, then reported once — `secureChannelDidComplete(ok: false)` if it
     /// never verified, else `connectionDidClose`.
-    func closeRendezvousConnection(_ pc: PeerConnection) {
+    func closeRendezvousConnection(_ pc: PeerConnection, reason: RendezvousConnectionFailure = .connectionClosed) {
         guard rendezvousConnections[pc.id] === pc else { return }
         let wasVerified = pc.rendezvousVerified
         removeRendezvousConnection(pc)
         if wasVerified {
             guard let id = pc.rendezvousContactID else { return }
-            Task { @MainActor [weak self] in self?.rendezvousEvents?.connectionDidClose(contactID: id) }
+            Task { @MainActor [weak self] in self?.rendezvousEvents?.connectionDidClose(contactID: id, reason: reason) }
         } else {
-            reportRendezvousOutcome(pc, ok: false)
+            reportRendezvousOutcome(pc, ok: false, reason: reason)
         }
     }
 
     /// Exactly once per install, always async.
-    private func reportRendezvousOutcome(_ pc: PeerConnection, ok: Bool) {
+    private func reportRendezvousOutcome(_ pc: PeerConnection, ok: Bool, reason: RendezvousConnectionFailure?) {
         guard !pc.rendezvousOutcomeReported, let id = pc.rendezvousContactID else { return }
         pc.rendezvousOutcomeReported = true
-        Task { @MainActor [weak self] in self?.rendezvousEvents?.secureChannelDidComplete(contactID: id, ok: ok) }
+        Task { @MainActor [weak self] in
+            self?.rendezvousEvents?.secureChannelDidComplete(contactID: id, ok: ok, reason: ok ? nil : reason)
+        }
     }
 
     /// Remove and close without any frame (`cancel()`, never `disconnect()`).
@@ -346,6 +396,7 @@ extension ConnectionManager {
         pc.onSecureChannelEstablished = nil
         pc.onStrictSecureChannelFailure = nil
         pc.rendezvousVerified = false
+        pc.rendezvousAwaitingConfirmation = false
         pc.cancel()
         pc.updateState(.disconnected)
         chatManager.setTyping(false, for: pc.id)

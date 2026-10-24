@@ -108,26 +108,30 @@ final class RVPipeEnd: TransportProtocol, @unchecked Sendable {
 /// in-memory identity key.
 @MainActor
 final class ScriptedRVPeer {
-    let key: RendezvousTestIdentity
+    let key: LocalChannelIdentity
     let end: RVPipeEnd
     let pc: PeerConnection
     var respondToHandshake = true
+    /// false: never send the initiator's bootstrap no-op.
+    var sendsBootstrap = true
+    /// false: drop every inbound envelope (so no responder no-op either).
+    var readsEnvelopes = true
     private(set) var inbox: [PeerMessage] = []
     private var reader: Task<Void, Never>?
 
-    init(key: RendezvousTestIdentity, end: RVPipeEnd, deviceID: String, cmIdentity: PeerIdentity) {
+    init(key: LocalChannelIdentity, end: RVPipeEnd, deviceID: String, cmIdentity: PeerIdentity) {
         self.key = key
         self.end = end
         pc = PeerConnection(
             peerID: cmIdentity.id, transport: end,
             peerIdentity: PeerIdentity(id: cmIdentity.id, displayName: "CM", identityPublicKey: cmIdentity.identityPublicKey),
-            localIdentity: PeerIdentity(id: deviceID, displayName: "Friend", identityPublicKey: key.raw),
+            localIdentity: PeerIdentity(id: deviceID, displayName: "Friend", identityPublicKey: key.publicKey.rawRepresentation),
             state: .connected)
         pc.onMessageReceived = { [weak self] in self?.inbox.append($0) }
         pc.onSecureChannelEstablished = { [weak self] _ in
             // Mirror the app: the ratchet initiator sends a bootstrap no-op.
             Task { @MainActor [weak self] in
-                guard let self, self.pc.secureChannel?.isInitiator == true,
+                guard let self, self.sendsBootstrap, self.pc.secureChannel?.isInitiator == true,
                       let msg = try? PeerMessage.typingIndicator(
                           TypingIndicatorPayload(isTyping: false, timestamp: Date()), senderID: deviceID)
                 else { return }
@@ -142,6 +146,8 @@ final class ScriptedRVPeer {
                 if m.type == .secureHandshake {
                     guard self.respondToHandshake else { continue }
                     try? await self.pc.handleIncomingSecureHandshake(m, identity: self.key)
+                } else if m.type == .secureEnvelope, !self.readsEnvelopes {
+                    continue
                 } else {
                     try? await self.pc.handleIncomingMessage(m)
                 }
@@ -164,8 +170,26 @@ final class ScriptedRVPeer {
 final class RVEventRecorder: RendezvousConnectionEventSink {
     private(set) var secure: [(UUID, Bool)] = []
     private(set) var closed: [UUID] = []
-    func secureChannelDidComplete(contactID: UUID, ok: Bool) { secure.append((contactID, ok)) }
-    func connectionDidClose(contactID: UUID) { closed.append(contactID) }
+    private(set) var secureReasons: [RendezvousConnectionFailure?] = []
+    private(set) var closeReasons: [RendezvousConnectionFailure?] = []
+    func secureChannelDidComplete(contactID: UUID, ok: Bool, reason: RendezvousConnectionFailure?) {
+        secure.append((contactID, ok)); secureReasons.append(reason)
+    }
+    func connectionDidClose(contactID: UUID, reason: RendezvousConnectionFailure?) {
+        closed.append(contactID); closeReasons.append(reason)
+    }
+}
+
+/// Claims `claimed` as its identity key but derives with a private key it
+/// actually owns (it does NOT own the private half of `claimed`).
+final class ImpostorChannelIdentity: LocalChannelIdentity {
+    let claimed: Curve25519.KeyAgreement.PublicKey
+    let actual = Curve25519.KeyAgreement.PrivateKey()
+    init(claiming key: Data) throws { claimed = try .init(rawRepresentation: key) }
+    var publicKey: Curve25519.KeyAgreement.PublicKey { claimed }
+    func deriveSharedSecret(with peerPublicKey: Curve25519.KeyAgreement.PublicKey) throws -> SharedSecret {
+        try actual.sharedSecretFromKeyAgreement(with: peerPublicKey)
+    }
 }
 
 /// Hands the manager a pipe end; like the real negotiator, `close()` closes
@@ -263,7 +287,7 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
     }
 
     /// Install `contact` over a fresh pipe; the scripted peer answers with `peerKey`.
-    private func install(_ contact: TrustedContact, peerKey: RendezvousTestIdentity,
+    private func install(_ contact: TrustedContact, peerKey: LocalChannelIdentity,
                          respond: Bool = true) -> (PeerConnection?, ScriptedRVPeer, RVPipeEnd) {
         let (cmEnd, peerEnd) = RVPipeEnd.pair()
         let peer = ScriptedRVPeer(key: peerKey, end: peerEnd, deviceID: contact.deviceId!, cmIdentity: cm.localIdentity)
@@ -864,5 +888,313 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
         let n = h.negotiators.made[0]
         n.open()
         return n
+    }
+}
+
+// MARK: - Task 5 fix round 1
+
+extension ConnectionManagerRendezvousTests {
+
+    private func reasonsByContact() -> [UUID: RendezvousConnectionFailure?] {
+        Dictionary(zip(recorder.secure.map(\.0), recorder.secureReasons), uniquingKeysWith: { a, _ in a })
+    }
+
+    // MARK: I-1 key confirmation
+
+    /// The impostor sends the PINNED public key in its bundle but does not own
+    /// its private key. Static-static DH still reaches `.secured` on our side;
+    /// only the first decrypted envelope (key confirmation) can tell. Several
+    /// friends so both ratchet roles are exercised.
+    func testImpostorClaimingThePinnedKeyWithoutItsPrivateKeyIsNeverVerified() async throws {
+        cm.rendezvousSecureChannelTimeoutNanoseconds = 600_000_000
+        var friends: [TrustedContact] = []
+        var ends: [RVPipeEnd] = []
+        var pcs: [PeerConnection] = []
+        for i in 0..<4 {
+            let f = try addFriend(name: "V\(i)")
+            friends.append(f)
+            let (pc, _, end) = install(f, peerKey: try ImpostorChannelIdentity(claiming: f.identityPublicKey))
+            pcs.append(try XCTUnwrap(pc))
+            ends.append(end)
+        }
+        var sawLive = false
+        let done = await poll(timeout: 5) {
+            if pcs.contains(where: \.rendezvousVerified)
+                || friends.contains(where: { self.cm.presence(ids: [$0.deviceId!]) == .online
+                                             || self.cm.connection(for: $0.deviceId!) != nil }) {
+                sawLive = true
+            }
+            return self.recorder.secure.count == friends.count
+        }
+        XCTAssertTrue(done)
+        XCTAssertFalse(sawLive, "an impostor was online at some point")
+        XCTAssertEqual(recorder.secure.map(\.1), Array(repeating: false, count: friends.count))
+        for r in recorder.secureReasons {
+            XCTAssertTrue(r == .timeout || r == .decryptFailed, String(describing: r))
+        }
+        XCTAssertTrue(pcs.allSatisfy { $0.secureChannelState == .secured }, "the claimed key alone reaches .secured")
+        XCTAssertTrue(ends.allSatisfy(\.closed))
+        XCTAssertTrue(recorder.closed.isEmpty)
+        for f in friends { XCTAssertNotEqual(cm.presence(ids: [f.deviceId!]), .online) }
+    }
+
+    /// `.secured` with the right key is not enough: until the peer's first
+    /// envelope decrypts, the connection is `.connecting`, unsendable, and
+    /// nothing is reported. Without confirmation within the deadline: ok:false.
+    func testSecuredButUnconfirmedStaysConnectingThenTimesOut() async throws {
+        cm.rendezvousSecureChannelTimeoutNanoseconds = 600_000_000
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let id = friend.deviceId!
+        let (cmEnd, peerEnd) = RVPipeEnd.pair()
+        let peer = ScriptedRVPeer(key: key, end: peerEnd, deviceID: id, cmIdentity: cm.localIdentity)
+        peer.sendsBootstrap = false
+        peer.readsEnvelopes = false
+        peers.append(peer)
+        peer.start()
+        let pc = try XCTUnwrap(cm.installRendezvousConnection(transport: cmEnd, contact: friend))
+        let secured = await poll { pc.secureChannelState == .secured }
+        XCTAssertTrue(secured)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(pc.rendezvousVerified)
+        XCTAssertEqual(cm.presence(ids: [id]), .connecting)
+        XCTAssertNil(cm.connection(for: id))
+        XCTAssertTrue(recorder.secure.isEmpty, "no ok:true before key confirmation")
+
+        let done = await poll { !self.recorder.secure.isEmpty }
+        XCTAssertTrue(done)
+        XCTAssertEqual(recorder.secure.map(\.1), [false])
+        XCTAssertEqual(recorder.secureReasons, [.timeout])
+        XCTAssertTrue(cmEnd.closed)
+        XCTAssertNil(cm.rendezvousConnections[id])
+    }
+
+    func testDecryptFailureAfterVerificationClosesAndReportsOnce() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (_, peer, end) = try await installVerified(friend, key: key)
+        let garbage = Data((0..<96).map { _ in UInt8.random(in: 0...255) })
+        try await peer.sendRaw(PeerMessage.secureEnvelope(frame: garbage, senderID: friend.deviceId!))
+        let closed = await poll { !self.recorder.closed.isEmpty }
+        XCTAssertTrue(closed)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(recorder.closed, [friend.id])
+        XCTAssertEqual(recorder.closeReasons, [.decryptFailed])
+        XCTAssertEqual(recorder.secure.map(\.1), [true])
+        XCTAssertTrue(end.closed)
+        XCTAssertNil(cm.rendezvousConnections[friend.deviceId!])
+    }
+
+    // MARK: I-4 local failure reasons (+ m-1 opt-in re-checked at verify)
+
+    func testFailureReasonsAreReportedLocally() async throws {
+        cm.rendezvousSecureChannelTimeoutNanoseconds = 10_000_000_000
+        // Handshake key is not the pinned one.
+        let keyed = try addFriend(name: "K")
+        _ = install(keyed, peerKey: RendezvousTestIdentity())
+        // HELLO claims another key.
+        let k2 = RendezvousTestIdentity()
+        let helloed = try addFriend(key: k2, name: "H")
+        let (_, p2, _) = install(helloed, peerKey: k2, respond: false)
+        try await p2.sendRaw(try PeerMessage.hello(identity: PeerIdentity(
+            id: helloed.deviceId!, displayName: "H", identityPublicKey: RendezvousTestIdentity().raw)))
+        // Opt-in turned off between install and secure (m-1).
+        let k3 = RendezvousTestIdentity()
+        let optedOut = try addFriend(key: k3, name: "O")
+        let (_, p3, e3) = install(optedOut, peerKey: k3, respond: false)
+        try cm.trustedContactStore.setRendezvousEnabled(for: optedOut.id, false)
+        await p3.pc.startSecureChannelNegotiation(peerSupportsSecureChannel: true, identity: k3)
+
+        let done = await poll { self.recorder.secure.count == 3 }
+        XCTAssertTrue(done)
+        XCTAssertEqual(recorder.secure.map(\.1), [false, false, false])
+        let reasons = reasonsByContact()
+        XCTAssertEqual(reasons[keyed.id], .keyMismatch)
+        XCTAssertEqual(reasons[helloed.id], .helloMismatch)
+        XCTAssertEqual(reasons[optedOut.id], .bindingFailed)
+        XCTAssertTrue(e3.closed)
+    }
+
+    func testHelloMismatchAfterVerifyIsReportedWithItsReason() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (_, peer, _) = try await installVerified(friend, key: key)
+        try await peer.send(try PeerMessage.hello(identity: PeerIdentity(
+            id: friend.deviceId!, displayName: "Mika", identityPublicKey: RendezvousTestIdentity().raw)))
+        let closed = await poll { !self.recorder.closed.isEmpty }
+        XCTAssertTrue(closed)
+        XCTAssertEqual(recorder.closeReasons, [.helloMismatch])
+    }
+
+    // MARK: I-2 media goes to the chat's peer, not the focused one
+
+    func testMediaFromAnOpenChatGoesToThatChatsPeerEvenWhenAnotherIsFocused() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let id = friend.deviceId!
+        let (_, peer, _) = try await installVerified(friend, key: key)
+
+        let otherID = "direct-\(UUID().uuidString)"
+        touched.append(otherID)
+        let (otherEnd, _) = RVPipeEnd.pair()
+        let other = PeerConnection(peerID: otherID, transport: otherEnd,
+                                   peerIdentity: PeerIdentity(id: otherID, displayName: "Other"),
+                                   localIdentity: cm.localIdentity, state: .connected)
+        cm._setConnectionForTesting(peerID: otherID, other)
+        cm.focus(on: otherID)
+        XCTAssertEqual(cm.focusedPeerID, otherID)
+
+        cm.sendMediaMessage(mediaType: .file, fileName: "a.txt", fileData: Data("hi".utf8),
+                            mimeType: "text/plain", duration: nil, thumbnailData: nil, to: id)
+        let arrived = await poll { peer.inbox.contains { $0.type == .mediaMessage } }
+        XCTAssertTrue(arrived, "media reached the open chat's peer")
+        XCTAssertFalse(otherEnd.sent.contains { $0.type == .mediaMessage || $0.type == .secureEnvelope },
+                       "nothing went to the focused peer")
+        XCTAssertNil(cm.chatManager.summary(forPeer: otherID).lastMessage, "nothing saved under the focused peer")
+        XCTAssertNotNil(cm.chatManager.summary(forPeer: id).lastMessage)
+        XCTAssertEqual(cm.focusedPeerID, otherID, "rendezvous connections never grab focus")
+    }
+
+    // MARK: I-3 device id must be unique among contacts
+
+    func testDeviceIdSharedWithAnotherContactIsNotEligible() throws {
+        let friend = try addFriend()
+        let twin = TrustedContact(deviceId: friend.deviceId!, displayName: "Twin",
+                                  identityPublicKey: RendezvousTestIdentity().raw, trustLevel: .linked)
+        cm.trustedContactStore.add(twin)
+        cm.trustedContactStore.setAccountBinding(for: twin.id, accountId: "ACtwin\(UUID().uuidString.prefix(4))")
+        let all = cm.trustedContactStore.contacts
+        let current = try XCTUnwrap(cm.trustedContactStore.find(byId: friend.id))
+        XCTAssertFalse(TrustedContactStore.isRendezvousEligible(current, among: all))
+        XCTAssertTrue(RendezvousManager.activeContacts(all).isEmpty)
+        XCTAssertNil(cm.installRendezvousConnection(transport: RVPipeEnd.pair().0, contact: current))
+    }
+
+    // MARK: m-2 dead direct connections don't block
+
+    func testDeadDirectConnectionDoesNotBlock() throws {
+        cm.rendezvousSecureChannelTimeoutNanoseconds = 10_000_000_000
+        let friend = try addFriend()
+        let dead = PeerConnection(peerID: friend.deviceId!, transport: RVPipeEnd.pair().0,
+                                  peerIdentity: PeerIdentity(id: friend.deviceId!, displayName: "Mika"),
+                                  localIdentity: cm.localIdentity, state: .failed(reason: "gone"))
+        cm._setConnectionForTesting(peerID: friend.deviceId!, dead)
+        XCTAssertFalse(cm.rendezvousBridge.hasDirectConnection(to: friend))
+        XCTAssertNotNil(cm.installRendezvousConnection(transport: RVPipeEnd.pair().0, contact: friend))
+    }
+
+    // MARK: m-3 relay identity swap notifies the manager
+
+    func testRelayHelloIdentitySwapNotifiesDirectConnectionsChanged() async throws {
+        let relayID = "relay-\(UUID().uuidString.prefix(6))"
+        touched.append(relayID)
+        let relay = PeerConnection(peerID: relayID, transport: RVPipeEnd.pair().0,
+                                   peerIdentity: PeerIdentity(id: relayID, displayName: "Relay Peer", supportsSecureChannel: true),
+                                   localIdentity: cm.localIdentity, state: .connected)
+        relay.isRelayPlaceholder = true
+        cm._setConnectionForTesting(peerID: relayID, relay)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        var calls = 0
+        cm.rendezvousBridge.onDirectConnectionsChanged = { calls += 1 }
+        let real = PeerIdentity(id: "real-\(UUID().uuidString)", displayName: "Rhea",
+                                identityPublicKey: RendezvousTestIdentity().raw)
+        touched.append(real.id)
+        cm.handleMessageForPeer(try PeerMessage.hello(identity: real), peerConnection: relay)
+        XCTAssertEqual(relay.peerIdentity.id, real.id)
+        let fired = await poll { calls >= 1 }
+        XCTAssertTrue(fired, "the manager learns the relay peer's real id")
+    }
+
+    // MARK: m-4 frames scoped to the sending peer
+
+    func testReceiptForAnotherPeersMessageIsIgnored() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (_, peer, _) = try await installVerified(friend, key: key)
+        let otherID = "other-\(UUID().uuidString)"
+        touched.append(otherID)
+        let foreign = cm.chatManager.saveOutgoing(text: "not yours", peerID: otherID, peerName: "Other")
+        cm.chatManager.flushAllPendingPersists()
+        let receipt = try PeerMessage.messageReceipt(
+            MessageReceiptPayload(messageIDs: [foreign.id], receiptType: .read, timestamp: Date()),
+            senderID: friend.deviceId!)
+        try await peer.send(receipt)
+        try await peer.send(text("marker", from: friend.deviceId!))
+        _ = await poll { (self.cm.chatManager.unreadCounts[friend.deviceId!] ?? 0) >= 1 }
+        cm.chatManager.loadMessages(forPeer: otherID)
+        XCTAssertEqual(cm.chatManager.messages.first { $0.id == foreign.id }?.status, foreign.status,
+                       "a peer cannot mark another thread's message")
+    }
+
+    func testReactionToAMessageOutsideThatPeersThreadIsIgnored() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (_, peer, _) = try await installVerified(friend, key: key)
+        let otherID = "other-\(UUID().uuidString)"
+        touched.append(otherID)
+        let foreign = cm.chatManager.saveOutgoing(text: "not yours", peerID: otherID, peerName: "Other")
+        cm.chatManager.loadMessages(forPeer: otherID)   // the open chat is the OTHER peer's
+        try await peer.send(try PeerMessage.reaction(
+            ReactionPayload(messageID: foreign.id, emoji: "👍", action: .add, timestamp: Date()), senderID: friend.deviceId!))
+        try await peer.send(text("marker", from: friend.deviceId!))
+        _ = await poll { (self.cm.chatManager.unreadCounts[friend.deviceId!] ?? 0) >= 1 }
+        XCTAssertNil(cm.chatManager.messages.first { $0.id == foreign.id }?.reactions)
+    }
+
+    func testGroupTextFromRendezvousRequiresLocalMembership() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let id = friend.deviceId!
+        let (_, peer, _) = try await installVerified(friend, key: key)
+        let unknownGroup = "G-\(UUID().uuidString)"
+        try await peer.send(try PeerMessage.textMessage(
+            TextMessagePayload(text: "spoofed group", groupID: unknownGroup, senderName: "Mika", messageID: UUID().uuidString),
+            senderID: id))
+        try await peer.send(text("marker", from: id))
+        _ = await poll { (self.cm.chatManager.unreadCounts[id] ?? 0) >= 1 }
+        XCTAssertFalse(cm.chatManager.groupMessages.contains { $0.groupID == unknownGroup })
+
+        cm.groupStore.add(name: "Ours \(UUID().uuidString.prefix(4))")
+        let group = try XCTUnwrap(cm.groupStore.groups.last)
+        defer { cm.groupStore.remove(id: group.id) }
+        cm.groupStore.addDevice(id, toGroup: group.id)
+        try await peer.send(try PeerMessage.textMessage(
+            TextMessagePayload(text: "member says hi", groupID: group.id, senderName: "Mika", messageID: UUID().uuidString),
+            senderID: id))
+        let saved = await poll { self.cm.chatManager.groupMessages.contains { $0.groupID == group.id } }
+        XCTAssertTrue(saved, "a member of a local group is accepted")
+    }
+
+    // MARK: m-5 group sends: rendezvous friends neither counted nor sent to
+
+    func testGroupBroadcastSkipsRendezvousFriendsAndNeverHangs() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let rvID = friend.deviceId!
+        let (_, peer, _) = try await installVerified(friend, key: key)
+
+        let directID = "direct-\(UUID().uuidString)"
+        touched.append(directID)
+        let (directEnd, _) = RVPipeEnd.pair()
+        let direct = PeerConnection(peerID: directID, transport: directEnd,
+                                    peerIdentity: PeerIdentity(id: directID, displayName: "D"),
+                                    localIdentity: cm.localIdentity, state: .connected)
+        cm._setConnectionForTesting(peerID: directID, direct)
+
+        cm.groupStore.add(name: "Mixed \(UUID().uuidString.prefix(4))")
+        let created = try XCTUnwrap(cm.groupStore.groups.last)
+        defer { cm.groupStore.remove(id: created.id) }
+        for d in [rvID, directID, "offline-\(UUID().uuidString)"] { cm.groupStore.addDevice(d, toGroup: created.id) }
+        let group = try XCTUnwrap(cm.groupStore.groups.first { $0.id == created.id })
+
+        XCTAssertEqual(cm.groupConnectionStatus(group).connected, 1, "only the direct member counts")
+        cm.broadcastTextMessage("hi all", toGroup: group.id)
+        let sent = await poll {
+            self.cm.chatManager.groupMessages.last { $0.groupID == group.id && $0.isOutgoing }?.status == .sent
+        }
+        XCTAssertTrue(sent, "status: \(String(describing: cm.chatManager.groupMessages.last?.status))")
+        XCTAssertTrue(directEnd.sent.contains { $0.type == .textMessage })
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(peer.inbox.contains { $0.type == .textMessage }, "rendezvous friend gets no group send")
     }
 }

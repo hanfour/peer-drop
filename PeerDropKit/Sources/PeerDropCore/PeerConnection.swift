@@ -95,6 +95,12 @@ public final class PeerConnection: ObservableObject, Identifiable {
     var rendezvousVerified = false
     /// `secureChannelDidComplete` was reported (exactly once per install).
     var rendezvousOutcomeReported = false
+    /// Secure channel up with the pinned key and binding, waiting for the
+    /// peer's first envelope to decrypt (key confirmation: static-static DH
+    /// over a CLAIMED key reaches `.secured` even for an impostor).
+    var rendezvousAwaitingConfirmation = false
+    /// An inbound envelope failed to decrypt (the receive loop then fails).
+    private(set) var envelopeDecryptFailed = false
 
     /// Strict secure-channel policy (Project E): the channel must come up
     /// within `handshakeFallbackNanoseconds` or the connection fails. It never
@@ -105,10 +111,14 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// Strict policy only: the secure channel could not be established.
     var onStrictSecureChannelFailure: (() -> Void)?
     private var strictSecureChannelFailed = false
+    /// Strict policy: the failure was the handshake timer (else: no peer
+    /// support or the bundle could not be sent).
+    private(set) var strictSecureChannelTimedOut = false
 
-    private func failStrictSecureChannel() {
+    private func failStrictSecureChannel(timedOut: Bool = false) {
         guard !strictSecureChannelFailed else { return }
         strictSecureChannelFailed = true
+        strictSecureChannelTimedOut = timedOut
         pendingRatchetPrivateKey = nil
         handshakeFallbackTask?.cancel()
         handshakeFallbackTask = nil
@@ -566,7 +576,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
             guard let self, !Task.isCancelled, self.connectionGeneration == generation else { return }
             if self.requiresStrictSecureChannel {
                 // Never fall back to plaintext: fail the connection instead.
-                if self.secureChannelState != .secured { self.failStrictSecureChannel() }
+                if self.secureChannelState != .secured { self.failStrictSecureChannel(timedOut: true) }
                 return
             }
             if self.secureChannelState == .handshakeInProgress {
@@ -628,7 +638,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
         handshakeFallbackTask?.cancel()
         handshakeFallbackTask = nil
         let fingerprint = secureChannel?.peerFingerprint ?? "?"
-        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(fingerprint, privacy: .public)")
+        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(fingerprint, privacy: .private)")
         onSecureChannelEstablished?(fingerprint)
     }
 
@@ -685,7 +695,13 @@ public final class PeerConnection: ObservableObject, Identifiable {
             // unchanged; if the connection was replaced while we were off the
             // main actor, the result belongs to a dead transport and is dropped.
             let generation = connectionGeneration
-            let inner = try await Self.decryptEnvelope(frame, channel: channel)
+            let inner: PeerMessage
+            do {
+                inner = try await Self.decryptEnvelope(frame, channel: channel)
+            } catch {
+                if connectionGeneration == generation { envelopeDecryptFailed = true }
+                throw error
+            }
             guard connectionGeneration == generation else { return }
             if !hasReceivedEnvelope { hasReceivedEnvelope = true }
             sendResponderNoOpIfNeeded(channel)

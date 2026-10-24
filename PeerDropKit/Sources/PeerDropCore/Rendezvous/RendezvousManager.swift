@@ -32,6 +32,33 @@ public enum RendezvousLinkState: Equatable {
     case unreachable
 }
 
+/// Why the connection layer gave up on an installed rendezvous connection.
+/// LOCAL diagnostics only (Task 6): kept in memory per contact, never logged,
+/// never sent, and never shown in a way that tells "they turned me off" apart
+/// from "they're offline" (presence stays offline / unreachable either way).
+public enum RendezvousConnectionFailure: Equatable, Sendable {
+    /// The handshake key is not the pinned contact key.
+    case keyMismatch
+    /// Binding, opt-in or eligibility no longer holds.
+    case bindingFailed
+    /// A HELLO claimed a key other than the pinned / handshake key.
+    case helloMismatch
+    /// No confirmed secure channel within the deadline.
+    case timeout
+    /// An envelope from the peer did not decrypt.
+    case decryptFailed
+    /// The secure channel could not be negotiated (send failed, no support).
+    case channelFailed
+    /// The connection layer refused the install.
+    case installRefused
+    /// Closed (peer hung up, transport dropped, local disconnect).
+    case connectionClosed
+
+    /// Pinned-identity contradictions: the room stays suspended until the
+    /// contact's key or device id changes (no retry loop against them).
+    public var suspendsRoom: Bool { self == .keyMismatch || self == .helloMismatch }
+}
+
 @MainActor
 public protocol DirectConnectionChecker: AnyObject {
     /// A direct (nearby / local) connection to this contact exists.
@@ -173,6 +200,12 @@ public final class RendezvousManager: ObservableObject {
     private let sessionTags: RendezvousSessionTagStore
 
     private var rooms: [Key: Room] = [:]
+    /// Last connection-layer failure per contact (in memory, never logged).
+    private var lastFailures: [UUID: RendezvousConnectionFailure] = [:]
+    /// Contacts suspended after a pinned-identity contradiction, with the
+    /// key + device id they were suspended at.
+    private struct Suspension: Equatable { let key: Data; let deviceId: String? }
+    private var suspensions: [UUID: Suspension] = [:]
     private var queue: [(Key, RendezvousSession.Event)] = []
     private var draining = false
     /// Entry points called re-entrantly while the queue drains (e.g. from
@@ -249,20 +282,50 @@ public final class RendezvousManager: ObservableObject {
 
     /// The connection layer finished the pinned-key secure channel on an
     /// installed rendezvous connection (`ok == false`: mismatch, plaintext, timeout).
-    public func secureChannelDidComplete(contactID: UUID, ok: Bool) {
+    public func secureChannelDidComplete(contactID: UUID, ok: Bool, reason: RendezvousConnectionFailure? = nil) {
+        if !ok, let reason { recordFailure(reason, contactID: contactID) }
         for (key, room) in rooms where key.contactID == contactID && room.installed {
             enqueue(key, .secureChannelResult(ok: ok))
         }
         drain()
+        if !ok, reason?.suspendsRoom == true { reconcile() }
     }
 
     /// The installed connection was torn down by the connection layer.
-    public func connectionDidClose(contactID: UUID) {
+    public func connectionDidClose(contactID: UUID, reason: RendezvousConnectionFailure? = nil) {
+        if let reason { recordFailure(reason, contactID: contactID) }
         for (key, room) in rooms where key.contactID == contactID && room.installed {
             room.installed = false
             enqueue(key, .connectionLost)
         }
         drain()
+        if reason?.suspendsRoom == true { reconcile() }
+    }
+
+    /// Last local failure reason for `contactID` (Task 6 diagnostics). In
+    /// memory only; never logged.
+    public func lastFailureReason(for contactID: UUID) -> RendezvousConnectionFailure? {
+        lastFailures[contactID]
+    }
+
+    private func recordFailure(_ reason: RendezvousConnectionFailure, contactID: UUID) {
+        lastFailures[contactID] = reason
+        guard reason.suspendsRoom, let c = contacts().first(where: { $0.id == contactID }) else { return }
+        suspensions[contactID] = Suspension(key: c.identityPublicKey, deviceId: c.deviceId)
+    }
+
+    /// Enabled + eligible + not suspended. A suspension lifts once the
+    /// contact's key or device id differs from the one it was suspended at.
+    private func currentActiveContacts() -> [TrustedContact] {
+        let all = contacts()
+        for (id, s) in suspensions {
+            guard let c = all.first(where: { $0.id == id }),
+                  c.identityPublicKey == s.key, c.deviceId == s.deviceId else {
+                suspensions[id] = nil
+                continue
+            }
+        }
+        return Self.activeContacts(all, excluding: Set(suspensions.keys))
     }
 
     public func linkState(for contactID: UUID) -> RendezvousLinkState {
@@ -284,8 +347,9 @@ public final class RendezvousManager: ObservableObject {
     // MARK: - Reconcile
 
     /// Enabled + eligible contacts, deterministic order, capped at 5.
-    static func activeContacts(_ all: [TrustedContact]) -> [TrustedContact] {
+    static func activeContacts(_ all: [TrustedContact], excluding excluded: Set<UUID> = []) -> [TrustedContact] {
         Array(all
+            .filter { !excluded.contains($0.id) }
             .filter { $0.isRendezvousEnabled && TrustedContactStore.isRendezvousEligible($0, among: all) }
             .sorted { $0.id.uuidString < $1.id.uuidString }
             .prefix(TrustedContactStore.maxRendezvousContacts))
@@ -294,7 +358,7 @@ public final class RendezvousManager: ObservableObject {
     private func reconcile() {
         if deferIfDraining({ [weak self] in self?.reconcile() }) { return }
         let now = clock.now
-        let before = Self.activeContacts(contacts())
+        let before = currentActiveContacts()
         let byID = Dictionary(uniqueKeysWithValues: before.map { ($0.id, $0) })
 
         // Drop rooms of contacts that are gone, disabled, ineligible or re-keyed.
@@ -310,7 +374,7 @@ public final class RendezvousManager: ObservableObject {
 
         // Re-read: closing rooms above can call back into the connection layer
         // (e.g. `uninstall`), which may change the contacts (round 2, c).
-        let active = Self.activeContacts(contacts())
+        let active = currentActiveContacts()
 
         if isForeground {
             let days = RendezvousToken.daysToJoin(now: now)
@@ -458,6 +522,7 @@ public final class RendezvousManager: ObservableObject {
                 siblings(of: key).forEach { enqueue($0, .retire) }
             } else {
                 room.installed = false
+                lastFailures[key.contactID] = .installRefused
                 enqueue(key, .installFailed)
             }
 
@@ -545,6 +610,11 @@ public final class RendezvousManager: ObservableObject {
             } else if sessions.contains(where: { if case .failed = $0.state { return true } else { return false } }) {
                 states[id] = .unreachable
             }
+        }
+        // A suspended contact looks like any other failure: unreachable.
+        if !suspensions.isEmpty {
+            let enabled = Set(contacts().filter(\.isRendezvousEnabled).map(\.id))
+            for id in suspensions.keys where states[id] == nil && enabled.contains(id) { states[id] = .unreachable }
         }
         if states != linkStates { linkStates = states }
     }

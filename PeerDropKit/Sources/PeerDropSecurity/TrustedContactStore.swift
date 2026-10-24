@@ -170,12 +170,17 @@ public final class TrustedContactStore: ObservableObject {
     /// Same rule as `FriendBinding.verifiedAccount`: the contact resolves
     /// uniquely by key and is not blocked, `accountId != nil` and no pending
     /// claim. Additionally the connection key (`deviceId`) must be known
-    /// (spec §12.12) and the key must be a 32-byte agreement key.
+    /// (spec §12.12) and unique among contacts, and the key must be a 32-byte
+    /// agreement key.
     public static func isRendezvousEligible(_ c: TrustedContact, among all: [TrustedContact]) -> Bool {
         guard !c.isBlocked, c.accountId != nil, c.pendingAccountBinding == nil,
               let deviceId = c.deviceId, !deviceId.isEmpty,
               c.identityPublicKey.count == 32 else { return false }
+        // The device id is the connection / chat key: it must also be unique
+        // among contacts, or a rendezvous connection (keyed by it) could be
+        // attributed to — or collide with — another contact (Task 5 I-3).
         return all.filter { $0.matchesKey(c.identityPublicKey) }.count == 1
+            && all.filter { $0.deviceId == deviceId }.count == 1
     }
 
     /// Contacts whose opt-in is on AND who are eligible right now (ineligible

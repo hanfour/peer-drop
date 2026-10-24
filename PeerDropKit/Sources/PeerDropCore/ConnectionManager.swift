@@ -881,11 +881,13 @@ public final class ConnectionManager: ObservableObject {
     /// relay peers — chat sends silently returned before even
     /// persisting the bubble. Linear scan is fine: maxConnections ≤ 5.
     public func connection(for peerID: String) -> PeerConnection? {
-        if let direct = connections[peerID] { return direct }
-        if let alias = connections.values.first(where: { $0.peerIdentity.id == peerID }) { return alias }
+        let candidate = connections[peerID] ?? connections.values.first(where: { $0.peerIdentity.id == peerID })
+        if let candidate, candidate.state.isActive { return candidate }
         // Project E: a cross-network connection, only once verified (pinned
-        // key + bound account), so a live send always has a secured channel.
-        return verifiedRendezvousConnection(for: peerID)
+        // key + bound account + key confirmation), so a live send always has a
+        // secured channel. It beats a dead direct entry, never a live one.
+        if let rendezvous = verifiedRendezvousConnection(for: peerID) { return rendezvous }
+        return candidate
     }
 
     /// Chat-thread key for a saved device record.
@@ -3734,6 +3736,15 @@ public final class ConnectionManager: ObservableObject {
                     logger.warning("Dropping group text claiming sender \(message.senderID.prefix(8)) on connection \(peerID.prefix(8))")
                     return
                 }
+                // Groups are device-local (never synced), so membership can
+                // only be checked against OUR groups. Cross-network friends
+                // must be a member of a local group with that id (Task 5 m-4);
+                // local peers keep the old behaviour.
+                if peerConnection.isRendezvous {
+                    guard groupStore.groups.contains(where: {
+                        $0.id == groupID && ($0.deviceIDs.contains(boundSenderID) || $0.deviceIDs.contains(peerID))
+                    }) else { return }
+                }
                 savedMsg = chatManager.saveGroupIncoming(
                     text: payload.text,
                     groupID: groupID,
@@ -3805,9 +3816,11 @@ public final class ConnectionManager: ObservableObject {
                     }
                 }
             } else {
-                // 1-to-1 message receipt
+                // 1-to-1 message receipt: only for OUR messages in THIS peer's
+                // thread (a peer may not mark another thread's messages).
                 let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                for msgID in payload.messageIDs {
+                for msgID in payload.messageIDs
+                where chatManager.threadContains(messageID: msgID, peerID: chatKey, outgoingOnly: true) {
                     chatManager.updateStatus(messageID: msgID, status: newStatus)
                 }
             }
@@ -3824,6 +3837,8 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode ReactionPayload")
                 return
             }
+            // The reacted-to message must be in this peer's thread.
+            guard chatManager.threadContains(messageID: payload.messageID, peerID: chatKey) else { return }
             switch payload.action {
             case .add:
                 chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: boundSenderID)
@@ -3967,6 +3982,9 @@ public final class ConnectionManager: ObservableObject {
                 return
             }
             peerConnection.updatePeerIdentity(identity)
+            // The relay connection now answers for `identity.id`: a rendezvous
+            // connection to the same device must step aside (Task 5 m-3).
+            notifyDirectConnectionsChanged()
             // Remember the real identity on the relay record so the offline
             // thread (stored under the identity id) can be found again; stash
             // it if the record only appears after PIN confirmation.
@@ -4329,9 +4347,9 @@ public final class ConnectionManager: ObservableObject {
             return
         }
 
-        // Send to all connected group members
+        // Send to all connected group members (never cross-network friends).
         for member in members where member.id != localIdentity.id {
-            if let peerConn = connection(for: member.id) {
+            if let peerConn = groupMemberConnection(member.id) {
                 Task {
                     do { try await peerConn.sendMessage(msg) }
                     catch { logger.warning("Failed to send group read receipt to \(member.id): \(error.localizedDescription)") }
@@ -4592,9 +4610,18 @@ public final class ConnectionManager: ObservableObject {
         try await connection.sendMessage(message)
     }
 
+    /// Focus-based variant (legacy callers). Chat UI must use `to:`.
     public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
-        guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
+        sendMediaMessage(mediaType: mediaType, fileName: fileName, fileData: fileData, mimeType: mimeType,
+                         duration: duration, thumbnailData: thumbnailData, to: peerID)
+    }
+
+    /// Send media to an explicit peer (the open chat's), never to whichever
+    /// peer happens to be focused: a chat opened while `.connecting` that turns
+    /// live is never focused (rendezvous connections don't grab focus).
+    public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?, to peerID: String) {
+        guard FeatureSettings.isChatEnabled else { return }
         guard let peerConn = connection(for: peerID) else { return }
         // audit-#14 Stage 3: gate media sends the same way text sends are gated.
         // Local-only block — the message isn't persisted yet so there's nothing
@@ -4719,43 +4746,43 @@ public final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Exactly the members that are counted as connected get the send, and
+        // completion is counted against them — not against every member, which
+        // left the status on "sending" whenever one member was offline.
+        // Cross-network (rendezvous) friends are neither counted nor sent to.
+        let targets = group.deviceIDs.compactMap { groupMemberConnection($0) }
+        guard !targets.isEmpty else {
+            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
+            return
+        }
         var sentCount = 0
         var failCount = 0
-
-        for deviceID in group.deviceIDs {
-            guard let peerConn = connections[deviceID], peerConn.state.isConnected else { continue }
-
+        for peerConn in targets {
             Task {
                 do {
                     try await peerConn.sendMessage(msg)
                     sentCount += 1
-                    // Update status when all sends complete
-                    if sentCount + failCount == group.deviceIDs.count {
-                        await MainActor.run {
-                            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .sent)
-                        }
-                    }
                 } catch {
                     failCount += 1
-                    if sentCount == 0 && failCount == group.deviceIDs.count {
-                        await MainActor.run {
-                            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
-                        }
-                    }
+                }
+                guard sentCount + failCount == targets.count else { return }
+                await MainActor.run {
+                    chatManager.updateGroupMessageStatus(messageID: saved.id, status: sentCount > 0 ? .sent : .failed)
                 }
             }
         }
+    }
 
-        // If no peers are connected, mark as failed immediately
-        let connectedInGroup = group.deviceIDs.filter { isConnected(to: $0) }.count
-        if connectedInGroup == 0 {
-            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
-        }
+    /// A group member's live local (non-rendezvous) connection, if any.
+    func groupMemberConnection(_ deviceID: String) -> PeerConnection? {
+        let pc = connections[deviceID] ?? connections.values.first { $0.peerIdentity.id == deviceID }
+        guard let pc, pc.state.isConnected, !pc.isRendezvous else { return nil }
+        return pc
     }
 
     /// Get connection status for group members.
     public func groupConnectionStatus(_ group: DeviceGroup) -> (connected: Int, total: Int, online: Int) {
-        let connectedCount = group.deviceIDs.filter { isConnected(to: $0) }.count
+        let connectedCount = group.deviceIDs.filter { groupMemberConnection($0) != nil }.count
         let onlineCount = group.deviceIDs.filter { deviceID in
             discoveredPeers.contains { $0.id == deviceID }
         }.count
