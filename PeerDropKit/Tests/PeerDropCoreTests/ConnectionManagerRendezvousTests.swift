@@ -44,12 +44,16 @@ final class RVPipeEnd: TransportProtocol, @unchecked Sendable {
     }
 
     func send(_ message: PeerMessage) async throws {
-        lock.lock()
-        if _closed { lock.unlock(); throw CancellationError() }
-        _sent.append(message)
-        let peer = other
-        lock.unlock()
+        guard let peer = record(message) else { throw CancellationError() }
         peer?.deliver(message)
+    }
+
+    /// nil when closed; otherwise the (possibly gone) other end.
+    private func record(_ message: PeerMessage) -> RVPipeEnd?? {
+        lock.lock(); defer { lock.unlock() }
+        if _closed { return nil }
+        _sent.append(message)
+        return .some(other)
     }
 
     private func deliver(_ message: PeerMessage) {
@@ -618,14 +622,115 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
         XCTAssertEqual(cm.activeConnectionCount, 0, "not counted against maxConnections")
         XCTAssertEqual(cm.maxConnections, 5)
 
-        // A sixth (e.g. after an opt-in race) is refused.
-        let extra = TrustedContact(deviceId: "dev-6-\(UUID().uuidString)", displayName: "Six",
-                                   identityPublicKey: RendezvousTestIdentity().raw, trustLevel: .linked)
-        cm.trustedContactStore.add(extra)
-        cm.trustedContactStore.setAccountBinding(for: extra.id, accountId: "AC6")
-        let sixth = try XCTUnwrap(cm.trustedContactStore.find(byId: extra.id))
+        // A sixth opted-in friend while five connections are still up (the
+        // first one's opt-in was turned off but its connection not yet torn
+        // down) is refused by the connection cap itself.
+        try cm.trustedContactStore.setRendezvousEnabled(for: friends[0].id, false)
+        let sixth = try addFriend(name: "Six")
+        XCTAssertTrue(sixth.isRendezvousEnabled)
         XCTAssertNil(cm.installRendezvousConnection(transport: RVPipeEnd.pair().0, contact: sixth))
         XCTAssertEqual(cm.rendezvousConnections.count, 5)
+    }
+
+    // MARK: Layers of the strict policy, one at a time
+
+    /// The impostor is another bound friend: the binding resolves (to the
+    /// wrong contact), so only the pinned-key comparison stops it.
+    func testHandshakeWithAnotherBoundFriendsKeyIsRefused() async throws {
+        let mallory = RendezvousTestIdentity()
+        _ = try addFriend(key: mallory, name: "Mallory")
+        let mika = try addFriend(name: "Mika")
+        let (pc, _, end) = install(mika, peerKey: mallory)
+        XCTAssertNotNil(pc)
+        let done = await poll { !self.recorder.secure.isEmpty }
+        XCTAssertTrue(done)
+        XCTAssertEqual(recorder.secure.map(\.1), [false])
+        XCTAssertTrue(end.closed)
+        XCTAssertNil(cm.connection(for: mika.deviceId!))
+    }
+
+    /// A re-exchange started after install (pending claim) must stop the
+    /// connection from verifying even though the key matches.
+    func testBindingPendingBeforeSecureIsRefused() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (pc, peer, end) = install(friend, peerKey: key, respond: false)
+        XCTAssertNotNil(pc)
+        cm.trustedContactStore.setPendingBinding(for: friend.id, PendingAccountBinding(
+            accountId: "NEW", signingKey: Data(count: 32), handshakeKeyHash: Data(count: 32), receivedAt: Date()))
+        // Now the friend sends its bundle; the CM (which already sent its own) secures.
+        await peer.pc.startSecureChannelNegotiation(peerSupportsSecureChannel: true, identity: key)
+        let done = await poll { !self.recorder.secure.isEmpty }
+        XCTAssertTrue(done)
+        XCTAssertEqual(recorder.secure.map(\.1), [false])
+        XCTAssertTrue(end.closed)
+        XCTAssertEqual(pc?.secureChannelState, .secured, "the channel came up; the binding refused it")
+    }
+
+    /// An unverified rendezvous connection dispatches nothing, even an
+    /// (injected) envelope-origin chat frame.
+    func testUnverifiedConnectionDispatchesNothing() async throws {
+        cm.rendezvousSecureChannelTimeoutNanoseconds = 10_000_000_000
+        let friend = try addFriend()
+        let pc = try XCTUnwrap(cm.installRendezvousConnection(transport: RVPipeEnd.pair().0, contact: friend))
+        pc.onMessageReceivedWithOrigin?(try text("sneak", from: friend.deviceId!), .envelope)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertNil(cm.chatManager.unreadCounts[friend.deviceId!])
+    }
+
+    func testStrictPeerConnectionDropsPlaintextBusinessBeforeSecure() async throws {
+        let (a, _) = RVPipeEnd.pair()
+        let pc = PeerConnection(peerID: "p", transport: a, peerIdentity: PeerIdentity(id: "p", displayName: "P"),
+                                localIdentity: PeerIdentity(id: "me", displayName: "Me"), state: .connected)
+        pc.requiresStrictSecureChannel = true
+        var delivered: [MessageType] = []
+        pc.onMessageReceived = { delivered.append($0.type) }
+        try await pc.handleIncomingMessage(try text("x", from: "p"))
+        try await pc.handleIncomingMessage(PeerMessage(type: .fileOffer, payload: Data(), senderID: "p"))
+        try await pc.handleIncomingMessage(PeerMessage.ping(senderID: "p"))
+        try await pc.handleIncomingMessage(try PeerMessage.hello(identity: PeerIdentity(id: "p", displayName: "P")))
+        XCTAssertEqual(delivered, [.ping, .hello], "only control frames and HELLO pass before the channel")
+    }
+
+    func testStrictPeerConnectionNeverSendsBusinessInPlaintext() async throws {
+        let (a, _) = RVPipeEnd.pair()
+        let pc = PeerConnection(peerID: "p", transport: a, peerIdentity: PeerIdentity(id: "p", displayName: "P"),
+                                localIdentity: PeerIdentity(id: "me", displayName: "Me"), state: .connected)
+        pc.requiresStrictSecureChannel = true
+        do {
+            try await pc.sendMessage(try text("x", from: "me"))
+            XCTFail("a business frame must not go out without the channel")
+        } catch {}
+        try await pc.sendMessage(PeerMessage.ping(senderID: "me"))
+        XCTAssertEqual(a.sent.map(\.type), [.ping])
+    }
+
+    func testStrictPeerConnectionWithoutPeerSupportFailsInsteadOfPlaintext() async {
+        let (a, _) = RVPipeEnd.pair()
+        let pc = PeerConnection(peerID: "p", transport: a, peerIdentity: PeerIdentity(id: "p", displayName: "P"),
+                                localIdentity: PeerIdentity(id: "me", displayName: "Me"), state: .connected)
+        pc.requiresStrictSecureChannel = true
+        var failed = 0
+        pc.onStrictSecureChannelFailure = { failed += 1 }
+        await pc.startSecureChannelNegotiation(peerSupportsSecureChannel: false)
+        XCTAssertEqual(failed, 1)
+        XCTAssertNotEqual(pc.secureChannelState, .fallbackPlaintext)
+    }
+
+    func testStrictHandshakeTimeoutFailsInsteadOfPlaintext() async {
+        let (a, _) = RVPipeEnd.pair()
+        let pc = PeerConnection(peerID: "p", transport: a, peerIdentity: PeerIdentity(id: "p", displayName: "P"),
+                                localIdentity: PeerIdentity(id: "me", displayName: "Me"), state: .connected)
+        pc.requiresStrictSecureChannel = true
+        pc.handshakeFallbackNanoseconds = 50_000_000
+        var failed = 0
+        pc.onStrictSecureChannelFailure = { failed += 1 }
+        await pc.startSecureChannelNegotiation(peerSupportsSecureChannel: true, identity: RendezvousTestIdentity())
+        let fired = await poll { failed == 1 }
+        XCTAssertTrue(fired)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(failed, 1)
+        XCTAssertEqual(pc.secureChannelState, .handshakeInProgress, "never .fallbackPlaintext")
     }
 
     // MARK: Background, uninstall
