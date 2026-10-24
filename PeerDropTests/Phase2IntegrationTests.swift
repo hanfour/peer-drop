@@ -424,9 +424,9 @@ final class Phase2IntegrationTests: XCTestCase {
         XCTAssertTrue(FeatureSettings.isRelayEnabled)
     }
 
-    func testClipboardSyncEnabledDefaultTrue() {
+    func testClipboardSyncEnabledDefaultFalse() {
         UserDefaults.standard.removeObject(forKey: "peerDropClipboardSyncEnabled")
-        XCTAssertTrue(FeatureSettings.isClipboardSyncEnabled)
+        XCTAssertFalse(FeatureSettings.isClipboardSyncEnabled)
     }
 
     func testRelayCanBeDisabled() {
