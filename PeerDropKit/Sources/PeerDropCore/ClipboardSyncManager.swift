@@ -25,6 +25,12 @@ public final class ClipboardSyncManager: ObservableObject {
     public func startMonitoring() {
         guard FeatureSettings.isClipboardSyncEnabled else { return }
         stopMonitoring()
+        #if os(iOS)
+        // iOS asks "Allow paste?" every time an app reads content another app copied, so the pasteboard is
+        // never read in the background or on a timer here. Sharing the clipboard on iOS stays an explicit
+        // action (the share-clipboard screen).
+        return
+        #else
 
         changeCount = pasteboard.changeCount
 
@@ -43,6 +49,7 @@ public final class ClipboardSyncManager: ObservableObject {
         }
 
         logger.info("Clipboard sync monitoring started")
+        #endif
     }
 
     public func stopMonitoring() {
