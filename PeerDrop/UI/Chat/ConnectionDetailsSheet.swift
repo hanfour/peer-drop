@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 import PeerDropCore
 import PeerDropTransport
@@ -86,3 +87,4 @@ private struct PeerProximityRow: View {
         }
     }
 }
+#endif

@@ -213,7 +213,7 @@ struct ContentView: View {
                 selectedTab = .nearby
             }
         } message: {
-            Text(errorMessage ?? "An unknown error occurred.")
+            Text(LocalizedStringKey(errorMessage ?? "An unknown error occurred."))
         }
         .fullScreenCover(isPresented: Binding(
             get: { !hasCompletedOnboarding && !ScreenshotModeProvider.shared.isActive },

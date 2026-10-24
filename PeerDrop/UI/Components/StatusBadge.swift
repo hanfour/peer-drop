@@ -11,7 +11,7 @@ struct StatusBadge: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
 
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -19,7 +19,7 @@ struct StatusBadge: View {
         .padding(.vertical, 4)
         .background(color.opacity(colorScheme == .dark ? 0.2 : 0.1), in: Capsule())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Status: \(label)")
+        .accessibilityLabel(Text(String(format: String(localized: "Status: %@"), NSLocalizedString(label, comment: ""))))
     }
 
     private var label: String {

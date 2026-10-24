@@ -46,6 +46,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>PeerDrop needs camera access to capture photos for sharing in chats.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>PeerDrop shows your contacts so you can invite them. Your contacts stay on this phone and are never uploaded.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>PeerDrop uses the local network to discover and connect to nearby devices for file transfer and voice calls.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -127,6 +127,37 @@ struct ChatView: View, PaperThemed {
             .paperMode(paperMode)
     }
 
+    @ViewBuilder
+    private func reconnectButtons(spacing: CGFloat, vertical: Bool) -> some View {
+        let content = Group {
+            Button {
+                if !connectionManager.reconnect(to: peerID) {
+                    connectionManager.statusToast = String(localized: "Can't find \(displayName) nearby. Make sure they have PeerDrop open.")
+                }
+            } label: {
+                Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(.subheadline, design: .rounded).weight(.medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(paper(.actionFill))
+
+            Button {
+                // Navigate back and return to discovery
+                connectionManager.returnToDiscovery()
+            } label: {
+                Text("Back to Nearby")
+                    .font(.system(.subheadline, design: .rounded).weight(.medium))
+                    .foregroundStyle(paper(.incomingText))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(paper(.datePillFill), in: Capsule())
+                    .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+        if vertical { VStack(spacing: spacing) { content } } else { HStack(spacing: spacing) { content } }
+    }
+
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -227,31 +258,9 @@ struct ChatView: View, PaperThemed {
                             .font(.subheadline.weight(.medium))
                     }
 
-                    HStack(spacing: 16) {
-                        Button {
-                            if !connectionManager.reconnect(to: peerID) {
-                                connectionManager.statusToast = String(localized: "Can't find \(displayName) nearby. Make sure they have PeerDrop open.")
-                            }
-                        } label: {
-                            Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.system(.subheadline, design: .rounded).weight(.medium))
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(paper(.actionFill))
-
-                        Button {
-                            // Navigate back and return to discovery
-                            connectionManager.returnToDiscovery()
-                        } label: {
-                            Text("Back to Nearby")
-                                .font(.system(.subheadline, design: .rounded).weight(.medium))
-                                .foregroundStyle(paper(.incomingText))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(paper(.datePillFill), in: Capsule())
-                                .overlay(Capsule().stroke(paper(.border), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
+                    ViewThatFits(in: .horizontal) {
+                        reconnectButtons(spacing: 16, vertical: false)
+                        reconnectButtons(spacing: 10, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -260,6 +269,7 @@ struct ChatView: View, PaperThemed {
                 .background(paper(.background))
                 .overlay(alignment: .top) {
                     Rectangle().fill(paper(.border)).frame(height: 1)
+
                 }
             }
 
@@ -299,21 +309,6 @@ struct ChatView: View, PaperThemed {
                 .accessibilityLabel(Text(verbatim: "\(displayName), \(peerPresence.accessibilityLabel(notesReachable: thread.binding == .verified))"))
                 .accessibilityAddTraits(.isHeader)
             }
-            if showsConnectionInfo, ChatPresenceMode.showsInfoButton(presence: peerPresence) {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        switch AlwaysConnectedPresentation.infoDestination(isRendezvousConnection: isCrossNetworkPeer) {
-                        case .alwaysConnectedSheet:
-                            showAlwaysConnectedInfo = true
-                        case .connectionView:
-                            showConnectionInfo = true
-                        }
-                    } label: {
-                        Image(systemName: "info.circle")
-                    }
-                    .accessibilityLabel(Text("Connection details"))
-                }
-            }
             #endif
             #if os(iOS)
             if offersVoiceCall {
@@ -324,25 +319,41 @@ struct ChatView: View, PaperThemed {
                 }
             }
             #endif
-            if AlwaysConnectedPresentation.showsChatButton(bindingIsVerified: thread.binding == .verified) {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAlwaysConnectedInfo = true } label: {
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                    }
-                    .accessibilityLabel(Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey)))
-                    .accessibilityIdentifier("always-connected-button")
-                }
-            }
             ToolbarItem(placement: .primaryAction) {
                 ExchangeNotesButton(peerID: peerID, peerName: displayName,
                                     bindingState: thread.binding, contactID: thread.contactID)
             }
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    showSearch = true
+            // Secondary actions live in one menu so the toolbar keeps room for the friend's name.
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    #if os(iOS)
+                    if showsConnectionInfo, ChatPresenceMode.showsInfoButton(presence: peerPresence) {
+                        Button {
+                            switch AlwaysConnectedPresentation.infoDestination(isRendezvousConnection: isCrossNetworkPeer) {
+                            case .alwaysConnectedSheet:
+                                showAlwaysConnectedInfo = true
+                            case .connectionView:
+                                showConnectionInfo = true
+                            }
+                        } label: {
+                            Label("Connection details", systemImage: "info.circle")
+                        }
+                    }
+                    #endif
+                    if AlwaysConnectedPresentation.showsChatButton(bindingIsVerified: thread.binding == .verified) {
+                        Button { showAlwaysConnectedInfo = true } label: {
+                            Label(LocalizedStringKey(AlwaysConnectedPresentation.titleKey), systemImage: "dot.radiowaves.left.and.right")
+                        }
+                        .accessibilityIdentifier("always-connected-button")
+                    }
+                    Button { showSearch = true } label: {
+                        Label("Search", systemImage: "magnifyingglass")
+                    }
                 } label: {
-                    Image(systemName: "magnifyingglass")
+                    Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel(Text("More"))
+                .accessibilityIdentifier("chat-more-menu")
             }
         }
         .sheet(isPresented: $showAlwaysConnectedInfo) {
