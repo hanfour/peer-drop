@@ -15,6 +15,11 @@ public struct PeerMessage: Codable {
 
     // MARK: - Convenience encoders for typed payloads
 
+    public static func notesExchange(_ payload: NotesExchangePayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .notesExchange, payload: data, senderID: senderID)
+    }
+
     public static func deviceIdExchange(deviceId: String, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(DeviceIdExchangePayload(deviceId: deviceId))
         return PeerMessage(type: .deviceIdExchange, payload: data, senderID: senderID)

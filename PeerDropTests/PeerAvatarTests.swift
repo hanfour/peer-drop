@@ -33,6 +33,30 @@ final class PeerAvatarTests: XCTestCase {
         XCTAssertTrue(labels.allSatisfy { !$0.isEmpty })
     }
 
+    /// Only a VERIFIED binding makes "you can send notes" true; an unbound offline friend's thread is locked.
+    func testOfflineLabelDependsOnNotesReachable() {
+        let plain = PeerPresence.offline.accessibilityLabel(notesReachable: false)
+        let notes = PeerPresence.offline.accessibilityLabel(notesReachable: true)
+        XCTAssertNotEqual(plain, notes)
+        XCTAssertEqual(plain, String(localized: "Offline"))
+        XCTAssertEqual(notes, String(localized: "Offline, you can send notes"))
+        // Default (no binding knowledge) never over-promises.
+        XCTAssertEqual(PeerPresence.offline.accessibilityLabel, plain)
+        // Online / nearby are unaffected by the flag.
+        XCTAssertEqual(PeerPresence.online.accessibilityLabel(notesReachable: true), PeerPresence.online.accessibilityLabel)
+        XCTAssertEqual(PeerPresence.nearby.accessibilityLabel(notesReachable: true), PeerPresence.nearby.accessibilityLabel)
+    }
+
+    func testAvatarAccessibilityTextUsesNotesReachable() {
+        XCTAssertTrue(PeerAvatar.accessibilityText(name: "Mika", presence: .offline, notesReachable: true).contains(String(localized: "Offline, you can send notes")))
+        XCTAssertFalse(PeerAvatar.accessibilityText(name: "Mika", presence: .offline, notesReachable: false).contains(String(localized: "you can send notes")))
+    }
+
+    func testOfflineBadgeKind() {
+        XCTAssertEqual(PresenceBadge.offlineKind(notesReachable: true), .notes)
+        XCTAssertEqual(PresenceBadge.offlineKind(notesReachable: false), .neutral)
+    }
+
     func testBadgeDiameter() {
         XCTAssertEqual(PresenceBadge.diameter(forAvatarSize: 32), 12, accuracy: 0.001)
         XCTAssertEqual(PresenceBadge.diameter(forAvatarSize: 40), 14.4, accuracy: 0.001)

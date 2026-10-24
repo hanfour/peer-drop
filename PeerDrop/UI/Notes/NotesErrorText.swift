@@ -22,7 +22,7 @@ extension NotesStoreError {
         case .rateLimited: return String(localized: "Too many notes today. Try again tomorrow.")
         case .textTooLong: return String(localized: "The note is too long.")
         case .noteNotFound: return String(localized: "This note is no longer available.")
-        case .noAccount, .proofOfWorkFailed, .network:
+        case .noAccount, .proofOfWorkFailed, .recipientMismatch, .network:
             switch context {
             case .compose: return String(localized: "Could not send the note.")
             case .inboxAction: return String(localized: "Something went wrong. Please try again.")

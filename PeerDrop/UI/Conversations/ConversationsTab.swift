@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import PeerDropCore
+import PeerDropNotes
 
 /// 紙條: first-row notes inbox + conversation list (friends and groups with messages, newest first).
 /// Expects to be hosted in a NavigationStack that the container owns. Chats are pushed through
@@ -20,6 +21,11 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     /// Pending inbox-push requests from the container (notification deep link). Consumed (reset to 0)
     /// here, so a rebuilt view (Mac sidebar switch) never replays an already handled request.
     @Binding var inboxRequest: Int
+    /// `DeviceRecord.id` of a friend whose thread should open (note deep link for a bound friend).
+    /// Consumed (reset to nil) here, like `inboxRequest`.
+    @Binding var threadRequest: ThreadRequest?
+    /// Called when the requested friend vanished: the container shows the tapped note directly.
+    var onThreadUnavailable: (String?) -> Void = { _ in }
     @ViewBuilder var inbox: () -> Inbox
     @State private var showInbox = false
     @State private var pickedGroup: DeviceGroup?
@@ -31,6 +37,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     /// Last-message summaries, rebuilt on appear and (debounced) on change signals — never inside `body`.
     @State private var peerSummaries: [String: ConversationSummary] = [:]
     @State private var groupSummaries: [String: ConversationSummary] = [:]
+    /// Records with a verified notes binding, computed with the summaries (never per row).
+    @State private var reachableRecordIDs: Set<String> = []
     /// False until the first synchronous seed, so the empty state never flashes.
     @State private var hasLoaded = false
     /// Refresh work only runs while this list is on screen (a chat pushed on top must not trigger decrypts).
@@ -51,14 +59,24 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     }
 
     private func refreshSummaries() {
-        var peers: [String: ConversationSummary] = [:]
-        for r in connectionManager.deviceStore.records {
-            peers[r.id] = chatManager.summary(forPeer: chatKey(for: r.id))
-        }
+        let peers: [String: ConversationSummary]
+        let notesStore = connectionManager.notesStore
+        // account -> record (first record wins), inverted: each account folds into exactly one row.
+        var accountForRecord: [String: String] = [:]
+        for (account, record) in BoundFriends.recordIDByAccount(connectionManager) { accountForRecord[record] = account }
+        peers = ConversationsLogic.foldPeers(
+            recordIDs: connectionManager.deviceStore.records.map(\.id),
+            chatKey: { chatKey(for: $0) },
+            base: { chatManager.summary(forPeer: $0) },
+            accountForRecord: accountForRecord,
+            notes: { notesStore.notes(forAccount: $0) },
+            noteUnread: { notesStore.unreadCount(forAccount: $0) })
         var groups: [String: ConversationSummary] = [:]
         for g in connectionManager.groupStore.groups {
             groups[g.id] = chatManager.summary(forGroup: g.id)
         }
+        let reachable = Set(accountForRecord.keys)
+        if reachable != reachableRecordIDs { reachableRecordIDs = reachable }
         if peers != peerSummaries { peerSummaries = peers }
         if groups != groupSummaries { groupSummaries = groups }
         hasLoaded = true
@@ -82,6 +100,8 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             chatManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.deviceStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.groupStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            connectionManager.notesStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            connectionManager.trustedContactStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
         ])) {
             if refreshGate.shouldRefreshOnChange { refreshSummaries() }
         }
@@ -153,11 +173,13 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             if let g = pickedGroup { GroupChatView(group: g) }
         }
         .onChange(of: inboxRequest) { _ in consumeInboxRequest() }
+        .onChange(of: threadRequest) { _ in consumeThreadRequest() }
         .onAppear {
             refreshGate.appear()
             refreshSummaries()
             bindRefreshHub()
             consumeInboxRequest()
+            consumeThreadRequest()
         }
         .onDisappear { refreshGate.disappear() }
     }
@@ -189,6 +211,41 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                 showInbox = true
             }
         }
+    }
+
+    /// Opens a bound friend's thread (note deep link). Dismisses the inbox or another chat first.
+    /// Mac chats live in their own window, so nothing needs dismissing there.
+    private func consumeThreadRequest() {
+        guard InboxDeepLink.shouldConsumeThread(pending: threadRequest), let request = threadRequest else { return }
+        let recordID = request.recordID
+        threadRequest = nil
+        guard let record = connectionManager.deviceStore.records.first(where: { $0.id == recordID }) else {
+            // Friend vanished since the decision: open the inbox and show the tapped note itself.
+            if !showInbox { showInbox = true }
+            onThreadUnavailable(request.noteID)
+            return
+        }
+        let name = connectionManager.displayName(for: record)
+        #if os(iOS)
+        let same = showPicked && pickedTarget?.peerID == chatKey(for: recordID)
+        switch InboxDeepLink.threadAction(inboxShowing: showInbox, chatShowing: showPicked || showGroup, sameThreadShowing: same) {
+        case .none:
+            break
+        case .push:
+            openChat(recordID: recordID, name: name)
+        case .dismissThenPush:
+            var t = Transaction(animation: nil)
+            t.disablesAnimations = true
+            withTransaction(t) {
+                showInbox = false
+                showGroup = false
+                showPicked = false
+            }
+            DispatchQueue.main.async { openChat(recordID: recordID, name: name) }
+        }
+        #else
+        openChat(recordID: recordID, name: name)
+        #endif
     }
 
     // MARK: - Rows
@@ -252,7 +309,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
                 openChat(recordID: model.sourceID, name: model.name)
             } label: {
                 HStack(spacing: 8) {
-                    ConversationRow(model: model, presence: presence)
+                    ConversationRow(model: model, presence: presence, notesReachable: reachableRecordIDs.contains(model.sourceID))
                     #if os(iOS)
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
@@ -377,6 +434,29 @@ enum InboxDeepLink {
         if inboxShowing { return .none }
         return chatShowing ? .dismissChatThenPush : .push
     }
+
+    /// Where a tapped note notification should land.
+    enum Destination: Equatable { case inbox, thread(recordID: String) }
+
+    /// A note from a VERIFIED sender whose account is bound to a friend opens that friend's thread;
+    /// everything else (anonymous, unverified, unbound, unknown note id) keeps the inbox behaviour.
+    /// `recordIDForAccount` must only know verified-bound accounts.
+    static func destination(sender: NoteSenderState?, recordIDForAccount: (String) -> String?) -> Destination {
+        guard case .verified(let id, _)? = sender, let record = recordIDForAccount(id) else { return .inbox }
+        return .thread(recordID: record)
+    }
+
+    enum ThreadAction: Equatable { case none, push, dismissThenPush }
+
+    /// Opening a friend thread: already on that thread -> nothing; the inbox or another chat is on
+    /// top -> dismiss it first (no animation), then push.
+    static func threadAction(inboxShowing: Bool, chatShowing: Bool, sameThreadShowing: Bool) -> ThreadAction {
+        if sameThreadShowing && !inboxShowing { return .none }
+        return (inboxShowing || chatShowing) ? .dismissThenPush : .push
+    }
+
+    /// A pending thread request (record id) is consumed once and reset, so it is never replayed.
+    static func shouldConsumeThread(pending: ThreadRequest?) -> Bool { pending != nil }
 }
 
 /// Owns the Combine subscription so it is created once, not per `body` evaluation.

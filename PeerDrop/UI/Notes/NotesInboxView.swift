@@ -15,6 +15,8 @@ struct NotesInboxView: View {
     @ObservedObject var accountManager: AccountManager
     /// Set by a notification tap; the view pushes that note and clears it.
     @Binding var openNoteID: String?
+    /// Verified-bound friends' accounts: their notes live in the thread, not here.
+    var boundAccounts: Set<String> = []
     @Binding var path: [NoteRecord]
     @State private var showCompose = false
 
@@ -23,10 +25,11 @@ struct NotesInboxView: View {
             if case .ready = accountManager.state {} else {
                 AccountSectionView(accountManager: accountManager)
             }
-            if store.inbox.isEmpty {
+            let visible = NotesInboxFilter.inbox(store.inbox, boundAccounts: boundAccounts)
+            if visible.isEmpty {
                 emptyState
             } else {
-                ForEach(store.inbox) { record in
+                ForEach(visible) { record in
                     NavigationLink(value: record) { NoteRowView(record: record) }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) { Task { await store.delete(record) } } label: { Label("Delete Note", systemImage: "trash") }
@@ -44,7 +47,7 @@ struct NotesInboxView: View {
                     .disabled(accountManager.account == nil)
             }
             ToolbarItem(placement: .secondaryAction) {
-                NavigationLink { SentNotesView(store: store) } label: { Label("Sent Notes", systemImage: "paperplane") }
+                NavigationLink { SentNotesView(store: store, boundAccounts: boundAccounts) } label: { Label("Sent Notes", systemImage: "paperplane") }
             }
         }
         .refreshable { await store.sync() }

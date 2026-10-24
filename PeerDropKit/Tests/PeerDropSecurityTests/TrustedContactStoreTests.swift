@@ -145,12 +145,15 @@ final class TrustedContactStoreTests: XCTestCase {
 
     func testPersistenceRoundTrip() {
         let key = "test-persist-\(UUID().uuidString)"
-        let store1 = TrustedContactStore(storageKey: key)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("tc-persist-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let enc = ChatDataEncryptor(testKey: SymmetricKey(size: .bits256))
+        let store1 = TrustedContactStore(storageKey: key, directory: dir, encryptor: enc)
         let contact = makeContact(name: "Persist")
         store1.add(contact)
         store1.flushPendingSave()
 
-        let store2 = TrustedContactStore(storageKey: key)
+        let store2 = TrustedContactStore(storageKey: key, directory: dir, encryptor: enc)
         XCTAssertEqual(store2.all.count, 1)
         XCTAssertEqual(store2.all.first?.displayName, "Persist")
 

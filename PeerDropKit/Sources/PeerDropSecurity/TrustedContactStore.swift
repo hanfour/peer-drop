@@ -9,7 +9,8 @@ public final class TrustedContactStore: ObservableObject {
     @Published public private(set) var contacts: [TrustedContact] = []
 
     private let storageKey: String
-    private let encryptor = ChatDataEncryptor.shared
+    private let encryptor: ChatDataEncryptor
+    private let directory: URL?
     private var pendingSave: DispatchWorkItem?
 
     /// Maximum number of key-rotation audit entries kept per contact.
@@ -22,14 +23,27 @@ public final class TrustedContactStore: ObservableObject {
         contacts.filter { !$0.isBlocked }
     }
 
-    public init(storageKey: String = "trusted-contacts") {
+    public init(
+        storageKey: String = "trusted-contacts",
+        directory: URL? = nil,
+        encryptor: ChatDataEncryptor = .shared
+    ) {
         self.storageKey = storageKey
+        self.directory = directory
+        self.encryptor = encryptor
         self.contacts = load()
     }
 
     // MARK: - CRUD
 
+    /// An account maps to at most one contact, so adding a contact that carries
+    /// an `accountId` clears that same `accountId` from every other contact.
     public func add(_ contact: TrustedContact) {
+        if let accountId = contact.accountId {
+            for i in contacts.indices where contacts[i].accountId == accountId {
+                contacts[i].accountId = nil
+            }
+        }
         contacts.append(contact)
         scheduleSave()
     }
@@ -76,6 +90,11 @@ public final class TrustedContactStore: ObservableObject {
         contacts.first { $0.mailboxId == mailboxId }
     }
 
+    /// `accountId` must be the `AccountID.raw` string (the form stored on contacts).
+    public func find(byAccountId accountId: String) -> TrustedContact? {
+        contacts.first { $0.accountId == accountId }
+    }
+
     // MARK: - Trust Management
 
     public func updateTrustLevel(for id: UUID, to level: TrustLevel) {
@@ -103,6 +122,35 @@ public final class TrustedContactStore: ObservableObject {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         guard contacts[index].peerProtocolVersion != version else { return }
         contacts[index].peerProtocolVersion = version
+        scheduleSave()
+    }
+
+    /// Bind (or unbind with `nil`) an account to a contact. An account maps to
+    /// at most one contact, so the same `accountId` is cleared everywhere else.
+    /// Any pending binding on this contact is dropped.
+    public func setAccountBinding(for id: UUID, accountId: String?) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        if let accountId {
+            for i in contacts.indices where i != index && contacts[i].accountId == accountId {
+                contacts[i].accountId = nil
+            }
+        }
+        contacts[index].accountId = accountId
+        contacts[index].pendingAccountBinding = nil
+        scheduleSave()
+    }
+
+    public func setPendingBinding(for id: UUID, _ binding: PendingAccountBinding?) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        contacts[index].pendingAccountBinding = binding
+        scheduleSave()
+    }
+
+    /// Fills the device ID only when none is recorded yet.
+    public func setDeviceId(for id: UUID, _ deviceId: String) {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
+        guard contacts[index].deviceId == nil else { return }
+        contacts[index].deviceId = deviceId
         scheduleSave()
     }
 
@@ -146,6 +194,9 @@ public final class TrustedContactStore: ObservableObject {
             contacts[index].keyHistory.removeFirst(overflow)
         }
         contacts[index].identityPublicKey = newKey
+        // A new identity key invalidates any account binding made for the old one.
+        contacts[index].accountId = nil
+        contacts[index].pendingAccountBinding = nil
         contacts[index].trustLevel = trustLevel
         if trustLevel != .verified {
             contacts[index].lastVerified = nil
@@ -156,7 +207,7 @@ public final class TrustedContactStore: ObservableObject {
     // MARK: - Persistence (Encrypted)
 
     private var storageURL: URL {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = directory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Security", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("\(storageKey).enc")

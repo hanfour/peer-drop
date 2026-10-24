@@ -67,6 +67,21 @@ final class DiaryKeyRelayTests: XCTestCase {
 
     // MARK: - Success path
 
+    /// Nickname-collision: the directory resolves a handle by id first, NICKNAME second. If `newMember`
+    /// doesn't resolve by id, an account whose nickname equals it must NOT receive the diary key.
+    func testNicknameCollisionDoesNotReceiveTheDiaryKey() async throws {
+        let key = SymmetricKey(size: .bits256)
+        try keyStore.save(key: key, for: diaryId)
+        let cipher = try metaCipher(key: key)
+        try queueSuccessfulSend()   // directory answers with `recipient`, whose accountId != the requested handle
+        let relay = DiaryKeyRelay(notesClient: notesClient, crypto: crypto, keyStore: keyStore, relayStore: relayStore)
+        let claimed = recipient.accountId.raw == "WTHER001" ? "XTHER001" : "WTHER001"
+        await relay.relayIfNeeded(diaryId: diaryId, newMember: claimed, metaCipher: cipher,
+                                  senderAccountId: "SENDER01", senderNickname: "alice")
+        XCTAssertEqual(TestURLProtocol.requests.count, 1, "only the directory lookup; no pow, no send")
+        XCTAssertNil(relayStore.lastRelay(diaryId: diaryId, member: claimed))
+    }
+
     func testWorkingKeySealsAndSendsASignedDiaryKeyNote() async throws {
         let key = SymmetricKey(size: .bits256)
         try keyStore.save(key: key, for: diaryId)

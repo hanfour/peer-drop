@@ -141,6 +141,10 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Published State
 
     @Published public private(set) var state: ConnectionState = .idle
+    /// Bumped whenever a connection's security standing changes without any other published
+    /// change (secure channel established, pinning verdict set, connection dropped). Views and
+    /// models that derive thread attribution from it refresh through `objectWillChange`.
+    @Published public private(set) var securityEpoch: Int = 0
     @Published public private(set) var discoveredPeers: [DiscoveredPeer] = []
     @Published public var pendingIncomingRequest: IncomingRequest?
     @Published public var showTransferProgress = false
@@ -225,6 +229,37 @@ public final class ConnectionManager: ObservableObject {
     /// All active peer connections, keyed by peerID.
     @Published public private(set) var connections: [String: PeerConnection] = [:]
 
+    // MARK: - Notes exchange (Project C; logic in ConnectionManager+NotesExchange.swift)
+
+    /// UI state of the notes-account exchange per connection, keyed by
+    /// `PeerConnection.id`. Absent = no exchange on that connection.
+    @Published public internal(set) var notesExchangeStates: [String: NotesExchangeSession.UIState] = [:]
+    /// One session per `PeerConnection` instance (Ruling 4).
+    var notesExchangeSessions: [ObjectIdentifier: NotesExchangeSessionBox] = [:]
+    /// Monotonic time for every now-bearing session event (injectable).
+    var notesExchangeClock: () -> Date = { ConnectionManager.notesExchangeMonotonicNow() }
+    /// Signs the reveal digest with the account's Ed25519 key.
+    var notesExchangeSigner: (Data) throws -> Data = { try IdentityKeyManager.shared.sign($0) }
+    /// The account's Ed25519 public key (registered as the directory `signingKey`).
+    var notesExchangeLocalSigningKey: () -> Data = { IdentityKeyManager.shared.signingPublicKey.rawRepresentation }
+    var notesExchangeMakeNonce: () -> Data = { NotesExchangeCrypto.makeNonce() }
+    var notesExchangeTickNanoseconds: UInt64 = 1_000_000_000
+    /// Test hook: replaces the remote host(s) read off a TCP connection.
+    var notesExchangeRemoteHostOverride: ((NWConnection?) -> String?)?
+    var notesExchangeObservedAccountManager: AccountManager?
+    var notesExchangeAccountCancellable: AnyCancellable?
+    var notesExchangeRetryInFlight = false
+    var notesExchangeRetryRequested = false
+    /// Wall clock for pending-binding age (persists across launches; injectable).
+    var notesPendingBindingClock: () -> Date = { Date() }
+    /// Debounce before a network-recovery retry of pending bindings.
+    var notesRetryDebounceNanoseconds: UInt64 = 2_000_000_000
+    var notesRetryDebounceTask: Task<Void, Never>?
+    /// Latest live verification started per peer handshake key (M5:
+    /// last-started wins). Absent = none in flight / invalidated.
+    var notesVerificationGenerations: [Data: UInt64] = [:]
+    var notesVerificationCounter: UInt64 = 0
+
     /// The currently focused peer ID for UI interactions.
     @Published public var focusedPeerID: String?
 
@@ -296,6 +331,8 @@ public final class ConnectionManager: ObservableObject {
         let peer: DiscoveredPeer
         /// The dialed peer sent `connectionAccept` on this socket.
         var accepted = false
+        /// Whether the HELLO we sent on this socket carried `supportsNotesExchange`.
+        var advertisedNotesExchange: Bool?
         init(connection: NWConnection, generation: UUID, peer: DiscoveredPeer) {
             self.connection = connection
             self.generation = generation
@@ -402,6 +439,101 @@ public final class ConnectionManager: ObservableObject {
             storage: NotesStorage(directory: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent(PeerDropPersistence.scopedKey("Notes"), isDirectory: true)))
     }()
+
+    // MARK: - Notes outbox (Project C)
+
+    private var noteOutboxStorage: NoteOutboxStore?
+    /// Created on first use (so contact changes before any note activity never touch its storage).
+    public internal(set) var noteOutbox: NoteOutboxStore {
+        get {
+            if let existing = noteOutboxStorage { return existing }
+            let created = NoteOutboxStore()
+            noteOutboxStorage = created
+            return created
+        }
+        set { noteOutboxStorage = newValue }
+    }
+
+    public internal(set) lazy var noteOutboxSender: NoteOutboxSender = NoteOutboxSender(
+        store: noteOutbox, notesStore: notesStore,
+        binding: { [weak self] contactID in
+            let contacts = self?.trustedContactStore.contacts ?? []
+            return Self.outboxBinding(for: contacts.first(where: { $0.id == contactID }), among: contacts)
+        },
+        wakeScheduling: true,
+        // Unknown (no path seen yet) counts as satisfied.
+        networkSatisfied: { [weak self] in self?.lastNetworkPath?.status != .unsatisfied },
+        accountReady: { [weak self] in self?.accountManager.account != nil })
+
+    /// What the outbox may do for a contact right now. Blocked wins over everything.
+    /// Pass `among` (all contacts) to apply FriendBinding's "exactly one contact per key" rule:
+    /// an ambiguous key is never sent to.
+    nonisolated static func outboxBinding(for contact: TrustedContact?, among contacts: [TrustedContact]? = nil) -> OutboxBindingLookup {
+        guard let c = contact else { return .none }
+        if let contacts, contacts.filter({ $0.matchesKey(c.identityPublicKey) }).count != 1 { return .none }
+        if c.isBlocked { return .blocked }
+        if c.pendingAccountBinding != nil { return .pending }
+        guard let accountId = c.accountId else { return .none }
+        return .verified(accountId: accountId, identityKey: c.identityPublicKey)
+    }
+
+    public enum QueueNoteError: Error, Equatable { case contactNotFound, outboxUnavailable, blocked, notBound, bindingPending, unavailable, accountUnavailable }
+
+    func bumpSecurityEpoch() { securityEpoch &+= 1 }
+
+    /// This device can never send notes: no way to authenticate at all.
+    /// Everything else (`.registering`, `.idle`, `.unavailable(.offline/.failed)`) is "not ready yet": those queue.
+    public nonisolated static func noteAccountIsPermanentlyUnavailable(_ state: AccountManager.State) -> Bool {
+        switch state {
+        // Only "no way to authenticate at all" is permanent. `.failed` also covers transient errors
+        // (5xx, 429, decode, persistence) that auto-retry, so it queues like `.registering`/`.offline`.
+        case .unavailable(.attestUnsupported): return true
+        case .idle, .registering, .ready, .unavailable(.offline), .unavailable(.failed): return false
+        }
+    }
+
+    /// Fails (immediately, not at the next flush) every queued entry whose contact became blocked
+    /// or whose identity key no longer equals the key the note was queued for.
+    func reconcileNoteOutbox(with contacts: [TrustedContact]) {
+        let byID = Dictionary(contacts.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        noteOutboxStorage?.failQueuedEntries { entry in
+            guard let c = byID[entry.contactID] else { return nil }
+            if c.isBlocked { return NoteOutboxFailure.blocked.reasonText }
+            if c.identityPublicKey != entry.expectedIdentityKey { return NoteOutboxFailure.recipientChanged.reasonText }
+            return nil
+        }
+    }
+
+    /// Queues a note the user explicitly sent from a friend thread and makes
+    /// one immediate delivery attempt. Throws (queueing nothing) when the
+    /// contact is blocked or has no verified account binding. Never called for
+    /// text that is merely sitting in the input field.
+    @MainActor @discardableResult
+    public func queueNote(text: String, toContact contactID: UUID) throws -> NoteOutboxEntry {
+        guard !ScreenshotModeProvider.shared.isActive else { throw QueueNoteError.unavailable }
+        let contact = trustedContactStore.contacts.first(where: { $0.id == contactID })
+        guard let c = contact else { throw QueueNoteError.contactNotFound }
+        let all = trustedContactStore.contacts
+        guard case .verified(let accountId, let key) = Self.outboxBinding(for: c, among: all) else {
+            switch Self.outboxBinding(for: c, among: all) {
+            case .blocked: throw QueueNoteError.blocked
+            case .pending: throw QueueNoteError.bindingPending
+            default: throw QueueNoteError.notBound
+            }
+        }
+        guard !Self.noteAccountIsPermanentlyUnavailable(accountManager.state) else { throw QueueNoteError.accountUnavailable }
+        noteOutbox.reloadIfNeeded()
+        guard !noteOutbox.isLoadFailed else { throw QueueNoteError.outboxUnavailable }
+        let entry = noteOutbox.enqueue(contactID: c.id, accountId: accountId, expectedIdentityKey: key, text: text)
+        Task { await flushNoteOutbox() }
+        return entry
+    }
+
+    @MainActor
+    public func flushNoteOutbox() async {
+        guard !ScreenshotModeProvider.shared.isActive else { return }
+        await noteOutboxSender.flush()
+    }
 
     // MARK: - Diary (sub-project 3)
 
@@ -667,6 +799,12 @@ public final class ConnectionManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // A blocked contact or a changed key fails its queued notes immediately.
+        trustedContactStore.$contacts
+            .dropFirst()
+            .sink { [weak self] contacts in self?.reconcileNoteOutbox(with: contacts) }
+            .store(in: &cancellables)
+
         // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
         clipboardSyncManager.onClipboardChanged = { [weak self] payload in
             self?.sendClipboardSyncToAll(payload)
@@ -753,6 +891,7 @@ public final class ConnectionManager: ObservableObject {
         // no longer installed, and must never regain an identity swap.
         if let replaced = connections[peerID], replaced !== peerConnection {
             replaced.isRelayPlaceholder = false
+            tearDownNotesExchange(for: replaced)
         }
         connections[peerID] = peerConnection
 
@@ -774,6 +913,10 @@ public final class ConnectionManager: ObservableObject {
         peerConnection.onMessageReceived = { [weak self, weak peerConnection] message in
             guard let self, let peerConnection else { return }
             self.dispatchBound(message, on: peerConnection)
+        }
+        peerConnection.onMessageReceivedWithOrigin = { [weak self, weak peerConnection] message, origin in
+            guard let self, let peerConnection else { return }
+            self.dispatchBound(message, on: peerConnection, origin: origin)
         }
 
         peerConnection.onDisconnected = { [weak self] in
@@ -803,8 +946,10 @@ public final class ConnectionManager: ObservableObject {
 
     /// Remove a peer connection.
     private func removeConnection(peerID: String) {
+        bumpSecurityEpoch()
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
+            tearDownNotesExchange(for: removed)
         }
 
         // Update focused peer if needed
@@ -1209,6 +1354,13 @@ public final class ConnectionManager: ObservableObject {
     private nonisolated func handleNetworkPathChange(_ newPath: NWPath) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+
+            // Project C: confirm pending notes bindings once connectivity is back.
+            self.notesExchangeNetworkPathChanged(
+                from: self.lastNetworkPath?.status,
+                oldInterfaces: Set(self.lastNetworkPath?.availableInterfaces.map { $0.name } ?? []),
+                to: newPath.status,
+                newInterfaces: Set(newPath.availableInterfaces.map { $0.name }))
 
             guard let lastPath = self.lastNetworkPath else {
                 self.lastNetworkPath = newPath
@@ -1655,6 +1807,33 @@ public final class ConnectionManager: ObservableObject {
         pc.isRelayPlaceholder
     }
 
+    /// Test-only: replace the identity sent in HELLOs (e.g. a test process
+    /// whose `PeerIdentity.local()` does not advertise notes exchange).
+    public func _setLocalIdentityForTesting(_ identity: PeerIdentity) {
+        localIdentity = identity
+    }
+
+    /// Test-only: swap in an `AccountManager` (fake directory). Treated as an
+    /// account-state change by the notes exchange.
+    public func _setAccountManagerForTesting(_ manager: AccountManager) {
+        accountManager = manager
+        observeAccountForNotesExchange()
+        notesExchangeAccountStateChanged(manager.state)
+    }
+
+    /// Test-only: send the relay HELLO (+ device-id exchange) on `pc`.
+    public func _startRelayHandshakeForTesting(_ pc: PeerConnection) {
+        startRelayHandshake(pc)
+    }
+
+    /// Test-only: live notes-exchange sessions.
+    public var _notesExchangeSessionCountForTesting: Int { notesExchangeSessions.count }
+
+    /// Test-only: whether any live session for `peerID` is ticking.
+    public func _notesExchangeTickActiveForTesting(_ peerID: String) -> Bool {
+        notesExchangeSessions.values.contains { $0.peerID == peerID && $0.tickTask != nil }
+    }
+
     /// Test-only: reconnect back-off attempts consumed so far.
     public func _reconnectAttemptCountForTesting() async -> Int {
         await reconnectController.currentAttempt
@@ -1833,7 +2012,13 @@ public final class ConnectionManager: ObservableObject {
                 // are unordered, so the inbox round can otherwise start
                 // before the `diaryStore` lazy below has installed
                 // `diaryKeyHandler` (see `syncNotes`' doc).
-                Task { await syncNotes() }
+                // Project C: confirm notes bindings received while offline,
+                // after the notes sync.
+                Task {
+                    await syncNotes()
+                    await notesExchangeDidBecomeActive()
+                    await flushNoteOutbox()
+                }
                 Task { await diaryStore.syncList() }
             }
             // Restart discovery when returning to foreground
@@ -2226,7 +2411,10 @@ public final class ConnectionManager: ObservableObject {
                 logger.info("Waiting for connection to be ready...")
                 try await connection.waitReady()
                 logger.info("Connection ready! Sending HELLO...")
-                let hello = try PeerMessage.hello(identity: localIdentity)
+                // Tailnet is not face to face: no notes-exchange flag there.
+                let helloIdentity = notesExchangeHelloIdentity(for: connection)
+                attempt.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await connection.sendMessage(hello)
                 logger.info("HELLO sent. Sending CONNECTION_REQUEST...")
                 let request = PeerMessage.connectionRequest(senderID: localIdentity.id)
@@ -2685,7 +2873,9 @@ public final class ConnectionManager: ObservableObject {
             do {
                 let accept = PeerMessage.connectionAccept(senderID: localIdentity.id)
                 try await request.connection.sendMessage(accept)
-                let hello = try PeerMessage.hello(identity: localIdentity)
+                let helloIdentity = notesExchangeHelloIdentity(for: request.connection)
+                peerConnection.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await request.connection.sendMessage(hello)
                 #if DEBUG
                 if _acceptInstallDelayNanosForTesting > 0 {
@@ -3138,6 +3328,7 @@ public final class ConnectionManager: ObservableObject {
             state: .connected
         )
         peerConnection.isRelayPlaceholder = true
+        peerConnection.isRelayTransport = true
         addConnection(peerConnection)
         focusedPeerID = peerID
         return peerConnection
@@ -3168,7 +3359,8 @@ public final class ConnectionManager: ObservableObject {
     private func startRelayHandshake(_ peerConnection: PeerConnection) {
         Task {
             do {
-                let hello = try PeerMessage.hello(identity: localIdentity)
+                // Relay is not face to face: never advertise notes exchange.
+                let hello = try PeerMessage.hello(identity: localIdentity.withoutNotesExchange())
                 try await peerConnection.sendMessage(hello)
                 // Exchange stable device ID so future invites can route directly.
                 let idExchange = try PeerMessage.deviceIdExchange(
@@ -3332,12 +3524,13 @@ public final class ConnectionManager: ObservableObject {
     /// frame is attributed to `peerConnection` — the transport it arrived on —
     /// and dropped if that PeerConnection is no longer the installed entry
     /// (stale loop after a remove/replace).
-    private func dispatchBound(_ message: PeerMessage, on peerConnection: PeerConnection) {
+    private func dispatchBound(_ message: PeerMessage, on peerConnection: PeerConnection,
+                               origin: PeerConnection.MessageOrigin = .plaintext) {
         guard connections[peerConnection.id] === peerConnection else {
             logger.info("Dropping \(String(describing: message.type)) from a PeerConnection that is no longer installed")
             return
         }
-        handleMessageForPeer(message, peerConnection: peerConnection)
+        handleMessageForPeer(message, peerConnection: peerConnection, origin: origin)
     }
 
     /// Handle a message that arrived on `peerConnection`'s transport.
@@ -3347,7 +3540,8 @@ public final class ConnectionManager: ObservableObject {
     /// bound connection: `peerID` (its `connections` key) and
     /// `boundSenderID` (its identity — equal to `peerID` for local
     /// connections, the post-HELLO real identity for `relay-*` ones).
-    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection) {
+    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection,
+                                      origin: PeerConnection.MessageOrigin = .plaintext) {
         let peerID = peerConnection.id
         let boundSenderID = peerConnection.peerIdentity.id
 
@@ -3687,6 +3881,13 @@ public final class ConnectionManager: ObservableObject {
             triggerSecureChannelNegotiation(for: peerConnection)
             logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
 
+        case .notesExchange:
+            // Project C: only an encrypted envelope on a secured channel may
+            // carry this. Anything else is dropped silently (no reply, no log
+            // of content).
+            guard origin == .envelope, peerConnection.secureChannelState == .secured else { return }
+            handleNotesExchangeMessage(message, on: peerConnection, origin: origin)
+
         case .secureHandshake, .secureEnvelope:
             // Safety net (should be unreachable). The single-reader handoff
             // (`legacyReaderActive`, flipped false in addConnection) stops the
@@ -3872,6 +4073,7 @@ public final class ConnectionManager: ObservableObject {
             localIdentity: localIdentity,
             state: .connected
         )
+        peerConnection.advertisedNotesExchange = attempt.advertisedNotesExchange
         sendSacrificialPingIfLegacyAcceptor(identity, on: connection)
         addConnection(peerConnection)
         // A dial is user-initiated: the user chose this peer, so it gets the
@@ -4183,6 +4385,8 @@ public final class ConnectionManager: ObservableObject {
         let deviceIdCandidates = [record?.peerDeviceId, id].compactMap { $0 }
         if let contact = deviceIdCandidates.lazy.compactMap({ self.trustedContactStore.find(byDeviceId: $0) }).first {
             remoteSessionManager.deleteSession(for: contact.id.uuidString)
+            // Nothing in the UI can show these once the contact is gone: delete, don't orphan.
+            noteOutbox.removeAll(forContact: contact.id)
             trustedContactStore.remove(contact.id)
         }
         chatManager.deleteMessages(forPeer: id)
@@ -4578,7 +4782,9 @@ public final class ConnectionManager: ObservableObject {
     /// state, and to surface the existing `KeyChangeAlertInfo` flow if a
     /// silent rotation slipped past checkPeerTrust.
     @MainActor
-    private func handleSecureChannelEstablished(for peerConnection: PeerConnection, fingerprint: String) {
+    func handleSecureChannelEstablished(for peerConnection: PeerConnection, fingerprint: String) {
+        // Finishing the handshake for an already-known contact publishes nothing else.
+        defer { bumpSecurityEpoch() }
         let identity = peerConnection.peerIdentity
         guard let peerPublicKey = identity.identityPublicKey else {
             logger.warning("Secure channel up but peer has no identityPublicKey — cannot pin")
@@ -4695,6 +4901,7 @@ public final class ConnectionManager: ObservableObject {
         }
         if let conn = liveConnection(matchingPublicKey: current.senderIdentityKey) {
             conn.setPinningVerdict(.matched)
+            bumpSecurityEpoch()
         }
     }
 
@@ -4840,7 +5047,7 @@ public final class ConnectionManager: ObservableObject {
 
     // MARK: - Tailnet Helpers
 
-    private func extractRemoteHost(from endpoint: NWEndpoint) -> String? {
+    func extractRemoteHost(from endpoint: NWEndpoint) -> String? {
         switch endpoint {
         case .hostPort(let host, _):
             switch host {

@@ -8,12 +8,10 @@ struct ConversationRow: View, PaperThemed {
     let model: ConversationRowModel
     /// nil for groups (no presence badge).
     let presence: PeerPresence?
+    /// Verified notes binding (offline friends only matter).
+    var notesReachable: Bool = false
 
-    private var preview: String {
-        guard let m = model.summary.lastMessage else { return "" }
-        let text = ConversationPreview.text(for: m)
-        return m.isOutgoing && !m.isDeleted ? String(format: String(localized: "You: %@"), text) : text
-    }
+    private var preview: String { ConversationsLogic.preview(model.summary) }
 
     private var timeText: String {
         guard let d = model.summary.lastActivity else { return "" }
@@ -70,13 +68,13 @@ struct ConversationRow: View, PaperThemed {
                 .frame(width: 44, height: 44)
                 .overlay(Image(systemName: "person.3.fill").foregroundStyle(.white))
         } else {
-            PeerAvatar(name: model.name, size: 44, presence: presence)
+            PeerAvatar(name: model.name, size: 44, presence: presence, notesReachable: notesReachable)
         }
     }
 
     private var accessibilityText: String {
         var parts = [model.name]
-        if let presence, !model.isGroup { parts.append(presence.accessibilityLabel) }
+        if let presence, !model.isGroup { parts.append(presence.accessibilityLabel(notesReachable: notesReachable)) }
         if model.summary.unread > 0 {
             parts.append(String(format: String(localized: "%lld unread"), model.summary.unread))
         }

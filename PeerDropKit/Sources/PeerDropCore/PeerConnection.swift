@@ -44,6 +44,21 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// Callback when a message is received.
     var onMessageReceived: ((PeerMessage) -> Void)?
 
+    /// How an inbound business message reached us.
+    enum MessageOrigin: Equatable { case envelope, plaintext }
+
+    /// Origin-aware variant of `onMessageReceived`. When set it takes
+    /// precedence; the one-argument closure remains the fallback.
+    var onMessageReceivedWithOrigin: ((PeerMessage, MessageOrigin) -> Void)?
+
+    private func deliver(_ message: PeerMessage, _ origin: MessageOrigin) {
+        if let withOrigin = onMessageReceivedWithOrigin {
+            withOrigin(message, origin)
+        } else {
+            onMessageReceived?(message)
+        }
+    }
+
     /// Callback when the connection should be removed.
     var onDisconnected: (() -> Void)?
 
@@ -64,6 +79,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// object allocated at the same address.
     var isRelayPlaceholder = false
 
+    /// Installed as a relay (`relay-<code>`) connection. Unlike
+    /// `isRelayPlaceholder` this is never cleared: the notes exchange (Project
+    /// C) uses it as one of its "not face to face" markers.
+    var isRelayTransport = false
+
     // MARK: - Secure channel (audit-#13 Phase 2)
 
     /// Active local-TCP secure channel, or nil if the peer hasn't completed
@@ -71,6 +91,10 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// encrypts non-control messages and the receive loop decrypts
     /// `.secureEnvelope` frames before delivering to `onMessageReceived`.
     private(set) var secureChannel: LocalSecureChannel?
+    /// OUR identity public key as used in this connection's handshake (set
+    /// together with `secureChannel`). The notes exchange signs and verifies
+    /// with this and `handshakePeerIdentityKey` from the same connection.
+    public private(set) var localHandshakeIdentityKey: Data?
     /// Tail of the ordered secure-send chain (see `sendMessage`).
     private var secureSendTail: Task<Void, Error>?
 
@@ -100,6 +124,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
         case mismatch(stored: String, received: String)  // ALERT — key changed silently
     }
     @Published public private(set) var pinningVerdict: PinningVerdict = .notChecked
+
+    /// Whether the HELLO WE sent on this connection advertised `supportsNotesExchange`
+    /// (it is withheld on tailnet / unreadable hosts). nil = unknown, treated as "no" by
+    /// the notes-exchange gate (fail closed).
+    var advertisedNotesExchange: Bool?
 
     /// Update the pinning verdict from outside (called by ConnectionManager
     /// after running the TrustedContactStore lookup in the
@@ -549,6 +578,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
             myRatchetPrivateKey: ratchetPriv,
             peerBundle: bundle
         )
+        localHandshakeIdentityKey = identity.publicKey.rawRepresentation
         pendingRatchetPrivateKey = nil
         secureChannelState = .secured
         handshakeFallbackTask?.cancel()
@@ -615,7 +645,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
             guard connectionGeneration == generation else { return }
             if !hasReceivedEnvelope { hasReceivedEnvelope = true }
             sendResponderNoOpIfNeeded(channel)
-            onMessageReceived?(inner)
+            deliver(inner, .envelope)
 
         default:
             // #170: on a secured channel, plaintext business frames are only
@@ -633,7 +663,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
                 plaintextAcceptedLegacyCount += 1
                 logger.notice("PeerConnection[\(self.id.prefix(8))] plaintext accepted (legacy mode): \(message.type.rawValue, privacy: .public) [accepted=\(self.plaintextAcceptedLegacyCount)]")
             }
-            onMessageReceived?(message)
+            deliver(message, .plaintext)
         }
     }
 

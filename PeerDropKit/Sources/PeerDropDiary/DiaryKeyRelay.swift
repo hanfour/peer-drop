@@ -137,6 +137,9 @@ public actor DiaryKeyRelay {
         defer { inFlight.remove(dedupeKey) }
 
         guard let entry = try? await notesClient.lookup(handle: newMember, includeBundle: true), entry.preKeyBundle != nil else { return }
+        // The directory resolves a handle by id first, NICKNAME second: an account whose nickname
+        // equals `newMember` must never receive the diary key.
+        guard entry.accountId.raw == newMember else { return }
 
         struct RelayPayload: Encodable { let diaryId: String; let keyEpoch: UInt32; let key: String }
         let payload = RelayPayload(diaryId: diaryId, keyEpoch: 1, key: key.withUnsafeBytes { Data($0) }.base64EncodedString())

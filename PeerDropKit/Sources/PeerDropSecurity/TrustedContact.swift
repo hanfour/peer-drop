@@ -26,6 +26,9 @@ public struct TrustedContact: Codable, Identifiable {
     /// nil for legacy contacts persisted before v5.4 (these decode as nil
     /// and are treated as `.unknown` at use sites).
     public var peerProtocolVersion: PeerVersion?
+    /// Account claim received from the peer but not yet confirmed by the user.
+    /// Cleared when the account is bound or the identity key changes.
+    public var pendingAccountBinding: PendingAccountBinding?
 
     public init(
         id: UUID = UUID(),
@@ -39,7 +42,8 @@ public struct TrustedContact: Codable, Identifiable {
         accountId: String? = nil,
         isBlocked: Bool = false,
         keyHistory: [KeyChangeRecord] = [],
-        peerProtocolVersion: PeerVersion? = nil
+        peerProtocolVersion: PeerVersion? = nil,
+        pendingAccountBinding: PendingAccountBinding? = nil
     ) {
         self.id = id
         self.deviceId = deviceId
@@ -53,6 +57,7 @@ public struct TrustedContact: Codable, Identifiable {
         self.isBlocked = isBlocked
         self.keyHistory = keyHistory
         self.peerProtocolVersion = peerProtocolVersion
+        self.pendingAccountBinding = pendingAccountBinding
     }
 
     // Explicit (rather than synthesized) `CodingKeys` so the on-disk key
@@ -67,7 +72,7 @@ public struct TrustedContact: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, deviceId, displayName, identityPublicKey, trustLevel, firstConnected, lastVerified, mailboxId
         case accountId = "userId"
-        case isBlocked, keyHistory, peerProtocolVersion
+        case isBlocked, keyHistory, peerProtocolVersion, pendingAccountBinding
     }
 
     public init(from decoder: Decoder) throws {
@@ -84,6 +89,7 @@ public struct TrustedContact: Codable, Identifiable {
         self.isBlocked = try c.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
         self.keyHistory = try c.decodeIfPresent([KeyChangeRecord].self, forKey: .keyHistory) ?? []
         self.peerProtocolVersion = try c.decodeIfPresent(PeerVersion.self, forKey: .peerProtocolVersion)
+        self.pendingAccountBinding = try c.decodeIfPresent(PendingAccountBinding.self, forKey: .pendingAccountBinding)
     }
 
     public var keyFingerprint: String {
@@ -102,6 +108,23 @@ public struct TrustedContact: Codable, Identifiable {
 
     public func cryptoPublicKey() throws -> Curve25519.KeyAgreement.PublicKey {
         try Curve25519.KeyAgreement.PublicKey(rawRepresentation: identityPublicKey)
+    }
+}
+
+// MARK: - Pending Account Binding
+
+/// An account claim from a peer awaiting user confirmation.
+public struct PendingAccountBinding: Codable, Equatable {
+    public let accountId: String
+    public let signingKey: Data
+    public let handshakeKeyHash: Data
+    public let receivedAt: Date
+
+    public init(accountId: String, signingKey: Data, handshakeKeyHash: Data, receivedAt: Date) {
+        self.accountId = accountId
+        self.signingKey = signingKey
+        self.handshakeKeyHash = handshakeKeyHash
+        self.receivedAt = receivedAt
     }
 }
 

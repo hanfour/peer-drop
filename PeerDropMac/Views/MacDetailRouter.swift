@@ -21,6 +21,7 @@ import PeerDropDiary
 struct MacDetailRouter: View {
     @Binding var selection: MacSidebarSection?
     @Binding var inboxRequest: Int
+    @Binding var threadRequest: ThreadRequest?
     @Binding var openNoteID: String?
     @Binding var diariesPath: [String]
     @Binding var openDiaryID: String?
@@ -49,6 +50,7 @@ struct MacDetailRouter: View {
                 accountManager: connectionManager.accountManager,
                 openNoteID: $openNoteID,
                 inboxRequest: $inboxRequest,
+                threadRequest: $threadRequest,
                 onGoHome: { selection = .home }
             )
             .environmentObject(connectionManager)

@@ -39,6 +39,8 @@ enum PaperToken: CaseIterable {
     case online
     /// Sticky-note ("note") fill, border, text and badge.
     case noteFill, noteBorder, noteText, noteBadge
+    /// Failure text on `noteFill`; >= 4.5:1 in both appearances.
+    case noteFailed
 }
 
 /// Page ground: `.live` is a crisp white-blue; `.note` is the warm paper look.
@@ -56,6 +58,7 @@ enum PaperPalette {
         case .noteBorder: return dark ? 0xF9A825 : 0xC77C00
         case .noteText:   return dark ? 0xFFE9B0 : 0x4A3200
         case .noteBadge:  return 0xF9A825
+        case .noteFailed: return dark ? 0xFFA79B : 0xB3261E
         default: break
         }
         if mode == .live { return liveHex(token, dark: dark) }
@@ -122,7 +125,7 @@ enum PaperPalette {
         case .actionFill:       return 0xB5532B
         case .warning:          return dark ? 0xF08A6A : 0xB3261E
         case .accent:           return dark ? 0xD89268 : 0xB5532B
-        case .brand, .highlight, .online, .noteFill, .noteBorder, .noteText, .noteBadge:
+        case .brand, .highlight, .online, .noteFill, .noteBorder, .noteText, .noteBadge, .noteFailed:
             preconditionFailure("mode-independent token handled in hex(_:dark:mode:)")
         }
     }

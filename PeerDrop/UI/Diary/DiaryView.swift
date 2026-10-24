@@ -275,7 +275,10 @@ struct DiaryView: View {
     private func loadHolderNickname() async {
         holderNickname = nil
         guard let holderId, holderId != myId else { return }
-        holderNickname = try? await accountManager.lookup(handle: holderId, includeBundle: false)?.nickname
+        // The directory falls back to NICKNAME matching: only show a name for the account we asked about.
+        guard let entry = try? await accountManager.lookup(handle: holderId, includeBundle: false),
+              entry.accountId.raw == holderId else { return }
+        holderNickname = entry.nickname
     }
 
     private func pass() async {

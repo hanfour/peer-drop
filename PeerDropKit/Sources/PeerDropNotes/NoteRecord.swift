@@ -62,4 +62,8 @@ public struct NoteRecord: Codable, Hashable, Identifiable, Sendable {   // Hasha
 
     public var isUnread: Bool { direction == .inbound && readAt == nil }
     public var isUndecryptable: Bool { text == nil }
+
+    /// The date a note sorts/summarises by: inbound = receivedAt (robust to sender clock
+    /// skew), outbound = sentAt. Single source for threads and conversation summaries.
+    public var threadDate: Date { direction == .inbound ? receivedAt : sentAt }
 }

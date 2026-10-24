@@ -214,4 +214,11 @@ final class PaperThemeTests: XCTestCase {
         XCTAssertEqual(PaperPalette.hex(.border, dark: false, mode: .live), 0xDDEAF4)
         XCTAssertEqual(PaperPalette.hex(.incomingText, dark: false, mode: .live), 0x1E2B36)
     }
+
+    func testNoteFailedMeetsAAOnNoteFillInBothAppearances() {
+        for dark in [false, true] {
+            let r = PaperPalette.contrastRatio(PaperPalette.hex(.noteFailed, dark: dark), PaperPalette.hex(.noteFill, dark: dark))
+            XCTAssertGreaterThanOrEqual(r, 4.5, "dark=\(dark) ratio \(r)")
+        }
+    }
 }

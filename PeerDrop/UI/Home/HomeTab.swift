@@ -16,6 +16,8 @@ struct HomeTab: View, PaperThemed {
     var onAddFriend: () -> Void = {}
 
     @State private var query = ""
+    /// Verified-bound record ids, refreshed on change signals (never recomputed per row).
+    @StateObject private var bound = BoundFriendsModel()
     @State private var showGroupEditor = false
     #if os(iOS)
     @State private var showProfile = false
@@ -32,6 +34,8 @@ struct HomeTab: View, PaperThemed {
         let presence: [String: PeerPresence]
         let connecting: Set<String>
         let sections: (connected: [DeviceRecord], friends: [DeviceRecord])
+        /// Records whose friend has a VERIFIED notes binding (offline thread still accepts notes).
+        let notesReachable: Set<String>
     }
 
     private func snapshot() -> Snapshot {
@@ -48,7 +52,7 @@ struct HomeTab: View, PaperThemed {
         }
         let sections = HomeListLogic.sections(records: records, presence: { map[$0.id] ?? .offline }, query: query,
                                               name: { connectionManager.displayName(for: $0) })
-        return Snapshot(presence: map, connecting: connecting, sections: sections)
+        return Snapshot(presence: map, connecting: connecting, sections: sections, notesReachable: bound.reachableRecordIDs)
     }
 
     private var groups: [DeviceGroup] {
@@ -108,6 +112,7 @@ struct HomeTab: View, PaperThemed {
         .navigationDestination(isPresented: $showConnection) { ConnectionView().environmentObject(connectionManager) }
         #endif
         .chatTargetDestination()
+        .onAppear { bound.bind(connectionManager) }
     }
 
     // MARK: - Toolbar
@@ -189,10 +194,11 @@ struct HomeTab: View, PaperThemed {
     private func friendRow(_ record: DeviceRecord, _ snap: Snapshot) -> some View {
         let presence = snap.presence[record.id] ?? .offline
         let isConnecting = snap.connecting.contains(record.id)
+        let reachable = snap.notesReachable.contains(record.id)
         let connect: () -> Void = { _ = connectionManager.reconnect(to: record.id) }
         #if os(iOS)
         NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) {
-            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, isConnecting: isConnecting, onConnect: connect)
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect)
         }
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
@@ -201,7 +207,7 @@ struct HomeTab: View, PaperThemed {
         Button {
             openWindow(id: "chat", value: peerID(for: record))
         } label: {
-            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, isConnecting: isConnecting, onConnect: connect)
+            FriendRow(record: record, name: connectionManager.displayName(for: record), presence: presence, notesReachable: reachable, isConnecting: isConnecting, onConnect: connect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")

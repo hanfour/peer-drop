@@ -67,4 +67,9 @@ public enum MessageType: String, Codable, CaseIterable {
     //   through this envelope automatically.
     case secureHandshake
     case secureEnvelope
+
+    // Project C: mutual notes-account exchange. Only sent when BOTH peers
+    // advertise `supportsNotesExchange`; only honoured inside a secure envelope.
+    // Must NOT be in `PeerConnection.unwrappedControlTypes`.
+    case notesExchange
 }

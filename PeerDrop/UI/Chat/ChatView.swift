@@ -3,6 +3,7 @@ import PeerDropCore
 import PeerDropProtocol
 import PeerDropTransport
 import PeerDropPlatform
+import PeerDropNotes
 import UniformTypeIdentifiers
 import os
 #if canImport(PhotosUI) && os(iOS)
@@ -29,7 +30,17 @@ struct ChatView: View, PaperThemed {
     #if canImport(PhotosUI) && os(iOS)
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     #endif
-    @State private var replyingToMessage: ChatMessage?
+    @StateObject private var thread = ThreadModel()
+    /// Owned by the thread model so leaving live chat clears it.
+    private var replyingToMessage: ChatMessage? {
+        get { thread.replyingToMessage }
+        nonmutating set { thread.replyingToMessage = newValue }
+    }
+    @State private var modeNotice: String?
+    @State private var lastComposerMode: ComposerMode?
+    @State private var noteToBlock: NoteRecord?
+    @State private var noteToReport: NoteRecord?
+    @State private var noteActionMessage: String?
     @State private var showMicPermissionAlert = false
     @State private var showSearch = false
     @State private var scrollToMessageID: String?
@@ -37,20 +48,6 @@ struct ChatView: View, PaperThemed {
     #if os(iOS)
     @State private var showConnectionInfo = false
     #endif
-
-    /// Check if this specific peer is connected (multi-connection aware).
-    private var isPeerConnected: Bool {
-        if let peerConn = connectionManager.connection(for: peerID) {
-            return peerConn.state.isConnected
-        }
-        // Fallback to global state for backward compatibility
-        switch connectionManager.state {
-        case .connected, .transferring, .voiceCall:
-            return connectionManager.connectedPeer?.id == peerID
-        default:
-            return false
-        }
-    }
 
     /// A headless peer (peerdrop-cli: a shell or AI agent) has no audio and no
     /// useful file handling, so the chat hides the attach + voice-message
@@ -97,99 +94,74 @@ struct ChatView: View, PaperThemed {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var noticeToken = UUID()
+    @State private var noteToDelete: NoteRecord?
 
     var body: some View {
         chatContent
             .paperMode(paperMode)
     }
 
-    private var chatContent: some View {
-        VStack(spacing: 0) {
-            // Messages
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        if chatManager.messages.isEmpty {
-                            EmptyChatView(message: String(localized: "No messages yet. Say hello to \(displayName)."))
-                                .padding(.top, 80)
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    if thread.items.isEmpty {
+                        EmptyChatView(message: String(localized: "No messages yet. Say hello to \(displayName)."))
+                            .padding(.top, 80)
+                    }
+                    if chatManager.hasMoreMessages {
+                        Button("Load earlier messages") {
+                            chatManager.loadMoreMessages()
                         }
-                        if chatManager.hasMoreMessages {
-                            Button("Load earlier messages") {
-                                chatManager.loadMoreMessages()
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity)
-                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                    }
 
-                        let runStarts = ChatMessageRuns.firstInRunIDs(in: chatManager.messages)
-                        let dayStarts = ChatMessageRuns.dayStartIDs(in: chatManager.messages)
-                        ForEach(chatManager.messages, id: \.id) { message in
-                            if dayStarts.contains(message.id) {
-                                ChatDatePill(date: message.timestamp)
-                            }
-                            ChatBubbleView(
-                                message: message,
-                                chatManager: chatManager,
-                                runStart: runStarts.contains(message.id),
-                                liveSenderName: liveName,
-                                onReaction: { emoji in
-                                    connectionManager.sendReaction(
-                                        emoji: emoji,
-                                        to: message.id,
-                                        action: .add,
-                                        peerID: peerID
-                                    )
-                                },
-                                onEdit: { messageID, newText in
-                                    connectionManager.sendMessageEdit(
-                                        messageID: messageID,
-                                        newText: newText,
-                                        to: peerID
-                                    )
-                                },
-                                onDelete: { messageID in
-                                    connectionManager.sendMessageDelete(
-                                        messageID: messageID,
-                                        to: peerID
-                                    )
-                                },
-                                onReply: { replyingToMessage = message }
-                            )
-                            .id(message.id)
-                            .swipeToReply(isEnabled: !message.isDeleted, isDeleted: message.isDeleted) {
-                                replyingToMessage = message
-                            }
-                            .accessibilityActions {
-                                if !message.isDeleted {
-                                    Button("Reply") { replyingToMessage = message }
-                                }
-                            }
+                    ForEach(thread.items) { item in
+                        if thread.dayStartIDs.contains(item.id) {
+                            ChatDatePill(date: item.date)
                         }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 12)
-                }
-                .onChange(of: chatManager.messages.count) { _ in
-                    if let last = chatManager.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
+                        threadRow(item)
+                            .id(item.id)
                     }
                 }
-                .onChange(of: scrollToMessageID) { messageID in
-                    if let messageID {
-                        withAnimation {
-                            proxy.scrollTo(messageID, anchor: .center)
-                        }
-                        // Clear after scrolling
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            scrollToMessageID = nil
-                        }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 12)
+            }
+            .onChange(of: thread.items.last?.id) { lastID in
+                if let lastID {
+                    withAnimation {
+                        proxy.scrollTo(lastID, anchor: .bottom)
                     }
                 }
             }
+            .onChange(of: scrollToMessageID) { messageID in
+                if let messageID {
+                    withAnimation {
+                        // Thread rows are keyed by ThreadItem.id ("chat:<message id>").
+                        proxy.scrollTo("chat:\(messageID)", anchor: .center)
+                    }
+                    // Clear after scrolling
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        scrollToMessageID = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private var chatContent: some View {
+        noteActionDialogs(chatCore)
+    }
+
+    private var chatCore: some View {
+        VStack(spacing: 0) {
+            // Messages
+            messageList
 
             // Typing indicator
             if chatManager.isTyping(peerID: peerID) {
@@ -225,7 +197,9 @@ struct ChatView: View, PaperThemed {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.exclamationmark")
                             .foregroundStyle(.orange)
-                        Text(String(localized: "\(displayName) is offline. Chat again when they're back."))
+                        Text(thread.mode.isNote
+                             ? String(format: String(localized: "%@ is offline. Notes go to their mailbox."), displayName)
+                             : String(localized: "\(displayName) is offline. Chat again when they're back."))
                             .font(.subheadline.weight(.medium))
                     }
 
@@ -270,10 +244,12 @@ struct ChatView: View, PaperThemed {
                 replyPreviewBar(for: replyMessage)
             }
 
-            // Input bar
-            inputBar
-                .disabled(!isPeerConnected)
-                .opacity(isPeerConnected ? 1.0 : 0.5)
+            // Composer: live chat, a note to a bound friend, or a locked bar (ThreadTransport decides).
+            if thread.isReady {
+                composer
+            } else {
+                Color.clear.frame(height: 56)
+            }
         }
         // Only the ground cross-fades on a live/note flip; layout must not animate.
         .background(paper(.background).animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: paperMode))
@@ -289,14 +265,14 @@ struct ChatView: View, PaperThemed {
             // (macOS keeps the system window title from navigationTitle.)
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
-                    PeerAvatar(name: displayName, size: 30, presence: peerPresence)
+                    PeerAvatar(name: displayName, size: 30, presence: peerPresence, notesReachable: thread.binding == .verified)
                         .accessibilityHidden(true)
                     Text(verbatim: displayName)
                         .font(.system(.headline, design: .rounded))
                         .lineLimit(1)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(verbatim: "\(displayName), \(peerPresence.accessibilityLabel)"))
+                .accessibilityLabel(Text(verbatim: "\(displayName), \(peerPresence.accessibilityLabel(notesReachable: thread.binding == .verified))"))
                 .accessibilityAddTraits(.isHeader)
             }
             if showsConnectionInfo, ChatPresenceMode.showsInfoButton(presence: peerPresence) {
@@ -311,6 +287,10 @@ struct ChatView: View, PaperThemed {
                 }
             }
             #endif
+            ToolbarItem(placement: .primaryAction) {
+                ExchangeNotesButton(peerID: peerID, peerName: displayName,
+                                    bindingState: thread.binding, contactID: thread.contactID)
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     showSearch = true
@@ -326,6 +306,8 @@ struct ChatView: View, PaperThemed {
         #endif
         .onAppear {
             chatManager.loadMessages(forPeer: peerID)
+            thread.attach(connectionManager: connectionManager, chatManager: chatManager, peerID: peerID)
+            thread.markVisibleNotesRead(isActive: scenePhase == .active)
             chatManager.activeChatPeerID = peerID
             // Focus on this peer for multi-connection
             connectionManager.focus(on: peerID)
@@ -398,6 +380,268 @@ struct ChatView: View, PaperThemed {
                 }
             )
         }
+    }
+
+    private func noteActionDialogs<V: View>(_ content: V) -> some View {
+        content
+        // Notes from the bound friend count as read while the thread is on screen.
+        .onChange(of: thread.unreadNoteIDs) { _ in thread.markVisibleNotesRead(isActive: scenePhase == .active) }
+        .onChange(of: scenePhase) { phase in thread.markVisibleNotesRead(isActive: phase == .active) }
+        .onChange(of: thread.mode) { newMode in
+            handleModeChange(to: newMode)
+        }
+        .confirmationDialog("Block this sender?", isPresented: Binding(get: { noteToBlock != nil }, set: { if !$0 { noteToBlock = nil } }), titleVisibility: .visible) {
+            Button("Block Sender", role: .destructive) {
+                if let record = noteToBlock { Task { await block(record) } }
+                noteToBlock = nil
+            }
+        } message: { Text("You will no longer receive notes from this sender, even anonymous ones.") }
+        .confirmationDialog("Delete this note?", isPresented: Binding(get: { noteToDelete != nil }, set: { if !$0 { noteToDelete = nil } }), titleVisibility: .visible) {
+            Button("Delete this note", role: .destructive) {
+                if let record = noteToDelete { Task { await connectionManager.notesStore.delete(record) } }
+                noteToDelete = nil
+            }
+        } message: { Text("This also deletes the note from the server.") }
+        .sheet(item: $noteToReport) { record in
+            NoteReportSheet(record: record, onSubmit: { reason, includeText in
+                noteToReport = nil
+                Task { await report(record, reason: reason, includeText: includeText) }
+            }, onCancel: { noteToReport = nil })
+        }
+        .alert("Note", isPresented: Binding(get: { noteActionMessage != nil }, set: { if !$0 { noteActionMessage = nil } })) {
+            Button("OK") { noteActionMessage = nil }
+        } message: { Text(noteActionMessage ?? "") }
+    }
+
+    // MARK: - Thread rows
+
+    @ViewBuilder
+    private func threadRow(_ item: ThreadItem) -> some View {
+        switch item {
+        case .chat(let message):
+            ChatBubbleView(
+                message: message,
+                chatManager: chatManager,
+                runStart: thread.runStartIDs.contains(item.id),
+                liveSenderName: liveName,
+                onReaction: { emoji in
+                    connectionManager.sendReaction(
+                        emoji: emoji,
+                        to: message.id,
+                        action: .add,
+                        peerID: peerID
+                    )
+                },
+                onEdit: { messageID, newText in
+                    connectionManager.sendMessageEdit(
+                        messageID: messageID,
+                        newText: newText,
+                        to: peerID
+                    )
+                },
+                onDelete: { messageID in
+                    connectionManager.sendMessageDelete(
+                        messageID: messageID,
+                        to: peerID
+                    )
+                },
+                onReply: thread.mode.isLive ? { replyingToMessage = message } : nil
+            )
+            .swipeToReply(isEnabled: !message.isDeleted && thread.mode.isLive, isDeleted: message.isDeleted) {
+                replyingToMessage = message
+            }
+            .accessibilityActions {
+                if !message.isDeleted && thread.mode.isLive {
+                    Button("Reply") { replyingToMessage = message }
+                }
+            }
+        case .note(let record):
+            NoteBubbleView(
+                item: item,
+                status: NoteBubbleStatus.status(for: item, sendingIDs: thread.sendingIDs) ?? .received,
+                peerName: displayName,
+                runStart: thread.runStartIDs.contains(item.id),
+                onDelete: {
+                    if record.direction == .inbound { noteToDelete = record }
+                    else { Task { await connectionManager.notesStore.delete(record) } }
+                },
+                onBlock: record.direction == .inbound ? { noteToBlock = record } : nil,
+                onReport: record.direction == .inbound ? { noteToReport = record } : nil)
+        case .queued(let entry):
+            NoteBubbleView(
+                item: item,
+                status: NoteBubbleStatus.status(for: item, sendingIDs: thread.sendingIDs) ?? .queued,
+                peerName: displayName,
+                runStart: thread.runStartIDs.contains(item.id),
+                onRetry: {
+                    connectionManager.noteOutbox.retry(id: entry.id)
+                    Task { await connectionManager.flushNoteOutbox() }
+                },
+                onDelete: {
+                    // Never remove an entry whose network send is in flight.
+                    guard !thread.sendingIDs.contains(entry.id) else { return }
+                    connectionManager.noteOutbox.remove(id: entry.id)
+                })
+        }
+    }
+
+    private func block(_ record: NoteRecord) async {
+        do {
+            _ = try await connectionManager.notesStore.block(record)
+            connectionManager.statusToast = String(localized: "Sender blocked")
+        } catch {
+            noteActionMessage = (error as? NotesStoreError)?.userMessage(context: .inboxAction)
+                ?? String(localized: "Something went wrong. Please try again.")
+        }
+    }
+
+    private func report(_ record: NoteRecord, reason: ReportReason, includeText: Bool) async {
+        do {
+            try await connectionManager.notesStore.report(record, reason: reason, includeText: includeText)
+            connectionManager.statusToast = String(localized: "Report sent")
+        } catch {
+            noteActionMessage = (error as? NotesStoreError)?.userMessage(context: .inboxAction)
+                ?? String(localized: "Something went wrong. Please try again.")
+        }
+    }
+
+    // MARK: - Composer
+
+    @ViewBuilder
+    private var composer: some View {
+        VStack(spacing: 0) {
+            if thread.outboxProblem {
+                Label("Some unsent notes could not be restored", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .accessibilityIdentifier("outbox-problem-banner")
+            }
+            switch thread.mode.kind {
+            case .live:
+                inputBar
+            case .note:
+                noteInputBar
+            case .locked(let reason):
+                lockedBar(reason)
+            }
+        }
+    }
+
+    /// The connection dropped or came back while the composer was on screen. Text and
+    /// drafts are never converted automatically: only the look changes, with a one-line notice.
+    private func handleModeChange(to newMode: ComposerMode) {
+        let old = lastComposerMode
+        lastComposerMode = newMode
+        if !newMode.isLive, voiceRecorder.isRecording { voiceRecorder.cancelRecording() }
+        if newMode.isNote, old?.isLive == true {
+            modeNotice = String(localized: "Switched to a note")
+            noticeToken = UUID()   // restarts the scoped auto-clear task below
+        } else if !newMode.isNote {
+            modeNotice = nil
+        }
+    }
+
+    private var noteScalarCount: Int { ComposerMode.scalarCount(messageText) }
+
+    private var noteInputBar: some View {
+        VStack(spacing: 0) {
+            if let modeNotice {
+                Label(modeNotice, systemImage: "envelope")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(paper(.noteText))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .accessibilityAddTraits(.updatesFrequently)
+                    .task(id: noticeToken) {
+                        try? await Task.sleep(nanoseconds: 6_000_000_000)
+                        if !Task.isCancelled { self.modeNotice = nil }
+                    }
+            }
+            if thread.mode.queuesUntilOnline {
+                Group {
+                    if thread.accountOfflineWait {
+                        Label("Will be sent when you're online", systemImage: "wifi.slash")
+                    } else {
+                        Label("Will be sent when your account is ready", systemImage: "clock")
+                    }
+                }
+                    .font(.footnote)
+                    .foregroundStyle(paper(.noteText).opacity(0.8))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField(text: $messageText,
+                          prompt: Text(verbatim: String(format: String(localized: "Write a note to %@…"), displayName))
+                              .foregroundColor(paper(.noteText).opacity(0.6)),
+                          axis: .vertical) {
+                    Text("Note")
+                }
+                .textFieldStyle(.plain)
+                .lineLimit(1...5)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(paper(.noteText))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(paper(.noteFill))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(paper(.noteBorder), style: StrokeStyle(lineWidth: 1, dash: [5, 3])))
+                .accessibilityLabel(Text(verbatim: String(format: String(localized: "Write a note to %@…"), displayName)))
+                .onSubmit { sendMessage() }
+
+                if ComposerMode.showsCounter(forText: messageText) {
+                    Text(verbatim: "\(noteScalarCount)/\(ComposerMode.noteScalarLimit)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(ComposerMode.isOverLimit(messageText) ? Color.red : paper(.noteText).opacity(0.8))
+                        .accessibilityLabel(Text(verbatim: String(format: String(localized: "%lld of %lld characters"), noteScalarCount, ComposerMode.noteScalarLimit)))
+                }
+
+                Button {
+                    sendMessage()
+                } label: {
+                    Image(systemName: "paperplane.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(canSendNote ? paper(.noteBadge) : paper(.noteText).opacity(0.3))
+                }
+                .paperIconButton()
+                .disabled(!canSendNote)
+                .accessibilityLabel("Send note")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var canSendNote: Bool {
+        let t = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !t.isEmpty && !ComposerMode.isOverLimit(t)
+    }
+
+    private func lockedBar(_ reason: LockReason) -> some View {
+        let text: String
+        switch reason {
+        case .notExchanged: text = String(localized: "Exchange notes with each other to stay in touch offline.")
+        case .verifying: text = String(localized: "Checking their notes account…")
+        case .accountUnavailable: text = String(localized: "Notes can't be sent from this device.")
+        }
+        return HStack(spacing: 8) {
+            Image(systemName: "lock.fill")
+            Text(verbatim: text)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(Color.gray.opacity(0.15))
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Reply Preview Bar
@@ -509,6 +753,8 @@ struct ChatView: View, PaperThemed {
                     .submitLabel(.send)
                     .onSubmit { sendMessage() }
                     .onChange(of: messageText) { newValue in
+                        // Typing indicators are live-chat only; a note composer sends nothing until Send.
+                        guard thread.mode.isLive else { return }
                         connectionManager.handleTypingChange(
                             in: peerID,
                             hasText: !newValue.isEmpty
@@ -555,10 +801,30 @@ struct ChatView: View, PaperThemed {
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        switch thread.mode.kind {
+        case .locked: return
+        case .note:
+            sendNote(text)
+            return
+        case .live: break
+        }
         // Use per-peer send for multi-connection
         connectionManager.sendTextMessage(text, to: peerID, replyTo: replyingToMessage)
         messageText = ""
         replyingToMessage = nil
+    }
+
+    /// Queues a note the user just sent. The text stays in the field when anything fails.
+    private func sendNote(_ text: String) {
+        let outcome = NoteSender.send(text: text, contactID: thread.contactID) { text, id in
+            try connectionManager.queueNote(text: text, toContact: id)
+        }
+        if outcome.clearsText {
+            messageText = ""
+            modeNotice = nil
+        } else if let message = outcome.message {
+            connectionManager.statusToast = message
+        }
     }
 
     // MARK: - Send image

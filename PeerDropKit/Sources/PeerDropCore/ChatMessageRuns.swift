@@ -5,7 +5,7 @@ import Foundation
 public enum ChatMessageRuns {
     public static let defaultGap: TimeInterval = 300
 
-    private static func speakerKey(_ m: ChatMessage) -> String {
+    static func speakerKey(_ m: ChatMessage) -> String {
         m.senderID ?? (m.isOutgoing ? "\u{0}me" : "\u{0}peer")
     }
 
@@ -17,20 +17,7 @@ public enum ChatMessageRuns {
         gap: TimeInterval = defaultGap,
         calendar: Calendar = .current
     ) -> Set<String> {
-        var result = Set<String>()
-        var previous: ChatMessage?
-        for m in messages {
-            if let p = previous {
-                let newRun = speakerKey(m) != speakerKey(p)
-                    || m.timestamp.timeIntervalSince(p.timestamp) > gap
-                    || !calendar.isDate(m.timestamp, inSameDayAs: p.timestamp)
-                if newRun { result.insert(m.id) }
-            } else {
-                result.insert(m.id)
-            }
-            previous = m
-        }
-        return result
+        runStarts(messages, id: \.id, speaker: speakerKey, date: \.timestamp, gap: gap, calendar: calendar)
     }
 
     /// `messages` must be sorted ascending by timestamp.
@@ -39,13 +26,38 @@ public enum ChatMessageRuns {
         in messages: [ChatMessage],
         calendar: Calendar = .current
     ) -> Set<String> {
+        dayStarts(messages, id: \.id, date: \.timestamp, calendar: calendar)
+    }
+
+    /// Shared run rule (also used by `ThreadMerge` for mixed chat/note items).
+    static func runStarts<T>(
+        _ items: [T], id: (T) -> String, speaker: (T) -> String, date: (T) -> Date,
+        gap: TimeInterval, calendar: Calendar
+    ) -> Set<String> {
         var result = Set<String>()
-        var previous: ChatMessage?
-        for m in messages {
+        var previous: T?
+        for m in items {
             if let p = previous {
-                if !calendar.isDate(m.timestamp, inSameDayAs: p.timestamp) { result.insert(m.id) }
+                let newRun = speaker(m) != speaker(p)
+                    || date(m).timeIntervalSince(date(p)) > gap
+                    || !calendar.isDate(date(m), inSameDayAs: date(p))
+                if newRun { result.insert(id(m)) }
             } else {
-                result.insert(m.id)
+                result.insert(id(m))
+            }
+            previous = m
+        }
+        return result
+    }
+
+    static func dayStarts<T>(_ items: [T], id: (T) -> String, date: (T) -> Date, calendar: Calendar) -> Set<String> {
+        var result = Set<String>()
+        var previous: T?
+        for m in items {
+            if let p = previous {
+                if !calendar.isDate(date(m), inSameDayAs: date(p)) { result.insert(id(m)) }
+            } else {
+                result.insert(id(m))
             }
             previous = m
         }
