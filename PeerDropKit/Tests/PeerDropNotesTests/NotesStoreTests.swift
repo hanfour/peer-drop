@@ -456,6 +456,23 @@ final class NotesStoreTests: XCTestCase {
         do { _ = try await store.send(text: "x", to: "TESTRCPT", anonymous: true); XCTFail() } catch { XCTAssertEqual(error as? NotesStoreError, .recipientHasNoKeys) }
         do { _ = try await store.send(text: String(repeating: "x", count: 2_001), to: "TESTRCPT", anonymous: true); XCTFail() } catch { XCTAssertEqual(error as? NotesStoreError, .textTooLong) }
     }
+    func testMarkReadOnServerOnlyKeepsLocalUnreadAndAsksOncePerNote() async throws {
+        let env = try NoteCrypto.seal(text: "hi", recipient: try me.entry(), signer: nil)
+        TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAE", env)]))]
+        await store.sync()
+        let id = store.inbox[0].id
+        TestURLProtocol.queue = [.init(status: 204, body: Data())]
+        let before = TestURLProtocol.requests.count
+        await store.markReadOnServerOnly(id)
+        XCTAssertEqual(TestURLProtocol.requests.count, before + 1)
+        XCTAssertEqual(TestURLProtocol.requests.last?.url?.path, "/v3/inbox/\(id)/read")
+        XCTAssertNil(store.inbox[0].readAt, "stays unread locally so un-hiding shows it again")
+        XCTAssertEqual(store.unreadCount, 1)
+        await store.markReadOnServerOnly(id)
+        XCTAssertEqual(TestURLProtocol.requests.count, before + 1, "not repeated")
+        store.load()
+        XCTAssertEqual(store.inbox.map(\.id), [id], "still stored locally")
+    }
     func testMarkReadDeleteBlockReport() async throws {
         let env = try NoteCrypto.seal(text: "hi", recipient: try me.entry(), signer: nil)
         TestURLProtocol.queue = [.init(status: 200, body: try inboxJSON([("01AAAAAAAAAAAAAAAAAAAAAAAE", env)]))]

@@ -1,8 +1,15 @@
 import Foundation
 
-/// Three-state presence shown on avatars.
-public enum PeerPresence: Equatable {
-    case online, nearby, offline
+/// Presence shown on avatars.
+/// - `online`: a live connection exists (for a cross-network friend: only a
+///   VERIFIED rendezvous connection).
+/// - `nearby`: discovered / connecting on the local network.
+/// - `connecting` (Project E): waiting in the rendezvous room or negotiating;
+///   never live.
+/// - `offline`: none of the above (a cross-network `unreachable` friend is
+///   offline: peer-off and refused are never distinguished).
+public enum PeerPresence: Equatable, CaseIterable {
+    case online, nearby, connecting, offline
 }
 
 /// Sets of known ids per presence source.
@@ -12,20 +19,27 @@ public struct PresenceSources {
     public var discovered: Set<String>
     /// Reserved for a future always-connected (server) mode; currently always empty.
     public var server: Set<String>
+    /// Project E: cross-network friends waiting in the room or negotiating
+    /// (not yet verified). Resolves to `.connecting`, never online.
+    public var crossNetworkConnecting: Set<String>
 
-    public init(connected: Set<String>, connecting: Set<String>, discovered: Set<String>, server: Set<String> = []) {
+    public init(connected: Set<String>, connecting: Set<String>, discovered: Set<String>, server: Set<String> = [],
+                crossNetworkConnecting: Set<String> = []) {
         self.connected = connected
         self.connecting = connecting
         self.discovered = discovered
         self.server = server
+        self.crossNetworkConnecting = crossNetworkConnecting
     }
 }
 
 public enum PeerPresenceResolver {
-    /// `ids ∩ (connected ∪ server)` → online; else `ids ∩ (connecting ∪ discovered)` → nearby; else offline.
+    /// `ids ∩ (connected ∪ server)` → online; else `ids ∩ (connecting ∪ discovered)` → nearby;
+    /// else `ids ∩ crossNetworkConnecting` → connecting; else offline.
     public static func presence(ids: Set<String>, sources: PresenceSources) -> PeerPresence {
         if !ids.isDisjoint(with: sources.connected.union(sources.server)) { return .online }
         if !ids.isDisjoint(with: sources.connecting.union(sources.discovered)) { return .nearby }
+        if !ids.isDisjoint(with: sources.crossNetworkConnecting) { return .connecting }
         return .offline
     }
 }
@@ -57,10 +71,22 @@ extension ConnectionManager {
             Set(conns.flatMap { [$0.id, $0.peerIdentity.id] })
         }
         let all = Array(connections.values)
+        // Project E: only a VERIFIED rendezvous connection is online (it is
+        // exactly what `connection(for:)` returns, so a live send always finds
+        // it); an installed-but-unverified one, or a room waiting/negotiating,
+        // is `.connecting`.
+        let rendezvous = Array(rendezvousConnections.values)
         return PresenceSources(
-            connected: ids(all.filter { $0.state.isConnected }),
+            connected: ids(all.filter { $0.state.isConnected } + rendezvous.filter(\.rendezvousVerified)),
             connecting: ids(all.filter { $0.state == .connecting }),
-            discovered: Set(discoveredPeers.map(\.id)))
+            discovered: Set(discoveredPeers.map(\.id)),
+            crossNetworkConnecting: ids(rendezvous.filter { !$0.rendezvousVerified })
+                .union(rendezvousConnectingDeviceIDs()))
+    }
+
+    /// Presence of a chat peer id (e.g. a thread's `peerID`) from one snapshot.
+    public func presence(ids: Set<String>) -> PeerPresence {
+        PeerPresenceResolver.presence(ids: ids, sources: presenceSources())
     }
 
     public func presence(for record: DeviceRecord) -> PeerPresence {

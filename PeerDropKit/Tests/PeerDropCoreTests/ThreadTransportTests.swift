@@ -27,4 +27,32 @@ final class ThreadTransportTests: XCTestCase {
             XCTAssertEqual(ThreadTransport.decide(presence: p, binding: b, account: a), expected, "\(p) \(b) \(a)")
         }
     }
+
+    /// Project E: `.connecting` (waiting in the room / negotiating) is never live:
+    /// it behaves like nearby/offline (note or locked).
+    func testConnectingIsNeverLive() {
+        let rows: [(BindingState, AccountAvailability, ThreadTransport.Decision)] = [
+            (.none, .ready, .locked(reason: .notExchanged)), (.none, .notReady, .locked(reason: .notExchanged)),
+            (.none, .unavailable, .locked(reason: .notExchanged)),
+            (.pending, .ready, .locked(reason: .verifying)), (.pending, .notReady, .locked(reason: .verifying)),
+            (.pending, .unavailable, .locked(reason: .verifying)),
+            (.verified, .ready, .note(canSendNow: true)), (.verified, .notReady, .note(canSendNow: false)),
+            (.verified, .unavailable, .locked(reason: .accountUnavailable)),
+        ]
+        for (b, a, expected) in rows {
+            XCTAssertEqual(ThreadTransport.decide(presence: .connecting, binding: b, account: a), expected, "\(b) \(a)")
+        }
+    }
+
+    /// Exhaustive: only `.online` is ever live.
+    func testOnlyOnlineIsLiveForEveryPresence() {
+        for p in PeerPresence.allCases {
+            for b in [BindingState.none, .pending, .verified] {
+                for a in [AccountAvailability.ready, .notReady, .unavailable] {
+                    let live = ThreadTransport.decide(presence: p, binding: b, account: a) == .live
+                    XCTAssertEqual(live, p == .online, "\(p) \(b) \(a)")
+                }
+            }
+        }
+    }
 }

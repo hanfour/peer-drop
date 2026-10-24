@@ -37,6 +37,35 @@ final class PeerPresenceTests: XCTestCase {
         XCTAssertEqual(resolve(["uuid-1"], connected: ["relay-ab"]), .offline)
     }
 
+    // MARK: Project E — cross-network `.connecting`
+
+    private func resolveCross(_ ids: Set<String>, connected: Set<String> = [], discovered: Set<String> = [],
+                              crossNetworkConnecting: Set<String>) -> PeerPresence {
+        PeerPresenceResolver.presence(
+            ids: ids,
+            sources: PresenceSources(connected: connected, connecting: [], discovered: discovered,
+                                     crossNetworkConnecting: crossNetworkConnecting))
+    }
+
+    func testCrossNetworkConnectingIsConnecting() {
+        XCTAssertEqual(resolveCross(["a"], crossNetworkConnecting: ["a"]), .connecting)
+    }
+    func testConnectedBeatsCrossNetworkConnecting() {
+        XCTAssertEqual(resolveCross(["a"], connected: ["a"], crossNetworkConnecting: ["a"]), .online)
+    }
+    func testNearbyBeatsCrossNetworkConnecting() {
+        XCTAssertEqual(resolveCross(["a"], discovered: ["a"], crossNetworkConnecting: ["a"]), .nearby)
+    }
+    func testCrossNetworkConnectingOtherIDIsOffline() {
+        XCTAssertEqual(resolveCross(["a"], crossNetworkConnecting: ["b"]), .offline)
+    }
+    func testDefaultSourcesHaveNoCrossNetworkConnecting() {
+        XCTAssertTrue(PresenceSources(connected: [], connecting: [], discovered: []).crossNetworkConnecting.isEmpty)
+    }
+    func testAllCasesAreExactlyFour() {
+        XCTAssertEqual(PeerPresence.allCases, [.online, .nearby, .connecting, .offline])
+    }
+
     // MARK: - RecordConnectionLookup
 
     func testLookupPrefersRecordID() {

@@ -92,3 +92,39 @@ final class AccountClientTests: XCTestCase {
 func XCTAssertThrowsErrorAsync<T>(_ expr: @autoclosure () async throws -> T, _ handler: (Error) -> Void) async {
     do { _ = try await expr(); XCTFail("expected error") } catch { handler(error) }
 }
+
+final class AccountClientSettingsTests: XCTestCase {
+    private var client: AccountClient!
+    override func setUp() {
+        TestURLProtocol.reset()
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [TestURLProtocol.self]
+        client = AccountClient(baseURL: URL(string: "https://worker.test")!, session: URLSession(configuration: cfg),
+                               authProvider: { $0.setValue("Bearer t", forHTTPHeaderField: "Authorization") }, tokenInvalidator: {})
+    }
+
+    func testGetDecodesNotePush() async throws {
+        TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"notePush":false}"#.utf8))]
+        let on = try await client.fetchNotePush()
+        XCTAssertFalse(on)
+        XCTAssertEqual(TestURLProtocol.requests[0].httpMethod, "GET")
+        XCTAssertEqual(TestURLProtocol.requests[0].url?.path, "/v3/account/settings")
+    }
+
+    func testPutSendsExactlyOneBooleanField() async throws {
+        TestURLProtocol.queue = [.init(status: 200, body: Data(#"{"notePush":false}"#.utf8))]
+        let on = try await client.updateNotePush(false)
+        XCTAssertFalse(on)
+        let req = TestURLProtocol.requests[0]
+        XCTAssertEqual(req.httpMethod, "PUT")
+        let json = try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: Any]
+        XCTAssertEqual(json?.count, 1)
+        XCTAssertEqual(json?["notePush"] as? Bool, false)
+    }
+
+    func testPutFailureThrows() async {
+        TestURLProtocol.queue = [.init(status: 400, body: Data(#"{"error":"invalid_settings"}"#.utf8))]
+        do { _ = try await client.updateNotePush(true); XCTFail("expected throw") }
+        catch { XCTAssertEqual(error as? AccountClientError, .invalid("invalid_settings")) }
+    }
+}

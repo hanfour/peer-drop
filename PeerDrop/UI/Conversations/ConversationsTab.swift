@@ -55,7 +55,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     /// Chat files are keyed by the live peer id when connected, else the record id (same rule as HomeTab).
     private func chatKey(for recordID: String) -> String {
         guard let record = connectionManager.deviceStore.records.first(where: { $0.id == recordID }) else { return recordID }
-        return connectionManager.connection(for: record)?.peerIdentity.id ?? recordID
+        return connectionManager.chatKey(forRecord: record)
     }
 
     private func refreshSummaries() {

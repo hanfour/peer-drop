@@ -491,6 +491,17 @@ public final class NotesStore: ObservableObject {
         if !isMock { try? await client.markRead(id: id) }
     }
 
+    /// Ids already marked read on the server without being read locally (hidden anonymous notes).
+    private var serverMarkedIDs: Set<String> = []
+
+    /// Marks a note read on the SERVER only, so the inbox's unread-first eviction can reclaim it, while it
+    /// stays stored and unread on this device (a hidden anonymous note reappears if the user un-hides).
+    /// The server's read flag is never shown to senders. Asks once per note per run.
+    public func markReadOnServerOnly(_ id: String) async {
+        guard !isMock, inbox.contains(where: { $0.id == id }), serverMarkedIDs.insert(id).inserted else { return }
+        try? await client.markRead(id: id)
+    }
+
     public func delete(_ record: NoteRecord) async {
         if !isMock {
             do { try storage.remove(id: record.id, direction: record.direction) } catch { lastError = error.localizedDescription }

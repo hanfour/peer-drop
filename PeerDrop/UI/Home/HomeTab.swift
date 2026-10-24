@@ -19,6 +19,8 @@ struct HomeTab: View, PaperThemed {
     /// Verified-bound record ids, refreshed on change signals (never recomputed per row).
     @StateObject private var bound = BoundFriendsModel()
     @State private var showGroupEditor = false
+    /// Friend whose "Always connected" sheet is open (Project E).
+    @State private var alwaysConnectedTarget: AlwaysConnectedTarget?
     #if os(iOS)
     @State private var showProfile = false
     @State private var showSettings = false
@@ -106,6 +108,10 @@ struct HomeTab: View, PaperThemed {
         .searchable(text: $query, prompt: Text("Search friends"))
         .toolbar { toolbarContent }
         .sheet(isPresented: $showGroupEditor) { GroupEditorView(groupStore: groupStore) }
+        .sheet(item: $alwaysConnectedTarget) { target in
+            AlwaysConnectedFriendSheet(peerID: target.peerID, name: target.name)
+                .environmentObject(connectionManager)
+        }
         #if os(iOS)
         .sheet(isPresented: $showProfile) { UserProfileView() }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(connectionManager) }
@@ -160,10 +166,49 @@ struct HomeTab: View, PaperThemed {
     }
 
     private func peerID(for record: DeviceRecord) -> String {
-        connectionManager.connection(for: record)?.peerIdentity.id ?? record.id
+        connectionManager.chatKey(forRecord: record)
     }
 
+    /// A verified cross-network ("always connected") friend: no manual disconnect (it would just reconnect),
+    /// no ConnectionView (file transfer / calls are not offered over it).
+    private func isCrossNetwork(_ record: DeviceRecord) -> Bool {
+        connectionManager.connection(for: record)?.isRendezvousConnection == true
+    }
+
+    private func alwaysConnectedTarget(for record: DeviceRecord) -> AlwaysConnectedTarget {
+        AlwaysConnectedTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))
+    }
+
+    @ViewBuilder
     private func connectedRow(_ record: DeviceRecord) -> some View {
+        if isCrossNetwork(record) {
+            crossNetworkRow(record)
+        } else {
+            directConnectedRow(record)
+        }
+    }
+
+    @ViewBuilder
+    private func crossNetworkRow(_ record: DeviceRecord) -> some View {
+        let row = FriendRow(record: record, name: connectionManager.displayName(for: record), presence: .online,
+                            connection: connectionManager.connection(for: record))
+        #if os(iOS)
+        NavigationLink(value: ChatTarget(peerID: peerID(for: record), name: connectionManager.displayName(for: record))) { row }
+            .accessibilityIdentifier("active-peer-row")
+            .listRowBackground(paper(.incomingBubble))
+            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
+        #else
+        Button { openWindow(id: "chat", value: peerID(for: record)) } label: { row }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("active-peer-row")
+            .listRowBackground(paper(.incomingBubble))
+            .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) { forgetButton(record) }
+        #endif
+    }
+
+    private func directConnectedRow(_ record: DeviceRecord) -> some View {
         Button {
             #if os(iOS)
             connectionManager.focus(on: connectionManager.connection(for: record)?.id ?? record.id)
@@ -177,6 +222,7 @@ struct HomeTab: View, PaperThemed {
         .buttonStyle(.plain)
         .accessibilityIdentifier("active-peer-row")
         .listRowBackground(paper(.incomingBubble))
+        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         // Swiping a connected row disconnects; forgetting the device is a second, non-default action.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
@@ -202,6 +248,7 @@ struct HomeTab: View, PaperThemed {
         }
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
+        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #else
         Button {
@@ -212,6 +259,7 @@ struct HomeTab: View, PaperThemed {
         .buttonStyle(.plain)
         .accessibilityIdentifier("saved-device-row")
         .listRowBackground(paper(.incomingBubble))
+        .alwaysConnectedEntry(for: record, open: { alwaysConnectedTarget = $0 }, target: alwaysConnectedTarget(for: record), tint: paper(.brand))
         .swipeActions(edge: .trailing) { forgetButton(record) }
         #endif
     }
@@ -291,5 +339,26 @@ struct HomeTab: View, PaperThemed {
         .padding(.vertical, 16)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
+    }
+}
+
+/// Entry points to the "Always connected" sheet from a friend row: long-press / right-click menu, a leading
+/// swipe, and a VoiceOver custom action (so it is reachable without gestures; the Mac menu is keyboard-reachable too).
+private extension View {
+    func alwaysConnectedEntry(for record: DeviceRecord, open: @escaping (AlwaysConnectedTarget) -> Void,
+                              target: AlwaysConnectedTarget, tint: Color) -> some View {
+        self
+            .contextMenu {
+                Button { open(target) } label: {
+                    Label(LocalizedStringKey(AlwaysConnectedPresentation.titleKey), systemImage: "dot.radiowaves.left.and.right")
+                }
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                Button { open(target) } label: {
+                    Label(LocalizedStringKey(AlwaysConnectedPresentation.titleKey), systemImage: "dot.radiowaves.left.and.right")
+                }
+                .tint(tint)
+            }
+            .accessibilityAction(named: Text(LocalizedStringKey(AlwaysConnectedPresentation.titleKey))) { open(target) }
     }
 }

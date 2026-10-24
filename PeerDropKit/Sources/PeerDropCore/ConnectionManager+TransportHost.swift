@@ -20,8 +20,11 @@ extension ConnectionManager: TransportHost {
 
     public var connectedPeerDisplayName: String? { connectedPeer?.displayName }
 
+    /// File transfer / voice calls / SDP signaling: never a cross-network
+    /// (rendezvous) connection, which only carries chat frames.
     public func messageChannel(for peerID: String) -> MessageSendingPeer? {
-        connection(for: peerID)
+        guard let pc = connection(for: peerID), !pc.isRendezvous else { return nil }
+        return pc
     }
 
     // `sendMessage(_:)` and `sendMessage(_:to:)` async throws already exist.

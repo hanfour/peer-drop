@@ -21,7 +21,10 @@ import type { TokenPayload } from "./deviceToken";
 import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
 import { verifyPoW } from "./pow";
 import { handleNotesRoute } from "./notes";
+import { handleAccountSettingsRoute } from "./accountSettings";
 import { handleDiaryRoute } from "./diary";
+import { handleRendezvous } from "./rendezvousRoute";
+import { buildIceServers } from "./turnIce";
 
 export interface Env {
   // KV
@@ -34,6 +37,7 @@ export interface Env {
   DEVICE_INBOX: DurableObjectNamespace;
   ACCOUNT_INBOX: DurableObjectNamespace;
   DIARY_ROOM: DurableObjectNamespace;
+  RENDEZVOUS_ROOM: DurableObjectNamespace;
   // D1
   ACCOUNTS_DB: D1Database;
   // Secrets
@@ -82,7 +86,6 @@ export interface Env {
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
 const ROOM_TTL_SECONDS = 600; // 10 minutes
-const TURN_TTL_SECONDS = 900; // 15 minutes
 
 // Rate limiting: max requests per (IP, route class) within the window.
 //
@@ -186,6 +189,13 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    // Anonymous rendezvous (Project E): deliberately BEFORE the KV rate limiter
+    // and auth — no token in the path, no auth, no KV writes, no logging. Has
+    // its own in-memory limiter; see rendezvousRoute.ts for the privacy contract.
+    if (path === "/rv" || path === "/rv/ice") {
+      return handleRendezvous(request, env, path);
     }
 
     // Rate limiting (KV-backed, shared across isolates/colos)
@@ -375,84 +385,11 @@ export default {
       const roomInfo = JSON.parse(room) as { token?: string };
       const roomToken = roomInfo.token;
 
-      // Request TURN credentials from Cloudflare API
-      if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) {
-        // Return STUN-only fallback if TURN is not configured
-        return new Response(
-          JSON.stringify({
-            iceServers: [
-              { urls: ["stun:stun.cloudflare.com:3478"] },
-              { urls: ["stun:stun.l.google.com:19302"] },
-            ],
-            roomToken,
-          }),
-          {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-
-      try {
-        const turnResponse = await fetch(
-          `https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${env.TURN_API_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ ttl: TURN_TTL_SECONDS }),
-          }
-        );
-
-        if (!turnResponse.ok) {
-          throw new Error(`TURN API returned ${turnResponse.status}`);
-        }
-
-        const turnData = (await turnResponse.json()) as {
-          iceServers: { urls: string[]; username: string; credential: string } | { urls: string[]; username: string; credential: string }[];
-        };
-
-        // Cloudflare API returns iceServers as an object; normalize to array
-        const rawServers = Array.isArray(turnData.iceServers)
-          ? turnData.iceServers
-          : [turnData.iceServers];
-
-        // Extract credentials from the first TURN entry (all variants share the same creds)
-        const creds = rawServers[0];
-
-        // Reconstruct iceServers with STUN (no auth) + TURN over UDP, TCP, and TLS
-        const iceServers = [
-          { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
-          {
-            urls: [
-              "turn:turn.cloudflare.com:3478?transport=udp",
-              "turn:turn.cloudflare.com:3478?transport=tcp",
-              "turns:turn.cloudflare.com:5349?transport=tcp",
-            ],
-            username: creds.username,
-            credential: creds.credential,
-          },
-        ];
-
-        return new Response(JSON.stringify({ iceServers, roomToken }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch (error) {
-        // Fallback to STUN only
-        return new Response(
-          JSON.stringify({
-            iceServers: [
-              { urls: ["stun:stun.cloudflare.com:3478"] },
-              { urls: ["stun:stun.l.google.com:19302"] },
-            ],
-            roomToken,
-          }),
-          {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
+      // STUN + Cloudflare TURN credentials (shared with /rv/ice)
+      const iceServers = await buildIceServers(env);
+      return new Response(JSON.stringify({ iceServers, roomToken }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // POST /debug/report — receive error report from app.
@@ -1715,10 +1652,14 @@ async function handleV3(request: Request, url: URL, path: string, env: Env, auth
     // batch (one transaction) so the two deletes can't land half-done.
     await db.batch([
       db.prepare("DELETE FROM account_devices WHERE account_id = ?1").bind(auth.accountId),
+      db.prepare("DELETE FROM account_settings WHERE account_id = ?1").bind(auth.accountId),
       db.prepare("DELETE FROM accounts WHERE account_id = ?1").bind(auth.accountId),
     ]);
     return new Response(null, { status: 204, headers: corsHeaders });
   }
+  const settingsResp = await handleAccountSettingsRoute(request, path, env, auth);
+  if (settingsResp) return settingsResp;
+
   const notesResp = await handleNotesRoute(request, url, path, env, auth, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) } });
   if (notesResp) return notesResp;
 
@@ -2200,3 +2141,4 @@ export class DeviceInbox {
 
 export { AccountInbox } from "./accountInbox";
 export { DiaryRoom } from "./diaryRoom";
+export { RendezvousRoom } from "./rendezvousRoom";

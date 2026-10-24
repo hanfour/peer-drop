@@ -266,6 +266,41 @@ public final class ConnectionManager: ObservableObject {
     /// Maximum number of simultaneous connections allowed.
     public let maxConnections = 5
 
+    // MARK: - Project E: rendezvous ("always connected") connections
+
+    /// Cross-network connections, keyed by `TrustedContact.deviceId` (the
+    /// friend's `PeerIdentity.id`). Kept OUT of `connections`: they never count
+    /// against `maxConnections`, never drive the global `state` or focus, and
+    /// `connection(for:)` returns one only once it is verified. See
+    /// `ConnectionManager+Rendezvous.swift`.
+    var rendezvousConnections: [String: PeerConnection] = [:]
+    /// Own cap for cross-network connections (= the opt-in limit).
+    public let maxRendezvousConnections = TrustedContactStore.maxRendezvousContacts
+    /// Strict secure-channel deadline, measured from install.
+    var rendezvousSecureChannelTimeoutNanoseconds: UInt64 = 5_000_000_000
+    /// iOS suspends a backgrounded app, so background closes every
+    /// cross-network connection; the Mac is not suspended and stays connected
+    /// (spec §4.4).
+    var rendezvousClosesOnBackground: Bool = {
+        #if os(iOS)
+        return true
+        #else
+        return false
+        #endif
+    }()
+    /// Seam handed to the rendezvous manager (weak back-reference: no cycle).
+    lazy var rendezvousBridge = RendezvousConnectionBridge(owner: self)
+    /// Created on the first foreground (not in screenshot mode).
+    public internal(set) var rendezvousManager: RendezvousManager?
+    var rendezvousLinkStatesCancellable: AnyCancellable?
+    /// Test-only: build the manager over fakes instead of `.live`.
+    var rendezvousManagerFactoryForTesting: (() -> RendezvousManager)?
+    /// Last scene phase delivered to `handleScenePhaseChange` (nil: none yet;
+    /// on Mac the first `.active` never arrives — see `startRendezvousIfForeground`).
+    var lastScenePhase: ScenePhase?
+    /// Test-only override of where secure-channel / close outcomes go.
+    weak var rendezvousEventSinkForTesting: RendezvousConnectionEventSink?
+
     /// The currently focused connection, if any.
     var focusedConnection: PeerConnection? {
         guard let id = focusedPeerID else { return nil }
@@ -804,6 +839,13 @@ public final class ConnectionManager: ObservableObject {
             .dropFirst()
             .sink { [weak self] contacts in self?.reconcileNoteOutbox(with: contacts) }
             .store(in: &cancellables)
+        // Project E: opt-in / binding / key / block changes re-reconcile the
+        // rooms. `@Published` fires before the value is stored: hop first.
+        trustedContactStore.$contacts
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rendezvousManager?.contactsDidChange() }
+            .store(in: &cancellables)
 
         // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
         clipboardSyncManager.onClipboardChanged = { [weak self] payload in
@@ -844,13 +886,23 @@ public final class ConnectionManager: ObservableObject {
     /// relay peers — chat sends silently returned before even
     /// persisting the bubble. Linear scan is fine: maxConnections ≤ 5.
     public func connection(for peerID: String) -> PeerConnection? {
-        if let direct = connections[peerID] { return direct }
-        return connections.values.first { $0.peerIdentity.id == peerID }
+        let candidate = connections[peerID] ?? connections.values.first(where: { $0.peerIdentity.id == peerID })
+        if let candidate, candidate.state.isActive { return candidate }
+        // Project E: a cross-network connection, only once verified (pinned
+        // key + bound account + key confirmation), so a live send always has a
+        // secured channel. It beats a dead direct entry, never a live one.
+        if let rendezvous = verifiedRendezvousConnection(for: peerID) { return rendezvous }
+        return candidate
+    }
+
+    /// Chat-thread key for a saved device record.
+    public func chatKey(forRecord record: DeviceRecord) -> String {
+        connection(for: record)?.peerIdentity.id ?? record.peerIdentityId ?? record.id
     }
 
     /// Is `id` already taken — as a `connections` key or as the identity a
     /// connection is aliased to (what `connection(for:)` resolves)? (#161 M-2)
-    private func isPeerIDInUse(_ id: String, excluding: PeerConnection? = nil) -> Bool {
+    func isPeerIDInUse(_ id: String, excluding: PeerConnection? = nil) -> Bool {
         connections.contains { key, pc in
             pc !== excluding && (key == id || pc.peerIdentity.id == id)
         }
@@ -880,7 +932,9 @@ public final class ConnectionManager: ObservableObject {
 
     /// Focus on a specific peer connection.
     public func focus(on peerID: String) {
-        guard let conn = connection(for: peerID) else { return }
+        // Never a cross-network connection: focus drives file transfer,
+        // voice calls and the legacy focus-based sends (Task 5 M-1).
+        guard let conn = connection(for: peerID), !conn.isRendezvous else { return }
         focusedPeerID = conn.id
     }
 
@@ -890,6 +944,8 @@ public final class ConnectionManager: ObservableObject {
         // An overwritten connection loses its relay-placeholder marker: it is
         // no longer installed, and must never regain an identity swap.
         if let replaced = connections[peerID], replaced !== peerConnection {
+            pendingPeerDeviceIds.removeValue(forKey: peerID)
+            pendingPeerIdentityIds.removeValue(forKey: peerID)
             replaced.isRelayPlaceholder = false
             tearDownNotesExchange(for: replaced)
         }
@@ -934,6 +990,7 @@ public final class ConnectionManager: ObservableObject {
 
         objectWillChange.send()
         onPeerConnected?(peerID)
+        notifyDirectConnectionsChanged()
     }
 
     /// Focus `peerID` only when nothing is focused or the focused peer is
@@ -947,6 +1004,8 @@ public final class ConnectionManager: ObservableObject {
     /// Remove a peer connection.
     private func removeConnection(peerID: String) {
         bumpSecurityEpoch()
+        pendingPeerDeviceIds.removeValue(forKey: peerID)
+        pendingPeerIdentityIds.removeValue(forKey: peerID)
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
             tearDownNotesExchange(for: removed)
@@ -958,6 +1017,7 @@ public final class ConnectionManager: ObservableObject {
         }
 
         objectWillChange.send()
+        notifyDirectConnectionsChanged()
     }
 
     private func handlePeerStateChange(peerID: String, newState: PeerConnectionState) {
@@ -1786,6 +1846,12 @@ public final class ConnectionManager: ObservableObject {
         connections[peerID] = peerConnection
     }
 
+    /// Test-only: install `peerConnection` through the real `addConnection`
+    /// (wires the receive loop), as a plain non-relay connection.
+    public func _addConnectionForTesting(_ peerConnection: PeerConnection) {
+        addConnection(peerConnection)
+    }
+
     /// Test-only: feed an inbound `NWConnection` (e.g. from a loopback
     /// `NWListener`) through the real acceptor path — HELLO, request,
     /// consent monitor — exactly as the Bonjour listener would (#161).
@@ -1996,6 +2062,7 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - App Lifecycle
 
     public func handleScenePhaseChange(_ phase: ScenePhase) {
+        lastScenePhase = phase
         switch phase {
         case .active:
             endBackgroundTask()
@@ -2021,6 +2088,8 @@ public final class ConnectionManager: ObservableObject {
                 }
                 Task { await diaryStore.syncList() }
             }
+            // Project E: rejoin the rendezvous rooms.
+            rendezvousAppDidBecomeActive()
             // Restart discovery when returning to foreground
             switch state {
             case .idle:
@@ -2046,6 +2115,9 @@ public final class ConnectionManager: ObservableObject {
             trustedContactStore.flushPendingSave()
             preKeyStore.flush()
             mailboxManager.stopPolling()
+            // Project E (iOS only): leave every room and close every
+            // cross-network connection quietly.
+            rendezvousAppDidEnterBackground()
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
@@ -2962,6 +3034,11 @@ public final class ConnectionManager: ObservableObject {
     private var relaySessionTimer: Task<Void, Never>?
     /// Holds the PeerConnection waiting for PIN verification before handshake.
     private var pendingRelayPeerConnection: PeerConnection?
+    /// Peer deviceIds received before the `relay-<code>` DeviceRecord existed
+    /// (PIN not yet confirmed); applied by `confirmRelayPIN`, dropped on removal.
+    private var pendingPeerDeviceIds: [String: String] = [:]
+    /// Same for the peer's real identity id learned at the HELLO swap.
+    private var pendingPeerIdentityIds: [String: String] = [:]
     /// Active BLE signaling instance.
     private(set) var bleSignaling: BLESignaling?
     /// In-progress invite accepts — prevents dual WS+APNs delivery from spawning parallel negotiations.
@@ -3338,6 +3415,12 @@ public final class ConnectionManager: ObservableObject {
     public func confirmRelayPIN() {
         guard let request = pendingRelayPIN else { return }
         RelayAuthenticator.storeFingerprint(request.remoteFingerprint, for: request.peerID, store: deviceStore)
+        if let stashed = pendingPeerDeviceIds.removeValue(forKey: request.peerID) {
+            deviceStore.updatePeerDeviceId(for: request.peerID, deviceId: stashed)
+        }
+        if let identityId = pendingPeerIdentityIds.removeValue(forKey: request.peerID) {
+            deviceStore.setPeerIdentityId(for: request.peerID, identityId: identityId)
+        }
         pendingRelayPIN = nil
 
         // Resume the deferred handshake
@@ -3429,6 +3512,12 @@ public final class ConnectionManager: ObservableObject {
     /// Disconnect from a specific peer.
     public func disconnect(from peerID: String) async {
         guard let peerConn = connection(for: peerID) else { return }
+        // Project E: a cross-network connection closes quietly (no frame) and
+        // never touches `connections` / focus / global state.
+        if peerConn.isRendezvous {
+            closeRendezvousConnection(peerConn)
+            return
+        }
         if peerID == focusedPeerID {
             activeConnection = nil
         }
@@ -3540,10 +3629,13 @@ public final class ConnectionManager: ObservableObject {
     /// bound connection: `peerID` (its `connections` key) and
     /// `boundSenderID` (its identity — equal to `peerID` for local
     /// connections, the post-HELLO real identity for `relay-*` ones).
-    private func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection,
+    func handleMessageForPeer(_ message: PeerMessage, peerConnection: PeerConnection,
                                       origin: PeerConnection.MessageOrigin = .plaintext) {
         let peerID = peerConnection.id
         let boundSenderID = peerConnection.peerIdentity.id
+        // Thread key for chat storage: relay peers use their identity UUID once
+        // known so incoming and outgoing messages share one file.
+        let chatKey = ChatStorageKey.key(forConnection: peerConnection)
 
         switch message.type {
         case .disconnect:
@@ -3652,6 +3744,15 @@ public final class ConnectionManager: ObservableObject {
                     logger.warning("Dropping group text claiming sender \(message.senderID.prefix(8)) on connection \(peerID.prefix(8))")
                     return
                 }
+                // Groups are device-local (never synced), so membership can
+                // only be checked against OUR groups. Cross-network friends
+                // must be a member of a local group with that id (Task 5 m-4);
+                // local peers keep the old behaviour.
+                if peerConnection.isRendezvous {
+                    guard groupStore.groups.contains(where: {
+                        $0.id == groupID && ($0.deviceIDs.contains(boundSenderID) || $0.deviceIDs.contains(peerID))
+                    }) else { return }
+                }
                 savedMsg = chatManager.saveGroupIncoming(
                     text: payload.text,
                     groupID: groupID,
@@ -3663,7 +3764,7 @@ public final class ConnectionManager: ObservableObject {
             } else {
                 savedMsg = chatManager.saveIncoming(
                     text: payload.text,
-                    peerID: peerID,
+                    peerID: chatKey,
                     peerName: peerConnection.peerIdentity.displayName,
                     senderName: payload.senderName,
                     replyToMessageID: payload.replyToMessageID,
@@ -3696,7 +3797,7 @@ public final class ConnectionManager: ObservableObject {
                 payload: payload,
                 // nil from a pre-H7 peer (or rejected bytes) keeps the old thumbnail-only behaviour.
                 fileData: payload.validatedFileData ?? Data(),
-                peerID: peerID,
+                peerID: chatKey,
                 peerName: peerConnection.peerIdentity.displayName
             )
             NotificationManager.shared.postChatMessage(from: peerConnection.peerIdentity.displayName, text: payload.fileName)
@@ -3723,9 +3824,12 @@ public final class ConnectionManager: ObservableObject {
                     }
                 }
             } else {
-                // 1-to-1 message receipt
+                // 1-to-1 message receipt: only for OUR messages in THIS peer's
+                // thread (a peer may not mark another thread's messages).
                 let newStatus: MessageStatus = payload.receiptType == .read ? .read : .delivered
-                for msgID in payload.messageIDs {
+                // One stored-thread read for the whole receipt (M-2).
+                let ours = chatManager.threadContains(messageIDs: Set(payload.messageIDs), peerID: chatKey, outgoingOnly: true)
+                for msgID in payload.messageIDs where ours.contains(msgID) {
                     chatManager.updateStatus(messageID: msgID, status: newStatus)
                 }
             }
@@ -3735,13 +3839,15 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode TypingIndicatorPayload")
                 return
             }
-            chatManager.setTyping(payload.isTyping, for: peerID)
+            chatManager.setTyping(payload.isTyping, for: chatKey)
 
         case .reaction:
             guard let payload = try? message.decodePayload(ReactionPayload.self) else {
                 logger.warning("Failed to decode ReactionPayload")
                 return
             }
+            // The reacted-to message must be in this peer's thread.
+            guard chatManager.threadContains(messageID: payload.messageID, peerID: chatKey) else { return }
             switch payload.action {
             case .add:
                 chatManager.addReaction(emoji: payload.emoji, to: payload.messageID, from: boundSenderID)
@@ -3752,7 +3858,7 @@ public final class ConnectionManager: ObservableObject {
         case .chatReject:
             let reason = (try? message.decodePayload(RejectionPayload.self))?.reason // P1: rejection reason is optional, nil is acceptable
             let errorText = reason == "featureDisabled" ? "Peer has chat disabled" : "Message rejected"
-            chatManager.markLastOutgoingAsFailed(peerID: peerID, errorText: errorText)
+            chatManager.markLastOutgoingAsFailed(peerID: chatKey, errorText: errorText)
 
         case .ping:
             let pong = PeerMessage.pong(senderID: localIdentity.id)
@@ -3801,7 +3907,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MessageEditPayload")
                 return
             }
-            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: peerID, origin: .remotePeer)
+            chatManager.applyEdit(messageID: payload.messageID, newText: payload.newText, editedAt: payload.editedAt, peerID: chatKey, origin: .remotePeer)
 
         case .messageDelete:
             guard FeatureSettings.isChatEnabled else { return }
@@ -3809,7 +3915,7 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode MessageDeletePayload")
                 return
             }
-            chatManager.applyDelete(messageID: payload.messageID, peerID: peerID, origin: .remotePeer)
+            chatManager.applyDelete(messageID: payload.messageID, peerID: chatKey, origin: .remotePeer)
 
         case .fileResume:
             guard let payload = try? message.decodePayload(FileResumePayload.self) else {
@@ -3830,8 +3936,16 @@ public final class ConnectionManager: ObservableObject {
                 logger.warning("Failed to decode DeviceIdExchangePayload")
                 return
             }
-            deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
-            logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+            if deviceStore.records.contains(where: { $0.id == peerConnection.id }) {
+                deviceStore.updatePeerDeviceId(for: peerConnection.id, deviceId: payload.deviceId)
+                logger.info("Stored peerDeviceId for \(peerConnection.id): \(payload.deviceId.prefix(8))")
+            } else if peerConnection.isRelayTransport {
+                // The `relay-<code>` record only exists once the PIN is
+                // confirmed; keep the id until then instead of dropping it.
+                pendingPeerDeviceIds[peerConnection.id] = payload.deviceId
+                logger.info("Stashed peerDeviceId for \(peerConnection.id) until the device record exists")
+            }
+            // Non-relay connection without a record: nothing to attach it to (unchanged).
 
         case .hello:
             // Relay identity swap (audit round 17, live finding 2026-06-13):
@@ -3877,6 +3991,17 @@ public final class ConnectionManager: ObservableObject {
                 return
             }
             peerConnection.updatePeerIdentity(identity)
+            // The relay connection now answers for `identity.id`: a rendezvous
+            // connection to the same device must step aside (Task 5 m-3).
+            notifyDirectConnectionsChanged()
+            // Remember the real identity on the relay record so the offline
+            // thread (stored under the identity id) can be found again; stash
+            // it if the record only appears after PIN confirmation.
+            if peerConnection.isRelayTransport {
+                if !deviceStore.setPeerIdentityId(for: peerID, identityId: identity.id) {
+                    pendingPeerIdentityIds[peerID] = identity.id
+                }
+            }
             checkPeerTrust(peerIdentity: identity)
             triggerSecureChannelNegotiation(for: peerConnection)
             logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
@@ -4231,9 +4356,9 @@ public final class ConnectionManager: ObservableObject {
             return
         }
 
-        // Send to all connected group members
+        // Send to all connected group members (never cross-network friends).
         for member in members where member.id != localIdentity.id {
-            if let peerConn = connection(for: member.id) {
+            if let peerConn = groupMemberConnection(member.id) {
                 Task {
                     do { try await peerConn.sendMessage(msg) }
                     catch { logger.warning("Failed to send group read receipt to \(member.id): \(error.localizedDescription)") }
@@ -4316,7 +4441,8 @@ public final class ConnectionManager: ObservableObject {
 
     public func sendClipboardSync(_ payload: ClipboardSyncPayload, to peerID: String) {
         guard FeatureSettings.isClipboardSyncEnabled else { return }
-        guard let peerConn = connection(for: peerID) else { return }
+        // Never over a cross-network connection (clipboard is face to face).
+        guard let peerConn = connection(for: peerID), !peerConn.isRendezvous else { return }
         guard let msg = try? PeerMessage.clipboardSync(payload, senderID: localIdentity.id) else {
             logger.warning("Failed to create PeerMessage for clipboardSync")
             return
@@ -4390,6 +4516,15 @@ public final class ConnectionManager: ObservableObject {
             trustedContactStore.remove(contact.id)
         }
         chatManager.deleteMessages(forPeer: id)
+        // A relay peer's post-HELLO history lives under its identity id. Delete
+        // it too, unless another record still maps to that identity (e.g. the
+        // same friend's local-network record keyed by the identity UUID).
+        if let identityId = record?.peerIdentityId, identityId != id {
+            let shared = deviceStore.records.contains {
+                $0.id != id && ($0.id == identityId || $0.peerIdentityId == identityId)
+            }
+            if !shared { chatManager.deleteMessages(forPeer: identityId) }
+        }
         deviceStore.remove(id: id)
     }
 
@@ -4485,10 +4620,19 @@ public final class ConnectionManager: ObservableObject {
         try await connection.sendMessage(message)
     }
 
+    /// Focus-based variant (legacy callers). Chat UI must use `to:`.
     public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?) {
-        guard FeatureSettings.isChatEnabled else { return }
         guard let peerID = focusedPeerID else { return }
-        guard let peerConn = connections[peerID] else { return }
+        sendMediaMessage(mediaType: mediaType, fileName: fileName, fileData: fileData, mimeType: mimeType,
+                         duration: duration, thumbnailData: thumbnailData, to: peerID)
+    }
+
+    /// Send media to an explicit peer (the open chat's), never to whichever
+    /// peer happens to be focused: a chat opened while `.connecting` that turns
+    /// live is never focused (rendezvous connections don't grab focus).
+    public func sendMediaMessage(mediaType: MediaMessagePayload.MediaType, fileName: String, fileData: Data, mimeType: String, duration: Double?, thumbnailData: Data?, to peerID: String) {
+        guard FeatureSettings.isChatEnabled else { return }
+        guard let peerConn = connection(for: peerID) else { return }
         // audit-#14 Stage 3: gate media sends the same way text sends are gated.
         // Local-only block — the message isn't persisted yet so there's nothing
         // to mark .failed; just refuse with a log.
@@ -4612,43 +4756,43 @@ public final class ConnectionManager: ObservableObject {
             return
         }
 
+        // Exactly the members that are counted as connected get the send, and
+        // completion is counted against them — not against every member, which
+        // left the status on "sending" whenever one member was offline.
+        // Cross-network (rendezvous) friends are neither counted nor sent to.
+        let targets = group.deviceIDs.compactMap { groupMemberConnection($0) }
+        guard !targets.isEmpty else {
+            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
+            return
+        }
         var sentCount = 0
         var failCount = 0
-
-        for deviceID in group.deviceIDs {
-            guard let peerConn = connections[deviceID], peerConn.state.isConnected else { continue }
-
+        for peerConn in targets {
             Task {
                 do {
                     try await peerConn.sendMessage(msg)
                     sentCount += 1
-                    // Update status when all sends complete
-                    if sentCount + failCount == group.deviceIDs.count {
-                        await MainActor.run {
-                            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .sent)
-                        }
-                    }
                 } catch {
                     failCount += 1
-                    if sentCount == 0 && failCount == group.deviceIDs.count {
-                        await MainActor.run {
-                            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
-                        }
-                    }
+                }
+                guard sentCount + failCount == targets.count else { return }
+                await MainActor.run {
+                    chatManager.updateGroupMessageStatus(messageID: saved.id, status: sentCount > 0 ? .sent : .failed)
                 }
             }
         }
+    }
 
-        // If no peers are connected, mark as failed immediately
-        let connectedInGroup = group.deviceIDs.filter { isConnected(to: $0) }.count
-        if connectedInGroup == 0 {
-            chatManager.updateGroupMessageStatus(messageID: saved.id, status: .failed)
-        }
+    /// A group member's live local (non-rendezvous) connection, if any.
+    func groupMemberConnection(_ deviceID: String) -> PeerConnection? {
+        let pc = connections[deviceID] ?? connections.values.first { $0.peerIdentity.id == deviceID }
+        guard let pc, pc.state.isConnected, !pc.isRendezvous else { return nil }
+        return pc
     }
 
     /// Get connection status for group members.
     public func groupConnectionStatus(_ group: DeviceGroup) -> (connected: Int, total: Int, online: Int) {
-        let connectedCount = group.deviceIDs.filter { isConnected(to: $0) }.count
+        let connectedCount = group.deviceIDs.filter { groupMemberConnection($0) != nil }.count
         let onlineCount = group.deviceIDs.filter { deviceID in
             discoveredPeers.contains { $0.id == deviceID }
         }.count
@@ -4952,7 +5096,9 @@ public final class ConnectionManager: ObservableObject {
     /// are quality-of-life improvements rather than send blockers as
     /// of the 2026-05-21 hotfix — see `evaluateTrustGate` for history.
     public func isPeerTrustedForUserActions(peerID: String) -> Bool {
-        guard let peerConn = connections[peerID] else { return false }
+        // Alias-aware, like the send paths: relay peers are keyed
+        // "relay-<code>" while UI surfaces pass the identity UUID.
+        guard let peerConn = connection(for: peerID) else { return false }
         let publicKey = peerConn.peerIdentity.identityPublicKey
         let contact = publicKey.flatMap { trustedContactStore.find(byPublicKey: $0) }
         return Self.evaluateTrustGate(

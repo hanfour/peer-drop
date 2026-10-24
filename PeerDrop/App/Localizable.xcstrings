@@ -1,6 +1,286 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Notes from outside your circle, including all anonymous notes. The sender is never told whether you read them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes from outside your circle, including all anonymous notes. The sender is never told whether you read them."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圈子以外的人寄來的紙條，包含所有匿名紙條。對方不會知道你有沒有看過。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圈子以外的人寄来的纸条，包含所有匿名纸条。对方不会知道你有没有看过。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仲間以外の人からのメモで、匿名のメモもすべて含まれます。読んだかどうかは、相手には知らされません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 사람들 밖에서 온 쪽지이며, 익명 쪽지는 모두 여기에 들어와요. 읽었는지는 보낸 사람에게 알려지지 않아요."
+          }
+        }
+      }
+    },
+    "This only hides anonymous notes on this device. The sender is not told, and the notes stay stored here, so you can turn this off to see them again. You may still get a notification when one arrives; turn off Note notifications to stop all of them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This only hides anonymous notes on this device. The sender is not told, and the notes stay stored here, so you can turn this off to see them again. You may still get a notification when one arrives; turn off Note notifications to stop all of them."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這只會在這台裝置上隱藏匿名紙條。對方不會被告知，紙條仍保留在本機，關閉後即可再次看到。匿名紙條送達時你仍可能收到通知；若要全部不通知，請關閉「紙條通知」。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这只会在这台设备上隐藏匿名纸条。对方不会被告知，纸条仍保留在本机，关闭后即可再次看到。匿名纸条送达时你仍可能收到通知；若要全部不通知，请关闭“纸条通知”。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これは、この端末で匿名のメモを非表示にするだけです。相手には知らされず、メモも端末内に残るので、オフにすればまた表示されます。届いたときに通知が来ることがあります。すべて止めるには「メモの通知」をオフにしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에서만 익명 쪽지를 숨겨요. 보낸 사람에게는 알려지지 않고 쪽지도 기기에 그대로 남아 있어서, 끄면 다시 볼 수 있어요. 도착했을 때 알림이 올 수 있어요. 모두 받지 않으려면 '쪽지 알림'을 꺼 주세요."
+          }
+        }
+      }
+    },
+    "Couldn't change this setting right now. Please try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't change this setting right now. Please try again later."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前無法變更這項設定，請稍後再試。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前无法更改这项设置，请稍后再试。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "いまはこの設定を変更できません。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 이 설정을 변경할 수 없어요. 잠시 후 다시 시도해 주세요."
+          }
+        }
+      }
+    },
+    "Strangers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strangers"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陌生人"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陌生人"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知らない人"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "낯선 사람"
+          }
+        }
+      }
+    },
+    "Strangers (%lld unread)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strangers (%lld unread)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陌生人（%lld 張未讀）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陌生人（%lld 张未读）"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知らない人（未読 %lld 件）"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "낯선 사람 (읽지 않음 %lld개)"
+          }
+        }
+      }
+    },
+    "Note notifications": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "紙條通知"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "纸条通知"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メモの通知"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "쪽지 알림"
+          }
+        }
+      }
+    },
+    "When this is off, no note will send you a notification. You can still read them in the app.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When this is off, no note will send you a notification. You can still read them in the app."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉後，任何紙條都不會推播通知你，仍可在 App 內查看。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭后，任何纸条都不会推送通知你，仍可在 App 内查看。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフにすると、メモが届いても通知は届きません。アプリ内ではこれまでどおり読めます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "끄면 어떤 쪽지도 알림으로 오지 않아요. 앱 안에서는 그대로 읽을 수 있어요."
+          }
+        }
+      }
+    },
+    "Don't receive anonymous notes (hidden on this device only)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don't receive anonymous notes (hidden on this device only)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不接收匿名紙條（僅在本機隱藏）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不接收匿名纸条（仅在本机隐藏）"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匿名のメモを受け取らない（この端末でのみ非表示）"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "익명 쪽지 받지 않기 (이 기기에서만 숨김)"
+          }
+        }
+      }
+    },
     "Connection details" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection details" } },
@@ -2084,6 +2364,41 @@
           "stringUnit": {
             "state": "translated",
             "value": "已連線"
+          }
+        }
+      }
+    },
+    "Connecting, not online yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting, not online yet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続中、まだオンラインではありません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 중, 아직 온라인 아님"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接中，尚未上线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線中，尚未上線"
           }
         }
       }
@@ -18789,6 +19104,1056 @@
           "stringUnit": {
             "state": "translated",
             "value": "部分尚未寄出的紙條無法還原"
+          }
+        }
+      }
+    },
+    "Always connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線"
+          }
+        }
+      }
+    },
+    "The green dot shows only when your friend has also turned this on and is online.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The green dot shows only when your friend has also turned this on and is online."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相手も「常時接続」をオンにしてオンラインのときだけ、緑のドットが表示されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상대방도 이 기능을 켜고 온라인일 때만 초록 점이 표시돼요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方也开启并在线时才会显示绿点"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對方也開啟並在線時才會顯示綠點"
+          }
+        }
+      }
+    },
+    "Always connected works with friends you have exchanged notes with. Exchange notes with this friend first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected works with friends you have exchanged notes with. Exchange notes with this friend first."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「常時接続」は、メモを交換した友だちとだけ使えます。まずこの友だちとメモを交換してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'항상 연결'은 쪽지를 교환한 친구와만 쓸 수 있어요. 먼저 이 친구와 쪽지를 교환해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“一直连线”适用于已交换过纸条的朋友。请先和这位朋友交换纸条。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「一直連線」適用於已交換過紙條的朋友。請先和這位朋友交換紙條。"
+          }
+        }
+      }
+    },
+    "You can keep up to 5 friends always connected. Turn one off to add another.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can keep up to 5 friends always connected. Turn one off to add another."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続にできる友だちは最大 5 人です。追加するには、ほかの 1 人をオフにしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결은 친구 5명까지 켤 수 있어요. 더 추가하려면 한 명을 꺼 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多可以让 5 位朋友保持一直连线。要再添加的话，请先关闭其中一位。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多可以讓 5 位朋友保持一直連線。要再加入的話，請先關閉其中一位。"
+          }
+        }
+      }
+    },
+    "Not connected right now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected right now"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "いまはつながっていません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 연결되어 있지 않아요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前没有连上"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前沒有連上"
+          }
+        }
+      }
+    },
+    "Connecting right now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting right now"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "いま接続しています"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 연결하는 중이에요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在连线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在連線"
+          }
+        }
+      }
+    },
+    "Connected across networks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected across networks"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネットワークをまたいでつながっています"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네트워크를 넘어 연결되어 있어요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已跨网络连上"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已跨網路連上"
+          }
+        }
+      }
+    },
+    "Always connected. Not available yet. Exchange notes with this friend first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. Not available yet. Exchange notes with this friend first."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。まだ使えません。まずこの友だちとメモを交換してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 아직 사용할 수 없어요. 먼저 이 친구와 쪽지를 교환해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。目前无法使用。请先和这位朋友交换纸条。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。目前無法使用。請先和這位朋友交換紙條。"
+          }
+        }
+      }
+    },
+    "Always connected for this friend.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected for this friend."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この友だちの常時接続。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 친구와의 항상 연결."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这位朋友的一直连线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這位朋友的一直連線。"
+          }
+        }
+      }
+    },
+    "Always connected. The limit of 5 friends is reached.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. The limit of 5 friends is reached."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。友だち 5 人の上限に達しています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 친구 5명 한도에 도달했어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。已达 5 位朋友的上限。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。已達 5 位朋友的上限。"
+          }
+        }
+      }
+    },
+    "Always connected. Not connected right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. Not connected right now."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。いまはつながっていません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 지금은 연결되어 있지 않아요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。目前没有连上。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。目前沒有連上。"
+          }
+        }
+      }
+    },
+    "Always connected. Connecting right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. Connecting right now."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。いま接続しています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 지금 연결하는 중이에요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。正在连线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。正在連線。"
+          }
+        }
+      }
+    },
+    "Always connected. Connected across networks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. Connected across networks."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。ネットワークをまたいでつながっています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 네트워크를 넘어 연결되어 있어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。已跨网络连上。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。已跨網路連上。"
+          }
+        }
+      }
+    },
+    "Turn off always connected?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off always connected?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「常時接続」をオフにしますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'항상 연결'을 끌까요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要关闭“一直连线”吗？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要關閉「一直連線」嗎？"
+          }
+        }
+      }
+    },
+    "After you turn it off, you will show as offline to them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After you turn it off, you will show as offline to them."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフにすると、相手側ではあなたがオフラインと表示されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "끄면 상대방 쪽에서는 내가 오프라인으로 표시돼요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭后你在他那边会显示离线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉後你在他那邊會顯示離線"
+          }
+        }
+      }
+    },
+    "Turn Off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Off"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフにする"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "끄기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉"
+          }
+        }
+      }
+    },
+    "This friend's key may have changed. Please re-pair in person.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This friend's key may have changed. Please re-pair in person."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この友だちの鍵が変わった可能性があります。直接会ってペアリングし直してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 친구의 키가 바뀌었을 수 있어요. 직접 만나서 다시 페어링해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这位朋友的密钥可能已更换，请当面重新配对"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這位朋友的金鑰可能已更換，請當面重新配對"
+          }
+        }
+      }
+    },
+    "How always connected works": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How always connected works"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「常時接続」のしくみ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'항상 연결'은 이렇게 동작해요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“一直连线”怎么运作"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「一直連線」怎麼運作"
+          }
+        }
+      }
+    },
+    "Three ways to connect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three ways to connect"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "つながる 3 つの方法"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결하는 세 가지 방법"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "三种连线方式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "三種連線方式"
+          }
+        }
+      }
+    },
+    "Good to know": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good to know"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知っておきたいこと"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "알아두면 좋은 점"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先了解这些"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先知道這些"
+          }
+        }
+      }
+    },
+    "What we can see": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What we can see"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "私たちに見えるもの"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "우리가 볼 수 있는 것"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我们能看到什么"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我們能看到什麼"
+          }
+        }
+      }
+    },
+    "Strangers send a one-way note. They can leave you a note, and that is all.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strangers send a one-way note. They can leave you a note, and that is all."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知らない人からは一方向のメモだけが届きます。メモを残せるだけで、それ以上のことはできません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "낯선 사람은 일방향 쪽지만 보낼 수 있어요. 쪽지를 남기는 것까지만 가능해요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陌生人只能寄单向的纸条：留一张纸条给你，仅此而已。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陌生人只能寄單向的紙條：留一張紙條給你，僅此而已。"
+          }
+        }
+      }
+    },
+    "Nearby friends chat live while you share a network. Leave the network and it ends.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nearby friends chat live while you share a network. Leave the network and it ends."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「近く」の友だちとは、同じネットワークにいる間だけリアルタイムでチャットできます。ネットワークを離れると切れます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'근처' 친구와는 같은 네트워크에 있는 동안 실시간으로 채팅해요. 네트워크를 벗어나면 끊겨요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“附近”的朋友在同一个网络下即时聊天，离开那个网络就会断线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「附近」的朋友在同一個網路下即時聊天，離開那個網路就會斷線。"
+          }
+        }
+      }
+    },
+    "Always connected is for friends you pick one by one. It works across networks, and only once you have both turned it on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected is for friends you pick one by one. It works across networks, and only once you have both turned it on."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「常時接続」は、友だちを 1 人ずつ選んで使います。ネットワークをまたいでつながれますが、2 人ともオンにしたときだけ働きます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'항상 연결'은 친구를 한 명씩 골라서 켜요. 네트워크를 넘어 연결되며, 두 사람 모두 켰을 때만 동작해요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“一直连线”是一位一位挑选的朋友。可以跨网络，而且要双方都开启才会生效。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「一直連線」是一位一位挑選的朋友。可以跨網路，而且要雙方都開啟才會生效。"
+          }
+        }
+      }
+    },
+    "You can keep up to 5 friends always connected at a time.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can keep up to 5 friends always connected at a time."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同時に常時接続にできる友だちは最大 5 人です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "동시에 친구 5명까지 항상 연결할 수 있어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时最多可以有 5 位朋友保持一直连线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同時最多可以有 5 位朋友保持一直連線。"
+          }
+        }
+      }
+    },
+    "Turning it off is quiet. Nothing is announced to your friend; you simply stop showing as online to them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turning it off is quiet. Nothing is announced to your friend; you simply stop showing as online to them."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフにしても静かに切り替わります。友だちへの告知は何もなく、相手側でオンライン表示にならなくなるだけです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "끄면 조용히 바뀌어요. 친구에게 따로 알리지 않고, 상대방 쪽에서 내가 온라인으로 표시되지 않을 뿐이에요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭时是悄悄的，不会对朋友做任何宣告；你只是不再在他那边显示在线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉時是悄悄的，不會對朋友做任何宣告；你只是不再於他那邊顯示在線。"
+          }
+        }
+      }
+    },
+    "When the app is not open, you fall back to notes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When the app is not open, you fall back to notes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを開いていないときは、メモでのやりとりに戻ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱을 열어 두지 않았을 때는 쪽지로 연락하게 돼요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 没有开着的时候，就会退回用纸条联系。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 沒有開著的時候，就會退回用紙條聯絡。"
+          }
+        }
+      }
+    },
+    "For now, always connected carries chat only. Files and calls need a nearby connection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For now, always connected carries chat only. Files and calls need a nearby connection."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現時点では、「常時接続」で送れるのはチャットのみです。ファイルの送信や通話は、近くで接続しているときに使えます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 '항상 연결'로 채팅만 보낼 수 있어요. 파일 전송과 통화는 가까이에서 연결했을 때 쓸 수 있어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前“一直连线”只传送聊天消息；传文件和通话需要在附近连线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前「一直連線」只傳送聊天訊息；傳檔案和通話需要在附近連線。"
+          }
+        }
+      }
+    },
+    "We don't store who your friends are, and chats are end-to-end encrypted. But we (or anyone who can watch our servers' live traffic, such as Cloudflare) could notice that two devices join at the same moment and infer that they are in touch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We don't store who your friends are, and chats are end-to-end encrypted. But we (or anyone who can watch our servers' live traffic, such as Cloudflare) could notice that two devices join at the same moment and infer that they are in touch."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーにはあなたの友だちが誰かは保存されず、チャットの内容はエンドツーエンドで暗号化されます。ただし、私たち（またはCloudflareのように、サーバーの通信をリアルタイムで監視できる人）は、2台の端末が同じ瞬間に接続したことに気づき、やりとりがあると推測できる可能性があります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "친구가 누구인지는 저장하지 않고, 채팅은 종단 간 암호화돼요. 다만 우리(또는 Cloudflare처럼 우리 서버의 실시간 트래픽을 볼 수 있는 누구든)는 두 기기가 같은 순간에 접속하는 것을 알아채고 서로 연락하는 사이라고 추측할 수 있어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我们不会储存你的朋友是谁，聊天内容也是端到端加密。不过，我们（或任何能实时监看我们服务器流量的人，例如 Cloudflare）可能会注意到两台设备在同一时间连上，进而推测它们有往来。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我們不會儲存你的朋友是誰，聊天內容也是端對端加密。不過，我們（或任何能即時監看我們伺服器流量的人，例如 Cloudflare）可能會注意到兩台裝置在同一時間連上，進而推測它們有往來。"
+          }
+        }
+      }
+    },
+    "Always connected. Not available right now. You can turn it off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always connected. Not available right now. You can turn it off."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常時接続。いまは使えませんが、オフにできます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 연결. 지금은 사용할 수 없지만 끌 수 있어요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直连线。目前无法使用，你可以把它关闭。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一直連線。目前無法使用，你可以把它關閉。"
           }
         }
       }

@@ -492,6 +492,36 @@ public final class ChatManager: ObservableObject {
             .map { $0.id }
     }
 
+    /// Read-only: is `messageID` in `peerID`'s 1-to-1 thread (queued, loaded
+    /// or on disk)? `outgoingOnly`: and is it one of ours. Never touches
+    /// `messages`, `currentPeerID` or `activeChatPeerID`.
+    public func threadContains(messageID: String, peerID: String, outgoingOnly: Bool = false) -> Bool {
+        threadContains(messageIDs: [messageID], peerID: peerID, outgoingOnly: outgoingOnly).contains(messageID)
+    }
+
+    /// Batch form: which of `messageIDs` are in the thread. The stored thread
+    /// is decrypted at most ONCE per call, and only if memory doesn't answer.
+    public func threadContains(messageIDs: Set<String>, peerID: String, outgoingOnly: Bool = false) -> Set<String> {
+        guard !messageIDs.isEmpty else { return [] }
+        var found: Set<String> = []
+        func collect(_ list: [ChatMessage]) {
+            for m in list where messageIDs.contains(m.id) && (!outgoingOnly || m.isOutgoing) { found.insert(m.id) }
+        }
+        collect(pendingMessages[peerID] ?? [])
+        if currentPeerID == peerID { collect(allMessagesForCurrentPeer); collect(messages) }
+        guard found.count < messageIDs.count else { return found }
+        threadDiskReadCount += 1
+        if let raw = try? Data(contentsOf: messagesFile(for: peerID)),
+           let decrypted = try? encryptor.decrypt(raw),
+           let stored = try? JSONDecoder().decode([ChatMessage].self, from: decrypted) {
+            collect(stored)
+        }
+        return found
+    }
+
+    /// Test hook: stored-thread reads made by `threadContains`.
+    private(set) var threadDiskReadCount = 0
+
     public func message(byID messageID: String) -> ChatMessage? {
         messages.first { $0.id == messageID }
     }

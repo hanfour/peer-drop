@@ -1,0 +1,118 @@
+{
+ "clientHourRule": "Clients MUST use h = floor((unixSeconds - 600) / 3600) (10 min backdating) so modest clock skew and hour-boundary races stay inside the server window {cur-1, cur}. The server accepts ONLY cur and cur-1.",
+ "description": "Rendezvous PoW vectors. PoW = SHA256(tokenBytes || UInt64BE(hour) || utf8(nonce)) with >=16 leading zero bits; hour must equal floor(nowSeconds/3600) or that minus 1. Token is base64url (no padding) of 32 bytes.",
+ "difficultyBits": 16,
+ "vectors": [
+  {
+   "name": "valid current hour",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "asfh",
+   "nowSeconds": 1800000000,
+   "valid": true,
+   "bitsReported": 16,
+   "note": ""
+  },
+  {
+   "name": "valid previous hour",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 499999,
+   "n": "b6mm",
+   "nowSeconds": 1800000000,
+   "valid": true,
+   "bitsReported": 16,
+   "note": ""
+  },
+  {
+   "name": "wrong hour (two hours back)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 499998,
+   "n": "c4iz",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 16,
+   "note": "PoW itself valid, hour outside window"
+  },
+  {
+   "name": "wrong hour (future)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500001,
+   "n": "c37cd",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 18,
+   "note": "PoW itself valid, hour in future"
+  },
+  {
+   "name": "insufficient bits (15 exactly)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "dyis",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 15,
+   "note": "15 leading zero bits"
+  },
+  {
+   "name": "insufficient bits (low)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "0",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 2,
+   "note": ""
+  },
+  {
+   "name": "wrong token (nonce mined for another token)",
+   "token": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+   "h": 500000,
+   "n": "elsl",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 3,
+   "note": ""
+  },
+  {
+   "name": "nonce encoding edge (non-ASCII utf8)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "é🙂-1g1a",
+   "nowSeconds": 1800000000,
+   "valid": true,
+   "bitsReported": 16,
+   "note": "nonce hashed as UTF-8 bytes"
+  },
+  {
+   "name": "nonce encoding edge (empty nonce, rejected as invalid shape)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "",
+   "nowSeconds": 1800000000,
+   "valid": false,
+   "bitsReported": 0,
+   "note": "empty nonce not allowed"
+  },
+  {
+   "name": "client rule at hour boundary (5 min after boundary -> previous hour)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500000,
+   "n": "fr9a",
+   "nowSeconds": 1800003900,
+   "valid": true,
+   "bitsReported": 18,
+   "note": "now=B+300; client h=floor((now-600)/3600)=H; server cur=H+1 accepts cur-1"
+  },
+  {
+   "name": "client rule at hour boundary (11 min after boundary -> new hour)",
+   "token": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+   "h": 500001,
+   "n": "g18h4",
+   "nowSeconds": 1800004260,
+   "valid": true,
+   "bitsReported": 16,
+   "note": "now=B+660; client h=floor((now-600)/3600)=H+1=cur"
+  }
+ ],
+ "clientContract": "Liveness: send the TEXT frame exactly \"ping\" at least every 30 s (server answers \"pong\"). WebSocket-protocol pings (URLSessionWebSocketTask.sendPing) do NOT count; silence >90 s closes the connection. 2 h hard cap cuts active sessions: reconnect with the SAME session id s. s = 16 random bytes base64url, fresh per (token, app run), never reused across tokens."
+}

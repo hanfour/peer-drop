@@ -1,0 +1,11 @@
+{
+ "description": "Deterministic /rv first frame built by the Swift client (RendezvousFirstFrame.build with token bytes i*7 mod 256, now = nowSeconds, session-tag RNG yielding bytes 0x00..0x0F, default base-36 PoW nonce search). Swift asserts it builds byte-for-byte; the Worker asserts verifyRendezvousClaim/parseSessionId accept it. Independently recomputed in Python when created.",
+ "nowSeconds": 1800000000,
+ "frame": "{\"v\":1,\"t\":\"AAcOFRwjKjE4P0ZNVFtiaXB3foWMk5qhqK-2vcTL0tk\",\"pow\":{\"h\":499999,\"n\":\"1wqj\"},\"s\":\"AAECAwQFBgcICQoLDA0ODw\"}",
+ "expected": {
+  "t": "AAcOFRwjKjE4P0ZNVFtiaXB3foWMk5qhqK-2vcTL0tk",
+  "h": 499999,
+  "n": "1wqj",
+  "s": "AAECAwQFBgcICQoLDA0ODw"
+ }
+}

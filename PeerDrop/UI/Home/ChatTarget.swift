@@ -60,6 +60,8 @@ enum FriendSubtitle {
                 : String(localized: "Connected · Local network")
         case .nearby:
             return String(localized: "Nearby · ready to connect")
+        case .connecting:
+            return String(localized: "Connecting...")
         case .offline:
             guard connectionCount > 0 else { return String(localized: "Not connected yet") }
             return String(format: String(localized: "Last online %@"), relativeFormatter.localizedString(for: lastConnected, relativeTo: now))

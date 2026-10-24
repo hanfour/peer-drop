@@ -700,7 +700,8 @@ final class ConnectionManagerSenderBindingTests: XCTestCase {
 
         let other = identity("Other")
         try await client.sendMessage(try PeerMessage.hello(identity: other))
-        try await drain(client, unreadKey: pc.id)
+        // Relay chat is stored under the peer identity id once known (Project E).
+        try await drain(client, unreadKey: real.id)
         XCTAssertEqual(pc.peerIdentity.id, real.id, "second HELLO re-pointed the relay connection")
     }
 

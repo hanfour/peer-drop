@@ -38,23 +38,38 @@ const migrationModules = import.meta.glob<string>("../../migrations/*.sql", {
   import: "default",
 });
 
+/** Split one migration file into statements (full-line `--` comments stripped; see the notes above). */
+export function migrationStatements(sql: string): string[] {
+  // Only handles full-line `--` comments (a line whose trimmed text
+  // starts with `--`). It does NOT strip inline trailing `--` comments
+  // (`col INTEGER, -- note`) and does NOT understand `;` inside string
+  // literals — a statement containing either will be mis-split. Keep
+  // future migrations to full-line comments and no embedded semicolons
+  // in string/text literals, or extend this splitter first.
+  const withoutComments = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  return withoutComments.split(";").map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+/** The raw SQL of one migration file, e.g. `migrationSql("0004_account_settings.sql")`. */
+export function migrationSql(fileName: string): string {
+  const key = Object.keys(migrationModules).find((k) => k.endsWith("/" + fileName));
+  if (!key) throw new Error(`no such migration: ${fileName}`);
+  return migrationModules[key];
+}
+
+/** Apply one migration file's statements (used to prove a migration is re-applicable). */
+export async function applyMigrationFile(db: D1Database, fileName: string): Promise<void> {
+  for (const stmt of migrationStatements(migrationSql(fileName))) await db.prepare(stmt).run();
+}
+
 /** Apply every migrations/*.sql file (sorted) to a miniflare D1 binding. */
 export async function applyMigrations(db: D1Database): Promise<void> {
   const files = Object.keys(migrationModules).sort();
   for (const f of files) {
-    const sql = migrationModules[f];
-    // Only handles full-line `--` comments (a line whose trimmed text
-    // starts with `--`). It does NOT strip inline trailing `--` comments
-    // (`col INTEGER, -- note`) and does NOT understand `;` inside string
-    // literals — a statement containing either will be mis-split. Keep
-    // future migrations to full-line comments and no embedded semicolons
-    // in string/text literals, or extend this splitter first.
-    const withoutComments = sql
-      .split("\n")
-      .filter((line) => !line.trim().startsWith("--"))
-      .join("\n");
-    const statements = withoutComments.split(";").map((s) => s.trim()).filter((s) => s.length > 0);
-    for (const stmt of statements) {
+    for (const stmt of migrationStatements(migrationModules[f])) {
       await db.prepare(stmt).run();
     }
   }

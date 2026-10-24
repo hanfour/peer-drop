@@ -84,6 +84,50 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// C) uses it as one of its "not face to face" markers.
     var isRelayTransport = false
 
+    // MARK: - Project E: rendezvous ("always connected") connections
+
+    /// Installed by `ConnectionManager.installRendezvousConnection`. Such a
+    /// connection lives outside `connections` and never touches global state.
+    var isRendezvous = false
+    /// Read-only view of `isRendezvous` for the UI layer (Task 6): file transfer
+    /// and calls are not offered over a cross-network connection.
+    public var isRendezvousConnection: Bool { isRendezvous }
+    /// Contact the rendezvous connection was installed for.
+    var rendezvousContactID: UUID?
+    /// Secure channel up with exactly the pinned key and a verified binding.
+    var rendezvousVerified = false
+    /// `secureChannelDidComplete` was reported (exactly once per install).
+    var rendezvousOutcomeReported = false
+    /// Secure channel up with the pinned key and binding, waiting for the
+    /// peer's first envelope to decrypt (key confirmation: static-static DH
+    /// over a CLAIMED key reaches `.secured` even for an impostor).
+    var rendezvousAwaitingConfirmation = false
+    /// An inbound envelope failed to decrypt (the receive loop then fails).
+    private(set) var envelopeDecryptFailed = false
+
+    /// Strict secure-channel policy (Project E): the channel must come up
+    /// within `handshakeFallbackNanoseconds` or the connection fails. It never
+    /// enters `.fallbackPlaintext`, never sends a business frame in plaintext,
+    /// and drops every plaintext business frame except `.hello` (delivered so
+    /// the owner can compare its claimed key).
+    var requiresStrictSecureChannel = false
+    /// Strict policy only: the secure channel could not be established.
+    var onStrictSecureChannelFailure: (() -> Void)?
+    private var strictSecureChannelFailed = false
+    /// Strict policy: the failure was the handshake timer (else: no peer
+    /// support or the bundle could not be sent).
+    private(set) var strictSecureChannelTimedOut = false
+
+    private func failStrictSecureChannel(timedOut: Bool = false) {
+        guard !strictSecureChannelFailed else { return }
+        strictSecureChannelFailed = true
+        strictSecureChannelTimedOut = timedOut
+        pendingRatchetPrivateKey = nil
+        handshakeFallbackTask?.cancel()
+        handshakeFallbackTask = nil
+        onStrictSecureChannelFailure?()
+    }
+
     // MARK: - Secure channel (audit-#13 Phase 2)
 
     /// Active local-TCP secure channel, or nil if the peer hasn't completed
@@ -372,6 +416,10 @@ public final class PeerConnection: ObservableObject, Identifiable {
             guard state.isActive, !isClosed else {
                 throw ConnectionError.notConnected
             }
+            // Strict policy: a business frame never leaves unencrypted.
+            if requiresStrictSecureChannel && secureChannel == nil {
+                throw ConnectionError.notConnected
+            }
         }
         // If we have a secured channel and this message isn't an unwrapped
         // control type, wrap it before hitting the wire. Wrapping fails
@@ -502,12 +550,14 @@ public final class PeerConnection: ObservableObject, Identifiable {
         identity: LocalChannelIdentity = IdentityKeyManager.shared
     ) async {
         guard peerSupportsSecureChannel else {
+            if requiresStrictSecureChannel { failStrictSecureChannel(); return }
             logger.info("PeerConnection[\(self.id.prefix(8))] peer doesn't support secure channel — staying plaintext")
             return
         }
         do {
             try await initiateSecureHandshake(identity: identity)
         } catch {
+            if requiresStrictSecureChannel { failStrictSecureChannel(); return }
             logger.error("PeerConnection[\(self.id.prefix(8))] secure handshake send failed: \(error.localizedDescription); falling back to plaintext")
             secureChannelState = .fallbackPlaintext
         }
@@ -527,6 +577,11 @@ public final class PeerConnection: ObservableObject, Identifiable {
         handshakeFallbackTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard let self, !Task.isCancelled, self.connectionGeneration == generation else { return }
+            if self.requiresStrictSecureChannel {
+                // Never fall back to plaintext: fail the connection instead.
+                if self.secureChannelState != .secured { self.failStrictSecureChannel(timedOut: true) }
+                return
+            }
             if self.secureChannelState == .handshakeInProgress {
                 logger.warning("PeerConnection[\(self.id.prefix(8))] handshake fallback fired after \(delay / 1_000_000)ms — peer didn't respond")
                 self.secureChannelState = .fallbackPlaintext
@@ -556,6 +611,8 @@ public final class PeerConnection: ObservableObject, Identifiable {
             logger.warning("PeerConnection[\(self.id.prefix(8))] ignoring duplicate handshake on secured channel")
             return
         }
+        // Strict policy: a failed channel is never retried on this connection.
+        guard !strictSecureChannelFailed else { return }
         let bundle = try message.decodePayload(LocalSecureChannel.HandshakeBundle.self)
 
         // Passive responder: peer initiated; we never called
@@ -584,7 +641,7 @@ public final class PeerConnection: ObservableObject, Identifiable {
         handshakeFallbackTask?.cancel()
         handshakeFallbackTask = nil
         let fingerprint = secureChannel?.peerFingerprint ?? "?"
-        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(fingerprint, privacy: .public)")
+        logger.info("PeerConnection[\(self.id.prefix(8))] secure channel established; peer fingerprint=\(fingerprint, privacy: .private)")
         onSecureChannelEstablished?(fingerprint)
     }
 
@@ -641,13 +698,28 @@ public final class PeerConnection: ObservableObject, Identifiable {
             // unchanged; if the connection was replaced while we were off the
             // main actor, the result belongs to a dead transport and is dropped.
             let generation = connectionGeneration
-            let inner = try await Self.decryptEnvelope(frame, channel: channel)
+            let inner: PeerMessage
+            do {
+                inner = try await Self.decryptEnvelope(frame, channel: channel)
+            } catch {
+                if connectionGeneration == generation { envelopeDecryptFailed = true }
+                throw error
+            }
             guard connectionGeneration == generation else { return }
             if !hasReceivedEnvelope { hasReceivedEnvelope = true }
             sendResponderNoOpIfNeeded(channel)
             deliver(inner, .envelope)
 
         default:
+            // Strict policy: before the channel exists, only control frames
+            // and `.hello` (for the owner's claimed-key check) get through.
+            // Once secured, the version-2 rule below drops all plaintext
+            // business frames.
+            if requiresStrictSecureChannel, secureChannel == nil,
+               !Self.unwrappedControlTypes.contains(message.type), message.type != .hello {
+                plaintextDroppedCount += 1
+                return
+            }
             // #170: on a secured channel, plaintext business frames are only
             // honest from a legacy peer (see `requiresEnvelopes`). Otherwise
             // it's an injection (TLS accepts any cert, #167): drop it, keep
