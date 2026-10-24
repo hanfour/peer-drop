@@ -1,6 +1,6 @@
 import XCTest
 import CryptoKit
-import PeerDropSecurity
+@testable import PeerDropSecurity
 import PeerDropTransport
 @testable import PeerDropCore
 
@@ -28,7 +28,19 @@ final class FakeSignalingTransport: RendezvousSignalingTransport {
     func sendSignal(_ plaintext: Data) { sent.append(plaintext) }
     func tick(now: Date) { tickCount += 1 }
     func close() { closed = true }
-    func fetchICEServers() async -> [RendezvousICEServer] { iceFetches += 1; return iceServers }
+    /// When set, ICE fetches suspend until `releaseICE()`.
+    var holdICE = false
+    private var iceWaiters: [CheckedContinuation<Void, Never>] = []
+    func fetchICEServers() async -> [RendezvousICEServer] {
+        iceFetches += 1
+        if holdICE { await withCheckedContinuation { iceWaiters.append($0) } }
+        return iceServers
+    }
+    func releaseICE() {
+        let w = iceWaiters
+        iceWaiters = []
+        w.forEach { $0.resume() }
+    }
     func emit(_ e: RendezvousSignalingEvent) { onEvent?(e) }
     var sentSignals: [RendezvousSignal] { sent.compactMap(RendezvousSignal.decode) }
 }
@@ -229,16 +241,108 @@ final class RendezvousManagerTests: XCTestCase {
         for c in [unbound, pending, blocked, off] { XCTAssertEqual(manager.linkState(for: c.id), .inactive) }
     }
 
-    func testInitialJoinWaitsForJitter() {
+    /// Ruling R-a: first join immediate even with jitter; retries are jittered.
+    func testFirstJoinImmediateRetriesJittered() {
         jitter.value = 12
         let c = addFriend()
         manager.appDidBecomeActive()
-        XCTAssertTrue(factory.made.isEmpty)
-        XCTAssertEqual(manager.linkState(for: c.id), .connecting)
-        clock.advance(11.9); manager.tick()
-        XCTAssertTrue(factory.made.isEmpty)
-        clock.advance(0.1); manager.tick()
         XCTAssertEqual(factory.made.count, 1)
+        XCTAssertEqual(manager.linkState(for: c.id), .connecting)
+        factory.made[0].emit(.closed)
+        clock.advance(12.5); manager.tick()
+        XCTAssertEqual(factory.made.count, 1)
+        clock.advance(0.5); manager.tick()
+        XCTAssertEqual(factory.made.count, 2, "retry at 1 s backoff + 12 s jitter")
+    }
+
+    // MARK: Fix 2: stale ICE fetch
+
+    func testStaleICEFetchAfterBackgroundForegroundDoesNotAttach() async {
+        _ = addFriend(role: .offerer)
+        manager.appDidBecomeActive()
+        let t1 = factory.made[0]; t1.holdICE = true
+        authenticate(t1)
+        await rvWaitUntil { t1.iceFetches == 1 }
+        manager.appDidEnterBackground()
+        manager.appDidBecomeActive()
+        let t2 = factory.made[1]; t2.holdICE = true
+        authenticate(t2)  // recreated room: attempt restarts at 1
+        await rvWaitUntil { t2.iceFetches == 1 }
+        t1.releaseICE()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(negotiators.made.isEmpty, "a stale fetch must not attach to the new room")
+        t2.releaseICE()
+        await rvWaitUntil { self.negotiators.made.count == 1 }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(negotiators.made.count, 1)
+    }
+
+    func testStaleICEFetchAfterRetireRecreateDoesNotAttach() async {
+        _ = addFriend(role: .offerer)
+        manager.appDidBecomeActive()
+        let t1 = factory.made[0]; t1.holdICE = true
+        authenticate(t1)
+        await rvWaitUntil { t1.iceFetches == 1 }
+        contacts[0].rendezvousEnabled = nil
+        manager.contactsDidChange()
+        contacts[0].rendezvousEnabled = true
+        manager.contactsDidChange()
+        let t2 = factory.made[1]; t2.holdICE = true
+        authenticate(t2)
+        await rvWaitUntil { t2.iceFetches == 1 }
+        t1.releaseICE()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(negotiators.made.isEmpty)
+        t2.releaseICE()
+        await rvWaitUntil { self.negotiators.made.count == 1 }
+    }
+
+    // MARK: Re-entrant connection-layer callbacks during install
+
+    func testConnectionDidCloseInsideInstallIsNotLost() async {
+        let (c, _, n) = await negotiatingOfferer()
+        installer.onInstall = { [unowned self] c in self.manager.connectionDidClose(contactID: c.id) }
+        n.open()
+        XCTAssertTrue(n.closed)
+        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
+        XCTAssertEqual(manager.sessionStates(for: c.id).values.first, .failed(.connectionLost))
+    }
+
+    func testSecureChannelDidCompleteInsideInstallIsNotLost() async {
+        let (c, t, n) = await negotiatingOfferer()
+        installer.onInstall = { [unowned self] c in self.manager.secureChannelDidComplete(contactID: c.id, ok: true) }
+        n.open()
+        XCTAssertEqual(manager.linkState(for: c.id), .connected)
+        XCTAssertTrue(t.closed)
+    }
+
+    func testFailedSecureChannelInsideInstallUninstalls() async {
+        let (c, _, n) = await negotiatingOfferer()
+        installer.onInstall = { [unowned self] c in self.manager.secureChannelDidComplete(contactID: c.id, ok: false) }
+        n.open()
+        XCTAssertEqual(installer.uninstalls, [c.id])
+        XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
+    }
+
+    func testDirectConnectionAppearingInsideInstallClosesEverything() async {
+        let (c, t, n) = await negotiatingOfferer()
+        installer.onInstall = { [unowned self] c in self.direct.set(c.id, true) }
+        n.open()
+        XCTAssertEqual(installer.uninstalls, [c.id])
+        XCTAssertTrue(n.closed)
+        XCTAssertTrue(t.closed)
+        XCTAssertEqual(manager.roomCount, 0)
+        XCTAssertEqual(manager.linkState(for: c.id), .inactive)
+    }
+
+    func testBackgroundInsideInstallClosesEverything() async {
+        let (c, t, n) = await negotiatingOfferer()
+        installer.onInstall = { [unowned self] _ in self.manager.appDidEnterBackground() }
+        n.open()
+        XCTAssertEqual(installer.uninstalls, [c.id])
+        XCTAssertTrue(n.closed)
+        XCTAssertTrue(t.closed)
+        XCTAssertEqual(manager.roomCount, 0)
     }
 
     // MARK: Downgrade / key change
@@ -574,6 +678,55 @@ final class RendezvousManagerTests: XCTestCase {
         XCTAssertEqual(manager.linkState(for: c.id), .unreachable)
         clock.advance(1); manager.tick()
         await rvWaitUntil { sockets.sockets.count == 2 }
+    }
+
+    // MARK: After the secure channel: silence
+
+    /// Real client: once secured, the room is left; a minute and more of ticks
+    /// sends no frame (no ping, no signal) on any socket and opens none.
+    func testAfterSecureOKLongTicksSendNoFrameOnAnySocket() async throws {
+        let sockets = FakeRVSocketFactory()
+        var peer = RVPeer()
+        while (try? RendezvousRole.forKeys(myKey: me.raw, peerKey: peer.key)) != .offerer { peer = RVPeer() }
+        var c = TrustedContact(deviceId: "dev-q", displayName: "q", identityPublicKey: peer.key, trustLevel: .verified, accountId: "acct-q")
+        c.rendezvousEnabled = true
+        contacts = [c]
+        manager = RendezvousManager(contacts: { [unowned self] in self.contacts },
+                                    secrets: IdentityRendezvousSecretProvider(identity: me),
+                                    direct: direct, installer: installer,
+                                    signaling: TestClientFactory(provider: IdentityRendezvousSecretProvider(identity: me),
+                                                                 sockets: sockets, tags: tags, clock: clock),
+                                    negotiators: negotiators, clock: clock, jitter: jitter, ticker: ticker, sessionTags: tags)
+        manager.appDidBecomeActive()
+        await rvWaitUntil { sockets.sockets.count == 1 }
+        let s = sockets.sockets[0]
+        let day = RendezvousToken.day(at: clock.now)
+        s.deliver(#"{"t":"joined"}"#)
+        let peerHello = try peer.hello(towards: me.raw, day: day)
+        try peer.accept(XCTUnwrap(s.sent.last))
+        s.deliver(peerHello)
+        XCTAssertEqual(peer.open(try XCTUnwrap(s.sent.last)), RendezvousSignal.ready.encoded())
+        s.deliver(try peer.sealFrame(RendezvousSignal.ready.encoded()))
+        await rvWaitUntil { self.negotiators.made.count == 1 }
+        negotiators.made[0].open()
+        manager.secureChannelDidComplete(contactID: c.id, ok: true)
+        XCTAssertTrue(s.closedByClient)
+        let sent = sockets.sockets.map(\.sent)
+        for _ in 0..<6 { clock.advance(15); manager.tick() }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(sockets.sockets.map(\.sent), sent)
+        XCTAssertEqual(sockets.sockets.count, 1)
+        XCTAssertEqual(manager.linkState(for: c.id), .connected)
+    }
+
+    // MARK: Shared session-tag store (minor 5)
+
+    func testLiveManagerSharesOneTagStoreWithItsSignalingFactory() {
+        let shared = RendezvousSessionTagStore()
+        let m = RendezvousManager.live(contacts: { [] }, secrets: IdentityRendezvousSecretProvider(identity: me),
+                                       direct: direct, installer: installer, sessionTags: shared)
+        XCTAssertTrue(m.sessionTagStore === shared)
+        XCTAssertTrue((m.signalingFactory as? LiveRendezvousSignalingFactory)?.sessionTags === shared)
     }
 
     // MARK: Two real managers (real client + crypto) through an in-memory room

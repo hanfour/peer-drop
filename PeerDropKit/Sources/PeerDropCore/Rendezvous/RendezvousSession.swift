@@ -16,8 +16,11 @@ import Foundation
 //   - Timeouts: negotiation 30 s (startNegotiation → dataChannelOpen), secure
 //     channel 5 s (dataChannelOpen → secureChannelResult(ok: true)); both fire at
 //     exactly `deadline` (now ≥ start + limit). Never falls back to plaintext.
-//   - Reconnect: exponential backoff 1 s → 300 s cap plus jitter 0…30 s; the
-//     initial join after foreground/enable waits jitter 0…30 s (plan Ruling 7).
+//   - Reconnect: exponential backoff 1 s → 300 s cap plus jitter 0…30 s. The
+//     FIRST join after foreground/enable is immediate (controller ruling R-a,
+//     amending plan Ruling 7: jitter costs latency, it does not defeat
+//     correlation). A socket that stayed up > 60 s before failing resets the
+//     failure counter (R-b), so long healthy waits don't inflate backoff.
 //   - Role: the party with the lexicographically smaller agreement key offers.
 
 /// Who sends the WebRTC offer.
@@ -96,6 +99,10 @@ public struct RendezvousSession: Equatable {
     public static let secureChannelTimeout: TimeInterval = 5
     public static let maxJitter: TimeInterval = 30
     public static let maxBackoff: TimeInterval = 300
+    /// A socket open longer than this before failing resets the backoff (R-b).
+    public static let healthySocketResetAfter: TimeInterval = 60
+    /// Peer ICE candidates accepted per negotiation attempt (minor 11).
+    public static let maxRemoteICECandidates = 64
 
     /// Coarse state (brief vocabulary).
     public enum State: Equatable {
@@ -201,6 +208,10 @@ public struct RendezvousSession: Equatable {
     public private(set) var signalingDeadline: Date?
     public private(set) var negotiationDeadline: Date?
     public private(set) var secureDeadline: Date?
+    /// When the current signaling socket was opened (nil when none).
+    public private(set) var socketOpenedAt: Date?
+    /// Peer ICE candidates delivered in the current attempt (capped).
+    public private(set) var remoteICECount = 0
 
     public init(contactID: UUID, day: Int, token: Data, role: RendezvousRole,
                 isForeground: Bool = false, isEnabled: Bool = false) {
@@ -271,21 +282,17 @@ public struct RendezvousSession: Equatable {
             if event == .appForeground { isForeground = true } else { isEnabled = true }
             guard case .idle(let joinAt) = phase, joinAt == nil, isForeground, isEnabled else { return [] }
             consecutiveFailures = 0
-            let j = Self.clampJitter(context.jitter)
-            if j == 0 { return join() }
-            let at = now.addingTimeInterval(j)
-            phase = .idle(joinAt: at)
-            return [.scheduleRetry(at: at)]
+            return join(now: now)  // R-a: no jitter on the first attempt
         default:
             break
         }
 
         switch phase {
         case .idle(let joinAt):
-            if event == .tick, let at = joinAt, now >= at, isForeground, isEnabled { return join() }
+            if event == .tick, let at = joinAt, now >= at, isForeground, isEnabled { return join(now: now) }
             return []
         case .failed(_, let retryAt):
-            if event == .tick, now >= retryAt, isForeground, isEnabled { return join() }
+            if event == .tick, now >= retryAt, isForeground, isEnabled { return join(now: now) }
             return []
         case .waiting:
             return handleWaiting(event, now: now, context: context)
@@ -357,7 +364,11 @@ public struct RendezvousSession: Equatable {
         case .signal(let data):
             guard let sig = RendezvousSignal.decode(data) else { return [] }
             switch (sig, role) {
-            case (.answer, .offerer), (.ice, _):
+            case (.ice, _):
+                guard remoteICECount < Self.maxRemoteICECandidates else { return [] }
+                remoteICECount += 1
+                return [.deliverRemoteSignal(sig, attempt: attempt)]
+            case (.answer, .offerer):
                 return [.deliverRemoteSignal(sig, attempt: attempt)]
             default:
                 return []  // a second offer / stray ready is dropped
@@ -419,6 +430,7 @@ public struct RendezvousSession: Equatable {
             return fail(.connectionLost, now: now, context: context, extra: [.closeConnection, .leaveRoom])
         case .signalingClosed:
             socketOpen = false
+            socketOpenedAt = nil
             return []  // the connection, not the room, matters now
         case .tick:
             if !secured, let d = secureDeadline, now >= d {
@@ -433,15 +445,17 @@ public struct RendezvousSession: Equatable {
 
     // MARK: Helpers
 
-    private mutating func join() -> [Action] {
+    private mutating func join(now: Date) -> [Action] {
         phase = .waiting
         socketOpen = true
+        socketOpenedAt = now
         resetPeer()
         return [.joinRoom(token: token)]
     }
 
     private mutating func startNegotiation(now: Date) -> [Action] {
         attempt += 1
+        remoteICECount = 0
         parked = false
         phase = .negotiating
         negotiationDeadline = now.addingTimeInterval(Self.negotiationTimeout)
@@ -464,6 +478,7 @@ public struct RendezvousSession: Equatable {
     private mutating func leave() -> [Action] {
         guard socketOpen else { return [] }
         socketOpen = false
+        socketOpenedAt = nil
         return [.leaveRoom]
     }
 
@@ -480,11 +495,15 @@ public struct RendezvousSession: Equatable {
     }
 
     private mutating func fail(_ reason: RendezvousFailureReason, now: Date, context: Context, extra: [Action]) -> [Action] {
+        if let opened = socketOpenedAt, now.timeIntervalSince(opened) > Self.healthySocketResetAfter {
+            consecutiveFailures = 0  // R-b: the socket was healthy for > 60 s
+        }
         var actions: [Action] = []
         for a in extra {
             if a == .leaveRoom { actions += leave() } else { actions.append(a) }
         }
         socketOpen = false
+        socketOpenedAt = nil
         resetPeer()
         negotiationDeadline = nil
         secureDeadline = nil

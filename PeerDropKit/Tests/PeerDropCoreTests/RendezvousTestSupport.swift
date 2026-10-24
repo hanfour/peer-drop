@@ -85,6 +85,29 @@ final class CountingRVSolver: RendezvousPoWSolving, @unchecked Sendable {
     }
 }
 
+/// The first solve (the first frame) runs at once; later solves wait for `release()`.
+final class GatedRVSolver: RendezvousPoWSolving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls = 0
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    var calls: Int { lock.lock(); defer { lock.unlock() }; return _calls }
+    func release() {
+        lock.lock(); released = true; let w = waiters; waiters = []; lock.unlock()
+        w.forEach { $0.resume() }
+    }
+    func solve(token: Data, hour: Int) async throws -> String {
+        lock.lock(); _calls += 1; let n = _calls; lock.unlock()
+        if n > 1 {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                lock.lock()
+                if released { lock.unlock(); c.resume() } else { waiters.append(c); lock.unlock() }
+            }
+        }
+        return try await DetachedRendezvousPoWSolver().solve(token: token, hour: hour)
+    }
+}
+
 // MARK: - Scripted peer (holds the other half of the DH)
 
 final class RVPeer {

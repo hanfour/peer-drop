@@ -34,7 +34,7 @@ public struct TrustedContact: Codable, Identifiable {
     /// know the key never see it. Change it only through
     /// `TrustedContactStore.setRendezvousEnabled(for:_:)`, which enforces the
     /// binding rule and the limit of 5.
-    public var rendezvousEnabled: Bool?
+    public internal(set) var rendezvousEnabled: Bool?
 
     /// `rendezvousEnabled == true` (the stored flag only; eligibility is
     /// `TrustedContactStore.isRendezvousEligible`).

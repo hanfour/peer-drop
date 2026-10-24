@@ -303,6 +303,38 @@ final class RendezvousSignalingClientTests: XCTestCase {
         XCTAssertEqual(solver.calls, 2)
     }
 
+    /// Fix 3: a downgrade must never leave a `POST /rv/ice` carrying the token.
+    func testFetchICEAfterCloseNeitherSolvesNorPosts() async {
+        let solver = CountingRVSolver()
+        let (c, _) = await connected(solver: solver)
+        c.close()
+        now = now.addingTimeInterval(3600)  // would force a re-solve
+        let servers = await c.fetchICEServers()
+        XCTAssertEqual(servers, [])
+        XCTAssertEqual(solver.calls, 1, "only the first-frame solve")
+        XCTAssertTrue(http.requests.isEmpty)
+    }
+
+    func testFetchICEBeforeConnectPostsNothing() async {
+        let c = makeClient()
+        let servers = await c.fetchICEServers()
+        XCTAssertEqual(servers, [])
+        XCTAssertTrue(http.requests.isEmpty)
+    }
+
+    func testCloseDuringICEPoWResolvePostsNothing() async {
+        let solver = GatedRVSolver()
+        let (c, _) = await connected(solver: solver)
+        now = now.addingTimeInterval(3600)
+        let fetch = Task { await c.fetchICEServers() }
+        await rvWaitUntil { solver.calls == 2 }
+        c.close()
+        solver.release()
+        let servers = await fetch.value
+        XCTAssertEqual(servers, [])
+        XCTAssertTrue(http.requests.isEmpty)
+    }
+
     func testICEFailuresFallBackToEmpty() async {
         let (c, _) = await connected()
         http.result = .success((Data(#"{"error":"denied"}"#.utf8), 403))

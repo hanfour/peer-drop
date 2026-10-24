@@ -409,17 +409,58 @@ final class RendezvousSessionTests: XCTestCase {
         XCTAssertEqual(s.state, .failed(.connectionLost))
     }
 
-    func testInitialJoinWaitsForInjectedJitter() {
+    /// Ruling R-a: the FIRST join after foreground/enable is immediate; jitter
+    /// applies to retries only.
+    func testFirstJoinIsImmediateJitterOnlyOnRetries() {
         var s = S(contactID: contact, day: 1, token: token, role: .offerer, isForeground: false, isEnabled: true)
-        XCTAssertEqual(s.handle(.appForeground, now: base, context: .init(jitter: 12)), [.scheduleRetry(at: at(12))])
-        XCTAssertEqual(s.state, .idle)
-        XCTAssertEqual(s.handle(.tick, now: at(11.999)), [])
-        XCTAssertEqual(s.handle(.tick, now: at(12)), [.joinRoom(token: token)])
-        // Background before the join cancels it and sends nothing.
-        var t = S(contactID: contact, day: 1, token: token, role: .offerer, isForeground: false, isEnabled: true)
-        _ = t.handle(.appForeground, now: base, context: .init(jitter: 12))
-        XCTAssertEqual(t.handle(.appBackground, now: at(1)), [])
-        XCTAssertEqual(t.handle(.tick, now: at(20)), [])
+        XCTAssertEqual(s.handle(.appForeground, now: base, context: .init(jitter: 12)), [.joinRoom(token: token)])
+        XCTAssertEqual(s.state, .waiting)
+        XCTAssertEqual(s.handle(.signalingClosed, now: at(1), context: .init(jitter: 12)), [.scheduleRetry(at: at(1 + 1 + 12))])
+        var e = S(contactID: contact, day: 1, token: token, role: .offerer, isForeground: true, isEnabled: false)
+        XCTAssertEqual(e.handle(.enabled, now: base, context: .init(jitter: 30)), [.joinRoom(token: token)])
+    }
+
+    // MARK: - Ruling R-b: healthy socket resets backoff
+
+    /// Three quick failures, then a socket that stays up. Exactly 60 s does
+    /// not reset (failure 4 ⇒ 8 s); more than 60 s resets (failure 1 ⇒ 1 s).
+    func testSocketHealthyOverSixtySecondsResetsBackoff() {
+        var s = waiting()                          // joined at 0
+        _ = s.handle(.signalingClosed, now: base)  // f1, retry at 1
+        _ = s.handle(.tick, now: at(1))
+        _ = s.handle(.signalingClosed, now: at(1)) // f2, retry at 3
+        _ = s.handle(.tick, now: at(3))
+        _ = s.handle(.signalingClosed, now: at(3)) // f3, retry at 7
+        XCTAssertEqual(s.handle(.tick, now: at(7)), [.joinRoom(token: token)])
+        var exactly = s
+        XCTAssertEqual(exactly.handle(.signalingClosed, now: at(67)), [.scheduleRetry(at: at(75))])
+        XCTAssertEqual(exactly.consecutiveFailures, 4)
+        XCTAssertEqual(s.handle(.signalingClosed, now: at(68)), [.scheduleRetry(at: at(69))])
+        XCTAssertEqual(s.consecutiveFailures, 1)
+    }
+
+    func testHealthySocketResetAlsoAppliesToSignalingTimeout() {
+        var s = waiting()
+        _ = s.handle(.signalingClosed, now: base)
+        _ = s.handle(.tick, now: at(1))
+        _ = s.handle(.signalingClosed, now: at(1))
+        _ = s.handle(.tick, now: at(3))            // joined at 3, failures 2
+        _ = s.handle(.peerJoined, now: at(100))
+        XCTAssertEqual(s.handle(.tick, now: at(105)), [.leaveRoom, .scheduleRetry(at: at(106))])
+    }
+
+    // MARK: - Minor 11: remote ICE cap
+
+    func testRemoteICECappedPerAttempt() {
+        var s = negotiating()
+        let ice = RendezvousSignal.ice(sdp: "c", mid: nil, index: 0)
+        for _ in 0..<S.maxRemoteICECandidates {
+            XCTAssertEqual(s.handle(.signal(ice.encoded()), now: base), [.deliverRemoteSignal(ice, attempt: 1)])
+        }
+        XCTAssertEqual(s.handle(.signal(ice.encoded()), now: base), [])
+        let ans = RendezvousSignal.answer(sdp: "a")
+        XCTAssertEqual(s.handle(.signal(ans.encoded()), now: base), [.deliverRemoteSignal(ans, attempt: 1)])
+        XCTAssertEqual(S.maxRemoteICECandidates, 64)
     }
 
     func testNotEnabledNeverJoins() {

@@ -1,6 +1,7 @@
 #if canImport(WebRTC)
 import Foundation
 import PeerDropTransport
+import PeerDropSecurity
 @preconcurrency import WebRTC
 
 // Project E — production `RendezvousNegotiator`: one WebRTC data channel via
@@ -21,8 +22,15 @@ public final class WebRTCRendezvousNegotiator: RendezvousNegotiator {
     private let configuration: RTCConfiguration
     private var client: DataChannelClient?
     private var transport: DataChannelTransport?
+    /// A remote description was received (one per negotiation).
     private var remoteDescriptionSet = false
+    /// `setRemoteSDP` has completed: only now may ICE candidates be added.
+    private var remoteDescriptionApplied = false
+    /// Peer ICE candidates accepted (queued + added), capped.
+    private var remoteICECount = 0
+    static let maxRemoteICECandidates = RendezvousSession.maxRemoteICECandidates
     private var localDescriptionSent = false
+    var pendingRemoteICECountForTesting: Int { pendingRemoteICE.count }
     private var pendingRemoteICE: [RendezvousSignal] = []
     private var pendingLocalICE: [RendezvousSignal] = []
     private var opened = false
@@ -80,7 +88,7 @@ public final class WebRTCRendezvousNegotiator: RendezvousNegotiator {
             Task { [weak self] in
                 do {
                     try await client.setRemoteSDP(RTCSessionDescription(type: .offer, sdp: sdp))
-                    self?.flushRemoteICE()
+                    self?.remoteDescriptionDidApply()
                     let answer = try await client.createAnswer()
                     self?.emitLocalDescription(.answer(sdp: answer.sdp))
                 } catch {
@@ -93,13 +101,15 @@ public final class WebRTCRendezvousNegotiator: RendezvousNegotiator {
             Task { [weak self] in
                 do {
                     try await client.setRemoteSDP(RTCSessionDescription(type: .answer, sdp: sdp))
-                    self?.flushRemoteICE()
+                    self?.remoteDescriptionDidApply()
                 } catch {
                     self?.fail()
                 }
             }
         case (.ice, _):
-            if remoteDescriptionSet { addRemoteICE(signal) } else if pendingRemoteICE.count < 64 { pendingRemoteICE.append(signal) }
+            guard remoteICECount < Self.maxRemoteICECandidates else { return }
+            remoteICECount += 1
+            if remoteDescriptionApplied { addRemoteICE(signal) } else { pendingRemoteICE.append(signal) }
         default:
             return
         }
@@ -135,7 +145,9 @@ public final class WebRTCRendezvousNegotiator: RendezvousNegotiator {
         if localDescriptionSent { onLocalSignal?(signal) } else if pendingLocalICE.count < 64 { pendingLocalICE.append(signal) }
     }
 
-    private func flushRemoteICE() {
+    private func remoteDescriptionDidApply() {
+        guard !finished else { return }
+        remoteDescriptionApplied = true
         let queued = pendingRemoteICE
         pendingRemoteICE = []
         queued.forEach(addRemoteICE)
@@ -166,6 +178,25 @@ public final class WebRTCRendezvousNegotiator: RendezvousNegotiator {
         let cb = onClosed
         close()
         cb?()
+    }
+}
+
+extension RendezvousManager {
+    /// Production wiring: ONE session-tag store shared by the manager (which
+    /// forgets expired days' tags) and the signaling factory (which uses them).
+    public static func live(
+        contacts: @escaping () -> [TrustedContact],
+        secrets: RendezvousSecretProvider = IdentityRendezvousSecretProvider(),
+        direct: DirectConnectionChecker,
+        installer: RendezvousConnectionInstaller,
+        baseURL: URL = WorkerURL.current(),
+        sessionTags: RendezvousSessionTagStore = .process
+    ) -> RendezvousManager {
+        RendezvousManager(
+            contacts: contacts, secrets: secrets, direct: direct, installer: installer,
+            signaling: LiveRendezvousSignalingFactory(provider: secrets, baseURL: baseURL, sessionTags: sessionTags),
+            negotiators: WebRTCRendezvousNegotiatorFactory(),
+            sessionTags: sessionTags)
     }
 }
 

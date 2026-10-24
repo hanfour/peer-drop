@@ -310,19 +310,24 @@ public final class RendezvousSignalingClient: RendezvousSignalingTransport {
 
     // MARK: ICE
 
+    /// Only while the socket is open: a closed client (downgrade, background,
+    /// retire) never solves PoW for, nor POSTs, its token again.
     public func fetchICEServers() async -> [RendezvousICEServer] {
+        guard phase == .open else { return [] }
         let hour = RendezvousProofOfWork.currentHour(now: clock())
         let nonce: String
         if let c = powCache, c.hour == hour {
             nonce = c.nonce
         } else {
             guard let n = try? await solver.solve(token: token, hour: hour) else { return [] }
+            guard phase == .open else { return [] }  // closed during the solve
             powCache = (hour, n)
             nonce = n
         }
         guard let encoded = try? RendezvousToken.encoded(token),
               let body = try? JSONSerialization.data(withJSONObject: ["t": encoded, "pow": ["h": hour, "n": nonce]])
         else { return [] }
+        guard phase == .open else { return [] }
         guard let (data, status) = try? await http.post(url: baseURL.appendingPathComponent("rv/ice"), body: body),
               status == 200 else { return [] }
         return Self.parseICEServers(data)

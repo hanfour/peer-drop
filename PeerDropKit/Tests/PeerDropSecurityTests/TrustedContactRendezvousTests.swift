@@ -122,6 +122,27 @@ final class TrustedContactRendezvousTests: XCTestCase {
         }
     }
 
+    /// Ruling R-d: blocking clears the opt-in, so unblocking never silently resumes it.
+    func testBlockClearsOptInAndUnblockDoesNotResume() throws {
+        let c = addBound("b")
+        try store.setRendezvousEnabled(for: c.id, true)
+        store.setBlocked(c.id, blocked: true)
+        XCTAssertNil(store.find(byId: c.id)?.rendezvousEnabled)
+        store.setBlocked(c.id, blocked: false)
+        XCTAssertNil(store.find(byId: c.id)?.rendezvousEnabled)
+        XCTAssertTrue(store.rendezvousEnabledContacts.isEmpty)
+    }
+
+    /// Minor 6: a contact handed to `add()` cannot carry the opt-in past the
+    /// eligibility check and the limit.
+    func testAddDropsIncomingOptIn() {
+        var c = TrustedContact(deviceId: "d-x", displayName: "x", identityPublicKey: newKey(),
+                               trustLevel: .verified, accountId: "acct-x")
+        c.rendezvousEnabled = true
+        store.add(c)
+        XCTAssertNil(store.find(byId: c.id)?.rendezvousEnabled)
+    }
+
     func testDuplicatedKeyRefusedLikeFriendBinding() {
         let key = newKey()
         let c = addBound("d1", key: key)

@@ -49,6 +49,10 @@ public final class TrustedContactStore: ObservableObject {
     /// An account maps to at most one contact, so adding a contact that carries
     /// an `accountId` clears that same `accountId` from every other contact.
     public func add(_ contact: TrustedContact) {
+        // The opt-in is only ever set through `setRendezvousEnabled` (binding
+        // rule + limit); an incoming contact cannot carry it in.
+        var contact = contact
+        contact.rendezvousEnabled = nil
         if let accountId = contact.accountId {
             for i in contacts.indices where contacts[i].accountId == accountId {
                 contacts[i].accountId = nil
@@ -120,6 +124,8 @@ public final class TrustedContactStore: ObservableObject {
     public func setBlocked(_ id: UUID, blocked: Bool) {
         guard let index = contacts.firstIndex(where: { $0.id == id }) else { return }
         contacts[index].isBlocked = blocked
+        // Ruling R-d: blocking drops the opt-in, so unblocking never resumes it silently.
+        if blocked { contacts[index].rendezvousEnabled = nil }
         scheduleSave()
     }
 

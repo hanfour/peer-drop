@@ -100,20 +100,33 @@ public protocol RendezvousTicker: AnyObject {
     func stop()
 }
 
-/// 1 Hz main-run-loop timer.
+/// 1 Hz main-run-loop timer in the COMMON modes, so it keeps firing (and the
+/// signaling keepalive keeps going) while iOS scroll tracking runs the run loop
+/// in `UITrackingRunLoopMode`; a default-mode timer would pause there and the
+/// Worker would cut the socket after 90 s. Invalidated on `stop()` and deinit.
 @MainActor
 public final class TimerRendezvousTicker: RendezvousTicker {
-    private var timer: Timer?
+    // nonisolated(unsafe): touched from `deinit`; the ticker lives and dies on the main thread.
+    nonisolated(unsafe) private var timer: Timer?
+    nonisolated(unsafe) private var fireCount = 0
     public init() {}
+    var timerForTesting: Timer? { timer }
+    var timerFireCountForTesting: Int { fireCount }
     public func start(_ tick: @escaping @MainActor () -> Void) {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            self?.fireCount += 1
             Task { @MainActor in tick() }
         }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
     public func stop() {
         timer?.invalidate()
         timer = nil
+    }
+    deinit {
+        timer?.invalidate()
     }
 }
 
@@ -162,6 +175,15 @@ public final class RendezvousManager: ObservableObject {
     private var rooms: [Key: Room] = [:]
     private var queue: [(Key, RendezvousSession.Event)] = []
     private var draining = false
+    /// Entry points called re-entrantly while the queue drains (e.g. from
+    /// inside `installer.install`) run after the drain, never mid-transition.
+    private var deferredCalls: [() -> Void] = []
+
+    private func deferIfDraining(_ call: @escaping () -> Void) -> Bool {
+        guard draining else { return false }
+        deferredCalls.append(call)
+        return true
+    }
 
     public init(
         contacts: @escaping () -> [TrustedContact],
@@ -191,6 +213,7 @@ public final class RendezvousManager: ObservableObject {
     // MARK: - Public API (Task 5 wiring)
 
     public func appDidBecomeActive() {
+        if deferIfDraining({ [weak self] in self?.appDidBecomeActive() }) { return }
         guard !isForeground else { return }
         isForeground = true
         ticker.start { [weak self] in self?.tick() }
@@ -199,6 +222,7 @@ public final class RendezvousManager: ObservableObject {
 
     /// Closes every socket and connection; sends nothing.
     public func appDidEnterBackground() {
+        if deferIfDraining({ [weak self] in self?.appDidEnterBackground() }) { return }
         isForeground = false
         ticker.stop()
         for key in rooms.keys { enqueue(key, .appBackground) }
@@ -213,6 +237,7 @@ public final class RendezvousManager: ObservableObject {
     }
 
     public func tick() {
+        if deferIfDraining({ [weak self] in self?.tick() }) { return }
         let now = clock.now
         for (key, room) in rooms {
             room.transport?.tick(now: now)
@@ -252,6 +277,9 @@ public final class RendezvousManager: ObservableObject {
     }
 
     var roomCount: Int { rooms.count }
+    var tickerForTesting: RendezvousTicker { ticker }
+    var sessionTagStore: RendezvousSessionTagStore { sessionTags }
+    var signalingFactory: RendezvousSignalingTransportFactory { signaling }
 
     // MARK: - Reconcile
 
@@ -264,6 +292,7 @@ public final class RendezvousManager: ObservableObject {
     }
 
     private func reconcile() {
+        if deferIfDraining({ [weak self] in self?.reconcile() }) { return }
         let now = clock.now
         let all = contacts()
         let active = Self.activeContacts(all)
@@ -334,13 +363,16 @@ public final class RendezvousManager: ObservableObject {
     private func drain() {
         guard !draining else { return }
         draining = true
-        defer { draining = false }
         while !queue.isEmpty {
             let (key, event) = queue.removeFirst()
             process(key, event)
         }
         removeClosedRooms(forgetTokens: true)
+        draining = false
         publishLinkStates()
+        while !deferredCalls.isEmpty {
+            deferredCalls.removeFirst()()
+        }
     }
 
     private func siblings(of key: Key) -> [Key] {
@@ -389,9 +421,12 @@ public final class RendezvousManager: ObservableObject {
             closeNegotiator(room)
             room.negotiatorAttempt = attempt
             let transport = room.transport
-            Task { [weak self] in
+            // The fetch is bound to THIS Room object: a room recreated for the
+            // same (contact, day) restarts `attempt` at 1 and must not adopt it.
+            Task { [weak self, weak room] in
                 let servers = await transport?.fetchICEServers() ?? []
-                self?.negotiatorReady(key: key, role: role, attempt: attempt, servers: servers)
+                guard let self, let room else { return }
+                self.negotiatorReady(key: key, room: room, role: role, attempt: attempt, servers: servers)
             }
 
         case .deliverRemoteSignal(let signal, let attempt):
@@ -412,10 +447,14 @@ public final class RendezvousManager: ObservableObject {
                 enqueue(key, .directConnectionPresent)
                 return
             }
+            // Mark installed BEFORE the call: the installer may synchronously
+            // report `secureChannelDidComplete` / `connectionDidClose`, which
+            // only target installed rooms (and only enqueue while draining).
+            room.installed = true
             if installer.install(transport: transport, contact: contact) {
-                room.installed = true
                 siblings(of: key).forEach { enqueue($0, .retire) }
             } else {
+                room.installed = false
                 enqueue(key, .installFailed)
             }
 
@@ -442,8 +481,8 @@ public final class RendezvousManager: ObservableObject {
         }
     }
 
-    private func negotiatorReady(key: Key, role: RendezvousRole, attempt: Int, servers: [RendezvousICEServer]) {
-        guard let room = rooms[key], room.session.state == .negotiating, room.session.attempt == attempt,
+    private func negotiatorReady(key: Key, room: Room, role: RendezvousRole, attempt: Int, servers: [RendezvousICEServer]) {
+        guard rooms[key] === room, room.session.state == .negotiating, room.session.attempt == attempt,
               room.negotiatorAttempt == attempt, room.negotiator == nil else { return }
         let n = negotiators.makeNegotiator(role: role, iceServers: servers)
         room.negotiator = n
@@ -514,7 +553,7 @@ public final class RendezvousManager: ObservableObject {
 public final class LiveRendezvousSignalingFactory: RendezvousSignalingTransportFactory {
     private let provider: RendezvousSecretProvider
     private let baseURL: URL
-    private let sessionTags: RendezvousSessionTagStore
+    let sessionTags: RendezvousSessionTagStore
     private let sockets = URLSessionRendezvousWebSocketFactory()
 
     public init(provider: RendezvousSecretProvider = IdentityRendezvousSecretProvider(),

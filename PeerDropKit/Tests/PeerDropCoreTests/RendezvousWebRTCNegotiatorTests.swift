@@ -20,6 +20,15 @@ final class RendezvousWebRTCNegotiatorTests: XCTestCase {
         XCTAssertEqual(c.iceServers[0].credential, "p")
     }
 
+    /// Minor 4 + 11: ICE before the remote description is applied is queued, and capped.
+    func testRemoteICEQueuedUntilDescriptionAppliedAndCapped() {
+        let answerer = WebRTCRendezvousNegotiator(role: .answerer, iceServers: [])
+        answerer.start()
+        for i in 0..<70 { answerer.handleRemote(.ice(sdp: "candidate:\(i) 1 udp 1 192.0.2.1 9 typ host", mid: "0", index: 0)) }
+        XCTAssertEqual(answerer.pendingRemoteICECountForTesting, 64)
+        answerer.close()
+    }
+
     /// Real WebRTC, in process: offer precedes its ICE, ICE before the remote
     /// description is queued, both sides open a data channel.
     func testLoopbackOffererAndAnswererOpen() async throws {
