@@ -29,6 +29,16 @@ public struct TrustedContact: Codable, Identifiable {
     /// Account claim received from the peer but not yet confirmed by the user.
     /// Cleared when the account is bound or the identity key changes.
     public var pendingAccountBinding: PendingAccountBinding?
+    /// Project E per-contact "always connected" opt-in. nil = off (default).
+    /// Optional on purpose: nil is never encoded, so older builds that do not
+    /// know the key never see it. Change it only through
+    /// `TrustedContactStore.setRendezvousEnabled(for:_:)`, which enforces the
+    /// binding rule and the limit of 5.
+    public var rendezvousEnabled: Bool?
+
+    /// `rendezvousEnabled == true` (the stored flag only; eligibility is
+    /// `TrustedContactStore.isRendezvousEligible`).
+    public var isRendezvousEnabled: Bool { rendezvousEnabled == true }
 
     public init(
         id: UUID = UUID(),
@@ -58,6 +68,7 @@ public struct TrustedContact: Codable, Identifiable {
         self.keyHistory = keyHistory
         self.peerProtocolVersion = peerProtocolVersion
         self.pendingAccountBinding = pendingAccountBinding
+        self.rendezvousEnabled = nil
     }
 
     // Explicit (rather than synthesized) `CodingKeys` so the on-disk key
@@ -73,6 +84,7 @@ public struct TrustedContact: Codable, Identifiable {
         case id, deviceId, displayName, identityPublicKey, trustLevel, firstConnected, lastVerified, mailboxId
         case accountId = "userId"
         case isBlocked, keyHistory, peerProtocolVersion, pendingAccountBinding
+        case rendezvousEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -90,6 +102,7 @@ public struct TrustedContact: Codable, Identifiable {
         self.keyHistory = try c.decodeIfPresent([KeyChangeRecord].self, forKey: .keyHistory) ?? []
         self.peerProtocolVersion = try c.decodeIfPresent(PeerVersion.self, forKey: .peerProtocolVersion)
         self.pendingAccountBinding = try c.decodeIfPresent(PendingAccountBinding.self, forKey: .pendingAccountBinding)
+        self.rendezvousEnabled = try c.decodeIfPresent(Bool.self, forKey: .rendezvousEnabled)
     }
 
     public var keyFingerprint: String {

@@ -2,6 +2,16 @@ import Foundation
 import Combine
 import os.log
 
+/// Why `TrustedContactStore.setRendezvousEnabled(for:_:)` refused.
+public enum RendezvousOptInError: Error, Equatable {
+    case unknownContact
+    /// Not a verified binding (no account, pending claim, blocked, duplicated
+    /// key or no device id) — see `TrustedContactStore.isRendezvousEligible`.
+    case notBound
+    /// Already `maxRendezvousContacts` contacts enabled.
+    case limitExceeded
+}
+
 public final class TrustedContactStore: ObservableObject {
 
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "TrustedContactStore")
@@ -42,6 +52,7 @@ public final class TrustedContactStore: ObservableObject {
         if let accountId = contact.accountId {
             for i in contacts.indices where contacts[i].accountId == accountId {
                 contacts[i].accountId = nil
+                contacts[i].rendezvousEnabled = nil
             }
         }
         contacts.append(contact)
@@ -133,10 +144,60 @@ public final class TrustedContactStore: ObservableObject {
         if let accountId {
             for i in contacts.indices where i != index && contacts[i].accountId == accountId {
                 contacts[i].accountId = nil
+                contacts[i].rendezvousEnabled = nil
             }
+        }
+        if accountId == nil || accountId != contacts[index].accountId {
+            // The opt-in was given for one binding; unbinding or rebinding drops it.
+            contacts[index].rendezvousEnabled = nil
         }
         contacts[index].accountId = accountId
         contacts[index].pendingAccountBinding = nil
+        scheduleSave()
+    }
+
+    // MARK: - Rendezvous ("always connected") opt-in
+
+    /// Hard cap on contacts with the opt-in (spec §10.1).
+    public static let maxRendezvousContacts = 5
+
+    /// Same rule as `FriendBinding.verifiedAccount`: the contact resolves
+    /// uniquely by key and is not blocked, `accountId != nil` and no pending
+    /// claim. Additionally the connection key (`deviceId`) must be known
+    /// (spec §12.12) and the key must be a 32-byte agreement key.
+    public static func isRendezvousEligible(_ c: TrustedContact, among all: [TrustedContact]) -> Bool {
+        guard !c.isBlocked, c.accountId != nil, c.pendingAccountBinding == nil,
+              let deviceId = c.deviceId, !deviceId.isEmpty,
+              c.identityPublicKey.count == 32 else { return false }
+        return all.filter { $0.matchesKey(c.identityPublicKey) }.count == 1
+    }
+
+    /// Contacts whose opt-in is on AND who are eligible right now (ineligible
+    /// ones, e.g. during a pending re-exchange, are suspended, not listed).
+    public var rendezvousEnabledContacts: [TrustedContact] {
+        contacts.filter { $0.isRendezvousEnabled && Self.isRendezvousEligible($0, among: contacts) }
+    }
+
+    /// Turn the opt-in on or off. Enabling requires eligibility and at most
+    /// `maxRendezvousContacts` enabled contacts; violations throw (never a
+    /// silent no-op). Disabling a known contact always succeeds and stores nil.
+    public func setRendezvousEnabled(for id: UUID, _ enabled: Bool) throws {
+        guard let index = contacts.firstIndex(where: { $0.id == id }) else {
+            throw RendezvousOptInError.unknownContact
+        }
+        guard enabled else {
+            guard contacts[index].rendezvousEnabled != nil else { return }
+            contacts[index].rendezvousEnabled = nil
+            scheduleSave()
+            return
+        }
+        guard Self.isRendezvousEligible(contacts[index], among: contacts) else {
+            throw RendezvousOptInError.notBound
+        }
+        if contacts[index].isRendezvousEnabled { return }
+        let others = contacts.indices.filter { $0 != index && contacts[$0].isRendezvousEnabled }.count
+        guard others < Self.maxRendezvousContacts else { throw RendezvousOptInError.limitExceeded }
+        contacts[index].rendezvousEnabled = true
         scheduleSave()
     }
 
@@ -197,6 +258,8 @@ public final class TrustedContactStore: ObservableObject {
         // A new identity key invalidates any account binding made for the old one.
         contacts[index].accountId = nil
         contacts[index].pendingAccountBinding = nil
+        // Project E: a new key never inherits the "always connected" opt-in.
+        contacts[index].rendezvousEnabled = nil
         contacts[index].trustLevel = trustLevel
         if trustLevel != .verified {
             contacts[index].lastVerified = nil
