@@ -37,10 +37,14 @@ import type { PushDeps } from "./notes";
 import { generateAccountId, normalizeAccountId } from "./account";
 import { GROUP_LIMITS, GROUP_PUSH } from "./groupRoom";
 import type { Caller, GroupMember, PushRecipient } from "./groupRoom";
-import { decodeB64, decodedByteLength, isValidGroupId, isValidMemberId, memberKeyMessage, sha256Hex, verifyAccountSig, wrapMessage } from "./groupSig";
-import { deliverGroupPush } from "./groupPush";
+import { decodeB64, decodedByteLength, isValidGroupId, isValidMemberId, memberKeyMessage, sha256Hex, verifyAccountSig, verifyAccountSigs, wrapMessage } from "./groupSig";
+import { deliverGroupPush, errName } from "./groupPush";
 
-export interface GroupRouteDeps { push: PushDeps; authorize: (r: Request) => Promise<GroupAuth | null> }
+/**
+ * `waitUntil` (the Worker's ctx.waitUntil) runs pushes after the response;
+ * without it (direct calls in tests) they are awaited inline.
+ */
+export interface GroupRouteDeps { push: PushDeps; authorize: (r: Request) => Promise<GroupAuth | null>; waitUntil?: (p: Promise<unknown>) => void }
 
 const GROUP_LIMIT_PER_ACCOUNT = 20;
 const GROUP_CREATE_LIMIT_PER_DAY = 20;
@@ -49,6 +53,14 @@ const JOIN_FAIL_LIMIT_PER_HOUR = 10;
 const MAX_CREATE_BODY_BYTES = 600 * 1024;
 const MAX_SMALL_BODY_BYTES = 4 * 1024;
 const MAX_INVITE_BIND_ATTEMPTS = 5;
+const MAX_EVENT_BODY_BYTES = 16 * 1024;
+const MAX_META_BODY_BYTES = 600 * 1024;
+const MAX_ROTATE_BODY_BYTES = 640 * 1024;
+const MAX_KEYS_BODY_BYTES = 32 * 1024;
+const KEY_REQUEST_LIMIT_PER_HOUR = 6;
+const MAX_TICKET_LEN = 64;
+/** wrapMessage encodes the epoch as UInt32BE: anything larger would alias a smaller epoch's signature. */
+const MAX_EPOCH = 0xFFFF_FFFF;
 const TOMBSTONE_PREFIX = "group-gone:";
 
 /**
@@ -180,9 +192,24 @@ async function markGone(env: Env, groupId: string): Promise<void> {
   ]);
 }
 
+/**
+ * Runs `task` after the response (waitUntil) or, with no waitUntil, inline.
+ * Never rejects: a failure is logged as a fixed label + the error's class.
+ */
+async function inBackground(deps: GroupRouteDeps, label: string, task: () => Promise<void>): Promise<void> {
+  const p = task().catch((e) => { console.error(label, errName(e)); });
+  if (deps.waitUntil) deps.waitUntil(p);
+  else await p;
+}
+
 async function readSmallBody(request: Request): Promise<Record<string, unknown> | Response> {
+  return readJsonBody(request, MAX_SMALL_BODY_BYTES);
+}
+
+/** A JSON object body of at most `max` characters (413 above, 400 if not an object). */
+async function readJsonBody(request: Request, max: number): Promise<Record<string, unknown> | Response> {
   const raw = await request.text();
-  if (raw.length > MAX_SMALL_BODY_BYTES) return json({ error: "too_large" }, 413);
+  if (raw.length > max) return json({ error: "too_large" }, 413);
   let body: unknown;
   try { body = JSON.parse(raw || "null"); } catch { body = null; }
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "missing_fields" }, 400);
@@ -190,6 +217,56 @@ async function readSmallBody(request: Request): Promise<Record<string, unknown> 
 }
 
 const isB64Of = (v: unknown, n: number): v is string => typeof v === "string" && decodedByteLength(v) === n;
+
+interface WrapIn { memberId: string; wrapped: string; sig: string }
+
+/**
+ * A wraps array as the room takes it: at most 50, distinct valid memberIds
+ * (else 400 bad_request), each `wrapped` 92 bytes and `sig` 64 bytes of
+ * strict base64 (else 400 bad_wrap) — checked here because the signatures
+ * are verified before the room sees the request.
+ */
+function parseWrapsInput(v: unknown): WrapIn[] | Response {
+  if (!Array.isArray(v) || v.length > GROUP_LIMITS.maxMembers) return json({ error: "bad_request" }, 400);
+  const seen = new Set<string>();
+  const out: WrapIn[] = [];
+  let shapeOk = true;
+  for (const w of v) {
+    if (!w || typeof w !== "object") return json({ error: "bad_request" }, 400);
+    const { memberId, wrapped, sig } = w as Record<string, unknown>;
+    if (!isValidMemberId(memberId) || seen.has(memberId)) return json({ error: "bad_request" }, 400);
+    seen.add(memberId);
+    if (!isB64Of(wrapped, GROUP_LIMITS.wrappedBytes) || !isB64Of(sig, GROUP_LIMITS.sigBytes)) { shapeOk = false; continue; }
+    out.push({ memberId, wrapped, sig });
+  }
+  return shapeOk ? out : json({ error: "bad_wrap" }, 400);
+}
+
+const isEpoch = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= MAX_EPOCH;
+
+/**
+ * Ruling 6 for PUT /keys and POST /rotate: every wrap must be signed by the
+ * CALLER's account over wrapMessage(groupId, epoch, target, wrapper = the
+ * caller's memberId — what the room records as wrappedBy — , wrapped).
+ */
+function wrapsSignedByCaller(env: Env, groupId: string, caller: Caller, epoch: number, wraps: WrapIn[]): Promise<boolean> {
+  return verifyAccountSigs(env.ACCOUNTS_DB, caller.accountId!, wraps.map((w) => ({
+    message: wrapMessage(groupId, epoch, w.memberId, caller.memberId, decodeB64(w.wrapped)!),
+    sig: w.sig,
+  })));
+}
+
+/** `?since=` / `?limit=`: absent, or a plain non-negative integer. */
+function parseListQuery(url: URL): { since?: number; limit?: number } | Response {
+  const out: { since?: number; limit?: number } = {};
+  for (const k of ["since", "limit"] as const) {
+    const v = url.searchParams.get(k);
+    if (v === null) continue;
+    if (!/^\d{1,15}$/.test(v)) return json({ error: "bad_request" }, 400);
+    out[k] = Number(v);
+  }
+  return out;
+}
 
 // ---- create ---------------------------------------------------------------
 
@@ -345,15 +422,12 @@ async function performJoin(env: Env, auth: GroupAuth, groupId: string, input: Jo
   }
   if (added) {
     // A new seat holds no key yet: silently ask the keyed account members to relay one.
-    try {
+    await inBackground(deps, "group join: key request push failed", async () => {
       const rk = await doCall(env, groupId, "/request-key", { caller });
-      if (rk.ok) {
-        const { recipients } = await rk.json() as { recipients: PushRecipient[] };
-        await deliverGroupPush(env, recipients, GROUP_PUSH.keyRequest(groupId), deps.push);
-      }
-    } catch (e) {
-      console.error("group join: key request push failed", String(e));
-    }
+      if (!rk.ok) return;
+      const { recipients } = await rk.json() as { recipients: PushRecipient[] };
+      await deliverGroupPush(env, recipients, GROUP_PUSH.keyRequest(groupId), deps.push);
+    });
   }
   const view = await doCall(env, groupId, "/view", { caller });
   if (!view.ok) return fromDo(view);
@@ -363,10 +437,36 @@ async function performJoin(env: Env, auth: GroupAuth, groupId: string, input: Jo
 
 // ---- dispatcher -------------------------------------------------------------
 
-const MEMBER_ROUTES = new Set(["GET ", "POST /join", "POST /leave", "POST /kick", "POST /close", "POST /invite/reset"]);
+const MEMBER_ROUTES = new Set([
+  "GET ", "POST /join", "POST /leave", "POST /kick", "POST /close", "POST /invite/reset",
+  "GET /events", "POST /events", "GET /meta", "PUT /meta", "POST /rotate", "GET /keys", "PUT /keys",
+  "POST /request-key", "POST /ws-ticket",
+]);
+
+/**
+ * GET /v3/groups/:id/ws?ticket= — the WebSocket upgrade. Authenticated by
+ * the one-time ticket ONLY (no Authorization, no member header: URLSession
+ * can't reliably send headers on an upgrade, and a long-lived Bearer must
+ * never sit in a URL). The DO gets a brand-new Request carrying nothing but
+ * the ticket and a lowercase `Upgrade: websocket` (it compares exactly).
+ */
+async function upgradeSocket(request: Request, url: URL, env: Env, groupId: string): Promise<Response> {
+  if ((request.headers.get("Upgrade") ?? "").toLowerCase() !== "websocket") return json({ error: "bad_request" }, 400);
+  if (!isValidGroupId(groupId) || !(await groupExistsInD1(env.ACCOUNTS_DB, groupId))) return json({ error: "not_found" }, 404);
+  const ticket = url.searchParams.get("ticket") ?? "";
+  if (!ticket || ticket.length > MAX_TICKET_LEN) return json({ error: "denied" }, 403);
+  const stub = env.GROUP_ROOM.get(env.GROUP_ROOM.idFromName(groupId));
+  const resp = await stub.fetch(new Request(`https://group/ws?ticket=${encodeURIComponent(ticket)}`, { headers: { Upgrade: "websocket" } }));
+  if (resp.status === 101) return resp;
+  return fromDo(resp);
+}
 
 /** /v3/groups* — anything unmatched is 404 not_found. */
-export async function handleGroupRoute(request: Request, _url: URL, path: string, env: Env, deps: GroupRouteDeps): Promise<Response> {
+export async function handleGroupRoute(request: Request, url: URL, path: string, env: Env, deps: GroupRouteDeps): Promise<Response> {
+  // The upgrade is ticket-only and must never consult the caller's token.
+  const ws = request.method === "GET" ? path.match(/^\/v3\/groups\/([^/]+)\/ws$/) : null;
+  if (ws) return upgradeSocket(request, url, env, ws[1]);
+
   const auth = await deps.authorize(request);
   if (!auth) return json({ error: "Unauthorized" }, 401);
   const db = env.ACCOUNTS_DB;
@@ -396,9 +496,39 @@ export async function handleGroupRoute(request: Request, _url: URL, path: string
   const groupId = m[1];
 
   // Bodies are read and validated before the existence check wakes nothing.
+  const route = `${request.method} ${sub}`;
   let kickTarget: string | null = null;
   let joinInput: JoinInput | null = null;
-  if (sub === "/kick") {
+  /** The validated fields of a content route's body (or query), passed on to the room. */
+  let fields: Record<string, unknown> = {};
+  let wraps: WrapIn[] = [];
+  if (route === "POST /events") {
+    const b = await readJsonBody(request, MAX_EVENT_BODY_BYTES);
+    if (b instanceof Response) return b;
+    if (typeof b.eventId !== "string" || typeof b.epoch !== "number" || typeof b.payloadCipher !== "string") return json({ error: "missing_fields" }, 400);
+    fields = { eventId: b.eventId, epoch: b.epoch, payloadCipher: b.payloadCipher };
+  } else if (route === "GET /events") {
+    const q = parseListQuery(url);
+    if (q instanceof Response) return q;
+    fields = q;
+  } else if (route === "PUT /meta") {
+    const b = await readJsonBody(request, MAX_META_BODY_BYTES);
+    if (b instanceof Response) return b;
+    if (typeof b.eventId !== "string" || typeof b.metaCipher !== "string") return json({ error: "missing_fields" }, 400);
+    fields = { eventId: b.eventId, metaCipher: b.metaCipher, joinPolicy: b.joinPolicy, removeAnonymous: b.removeAnonymous };
+  } else if (route === "POST /rotate" || route === "PUT /keys") {
+    const rotate = route === "POST /rotate";
+    const b = await readJsonBody(request, rotate ? MAX_ROTATE_BODY_BYTES : MAX_KEYS_BODY_BYTES);
+    if (b instanceof Response) return b;
+    if (b.epoch === undefined || b.wraps === undefined || (rotate && (typeof b.eventId !== "string" || typeof b.metaCipher !== "string"))) {
+      return json({ error: "missing_fields" }, 400);
+    }
+    if (!isEpoch(b.epoch)) return json({ error: "bad_request" }, 400);
+    const w = parseWrapsInput(b.wraps);
+    if (w instanceof Response) return w;
+    wraps = w;
+    fields = rotate ? { eventId: b.eventId, epoch: b.epoch, metaCipher: b.metaCipher } : { epoch: b.epoch };
+  } else if (sub === "/kick") {
     const b = await readSmallBody(request);
     if (b instanceof Response) return b;
     if (typeof b.memberId !== "string") return json({ error: "missing_fields" }, 400);
@@ -425,6 +555,71 @@ export async function handleGroupRoute(request: Request, _url: URL, path: string
     const r = await doCall(env, groupId, "/view", { caller });
     if (!r.ok) return fromDo(r);
     return json(await r.json());
+  }
+
+  // ---- content routes (Task 7) ----
+  if (route === "GET /events" || route === "GET /keys" || route === "GET /meta") {
+    const doPath = route === "GET /events" ? "/events/list" : route === "GET /keys" ? "/keys/mine" : "/meta-cipher";
+    const r = await doCall(env, groupId, doPath, { caller, ...fields });
+    if (!r.ok) return fromDo(r);
+    return json(await r.json());
+  }
+
+  if (route === "POST /events") {
+    const r = await doCall(env, groupId, "/events/msg", { caller, ...fields });
+    if (!r.ok) return fromDo(r);
+    const out = await r.json() as { seq: number; recipients?: PushRecipient[] };
+    const recipients = r.status === 201 ? out.recipients ?? [] : [];
+    if (recipients.length) {
+      await inBackground(deps, "group msg push failed", () => deliverGroupPush(env, recipients, GROUP_PUSH.message(groupId), deps.push));
+    }
+    // Only the seq: the stored event and the recipient list stay server-side.
+    return json({ seq: out.seq }, r.status);
+  }
+
+  if (route === "PUT /meta") {
+    const r = await doCall(env, groupId, "/meta", { caller, ...fields });
+    if (!r.ok) return fromDo(r);
+    const out = await r.json() as { seq: number; metaVersion: number };
+    return json({ seq: out.seq, metaVersion: out.metaVersion }, r.status);
+  }
+
+  if (route === "POST /rotate" || route === "PUT /keys") {
+    // Only an account's signature can be checked (Ruling 7); the owner is always one.
+    if (!caller.accountId) return json({ error: "account_required" }, 403);
+    if (!(await wrapsSignedByCaller(env, groupId, caller, fields.epoch as number, wraps))) return json({ error: "bad_sig" }, 400);
+    if (route === "PUT /keys") {
+      const r = await doCall(env, groupId, "/keys/put", { caller, epoch: fields.epoch, wraps });
+      if (!r.ok) return fromDo(r);
+      const out = await r.json() as { written: string[]; skipped: string[] };
+      return json({ written: out.written, skipped: out.skipped });
+    }
+    const r = await doCall(env, groupId, "/rotate", { caller, ...fields, wraps });
+    if (!r.ok) return fromDo(r);
+    const out = await r.json() as { seq: number; epoch: number };
+    return json({ seq: out.seq, epoch: out.epoch }, r.status);
+  }
+
+  if (route === "POST /request-key") {
+    // The room authorizes first (no writes there), so a stranger claiming a
+    // member's id can't spend that member's budget.
+    const r = await doCall(env, groupId, "/request-key", { caller });
+    if (!r.ok) return fromDo(r);
+    const { recipients } = await r.json() as { recipients: PushRecipient[] };
+    if (!(await bumpQuota(env.V2_STORE, `group-keyreq:${groupId}:${caller.memberId}:${hourKey()}`, KEY_REQUEST_LIMIT_PER_HOUR, 2 * 3600))) {
+      return json({ error: "rate_limited" }, 429);
+    }
+    if (recipients.length) {
+      await inBackground(deps, "group key request push failed", () => deliverGroupPush(env, recipients, GROUP_PUSH.keyRequest(groupId), deps.push));
+    }
+    return new Response(null, { status: 204 });
+  }
+
+  if (route === "POST /ws-ticket") {
+    const r = await doCall(env, groupId, "/ws-ticket", { caller });
+    if (!r.ok) return fromDo(r);
+    const { ticket } = await r.json() as { ticket: string };
+    return json({ ticket, expiresInSeconds: GROUP_LIMITS.ticketTtlMs / 1000 });
   }
 
   if (sub === "/leave") {

@@ -127,3 +127,61 @@ export const leaveGroup = (h: Record<string, string>, groupId: string) => postTo
 export const kickMember = (h: Record<string, string>, groupId: string, memberId: string) => postTo(h, `/v3/groups/${groupId}/kick`, { memberId });
 export const closeGroup = (h: Record<string, string>, groupId: string) => postTo(h, `/v3/groups/${groupId}/close`);
 export const resetGroupInvite = (h: Record<string, string>, groupId: string) => postTo(h, `/v3/groups/${groupId}/invite/reset`);
+
+// ---- Task 7: content routes ------------------------------------------------
+
+export interface WrapBody { memberId: string; wrapped: string; sig: string }
+/** One correctly signed wrap per target, signed by `wrapper`'s account as wrapper memberId `wrapperMemberId`. */
+export async function signedWraps(wrapper: GroupAccount, groupId: string, epoch: number, wrapperMemberId: string, targets: string[]): Promise<WrapBody[]> {
+  return Promise.all(targets.map(async (memberId) => {
+    const wrapped = fakeWrap();
+    return { memberId, wrapped, sig: await signWrap(wrapper, groupId, epoch, memberId, wrapperMemberId, wrapped) };
+  }));
+}
+/** A base64 stand-in for a msg payloadCipher of `n` bytes. */
+export const fakePayload = (n = 40): string => fakeMeta(n);
+
+const send = (method: string, headers: Record<string, string>, path: string, body?: unknown) =>
+  SELF.fetch(`https://example.com${path}`, { method, headers, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+export const postEvent = (h: Record<string, string>, groupId: string, body: unknown) => send("POST", h, `/v3/groups/${groupId}/events`, body);
+export const listEvents = (h: Record<string, string>, groupId: string, qs = "") => send("GET", h, `/v3/groups/${groupId}/events${qs}`);
+export const getGroupMeta = (h: Record<string, string>, groupId: string) => send("GET", h, `/v3/groups/${groupId}/meta`);
+export const putGroupMeta = (h: Record<string, string>, groupId: string, body: unknown) => send("PUT", h, `/v3/groups/${groupId}/meta`, body);
+export const rotateGroup = (h: Record<string, string>, groupId: string, body: unknown) => send("POST", h, `/v3/groups/${groupId}/rotate`, body);
+export const getKeys = (h: Record<string, string>, groupId: string) => send("GET", h, `/v3/groups/${groupId}/keys`);
+export const putKeys = (h: Record<string, string>, groupId: string, body: unknown) => send("PUT", h, `/v3/groups/${groupId}/keys`, body);
+export const requestKey = (h: Record<string, string>, groupId: string) => send("POST", h, `/v3/groups/${groupId}/request-key`);
+export const wsTicket = (h: Record<string, string>, groupId: string) => send("POST", h, `/v3/groups/${groupId}/ws-ticket`);
+export const wsUpgrade = (groupId: string, ticket: string | null, headers: Record<string, string> = { Upgrade: "websocket" }) =>
+  SELF.fetch(`https://example.com/v3/groups/${groupId}/ws${ticket === null ? "" : `?ticket=${encodeURIComponent(ticket)}`}`, { headers });
+
+/** A client WebSocket that records frames and its close. */
+export class TestSocket {
+  messages: string[] = [];
+  closed: { code: number; reason: string } | null = null;
+  private waiters: (() => void)[] = [];
+  constructor(public ws: WebSocket) {
+    ws.accept();
+    ws.addEventListener("message", (e) => { this.messages.push(e.data as string); this.wake(); });
+    ws.addEventListener("close", (e) => { this.closed = { code: e.code, reason: e.reason }; this.wake(); });
+  }
+  private wake() { const w = this.waiters; this.waiters = []; w.forEach((f) => f()); }
+  async waitFor(pred: () => boolean, ms = 4000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!pred()) {
+      const left = end - Date.now();
+      if (left <= 0) throw new Error("timeout waiting; messages=" + JSON.stringify(this.messages) + " closed=" + JSON.stringify(this.closed));
+      await new Promise<void>((res) => { this.waiters.push(res); setTimeout(res, Math.min(left, 50)); });
+    }
+  }
+}
+
+/** ws-ticket + upgrade through the routes; asserts 101. */
+export async function connectMember(h: Record<string, string>, groupId: string): Promise<TestSocket> {
+  const t = await wsTicket(h, groupId);
+  if (t.status !== 200) throw new Error(`connectMember: ticket ${t.status} ${await t.text()}`);
+  const { ticket } = await t.json() as { ticket: string };
+  const r = await wsUpgrade(groupId, ticket);
+  if (r.status !== 101) throw new Error(`connectMember: upgrade ${r.status} ${await r.text()}`);
+  return new TestSocket(r.webSocket!);
+}

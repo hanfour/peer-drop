@@ -72,15 +72,26 @@ export function wrapMessage(groupId: string, epoch: number, targetMemberId: stri
  * malformed signature, D1 error — is simply `false`.
  */
 export async function verifyAccountSig(db: D1Database, accountId: string, message: Uint8Array, sigB64: string): Promise<boolean> {
+  return verifyAccountSigs(db, accountId, [{ message, sig: sigB64 }]);
+}
+
+/**
+ * True only when EVERY `sig` verifies over its `message` with the account's
+ * signing key (read from D1 once, however many items). Any problem is
+ * `false`; an empty list is vacuously true.
+ */
+export async function verifyAccountSigs(db: D1Database, accountId: string, items: { message: Uint8Array; sig: string }[]): Promise<boolean> {
   try {
-    const sig = decodeB64(sigB64);
-    if (!sig || sig.length !== 64) return false;
+    if (items.length === 0) return true;
+    const sigs = items.map((i) => decodeB64(i.sig));
+    if (sigs.some((s) => !s || s.length !== 64)) return false;
     const row = await db.prepare("SELECT signing_key FROM accounts WHERE account_id = ?1").bind(accountId).first<{ signing_key: ArrayBuffer }>();
     if (!row?.signing_key) return false;
     const raw = new Uint8Array(row.signing_key);
     if (raw.length !== 32) return false;
     const key = await crypto.subtle.importKey("raw", raw, { name: "Ed25519" }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, sig, message);
+    const results = await Promise.all(items.map((i, n) => crypto.subtle.verify({ name: "Ed25519" }, key, sigs[n]!, i.message)));
+    return results.every(Boolean);
   } catch {
     return false;
   }

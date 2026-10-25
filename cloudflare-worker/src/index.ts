@@ -188,7 +188,7 @@ async function isRateLimited(env: Env, ip: string, routeClass: string): Promise<
 const corsHeaders: Record<string, string> = {};
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -1462,7 +1462,13 @@ export default {
     // gate below: an anonymous member has a device token but no account
     // scope. group.ts decides per route what identity it needs.
     if (path === "/v3/groups" || path.startsWith("/v3/groups/")) {
-      return await handleGroupRoute(request, url, path, env, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) }, authorize: (r) => authorizeGroupCaller(r, env) });
+      // Pushes run under waitUntil: the post/join answers without waiting
+      // for APNs, and a push failure can never turn it into an error.
+      return await handleGroupRoute(request, url, path, env, {
+        push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) },
+        authorize: (r) => authorizeGroupCaller(r, env),
+        waitUntil: ctx ? (p) => ctx.waitUntil(p) : undefined,
+      });
     }
 
     // GET /v3/admin/reports — operator view of the report archive. Keyed by

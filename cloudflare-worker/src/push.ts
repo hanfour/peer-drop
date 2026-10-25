@@ -56,7 +56,9 @@ export async function pushToDevice(env: Env, deviceId: string, fallbackPlatform:
         : { topicOverride: topic },
     );
   } catch (e) {
-    console.error("push failed", String(e));
+    // The error's class name only: a send failure's message can carry the
+    // APNs URL, which embeds the device token.
+    console.error("push failed", e instanceof Error ? e.name : "error");
   }
   return true;
 }
