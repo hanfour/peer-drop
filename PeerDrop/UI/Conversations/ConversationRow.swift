@@ -1,7 +1,7 @@
 import SwiftUI
 import PeerDropCore
 
-/// One row of the 紙條 list: avatar (presence for friends, group glyph for groups), name,
+/// One row of the 紙條 list: friend avatar with presence, name,
 /// one-line preview, time and an unread badge.
 struct ConversationRow: View, PaperThemed {
     @Environment(\.paperMode) var paperMode
@@ -62,19 +62,12 @@ struct ConversationRow: View, PaperThemed {
 
     @ViewBuilder
     private var avatar: some View {
-        if model.isGroup {
-            RoundedRectangle(cornerRadius: PeerAvatarShape.cornerRadius(forSize: 44), style: .continuous)
-                .fill(paper(.brand))
-                .frame(width: 44, height: 44)
-                .overlay(Image(systemName: "person.3.fill").foregroundStyle(.white))
-        } else {
-            PeerAvatar(name: model.name, size: 44, presence: presence, notesReachable: notesReachable)
-        }
+        PeerAvatar(name: model.name, size: 44, presence: presence, notesReachable: notesReachable)
     }
 
     private var accessibilityText: String {
         var parts = [model.name]
-        if let presence, !model.isGroup { parts.append(presence.accessibilityLabel(notesReachable: notesReachable)) }
+        if let presence { parts.append(presence.accessibilityLabel(notesReachable: notesReachable)) }
         if model.summary.unread > 0 {
             parts.append(String(format: String(localized: "%lld unread"), model.summary.unread))
         }

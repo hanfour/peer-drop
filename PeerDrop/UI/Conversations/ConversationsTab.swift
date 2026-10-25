@@ -3,7 +3,7 @@ import Combine
 import PeerDropCore
 import PeerDropNotes
 
-/// 紙條: first-row notes inbox + conversation list (friends and groups with messages, newest first).
+/// 紙條: first-row notes inbox + conversation list (friends with messages, newest first).
 /// Expects to be hosted in a NavigationStack that the container owns. Chats are pushed through
 /// `isPresented` destinations here (no `ChatTarget` value is pushed), so no `.chatTargetDestination()`.
 /// The inbox row (first row of the list) pushes the injected `inbox` view (Task 9 wires NotesInboxView).
@@ -28,15 +28,12 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     var onThreadUnavailable: (String?) -> Void = { _ in }
     @ViewBuilder var inbox: () -> Inbox
     @State private var showInbox = false
-    @State private var pickedGroup: DeviceGroup?
-    @State private var showGroup = false
 
     @State private var query = ""
     @StateObject private var hub = RefreshHub()
     @State private var showPicker = false
     /// Last-message summaries, rebuilt on appear and (debounced) on change signals — never inside `body`.
     @State private var peerSummaries: [String: ConversationSummary] = [:]
-    @State private var groupSummaries: [String: ConversationSummary] = [:]
     /// Records with a verified notes binding, computed with the summaries (never per row).
     @State private var reachableRecordIDs: Set<String> = []
     /// False until the first synchronous seed, so the empty state never flashes.
@@ -71,14 +68,9 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             accountForRecord: accountForRecord,
             notes: { notesStore.notes(forAccount: $0) },
             noteUnread: { notesStore.unreadCount(forAccount: $0) })
-        var groups: [String: ConversationSummary] = [:]
-        for g in connectionManager.groupStore.groups {
-            groups[g.id] = chatManager.summary(forGroup: g.id)
-        }
         let reachable = Set(accountForRecord.keys)
         if reachable != reachableRecordIDs { reachableRecordIDs = reachable }
         if peers != peerSummaries { peerSummaries = peers }
-        if groups != groupSummaries { groupSummaries = groups }
         hasLoaded = true
     }
 
@@ -99,7 +91,6 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             connectionManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             chatManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.deviceStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
-            connectionManager.groupStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.notesStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             connectionManager.trustedContactStore.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
         ])) {
@@ -110,9 +101,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
     private func rows() -> [ConversationRowModel] {
         ConversationsLogic.rows(
             records: connectionManager.deviceStore.records,
-            groups: connectionManager.groupStore.groups,
             summaryForPeer: { peerSummaries[$0] ?? ConversationSummary(id: $0, isGroup: false, lastMessage: nil, unread: 0) },
-            summaryForGroup: { groupSummaries[$0] ?? ConversationSummary(id: $0, isGroup: true, lastMessage: nil, unread: 0) },
             query: query,
             name: { connectionManager.displayName(for: $0) })
     }
@@ -176,9 +165,6 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         }
         #endif
         .navigationDestination(isPresented: $showInbox) { inbox() }
-        .navigationDestination(isPresented: $showGroup) {
-            if let g = pickedGroup { GroupChatView(group: g) }
-        }
         .onChange(of: inboxRequest) { _ in consumeInboxRequest() }
         .onChange(of: threadRequest) { _ in consumeThreadRequest() }
         .onAppear {
@@ -198,9 +184,9 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         guard InboxDeepLink.shouldConsume(pending: inboxRequest) else { return }
         inboxRequest = 0
         #if os(iOS)
-        let chatShowing = showPicked || showGroup
+        let chatShowing = showPicked
         #else
-        let chatShowing = showGroup
+        let chatShowing = false
         #endif
         switch InboxDeepLink.action(inboxShowing: showInbox, chatShowing: chatShowing) {
         case .none:
@@ -211,7 +197,6 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             var t = Transaction(animation: nil)
             t.disablesAnimations = true
             withTransaction(t) {
-                showGroup = false
                 #if os(iOS)
                 showPicked = false
                 #endif
@@ -235,7 +220,7 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
         let name = connectionManager.displayName(for: record)
         #if os(iOS)
         let same = showPicked && pickedTarget?.peerID == chatKey(for: recordID)
-        switch InboxDeepLink.threadAction(inboxShowing: showInbox, chatShowing: showPicked || showGroup, sameThreadShowing: same) {
+        switch InboxDeepLink.threadAction(inboxShowing: showInbox, chatShowing: showPicked, sameThreadShowing: same) {
         case .none:
             break
         case .push:
@@ -245,7 +230,6 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
             t.disablesAnimations = true
             withTransaction(t) {
                 showInbox = false
-                showGroup = false
                 showPicked = false
             }
             DispatchQueue.main.async { openChat(recordID: recordID, name: name) }
@@ -293,41 +277,21 @@ struct ConversationsTab<Inbox: View>: View, PaperThemed {
 
     @ViewBuilder
     private func row(_ model: ConversationRowModel, presence: PeerPresence?) -> some View {
-        if model.isGroup {
-            if let group = connectionManager.groupStore.groups.first(where: { $0.id == model.sourceID }) {
-                Button {
-                    pickedGroup = group
-                    showGroup = true
-                } label: {
-                    HStack(spacing: 8) {
-                        ConversationRow(model: model, presence: nil)
-                        #if os(iOS)
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(paper(.datePillText))
-                            .accessibilityHidden(true)
-                        #endif
-                    }
-                }
-                .buttonStyle(.plain)
+        Button {
+            openChat(recordID: model.sourceID, name: model.name)
+        } label: {
+            HStack(spacing: 8) {
+                ConversationRow(model: model, presence: presence, notesReachable: reachableRecordIDs.contains(model.sourceID))
+                #if os(iOS)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(paper(.datePillText))
+                    .accessibilityHidden(true)
+                #endif
             }
-        } else {
-            Button {
-                openChat(recordID: model.sourceID, name: model.name)
-            } label: {
-                HStack(spacing: 8) {
-                    ConversationRow(model: model, presence: presence, notesReachable: reachableRecordIDs.contains(model.sourceID))
-                    #if os(iOS)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(paper(.datePillText))
-                        .accessibilityHidden(true)
-                    #endif
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(Text("Opens the conversation"))
         }
+        .buttonStyle(.plain)
+        .accessibilityHint(Text("Opens the conversation"))
     }
 
     // MARK: - Empty / no results

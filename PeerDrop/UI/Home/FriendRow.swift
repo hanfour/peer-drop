@@ -16,6 +16,8 @@ struct FriendRow: View, PaperThemed {
     var onConnect: (() -> Void)? = nil
     /// Live connection of a connected friend; shows the encryption status chip.
     var connection: PeerConnection? = nil
+    /// Category the friend sits in; shown as a caption on search results (nil = no caption).
+    var categoryName: String? = nil
 
     private var shownName: String { name ?? record.displayName }
 
@@ -23,6 +25,13 @@ struct FriendRow: View, PaperThemed {
         FriendSubtitle.text(presence: presence, lastConnected: record.lastConnected,
                             connectionCount: record.connectionCount, source: record.sourceType,
                             isConnecting: isConnecting)
+    }
+
+    private var accessibilityText: String {
+        let base = FriendRowAccessibility.label(name: shownName, presenceLabel: presence.accessibilityLabel(notesReachable: notesReachable),
+                                                subtitle: subtitle, isConnecting: isConnecting && presence != .online)
+        guard let categoryName else { return base }
+        return base + ", " + String(format: String(localized: "Category: %@"), categoryName)
     }
 
     var body: some View {
@@ -40,10 +49,19 @@ struct FriendRow: View, PaperThemed {
                     .font(.caption)
                     .foregroundStyle(paper(.datePillText))
                     .lineLimit(2)
+                if let categoryName {
+                    HStack(spacing: 3) {
+                        Image(systemName: "folder")
+                        Text(verbatim: categoryName).lineLimit(1)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(paper(.datePillText))
+                    .accessibilityIdentifier("friend-row-category")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: FriendRowAccessibility.label(name: shownName, presenceLabel: presence.accessibilityLabel(notesReachable: notesReachable), subtitle: subtitle, isConnecting: isConnecting && presence != .online)))
+            .accessibilityLabel(Text(verbatim: accessibilityText))
 
             if let connection {
                 SecureChannelIndicator(peerConn: connection)
