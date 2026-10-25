@@ -23,6 +23,7 @@ import { verifyPoW } from "./pow";
 import { handleNotesRoute } from "./notes";
 import { handleAccountSettingsRoute } from "./accountSettings";
 import { handleDiaryRoute } from "./diary";
+import { handleGroupRoute } from "./group";
 import { handleRendezvous } from "./rendezvousRoute";
 import { buildIceServers } from "./turnIce";
 
@@ -38,6 +39,7 @@ export interface Env {
   ACCOUNT_INBOX: DurableObjectNamespace;
   DIARY_ROOM: DurableObjectNamespace;
   RENDEZVOUS_ROOM: DurableObjectNamespace;
+  GROUP_ROOM: DurableObjectNamespace;
   // D1
   ACCOUNTS_DB: D1Database;
   // Secrets
@@ -117,6 +119,9 @@ function generateRoomCode(): string {
 // one surface — e.g. message delivery — can't starve unrelated surfaces like
 // room creation for the same IP.
 export function rateLimitClass(path: string, _method: string): string {
+  // Group chat gets its own budget so a busy room can't starve the other
+  // /v3 surfaces (checked before the generic /v3/ prefix).
+  if (path === "/v3/groups" || path.startsWith("/v3/groups/")) return "groups";
   if (path.startsWith("/v3/")) return "v3";
   if (path.startsWith("/v2/keys")) return "keys";
   if (path.startsWith("/v2/messages")) return "messages";
@@ -183,7 +188,7 @@ async function isRateLimited(env: Env, ip: string, routeClass: string): Promise<
 const corsHeaders: Record<string, string> = {};
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -1453,6 +1458,19 @@ export default {
       return jsonResponse({ accountId, nickname, token, expiresInSeconds: 900 }, 201);
     }
 
+    // /v3/groups* — group chat rooms. Sits BEFORE the account-scoped /v3
+    // gate below: an anonymous member has a device token but no account
+    // scope. group.ts decides per route what identity it needs.
+    if (path === "/v3/groups" || path.startsWith("/v3/groups/")) {
+      // Pushes run under waitUntil: the post/join answers without waiting
+      // for APNs, and a push failure can never turn it into an error.
+      return await handleGroupRoute(request, url, path, env, {
+        push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) },
+        authorize: (r) => authorizeGroupCaller(r, env),
+        waitUntil: ctx ? (p) => ctx.waitUntil(p) : undefined,
+      });
+    }
+
     // GET /v3/admin/reports — operator view of the report archive. Keyed by
     // ANALYTICS_KEY (not an account token), so it must sit before the
     // account-scoped /v3 dispatch below.
@@ -1462,9 +1480,9 @@ export default {
       const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
       const limitRaw = parseInt(url.searchParams.get("limit") ?? "100", 10);
       const limit = Math.min(Math.max(Number.isNaN(limitRaw) ? 100 : limitRaw, 1), 100);
-      const rows = (await env.ACCOUNTS_DB.prepare("SELECT id, reporter_account_id, sender_hash, inbox_item_id, diary_id, diary_seq, reason, excerpt, created_at FROM reports WHERE created_at > ?1 ORDER BY created_at ASC LIMIT ?2").bind(since, limit)
-        .all<{ id: string; reporter_account_id: string; sender_hash: string | null; inbox_item_id: string | null; diary_id: string | null; diary_seq: number | null; reason: string; excerpt: string | null; created_at: number }>()).results;
-      return jsonResponse({ reports: rows.map((r) => ({ id: r.id, reporterAccountId: r.reporter_account_id, senderHash: r.sender_hash, inboxItemId: r.inbox_item_id, diaryId: r.diary_id, diarySeq: r.diary_seq, reason: r.reason, excerpt: r.excerpt, createdAt: r.created_at })) });
+      const rows = (await env.ACCOUNTS_DB.prepare("SELECT id, reporter_account_id, reporter_device_id, sender_hash, inbox_item_id, diary_id, diary_seq, group_id, group_seq, reason, excerpt, created_at FROM reports WHERE created_at > ?1 ORDER BY created_at ASC LIMIT ?2").bind(since, limit)
+        .all<{ id: string; reporter_account_id: string | null; reporter_device_id: string | null; sender_hash: string | null; inbox_item_id: string | null; diary_id: string | null; diary_seq: number | null; group_id: string | null; group_seq: number | null; reason: string; excerpt: string | null; created_at: number }>()).results;
+      return jsonResponse({ reports: rows.map((r) => ({ id: r.id, reporterAccountId: r.reporter_account_id, reporterDeviceId: r.reporter_device_id, senderHash: r.sender_hash, inboxItemId: r.inbox_item_id, diaryId: r.diary_id, diarySeq: r.diary_seq, groupId: r.group_id, groupSeq: r.group_seq, reason: r.reason, excerpt: r.excerpt, createdAt: r.created_at })) });
     }
 
     // /v3/* — account-scoped routes. Bearer device token, or the key lane
@@ -1580,6 +1598,42 @@ export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | 
   if (!authed) return null;
   const accountId = accountIdFromScope(authed.payload.scope);
   return accountId ? { deviceId: authed.payload.deviceId, accountId, lane: authed.lane } : null;
+}
+
+export interface GroupAuth { deviceId: string; accountId: string | null; lane: AuthLane }
+
+/**
+ * Authentication for /v3/groups*: any device (Bearer of any scope, or the
+ * key lane), with the account it is signed in to — null for a device that
+ * isn't. On the Bearer lane a not-yet-account-scoped token (issued before
+ * the device registered, valid ≤ 15 min) still gets the device's account
+ * from D1: the caller must carry EVERY identity it has, so a kicked account
+ * can't rejoin a room anonymously from its own device on an old token. On
+ * the key lane the account always comes from that D1 lookup of the
+ * self-reported device id, never from anything else the client sends.
+ * "unavailable" when that lookup errors (the route answers 503).
+ */
+export async function authorizeGroupCaller(request: Request, env: Env): Promise<GroupAuth | null | "unavailable"> {
+  const authed = await authorizeDeviceWithLane(request, env);
+  if (!authed) return null;
+  let accountId = accountIdFromScope(authed.payload.scope);
+  if (!accountId) {
+    // FAIL CLOSED. scopeForDevice (the key lane's lookup, and token
+    // issuance) turns a D1 error into "default" — for group auth that
+    // would drop the accountId, and with it the account's ban hash, letting
+    // a kicked account rejoin anonymously during an outage. So the lookup
+    // is repeated strictly, and an error is "unavailable" (503), never
+    // "not signed in".
+    try {
+      const row = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM account_devices WHERE device_id = ?1")
+        .bind(authed.payload.deviceId).first<{ account_id: string }>();
+      accountId = row?.account_id ?? null;
+    } catch (e) {
+      console.error("group auth: account lookup failed", String(e));
+      return "unavailable";
+    }
+  }
+  return { deviceId: authed.payload.deviceId, accountId, lane: authed.lane };
 }
 
 /**
@@ -2142,3 +2196,4 @@ export class DeviceInbox {
 export { AccountInbox } from "./accountInbox";
 export { DiaryRoom } from "./diaryRoom";
 export { RendezvousRoom } from "./rendezvousRoom";
+export { GroupRoom } from "./groupRoom";

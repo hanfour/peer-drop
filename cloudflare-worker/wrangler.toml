@@ -59,6 +59,10 @@ class_name = "DiaryRoom"
 name = "RENDEZVOUS_ROOM"
 class_name = "RendezvousRoom"
 
+[[durable_objects.bindings]]
+name = "GROUP_ROOM"
+class_name = "GroupRoom"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalingRoom"]
@@ -82,3 +86,7 @@ new_sqlite_classes = ["DiaryRoom"]
 [[migrations]]
 tag = "v6"
 new_sqlite_classes = ["RendezvousRoom"]
+
+[[migrations]]
+tag = "v7"
+new_sqlite_classes = ["GroupRoom"]

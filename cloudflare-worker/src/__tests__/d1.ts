@@ -74,3 +74,15 @@ export async function applyMigrations(db: D1Database): Promise<void> {
     }
   }
 }
+
+/** Apply migrations/*.sql (sorted) up to and including `lastFileInclusive`, e.g. "0004_account_settings.sql". */
+export async function applyMigrationsThrough(db: D1Database, lastFileInclusive: string): Promise<void> {
+  const files = Object.keys(migrationModules).sort();
+  const idx = files.findIndex((k) => k.endsWith("/" + lastFileInclusive));
+  if (idx < 0) throw new Error(`no such migration: ${lastFileInclusive}`);
+  for (const f of files.slice(0, idx + 1)) {
+    for (const stmt of migrationStatements(migrationModules[f])) {
+      await db.prepare(stmt).run();
+    }
+  }
+}

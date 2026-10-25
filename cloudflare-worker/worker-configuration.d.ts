@@ -4,7 +4,7 @@
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./src/index");
-		durableNamespaces: "SignalingRoom" | "PreKeyStore" | "DeviceInbox" | "RendezvousRoom";
+		durableNamespaces: "SignalingRoom" | "PreKeyStore" | "DeviceInbox" | "RendezvousRoom" | "GroupRoom";
 	}
 	interface Env {
 		ROOMS: KVNamespace;
@@ -14,6 +14,7 @@ declare namespace Cloudflare {
 		PREKEY_STORE: DurableObjectNamespace<import("./src/index").PreKeyStore>;
 		DEVICE_INBOX: DurableObjectNamespace<import("./src/index").DeviceInbox>;
 		RENDEZVOUS_ROOM: DurableObjectNamespace; // untyped on purpose: typed generic trips TS2589 in specs
+		GROUP_ROOM: DurableObjectNamespace; // untyped on purpose
 	}
 }
 interface Env extends Cloudflare.Env {}
