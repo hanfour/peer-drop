@@ -72,4 +72,10 @@ public enum MessageType: String, Codable, CaseIterable {
     // advertise `supportsNotesExchange`; only honoured inside a secure envelope.
     // Must NOT be in `PeerConnection.unwrappedControlTypes`.
     case notesExchange
+
+    // Project F2: a friend's category status message. Only sent when BOTH
+    // peers advertise `supportsStatusUpdate` on a `.secured` channel, and only
+    // honoured inside a secure envelope — older builds fail the connection on
+    // an unknown `MessageType`. Must NOT be in `PeerConnection.unwrappedControlTypes`.
+    case statusUpdate
 }

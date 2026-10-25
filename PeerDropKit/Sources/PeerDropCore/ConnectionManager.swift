@@ -250,6 +250,11 @@ public final class ConnectionManager: ObservableObject {
     var notesExchangeAccountCancellable: AnyCancellable?
     var notesExchangeRetryInFlight = false
     var notesExchangeRetryRequested = false
+
+    // MARK: - Status update (Project F2; logic in ConnectionManager+StatusUpdate.swift)
+
+    /// Test-only observer: every `.statusUpdate` payload that passed the gate.
+    var statusUpdateAcceptedForTesting: ((StatusUpdatePayload, PeerConnection) -> Void)?
     /// Wall clock for pending-binding age (persists across launches; injectable).
     var notesPendingBindingClock: () -> Date = { Date() }
     /// Debounce before a network-recovery retry of pending bindings.
@@ -368,6 +373,8 @@ public final class ConnectionManager: ObservableObject {
         var accepted = false
         /// Whether the HELLO we sent on this socket carried `supportsNotesExchange`.
         var advertisedNotesExchange: Bool?
+        /// Whether the HELLO we sent on this socket carried `supportsStatusUpdate`.
+        var advertisedStatusUpdate: Bool?
         init(connection: NWConnection, generation: UUID, peer: DiscoveredPeer) {
             self.connection = connection
             self.generation = generation
@@ -2493,6 +2500,7 @@ public final class ConnectionManager: ObservableObject {
                 // Tailnet is not face to face: no notes-exchange flag there.
                 let helloIdentity = notesExchangeHelloIdentity(for: connection)
                 attempt.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                attempt.advertisedStatusUpdate = helloIdentity.supportsStatusUpdate
                 let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await connection.sendMessage(hello)
                 logger.info("HELLO sent. Sending CONNECTION_REQUEST...")
@@ -2956,6 +2964,7 @@ public final class ConnectionManager: ObservableObject {
                 try await request.connection.sendMessage(accept)
                 let helloIdentity = notesExchangeHelloIdentity(for: request.connection)
                 peerConnection.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                peerConnection.advertisedStatusUpdate = helloIdentity.supportsStatusUpdate
                 let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await request.connection.sendMessage(hello)
                 #if DEBUG
@@ -3452,7 +3461,10 @@ public final class ConnectionManager: ObservableObject {
         Task {
             do {
                 // Relay is not face to face: never advertise notes exchange.
-                let hello = try PeerMessage.hello(identity: localIdentity.withoutNotesExchange())
+                // The status-update flag stays (recorded before the send).
+                let helloIdentity = localIdentity.withoutNotesExchange()
+                peerConnection.advertisedStatusUpdate = helloIdentity.supportsStatusUpdate
+                let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await peerConnection.sendMessage(hello)
                 // Exchange stable device ID so future invites can route directly.
                 let idExchange = try PeerMessage.deviceIdExchange(
@@ -4025,6 +4037,11 @@ public final class ConnectionManager: ObservableObject {
             guard origin == .envelope, peerConnection.secureChannelState == .secured else { return }
             handleNotesExchangeMessage(message, on: peerConnection, origin: origin)
 
+        case .statusUpdate:
+            // Project F2: gated like `.notesExchange` (envelope, secured, both
+            // flags); anything else is dropped silently.
+            handleStatusUpdateMessage(message, on: peerConnection, origin: origin)
+
         case .secureHandshake, .secureEnvelope:
             // Safety net (should be unreachable). The single-reader handoff
             // (`legacyReaderActive`, flipped false in addConnection) stops the
@@ -4211,6 +4228,7 @@ public final class ConnectionManager: ObservableObject {
             state: .connected
         )
         peerConnection.advertisedNotesExchange = attempt.advertisedNotesExchange
+        peerConnection.advertisedStatusUpdate = attempt.advertisedStatusUpdate
         sendSacrificialPingIfLegacyAcceptor(identity, on: connection)
         addConnection(peerConnection)
         // A dial is user-initiated: the user chose this peer, so it gets the

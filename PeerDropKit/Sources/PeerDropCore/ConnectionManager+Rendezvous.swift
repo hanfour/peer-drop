@@ -68,13 +68,15 @@ public final class RendezvousConnectionBridge: DirectConnectionChecker, Rendezvo
 
 extension ConnectionManager {
 
-    /// Frames a verified rendezvous connection may deliver (chat only). File
-    /// transfer, calls, clipboard, NearbyInteraction, device-id exchange and
-    /// the notes exchange are not carried cross-network (they would drive
-    /// global state / UI, or are face-to-face only).
+    /// Frames a verified rendezvous connection may deliver (chat, plus the
+    /// gated Project F2 status update). File transfer, calls, clipboard,
+    /// NearbyInteraction, device-id exchange and the notes exchange are not
+    /// carried cross-network (they would drive global state / UI, or are
+    /// face-to-face only).
     static let rendezvousDispatchedTypes: Set<MessageType> = [
         .textMessage, .mediaMessage, .messageReceipt, .typingIndicator, .reaction,
         .chatReject, .messageEdit, .messageDelete, .ping, .pong,
+        .statusUpdate,
     ]
 
     var rendezvousEvents: RendezvousConnectionEventSink? {
@@ -231,6 +233,9 @@ extension ConnectionManager {
         pc.rendezvousContactID = c.id
         pc.isRelayTransport = true          // not face to face: Project C's gate refuses it
         pc.advertisedNotesExchange = false
+        // Project F2: nothing advertised until the encrypted HELLO goes out
+        // after key confirmation (`confirmRendezvousConnection`).
+        pc.advertisedStatusUpdate = false
         pc.requiresStrictSecureChannel = true
         pc.handshakeFallbackNanoseconds = rendezvousSecureChannelTimeoutNanoseconds
 
@@ -348,6 +353,22 @@ extension ConnectionManager {
         reportRendezvousOutcome(pc, ok: true, reason: nil)
         bumpSecurityEpoch()
         objectWillChange.send()
+        sendRendezvousCapabilityHello(pc)
+    }
+
+    /// Project F2: the install-time identity is pinned and Project E peers
+    /// never send a HELLO, so capabilities are exchanged in one ENCRYPTED HELLO
+    /// once the connection is verified. A Project E peer only runs its key
+    /// check on it (same key ⇒ harmless). Never sent in plaintext: the strict
+    /// channel wraps every business frame.
+    private func sendRendezvousCapabilityHello(_ pc: PeerConnection) {
+        let identity = localIdentity.withoutNotesExchange()
+        guard let hello = try? PeerMessage.hello(identity: identity) else { return }
+        pc.advertisedStatusUpdate = identity.supportsStatusUpdate
+        Task { @MainActor [weak pc] in
+            guard let pc else { return }
+            try? await pc.sendMessage(hello)
+        }
     }
 
     // MARK: - Dispatch
@@ -375,6 +396,12 @@ extension ConnectionManager {
                 // plaintext one may be anyone's (never suspends).
                 closeRendezvousConnection(pc, reason: origin == .envelope ? .helloMismatch : .helloMismatchUnauthenticated)
                 return
+            }
+            // Project F2: only the friend's own (encrypted, verified) word sets
+            // the capability; `peerIdentity` stays pinned.
+            if origin == .envelope, pc.rendezvousVerified {
+                pc.rendezvousPeerSupportsStatusUpdate = claimed.supportsStatusUpdate
+                statusUpdateCapabilityLearned(pc)
             }
             return
         case .disconnect:
