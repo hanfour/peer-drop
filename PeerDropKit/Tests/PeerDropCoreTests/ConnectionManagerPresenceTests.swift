@@ -235,6 +235,26 @@ final class ConnectionManagerPresenceTests: XCTestCase {
         XCTAssertTrue(pending, "a visible friend still gets the consent sheet")
     }
 
+    /// The consent sheet is up when their category starts hiding us: it is
+    /// dismissed and the socket dropped — no `.connectionReject`, no toast.
+    func testPendingConsentFromNowHiddenFriendIsDismissedQuietly() async throws {
+        let id = "dev-\(UUID().uuidString)"
+        let catID = category(.online, holding: id)
+        let socket = try await request(as: PeerIdentity(id: id, displayName: "Soon hidden"))
+        let pending = await poll { self.cm.pendingIncomingRequest?.peerIdentity.id == id }
+        XCTAssertTrue(pending)
+        XCTAssertEqual(cm.state, .incomingRequest)
+
+        XCTAssertTrue(cm.categoryStore.setPresence(.offline, for: catID))
+        let (types, closed) = await readUntilClosed(socket)
+        XCTAssertTrue(closed, "the pending socket must be dropped")
+        XCTAssertEqual(types, [], "no reject (or any) frame: \(types)")
+        XCTAssertNil(cm.pendingIncomingRequest)
+        XCTAssertEqual(cm.state, .discovering)
+        XCTAssertNil(cm.statusToast)
+        XCTAssertNil(cm.connections[id])
+    }
+
     /// The category holds only the LAN record; the HELLO comes from another
     /// record of the same person (same pinned key) — hidden too.
     func testHiddenViaSecondRecordOfSamePerson() async throws {
@@ -281,6 +301,80 @@ final class ConnectionManagerPresenceTests: XCTestCase {
         XCTAssertFalse(cm._hasDialAttemptForTesting)
         XCTAssertEqual(cm.statusToast, String(localized: "This friend's category shows you as offline"))
         XCTAssertEqual(cm.state, before)
+    }
+
+    enum LegacyAcceptor {
+        /// Legacy: the identity rides in the accept payload.
+        case identityInAccept
+        /// Identity-less accept, identity only in the HELLO that follows.
+        case identityInHello
+    }
+
+    /// A scripted acceptor whose Bonjour id differs from its identity id.
+    /// Reads our HELLO + request, answers per `script`, then records every
+    /// later frame type until the dialer closes the socket.
+    private func startLegacyAcceptor(replyingAs reply: PeerIdentity, script: LegacyAcceptor,
+                                     recorder: FrameRecorder) async throws -> UInt16 {
+        try await startListener { conn in
+            conn.start(queue: Self.socketQueue())
+            Task {
+                defer { recorder.markClosed() }
+                do {
+                    try await conn.waitReady(timeout: 5)
+                    _ = try await conn.receiveMessage(timeout: 5) // hello
+                    _ = try await conn.receiveMessage(timeout: 5) // connectionRequest
+                    switch script {
+                    case .identityInAccept:
+                        try await conn.sendMessage(PeerMessage(type: .connectionAccept,
+                                                               payload: try JSONEncoder().encode(reply),
+                                                               senderID: reply.id))
+                    case .identityInHello:
+                        try await conn.sendMessage(PeerMessage.connectionAccept(senderID: reply.id))
+                        recorder.markAccepted()
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                        try await conn.sendMessage(try PeerMessage.hello(identity: reply))
+                    }
+                    while true { recorder.append(try await conn.receiveMessage(timeout: 10).type) }
+                } catch {}
+            }
+        }
+    }
+
+    private func assertDialAbandonedQuietly(_ script: LegacyAcceptor) async throws {
+        let bonjourID = "bonjour-\(UUID().uuidString)"
+        let hidden = PeerIdentity(id: "ident-\(UUID().uuidString)", displayName: "Legacy")
+        touched += [bonjourID, hidden.id]
+        category(.offline, holding: hidden.id)
+        let recorder = FrameRecorder()
+        let port = try await startLegacyAcceptor(replyingAs: hidden, script: script, recorder: recorder)
+        cm.requestConnection(to: DiscoveredPeer(id: bonjourID, displayName: "Legacy",
+                                                endpoint: .manual(host: "127.0.0.1", port: port), source: .manual))
+        XCTAssertTrue(cm._hasDialAttemptForTesting, "the Bonjour id is visible: the dial starts")
+        if script == .identityInHello {
+            let accepted = await poll { recorder.accepted && self.cm.state == .connected }
+            XCTAssertTrue(accepted, "identity-less accept moves to .connected (state=\(cm.state))")
+        }
+        let closed = await poll(timeout: 5) { recorder.closed }
+        XCTAssertTrue(closed, "the dialer must drop the socket")
+        XCTAssertEqual(recorder.types, [], "no frame after learning who it is: \(recorder.types)")
+        XCTAssertFalse(cm._hasDialAttemptForTesting)
+        XCTAssertTrue(cm.connections.isEmpty)
+        XCTAssertNil(cm.statusToast, "no toast")
+        XCTAssertEqual(cm.state, .discovering, "alone ⇒ back to discovering, not \(cm.state)")
+        XCTAssertTrue(cm.shouldAttemptConnection(to: bonjourID), "no failure recorded")
+        XCTAssertTrue(cm.shouldAttemptConnection(to: hidden.id), "no failure recorded")
+        // Nothing late (timeouts, read-loop errors) turns it into a failure.
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(cm.state, .discovering)
+        XCTAssertNil(cm.statusToast)
+    }
+
+    func testDialAbandonedWhenLegacyAcceptRevealsHiddenFriend() async throws {
+        try await assertDialAbandonedQuietly(.identityInAccept)
+    }
+
+    func testDialAbandonedWhenHelloAfterIdentitylessAcceptRevealsHiddenFriend() async throws {
+        try await assertDialAbandonedQuietly(.identityInHello)
     }
 
     // MARK: Live connections
@@ -352,6 +446,9 @@ final class ConnectionManagerPresenceTests: XCTestCase {
         XCTAssertTrue(cm.rendezvousConnections.isEmpty)
         XCTAssertTrue(cmEnd.closed)
         XCTAssertEqual(cmEnd.sent.count, sentBefore, "no frame when the window starts")
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(recorder.closed.isEmpty, "a friend hidden on purpose is not a link failure: \(recorder.closeReasons)")
+        XCTAssertFalse(recorder.secure.contains { !$0.1 }, "no failed outcome reported either")
     }
 
     func testInstallRefusedForHiddenContact() throws {
@@ -393,4 +490,19 @@ final class ConnectionManagerPresenceTests: XCTestCase {
         cm.handleScenePhaseChange(.background)
         XCTAssertNil(cm.presenceTimer)
     }
+}
+
+/// Frame types an acceptor saw after its scripted reply, and whether the
+/// dialer closed the socket.
+final class FrameRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _types: [MessageType] = []
+    private var _closed = false
+    private var _accepted = false
+    var types: [MessageType] { lock.withLock { _types } }
+    var closed: Bool { lock.withLock { _closed } }
+    var accepted: Bool { lock.withLock { _accepted } }
+    func append(_ t: MessageType) { lock.withLock { _types.append(t) } }
+    func markClosed() { lock.withLock { _closed = true } }
+    func markAccepted() { lock.withLock { _accepted = true } }
 }

@@ -3058,6 +3058,21 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Project F2: the friend behind the pending consent sheet is now hidden
+    /// by their category. Dismiss the sheet and drop the socket quietly — no
+    /// `.connectionReject` frame, no toast; to them we simply went offline.
+    func dismissPendingIncomingRequestQuietly() {
+        guard let request = pendingIncomingRequest else { return }
+        consentMonitorTask?.cancel()
+        consentMonitorTask = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
+        pendingIncomingRequest = nil
+        request.connection.cancel()
+        if activeConnection === request.connection { activeConnection = nil }
+        if case .incomingRequest = state { transition(to: .discovering) }
+    }
+
     public func rejectConnection() {
         guard let request = pendingIncomingRequest else { return }
         // Cancel consent monitoring and timeout
@@ -4252,11 +4267,6 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// Create + install the PeerConnection for the socket this initiator
-    /// dialed. Refuses (and ends the dial) if the id is a reserved `relay-*`
-    /// id or already in use — as a `connections` key or as the identity an
-    /// existing connection is aliased to — so a dialed peer can never replace,
-    /// shadow or re-point an existing connection (#161, I-1, M-2).
     /// Project F2: the dialed peer turned out (legacy Bonjour id ≠ identity
     /// id) to be a friend whose category hides us. Drop the socket quietly:
     /// no toast, no failure recorded. The global state leaves `.requesting`
@@ -4281,6 +4291,11 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Create + install the PeerConnection for the socket this initiator
+    /// dialed. Refuses (and ends the dial) if the id is a reserved `relay-*`
+    /// id or already in use — as a `connections` key or as the identity an
+    /// existing connection is aliased to — so a dialed peer can never replace,
+    /// shadow or re-point an existing connection (#161, I-1, M-2).
     private func installInitiatorPeerConnection(identity: PeerIdentity, attempt: DialAttempt) -> Bool {
         let connection = attempt.connection
         if let existing = connections[identity.id], existing.nwConnection === connection {

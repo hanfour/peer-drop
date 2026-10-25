@@ -10,7 +10,8 @@ import PeerDropTransport
 // - dialing them: refused with a toast;
 // - always-connected room: left (`RendezvousManager` filters on `visible`);
 // - a live direct / rendezvous connection: closed quietly (`cancel()`, never
-//   `disconnect()`, which would send a `.disconnect` frame).
+//   `disconnect()`, which would send a `.disconnect` frame);
+// - a pending consent sheet from them: dismissed, no reject frame, no toast.
 // Relay-code (`relay-<code>`) connections are exempt: both sides typed the
 // room code, an explicit one-off consent.
 //
@@ -60,6 +61,17 @@ extension ConnectionManager {
                                                 extraIDs: [pc.id, ChatStorageKey.key(forConnection: pc)]))
     }
 
+    /// A rendezvous link is judged by its contact, exactly as the manager
+    /// (`visible:`) and the installer (`currentRendezvousContact`) judge it;
+    /// falls back to the connection's aliases if the contact is gone.
+    private func isRendezvousFriendVisible(_ pc: PeerConnection) -> Bool {
+        if let id = pc.rendezvousContactID,
+           let contact = trustedContactStore.contacts.first(where: { $0.id == id }) {
+            return isFriendVisible(contact: contact)
+        }
+        return isFriendVisible(connection: pc)
+    }
+
     // MARK: - Enforcement
 
     /// Close every live connection to a friend who may no longer see us,
@@ -69,8 +81,14 @@ extension ConnectionManager {
         where !pc.isRelayTransport && pc.state.isActive && !isFriendVisible(connection: pc) {
             closeQuietly(pc)
         }
-        for pc in Array(rendezvousConnections.values) where !isFriendVisible(connection: pc) {
-            closeRendezvousConnection(pc)
+        // Quiet removal, not `closeRendezvousConnection`: hiding a friend on
+        // purpose must not leave a `.connectionClosed` failure diagnostic.
+        // The manager drops the room in `contactsDidChange()` below.
+        for pc in Array(rendezvousConnections.values) where !isRendezvousFriendVisible(pc) {
+            removeRendezvousConnection(pc)
+        }
+        if let request = pendingIncomingRequest, !isFriendVisible(identity: request.peerIdentity) {
+            dismissPendingIncomingRequestQuietly()
         }
         rendezvousManager?.contactsDidChange()
         schedulePresenceTimer()

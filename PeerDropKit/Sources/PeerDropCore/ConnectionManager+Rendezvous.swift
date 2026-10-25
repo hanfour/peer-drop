@@ -452,7 +452,9 @@ extension ConnectionManager {
     }
 
     /// Remove and close without any frame (`cancel()`, never `disconnect()`).
-    private func removeRendezvousConnection(_ pc: PeerConnection) {
+    /// Reports nothing to the manager (also used by Project F2's presence
+    /// enforcement: a friend hidden on purpose is not a link failure).
+    func removeRendezvousConnection(_ pc: PeerConnection) {
         guard rendezvousConnections[pc.id] === pc else { return }
         rendezvousConnections[pc.id] = nil
         pc.onDisconnected = nil
