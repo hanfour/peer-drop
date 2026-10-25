@@ -44,7 +44,7 @@ import { deliverGroupPush, errName } from "./groupPush";
  * `waitUntil` (the Worker's ctx.waitUntil) runs pushes after the response;
  * without it (direct calls in tests) they are awaited inline.
  */
-export interface GroupRouteDeps { push: PushDeps; authorize: (r: Request) => Promise<GroupAuth | null>; waitUntil?: (p: Promise<unknown>) => void }
+export interface GroupRouteDeps { push: PushDeps; authorize: (r: Request) => Promise<GroupAuth | null | "unavailable">; waitUntil?: (p: Promise<unknown>) => void }
 
 const GROUP_LIMIT_PER_ACCOUNT = 20;
 const GROUP_CREATE_LIMIT_PER_DAY = 20;
@@ -58,6 +58,17 @@ const MAX_META_BODY_BYTES = 600 * 1024;
 const MAX_ROTATE_BODY_BYTES = 640 * 1024;
 const MAX_KEYS_BODY_BYTES = 32 * 1024;
 const KEY_REQUEST_LIMIT_PER_HOUR = 6;
+/**
+ * Joins into ONE room per identity (account, else device hash) per hour —
+ * fresh seats and Ruling-12 takeovers alike. Each one writes leave/join
+ * events and fires a key-request push, so leave/join churn is capped here.
+ */
+const ROOM_JOIN_LIMIT_PER_HOUR = 6;
+/**
+ * Key-request pushes (join-time + explicit) per identity per room per hour:
+ * the per-seat cap of 6 alone would refill with every new seat.
+ */
+const KEY_REQUEST_IDENTITY_LIMIT_PER_HOUR = 12;
 const MAX_TICKET_LEN = 64;
 /** wrapMessage encodes the epoch as UInt32BE: anything larger would alias a smaller epoch's signature. */
 const MAX_EPOCH = 0xFFFF_FFFF;
@@ -122,6 +133,8 @@ export async function underGroupLimit(db: D1Database, accountId: string, groupId
   const row = await db.prepare("SELECT COUNT(*) AS n FROM group_members WHERE account_id = ?1").bind(accountId).first<{ n: number }>();
   return (row?.n ?? 0) < GROUP_LIMIT_PER_ACCOUNT;
 }
+
+const keyRequestIdentityKey = (groupId: string, identity: string) => `group-keyreq-who:${groupId}:${identity}:${hourKey()}`;
 
 /** The per-caller key for the wrong-code limit: the account if signed in, else the device's hash. */
 async function failKeyOf(auth: GroupAuth): Promise<string> {
@@ -200,6 +213,42 @@ async function inBackground(deps: GroupRouteDeps, label: string, task: () => Pro
   const p = task().catch((e) => { console.error(label, errName(e)); });
   if (deps.waitUntil) deps.waitUntil(p);
   else await p;
+}
+
+/**
+ * Brings the D1 row (accountId, groupId) in line with the room: DELETE it
+ * first, THEN ask the room whether the account still holds a seat and put
+ * the row back if so. In that order a join racing a leave/kick can't be
+ * lost: a join always INSERTs after its DO write, so either its INSERT
+ * lands after this DELETE, or this check already sees the seat. (Checking
+ * first and deleting after could delete a just-rejoined account's row.)
+ * Throws on a D1 or room error.
+ */
+export async function reconcileAccountIndex(env: Env, groupId: string, accountId: string): Promise<void> {
+  const db = env.ACCOUNTS_DB;
+  await db.prepare("DELETE FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(accountId, groupId).run();
+  const r = await doCall(env, groupId, "/account-member", { accountId });
+  if (!r.ok) throw new Error("account-member check failed");
+  const { member } = await r.json() as { member: boolean };
+  if (member) {
+    await db.prepare("INSERT OR IGNORE INTO group_members (account_id, group_id, joined_at) VALUES (?1, ?2, ?3)").bind(accountId, groupId, Date.now()).run();
+  }
+}
+
+/**
+ * The room said this account isn't (or is no longer) in it while D1 may
+ * still list the group for it — a kick/leave whose DELETE failed, a retry
+ * that could no longer name the account. Repair when D1 has the row. A
+ * Ruling-12 takeover's old device lands here too; reconcile keeps the row.
+ * Best effort: never changes the response.
+ */
+async function reconcileIfIndexed(env: Env, groupId: string, accountId: string): Promise<void> {
+  try {
+    const row = await env.ACCOUNTS_DB.prepare("SELECT 1 AS x FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(accountId, groupId).first();
+    if (row) await reconcileAccountIndex(env, groupId, accountId);
+  } catch (e) {
+    console.error("group: index repair failed", String(e));
+  }
 }
 
 async function readSmallBody(request: Request): Promise<Record<string, unknown> | Response> {
@@ -396,9 +445,12 @@ async function performJoin(env: Env, auth: GroupAuth, groupId: string, input: Jo
     return err;
   }
   if (dry.status === 201) {
-    if (input.as === "account") {
-      if (!(await underGroupLimit(db, auth.accountId!, groupId))) return json({ error: "group_limit" }, 409);
-    } else if (!(await bumpQuota(env.V2_STORE, `group-anon-join:${await sha256Hex(auth.deviceId)}:${dayKey()}`, ANON_JOIN_LIMIT_PER_DAY, 2 * 86400))) {
+    if (input.as === "account" && !(await underGroupLimit(db, auth.accountId!, groupId))) return json({ error: "group_limit" }, 409);
+    // Every real join (new seat or takeover) — not an idempotent resend (200).
+    if (!(await bumpQuota(env.V2_STORE, `group-join:${groupId}:${failKey}:${hourKey()}`, ROOM_JOIN_LIMIT_PER_HOUR, 2 * 3600))) {
+      return json({ error: "rate_limited" }, 429);
+    }
+    if (input.as === "anon" && !(await bumpQuota(env.V2_STORE, `group-anon-join:${await sha256Hex(auth.deviceId)}:${dayKey()}`, ANON_JOIN_LIMIT_PER_DAY, 2 * 86400))) {
       return json({ error: "rate_limited" }, 429);
     }
   }
@@ -420,8 +472,10 @@ async function performJoin(env: Env, auth: GroupAuth, groupId: string, input: Jo
       return json({ error: "d1_error" }, 500);
     }
   }
-  if (added) {
-    // A new seat holds no key yet: silently ask the keyed account members to relay one.
+  // A new seat holds no key yet: silently ask the keyed account members to
+  // relay one — within the identity's key-request budget (else skipped; the
+  // client can still ask explicitly once the budget frees up).
+  if (added && await bumpQuota(env.V2_STORE, keyRequestIdentityKey(groupId, failKey), KEY_REQUEST_IDENTITY_LIMIT_PER_HOUR, 2 * 3600)) {
     await inBackground(deps, "group join: key request push failed", async () => {
       const rk = await doCall(env, groupId, "/request-key", { caller });
       if (!rk.ok) return;
@@ -468,6 +522,7 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   if (ws) return upgradeSocket(request, url, env, ws[1]);
 
   const auth = await deps.authorize(request);
+  if (auth === "unavailable") return json({ error: "unavailable" }, 503);
   if (!auth) return json({ error: "Unauthorized" }, 401);
   const db = env.ACCOUNTS_DB;
 
@@ -550,9 +605,18 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
 
   const caller = callerFor(auth, request);
   if (caller instanceof Response) return caller;
+  /** doCall for a member route: a not_member answer repairs a stale D1 row for the caller's account. */
+  const call = async (doPath: string, body: unknown): Promise<Response> => {
+    const r = await doCall(env, groupId, doPath, body);
+    if (r.status === 403 && auth.accountId) {
+      const peek = await r.clone().json().catch(() => null) as { error?: unknown } | null;
+      if (peek?.error === "not_member") await reconcileIfIndexed(env, groupId, auth.accountId);
+    }
+    return r;
+  };
 
   if (sub === "") {
-    const r = await doCall(env, groupId, "/view", { caller });
+    const r = await call("/view", { caller });
     if (!r.ok) return fromDo(r);
     return json(await r.json());
   }
@@ -560,13 +624,13 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   // ---- content routes (Task 7) ----
   if (route === "GET /events" || route === "GET /keys" || route === "GET /meta") {
     const doPath = route === "GET /events" ? "/events/list" : route === "GET /keys" ? "/keys/mine" : "/meta-cipher";
-    const r = await doCall(env, groupId, doPath, { caller, ...fields });
+    const r = await call(doPath, { caller, ...fields });
     if (!r.ok) return fromDo(r);
     return json(await r.json());
   }
 
   if (route === "POST /events") {
-    const r = await doCall(env, groupId, "/events/msg", { caller, ...fields });
+    const r = await call("/events/msg", { caller, ...fields });
     if (!r.ok) return fromDo(r);
     const out = await r.json() as { seq: number; recipients?: PushRecipient[] };
     const recipients = r.status === 201 ? out.recipients ?? [] : [];
@@ -578,7 +642,7 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   }
 
   if (route === "PUT /meta") {
-    const r = await doCall(env, groupId, "/meta", { caller, ...fields });
+    const r = await call("/meta", { caller, ...fields });
     if (!r.ok) return fromDo(r);
     const out = await r.json() as { seq: number; metaVersion: number };
     return json({ seq: out.seq, metaVersion: out.metaVersion }, r.status);
@@ -589,12 +653,12 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
     if (!caller.accountId) return json({ error: "account_required" }, 403);
     if (!(await wrapsSignedByCaller(env, groupId, caller, fields.epoch as number, wraps))) return json({ error: "bad_sig" }, 400);
     if (route === "PUT /keys") {
-      const r = await doCall(env, groupId, "/keys/put", { caller, epoch: fields.epoch, wraps });
+      const r = await call("/keys/put", { caller, epoch: fields.epoch, wraps });
       if (!r.ok) return fromDo(r);
       const out = await r.json() as { written: string[]; skipped: string[] };
       return json({ written: out.written, skipped: out.skipped });
     }
-    const r = await doCall(env, groupId, "/rotate", { caller, ...fields, wraps });
+    const r = await call("/rotate", { caller, ...fields, wraps });
     if (!r.ok) return fromDo(r);
     const out = await r.json() as { seq: number; epoch: number };
     return json({ seq: out.seq, epoch: out.epoch }, r.status);
@@ -603,10 +667,12 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   if (route === "POST /request-key") {
     // The room authorizes first (no writes there), so a stranger claiming a
     // member's id can't spend that member's budget.
-    const r = await doCall(env, groupId, "/request-key", { caller });
+    const r = await call("/request-key", { caller });
     if (!r.ok) return fromDo(r);
     const { recipients } = await r.json() as { recipients: PushRecipient[] };
-    if (!(await bumpQuota(env.V2_STORE, `group-keyreq:${groupId}:${caller.memberId}:${hourKey()}`, KEY_REQUEST_LIMIT_PER_HOUR, 2 * 3600))) {
+    // Per seat (6) and per identity across seats and join-time requests (12).
+    if (!(await bumpQuota(env.V2_STORE, `group-keyreq:${groupId}:${caller.memberId}:${hourKey()}`, KEY_REQUEST_LIMIT_PER_HOUR, 2 * 3600))
+      || !(await bumpQuota(env.V2_STORE, keyRequestIdentityKey(groupId, await failKeyOf(auth)), KEY_REQUEST_IDENTITY_LIMIT_PER_HOUR, 2 * 3600))) {
       return json({ error: "rate_limited" }, 429);
     }
     if (recipients.length) {
@@ -616,14 +682,14 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   }
 
   if (route === "POST /ws-ticket") {
-    const r = await doCall(env, groupId, "/ws-ticket", { caller });
+    const r = await call("/ws-ticket", { caller });
     if (!r.ok) return fromDo(r);
     const { ticket } = await r.json() as { ticket: string };
     return json({ ticket, expiresInSeconds: GROUP_LIMITS.ticketTtlMs / 1000 });
   }
 
   if (sub === "/leave") {
-    const r = await doCall(env, groupId, "/leave", { caller });
+    const r = await call("/leave", { caller });
     if (r.status === 404) {
       // D1 still indexes a room the DO already wiped: finish the wipe.
       try { await markGone(env, groupId); } catch (e) {
@@ -635,11 +701,11 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
     if (!r.ok) return fromDo(r);
     const { remaining, removed } = await r.json() as { remaining: number; removed: { kind: string; accountId?: string } | null };
     try {
-      if (removed?.kind === "account" && removed.accountId) {
-        await db.prepare("DELETE FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(removed.accountId, groupId).run();
-      }
-      // Last one out: the DO is empty — tombstone the id and drop the invite row.
+      // Last one out: the DO is empty — tombstone the id and drop every D1 row.
       if (remaining === 0) await markGone(env, groupId);
+      else if (removed?.kind === "account" && removed.accountId) await reconcileAccountIndex(env, groupId, removed.accountId);
+      // Not a member (already gone, or an old Ruling-12 seat): repair a stale row, if any.
+      else if (!removed && auth.accountId) await reconcileIfIndexed(env, groupId, auth.accountId);
     } catch (e) {
       console.error("group leave: D1 write failed", String(e));
       return json({ error: "d1_error" }, 500);
@@ -648,12 +714,12 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   }
 
   if (sub === "/kick") {
-    const r = await doCall(env, groupId, "/kick", { caller, targetMemberId: kickTarget });
+    const r = await call("/kick", { caller, targetMemberId: kickTarget });
     if (!r.ok) return fromDo(r);
     const { removed } = await r.json() as { removed: { kind: string; accountId?: string } | null };
     if (removed?.kind === "account" && removed.accountId) {
       try {
-        await db.prepare("DELETE FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(removed.accountId, groupId).run();
+        await reconcileAccountIndex(env, groupId, removed.accountId);
       } catch (e) {
         console.error("group kick: D1 delete failed", String(e));
         return json({ error: "d1_error" }, 500);
@@ -663,13 +729,13 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   }
 
   if (sub === "/close") {
-    const r = await doCall(env, groupId, "/close", { caller });
+    const r = await call("/close", { caller });
     if (!r.ok) return fromDo(r);
     return new Response(null, { status: 204 });
   }
 
   // POST /invite/reset (owner only)
-  const r = await doCall(env, groupId, "/invite/reset", { caller });
+  const r = await call("/invite/reset", { caller });
   if (!r.ok) return fromDo(r);
   const { inviteCode, previousCode } = await r.json() as { inviteCode: string; previousCode: string };
   try {

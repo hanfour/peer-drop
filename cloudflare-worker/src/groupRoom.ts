@@ -205,6 +205,7 @@ const stripDevice = ({ deviceId: _d, devHash: _h, ...rest }: GroupMember): Group
 const KNOWN_PATHS = new Set([
   "/init", "/view", "/join", "/close", "/invite/reset", "/events/list", "/events/msg", "/ws-ticket",
   "/keys/mine", "/keys/put", "/rotate", "/meta", "/meta-cipher", "/leave", "/kick", "/request-key",
+  "/account-member",
 ]);
 
 const WS_OPEN = 1;
@@ -537,6 +538,13 @@ export class GroupRoom {
       }
       // kick reads meta itself: it has a hash to compute once it knows the target.
       if (path === "/kick") return await this.kick(parseKick(body));
+      if (path === "/account-member") {
+        // Read-only, for the route's D1 index repair: does this account hold
+        // a seat? A wiped room (no meta) seats nobody. Never writes.
+        if (!isBoundedString(body.accountId, MAX_ACCOUNT_ID_LEN)) throw new BadRequest();
+        const meta = await this.getMeta();
+        return this.json({ member: !!meta && meta.members.some((m) => m.kind === "account" && m.accountId === body.accountId) });
+      }
       const caller = parseCaller(body.caller);
       const meta = await this.getMeta();
       if (!meta) return this.json({ error: "not_found" }, 404);

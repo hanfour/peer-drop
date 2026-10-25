@@ -1611,12 +1611,28 @@ export interface GroupAuth { deviceId: string; accountId: string | null; lane: A
  * can't rejoin a room anonymously from its own device on an old token. On
  * the key lane the account always comes from that D1 lookup of the
  * self-reported device id, never from anything else the client sends.
+ * "unavailable" when that lookup errors (the route answers 503).
  */
-export async function authorizeGroupCaller(request: Request, env: Env): Promise<GroupAuth | null> {
+export async function authorizeGroupCaller(request: Request, env: Env): Promise<GroupAuth | null | "unavailable"> {
   const authed = await authorizeDeviceWithLane(request, env);
   if (!authed) return null;
   let accountId = accountIdFromScope(authed.payload.scope);
-  if (!accountId && authed.lane === "bearer") accountId = accountIdFromScope(await scopeForDevice(env.ACCOUNTS_DB, authed.payload.deviceId));
+  if (!accountId) {
+    // FAIL CLOSED. scopeForDevice (the key lane's lookup, and token
+    // issuance) turns a D1 error into "default" — for group auth that
+    // would drop the accountId, and with it the account's ban hash, letting
+    // a kicked account rejoin anonymously during an outage. So the lookup
+    // is repeated strictly, and an error is "unavailable" (503), never
+    // "not signed in".
+    try {
+      const row = await env.ACCOUNTS_DB.prepare("SELECT account_id FROM account_devices WHERE device_id = ?1")
+        .bind(authed.payload.deviceId).first<{ account_id: string }>();
+      accountId = row?.account_id ?? null;
+    } catch (e) {
+      console.error("group auth: account lookup failed", String(e));
+      return "unavailable";
+    }
+  }
   return { deviceId: authed.payload.deviceId, accountId, lane: authed.lane };
 }
 
