@@ -96,8 +96,8 @@ const ROOM_TTL_SECONDS = 600; // 10 minutes
 // to be a function, a class, or an ExportedHandler — a plain numeric export
 // crashes the whole local runtime before it binds a port
 // ("Incorrect type for map entry 'RATE_LIMIT_MAX_REQUESTS'"), which blocked
-// every local E2E run. Nothing imports these constants from here (rate-limit.spec.ts
-// declares its own copy of the limits it asserts against).
+// every local E2E run. Nothing imports these from here (rate-limit.spec.ts
+// declares its own copy of the limit it asserts against).
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 // Per-route-class overrides; every other class keeps the default of 30.
 const RATE_LIMITS: Record<string, number> = { groups: 120 };
