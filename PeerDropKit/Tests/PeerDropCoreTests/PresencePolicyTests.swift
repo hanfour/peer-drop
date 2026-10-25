@@ -99,6 +99,33 @@ final class PresencePolicyTests: XCTestCase {
         XCTAssertEqual(PresencePolicy.maxStatusMessageLength, 60)
     }
 
+    func testStatusMessageFoldsBreaksAndStripsControls() {
+        let table: [(String, String?, String)] = [
+            ("a\u{2029}b", "a b", "paragraph separator"),
+            ("a\u{85}b", "a b", "NEL"),
+            ("a\u{0B}b\u{0C}c", "a b c", "VT and FF"),
+            ("a\tb", "a b", "tab"),
+            ("a\r\n\r\nb", "a  b", "each CRLF pair counts once"),
+            ("\u{202E}evil\u{202C}", "evil", "RLO/PDF overrides"),
+            ("\u{2066}x\u{2069}\u{2067}y\u{2069}\u{2068}z\u{2069}", "xyz", "isolates"),
+            ("\u{202A}a\u{202B}b\u{202D}c", "abc", "LRE/RLE/LRO"),
+            ("a\u{200E}b\u{200F}c", "abc", "LRM/RLM"),
+            ("a\u{200B}b\u{FEFF}c\u{00AD}d", "abcd", "ZWSP, BOM, soft hyphen"),
+            ("a\u{0}b\u{7}c\u{1B}d\u{7F}e\u{9F}f", "abcdef", "C0/C1 controls and DEL"),
+            ("\u{202E}\u{200B}  ", nil, "only controls → nil"),
+            ("👨\u{200D}👩\u{200D}👧", "👨\u{200D}👩\u{200D}👧", "ZWJ kept"),
+            ("می\u{200C}خواهم", "می\u{200C}خواهم", "ZWNJ kept"),
+            ("🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}",
+             "🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}", "tag sequence flag kept"),
+            ("1\u{FE0F}\u{20E3}", "1\u{FE0F}\u{20E3}", "keycap kept"),
+        ]
+        for (raw, expected, label) in table {
+            XCTAssertEqual(PresencePolicy.cleanStatusMessage(raw), expected, label)
+        }
+        XCTAssertEqual(PresencePolicy.cleanStatusMessage("👨\u{200D}👩\u{200D}👧")?.count, 1)
+        XCTAssertEqual(PresencePolicy.cleanStatusMessage("🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}")?.count, 1)
+    }
+
     func testStatusTextHonoursShowFlagAndUncategorized() {
         let cats = [
             FriendCategory(id: "1", name: "shown", friendIDs: ["a"], statusMessage: "hi", showStatusMessage: true),

@@ -60,7 +60,10 @@ struct CategoryStatusSection: View, PaperThemed {
         } header: {
             Text("Status for this category")
         } footer: {
-            Text("Friends in this category see you as offline and can't connect to you, and you won't be connected to them either. On the same Wi-Fi they may still see this device under Nearby.")
+            // Only explain what "offline" does when it can apply; "Show as online" needs no caveat.
+            if mode != .online {
+                Text("While offline (or inside the schedule), friends in this category see you as offline and can't connect to you, and you won't be connected to them either. They can still reach you with a room code or a relay invite you accept. On the same Wi-Fi they may still see this device under Nearby.")
+            }
         }
         .listRowBackground(paper(.incomingBubble))
 
@@ -76,7 +79,7 @@ struct CategoryStatusSection: View, PaperThemed {
         } header: {
             Text("Status message")
         } footer: {
-            Text("Sent directly to friends in this category while you're connected, never through a server.")
+            Text("End-to-end encrypted, sent directly to friends in this category while you're connected; never stored on a server.")
         }
         .listRowBackground(paper(.incomingBubble))
     }

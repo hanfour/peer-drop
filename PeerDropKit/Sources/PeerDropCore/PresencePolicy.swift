@@ -57,16 +57,48 @@ public enum PresencePolicy {
         return text
     }
 
-    /// Newlines (`\n`, `\r`, U+2028) become one space each (a `\r\n` pair counts once),
-    /// then surrounding whitespace is trimmed. Empty → nil. Does not truncate; the
-    /// caller compares `count` against `maxStatusMessageLength`.
+    /// Line and page breaks and tabs (`\n`, `\r`, `\t`, VT, FF, NEL, U+2028, U+2029) become
+    /// one space each (a `\r\n` pair counts once). Other control characters (Cc) and
+    /// format characters (Cf — bidi overrides/isolates, LRM/RLM, zero-width space, BOM…)
+    /// are removed, except ZWJ/ZWNJ and emoji tag characters, which emoji sequences and
+    /// some scripts need. Then surrounding whitespace is trimmed. Empty → nil. Does not
+    /// truncate; the caller compares `count` against `maxStatusMessageLength`.
     nonisolated public static func cleanStatusMessage(_ raw: String) -> String? {
-        var text = raw.replacingOccurrences(of: "\r\n", with: " ")
-        for newline in ["\n", "\r", "\u{2028}"] {
-            text = text.replacingOccurrences(of: newline, with: " ")
+        var scalars = String.UnicodeScalarView()
+        var afterCR = false
+        for scalar in raw.unicodeScalars {
+            if scalar == "\n" && afterCR { afterCR = false; continue }
+            afterCR = scalar == "\r"
+            if isFoldedToSpace(scalar) {
+                scalars.append(" ")
+            } else if !isStrippedControl(scalar) {
+                scalars.append(scalar)
+            }
         }
-        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text
+    }
+
+    nonisolated private static func isFoldedToSpace(_ s: Unicode.Scalar) -> Bool {
+        switch s.value {
+        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x85, 0x2028, 0x2029: return true
+        default: return false
+        }
+    }
+
+    nonisolated private static func isStrippedControl(_ s: Unicode.Scalar) -> Bool {
+        switch s.properties.generalCategory {
+        case .control:
+            return true
+        case .format:
+            // ZWNJ/ZWJ (emoji sequences, Persian/Indic text) and tag characters
+            // (subdivision flags such as 🏴󠁧󠁢󠁳󠁣󠁴󠁿) stay.
+            if s.value == 0x200C || s.value == 0x200D { return false }
+            if (0xE0020...0xE007F).contains(s.value) { return false }
+            return true
+        default:
+            return false
+        }
     }
 
     nonisolated private static func category(for aliases: [String], in categories: [FriendCategory]) -> FriendCategory? {

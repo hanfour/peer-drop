@@ -303,6 +303,33 @@ final class ConnectionManagerPresenceTests: XCTestCase {
         XCTAssertEqual(cm.state, before)
     }
 
+    func testDialToHiddenFriendWithLiveRelayLinkFocusesInsteadOfToasting() {
+        let relayID = "relay-\(UUID().uuidString.prefix(6))"
+        let friend = "friend-\(UUID().uuidString)"
+        _ = pipeConnection(id: relayID, identityID: friend, relay: true)
+        category(.offline, holding: relayID)
+        cm.statusToast = nil
+        cm.requestConnection(to: DiscoveredPeer(id: relayID, displayName: "Friend",
+                                                endpoint: .manual(host: "127.0.0.1", port: 9), source: .manual))
+        XCTAssertEqual(cm.focusedPeerID, relayID, "the existing exempt link is focused")
+        XCTAssertNil(cm.statusToast, "no 'shows you as offline' toast for a link that already exists")
+        XCTAssertFalse(cm._hasDialAttemptForTesting)
+    }
+
+    func testReconnectToHiddenFriendDoesNotBurnABackoffAttempt() async {
+        let id = "dev-\(UUID().uuidString)"
+        category(.offline, holding: id)
+        cm._setLastConnectedPeerForTesting(DiscoveredPeer(id: id, displayName: "Hidden",
+                                                         endpoint: .manual(host: "127.0.0.1", port: 9), source: .manual))
+        let before = await cm._reconnectAttemptCountForTesting()
+        cm.reconnect()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        let after = await cm._reconnectAttemptCountForTesting()
+        XCTAssertEqual(after, before, "reconnect() consumed a back-off attempt on a refused dial")
+        XCTAssertFalse(cm._hasDialAttemptForTesting)
+        cm._setLastConnectedPeerForTesting(nil)
+    }
+
     enum LegacyAcceptor {
         /// Legacy: the identity rides in the accept payload.
         case identityInAccept
@@ -489,6 +516,27 @@ final class ConnectionManagerPresenceTests: XCTestCase {
         cm.rendezvousClosesOnBackground = true    // iOS
         cm.handleScenePhaseChange(.background)
         XCTAssertNil(cm.presenceTimer)
+    }
+
+    func testMacWakeWhileBackgroundedRechecksSchedules() async {
+        let id = "dev-\(UUID().uuidString)"
+        let evening = taipei.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 8, minute: 0))!
+        cm.presenceClock = { evening }
+        category(.scheduled(workHours), holding: id)
+        let end = pipeConnection(id: id)
+        cm.rendezvousClosesOnBackground = false   // Mac
+        cm.handleScenePhaseChange(.background)
+        cm.cancelPresenceTimer()                  // the timer was missed while asleep
+        XCTAssertNotNil(cm.connections[id], "08:00 is outside the window")
+
+        let nine = taipei.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 9, minute: 30))!
+        cm.presenceClock = { nine }
+        let before = end.sent.count
+        cm.startRendezvousIfForeground()          // Mac wake, app still in the background
+        XCTAssertNil(cm.connections[id], "the schedule started while asleep")
+        XCTAssertTrue(end.closed)
+        XCTAssertEqual(end.sent.count, before, "closed without a frame")
+        XCTAssertNotNil(cm.presenceTimer, "the Mac re-arms the timer in the background")
     }
 }
 

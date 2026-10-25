@@ -1546,6 +1546,12 @@ public final class ConnectionManager: ObservableObject {
             logger.info("reconnect skipped — a connection request is awaiting consent")
             return
         }
+        // Project F2: a dial to a friend whose category hides us is refused —
+        // don't burn a back-off attempt on it either.
+        guard connections[peer.id]?.state.isConnected == true || isFriendVisible(aliases: [peer.id]) else {
+            logger.info("reconnect skipped — this friend's category shows us offline")
+            return
+        }
 
         Task {
             guard let delay = await reconnectController.nextDelay() else {
@@ -1563,11 +1569,14 @@ public final class ConnectionManager: ObservableObject {
             let deferred = await MainActor.run { () -> Bool in
                 // A consent sheet came up during the back-off: skip this retry.
                 guard self.pendingIncomingRequest == nil else { return true }
+                // The friend became hidden during the back-off: skip it too.
+                guard self.connections[peer.id]?.state.isConnected == true
+                        || self.isFriendVisible(aliases: [peer.id]) else { return true }
                 self.requestConnection(to: peer)
                 return false
             }
             if deferred {
-                logger.info("reconnect retry skipped — a connection request is awaiting consent")
+                logger.info("reconnect retry skipped — consent pending or friend hidden")
                 await reconnectController.refund()
             }
         }
@@ -1944,6 +1953,11 @@ public final class ConnectionManager: ObservableObject {
     /// Test-only: whether any live session for `peerID` is ticking.
     public func _notesExchangeTickActiveForTesting(_ peerID: String) -> Bool {
         notesExchangeSessions.values.contains { $0.peerID == peerID && $0.tickTask != nil }
+    }
+
+    /// Test-only: set the peer `reconnect()` dials.
+    public func _setLastConnectedPeerForTesting(_ peer: DiscoveredPeer?) {
+        lastConnectedPeer = peer
     }
 
     /// Test-only: reconnect back-off attempts consumed so far.
@@ -2400,6 +2414,13 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Connection Request (Outgoing)
 
     public func requestConnection(to peer: DiscoveredPeer) {
+        // Already connected (e.g. an exempt relay-code link to a friend whose
+        // category hides us): just focus it — nothing new is revealed.
+        if let existingConn = connections[peer.id], existingConn.state.isConnected {
+            focusedPeerID = peer.id
+            return
+        }
+
         // Project F2: their category shows us offline — don't reveal us by dialing.
         guard isFriendVisible(aliases: [peer.id]) else {
             statusToast = String(localized: "This friend's category shows you as offline")
@@ -2412,13 +2433,6 @@ public final class ConnectionManager: ObservableObject {
         guard pendingIncomingRequest == nil else {
             logger.info("requestConnection ignored — a connection request is awaiting consent")
             statusToast = String(localized: "Respond to the pending connection request first")
-            return
-        }
-
-        // Check if already connected to this peer
-        if let existingConn = connections[peer.id], existingConn.state.isConnected {
-            // Just focus on this connection
-            focusedPeerID = peer.id
             return
         }
 

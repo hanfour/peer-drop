@@ -25,6 +25,8 @@ struct CategoryDetailView: View, PaperThemed {
     @State private var recordsVersion = 0
     /// Re-evaluated every 30 s so a schedule boundary updates "Connect All" and the status section.
     @State private var now = Date()
+    /// Held outside `body` so a redraw doesn't build and restart a new timer.
+    private let ticker = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private var category: FriendCategory? { store.categories.first { $0.id == categoryID } }
 
@@ -63,7 +65,7 @@ struct CategoryDetailView: View, PaperThemed {
         .paperMode(.live)
         .onChange(of: category == nil) { gone in if gone { dismiss() } }
         .onReceive(connectionManager.deviceStore.$records.dropFirst()) { _ in recordsVersion &+= 1 }
-        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
+        .onReceive(ticker) { now = $0 }
     }
 
     private func content(_ category: FriendCategory, members: [Member]) -> some View {

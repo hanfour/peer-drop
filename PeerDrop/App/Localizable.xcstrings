@@ -1,6 +1,76 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "While offline (or inside the schedule), friends in this category see you as offline and can't connect to you, and you won't be connected to them either. They can still reach you with a room code or a relay invite you accept. On the same Wi-Fi they may still see this device under Nearby.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While offline (or inside the schedule), friends in this category see you as offline and can't connect to you, and you won't be connected to them either. They can still reach you with a room code or a relay invite you accept. On the same Wi-Fi they may still see this device under Nearby."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフライン中（またはスケジュールの時間内）は、このカテゴリの友だちにはあなたがオフラインに見え、あなたに接続できません。あなたからも接続しません。ただし、ルームコードや、あなたが承諾したリレー招待では連絡できます。同じ Wi-Fi では「近く」にこのデバイスが表示されることがあります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "오프라인일 때(또는 일정 시간 안에는) 이 카테고리의 친구에게는 오프라인으로 보이며 나에게 연결할 수 없고, 나도 그들과 연결되지 않습니다. 단, 방 코드나 내가 수락한 릴레이 초대로는 연락할 수 있습니다. 같은 Wi-Fi에서는 '근처'에 이 기기가 계속 보일 수 있습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "离线时（或在排程时段内），这个分类的朋友会看到你离线，也无法连接到你；你也不会和他们连接。不过他们仍可以用房间代码，或通过你接受的中继邀请联系你。在同一个 Wi-Fi 下，他们仍可能在“附近”看到这台设备。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "離線時（或在排程時段內），這個分類的朋友會看到你離線，也無法連線到你；你也不會和他們連線。不過他們仍可以用房號，或透過你接受的中繼邀請聯絡你。在同一個 Wi-Fi 下，他們仍可能在「附近」看到這台裝置。"
+          }
+        }
+      }
+    },
+    "End-to-end encrypted, sent directly to friends in this category while you're connected; never stored on a server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End-to-end encrypted, sent directly to friends in this category while you're connected; never stored on a server."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "エンドツーエンドで暗号化され、接続中にこのカテゴリの友だちへ直接送られます。サーバーには保存されません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "종단간 암호화되어 연결되어 있을 때 이 카테고리의 친구에게 직접 전송되며, 서버에는 저장되지 않습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "端到端加密，只会在连接时直接发送给这个分类的朋友，不会存储在服务器上。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端對端加密，只會在連線時直接傳給這個分類的朋友，不會儲存在伺服器上。"
+          }
+        }
+      }
+    },
     "Friends in this category see you as offline right now.": {
       "extractionState": "manual",
       "localizations": {

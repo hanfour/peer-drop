@@ -111,10 +111,15 @@ extension ConnectionManager {
     /// the background. Idempotent. For launch paths that miss the first
     /// `.active` scene phase (Mac `onAppear`) and for wake from sleep.
     public func startRendezvousIfForeground() {
-        guard rendezvousAppIsForeground else { return }
         // Project F2: the clock may have crossed a schedule boundary while
-        // asleep (Mac wake comes through here).
+        // asleep (Mac wake comes through here) — re-check even when the app
+        // is in the background, since the Mac keeps enforcing there.
         reevaluatePresence()
+        guard rendezvousAppIsForeground else {
+            // iOS runs no presence timer in the background; don't leave one armed.
+            if rendezvousClosesOnBackground { cancelPresenceTimer() }
+            return
+        }
         rendezvousAppDidBecomeActive()
     }
 
