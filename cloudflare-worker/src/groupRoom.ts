@@ -18,6 +18,11 @@
 // exists ONLY in this DO's `meta` and never leaves it in any response; an
 // account member has no deviceId here at all (Ruling 14).
 //
+// `caller` (from the route) must carry EVERY identity it authenticated:
+// accountId whenever the device is signed in — also when it acts as an
+// anonymous member — because /join checks the ban list against all of them
+// (a kicked account must not rejoin anonymously from its own device).
+//
 // Every endpoint except /init answers 404 without touching storage when there
 // is no `meta`, so a stray id can never materialise a room.
 //
@@ -72,8 +77,14 @@ const JOIN_POLICIES = new Set<string>(["accountOnly", "anonymousAllowed"]);
 const padSeq = (n: number): string => String(n).padStart(12, "0");
 const evKey = (seq: number): string => `ev:${padSeq(seq)}`;
 const keyKey = (epoch: number, memberId: string): string => `key:${String(epoch).padStart(10, "0")}:${memberId}`;
-const banHash = (m: { kind: GroupMemberKind; accountId?: string; deviceId?: string }): Promise<string> =>
-  sha256Hex(m.kind === "account" ? `acct:${m.accountId}` : `dev:${m.deviceId}`);
+/** Where the memberId starts in a `key:` storage key. */
+const KEY_MEMBER_AT = "key:".length + 10 + 1;
+/** The string whose sha256 is a member's `ban:` key (Ruling 13). */
+const identityOf = (m: { kind: GroupMemberKind; accountId?: string; deviceId?: string }): string =>
+  m.kind === "account" ? `acct:${m.accountId}` : `dev:${m.deviceId}`;
+/** What leave / kick tell the route about who went (never a deviceId). */
+const removedView = (m: GroupMember): { kind: GroupMemberKind; accountId?: string } =>
+  m.kind === "account" ? { kind: "account", accountId: m.accountId } : { kind: "anon" };
 
 class BadRequest extends Error {}
 
@@ -149,7 +160,7 @@ function parseInit(b: Record<string, unknown>): InitRequest | "too_large" {
   };
 }
 
-interface JoinRequest { member: GroupMember; inviteCode: unknown; dryRun: boolean; banKey: string }
+interface JoinRequest { member: GroupMember; inviteCode: unknown; dryRun: boolean; banKeys: string[] }
 
 /** Same person? Account members by accountId, anonymous ones by deviceId. */
 const sameIdentity = (a: GroupMember, b: GroupMember): boolean =>
@@ -158,7 +169,10 @@ const sameIdentity = (a: GroupMember, b: GroupMember): boolean =>
 /** A member as any other member may see it: never the deviceId. */
 const stripDevice = ({ deviceId: _d, ...rest }: GroupMember): GroupMember => rest;
 
-const KNOWN_PATHS = new Set(["/init", "/view", "/join", "/close", "/invite/reset", "/events/list", "/events/msg", "/ws-ticket"]);
+const KNOWN_PATHS = new Set([
+  "/init", "/view", "/join", "/close", "/invite/reset", "/events/list", "/events/msg", "/ws-ticket",
+  "/keys/mine", "/keys/put", "/rotate", "/meta", "/meta-cipher", "/leave", "/kick",
+]);
 
 const WS_OPEN = 1;
 const ALARM_PRUNE_BATCH = 1000;
@@ -202,14 +216,96 @@ function parseList(b: Record<string, unknown>): ListRequest {
 interface MsgRequest { caller: Caller; eventId: string; epoch: number; payloadCipher: string; eventIdOk: boolean; payload: "ok" | "bad" | "too_large" }
 function parseMsg(b: Record<string, unknown>): MsgRequest {
   const caller = parseCaller(b.caller);
-  if (typeof b.eventId !== "string" || b.eventId.length > 64) throw new BadRequest();
+  const { eventId, eventIdOk } = parseEventId(b.eventId);
   if (!isNonNegInt(b.epoch)) throw new BadRequest();
   const len = typeof b.payloadCipher === "string" && b.payloadCipher.length > 0 ? decodedByteLength(b.payloadCipher) : null;
   const payload = len === null || len === 0 ? "bad" : len > GROUP_LIMITS.maxPayloadBytes ? "too_large" : "ok";
   return {
-    caller, eventId: b.eventId, epoch: b.epoch, payloadCipher: payload === "ok" ? b.payloadCipher as string : "",
-    eventIdOk: isValidEventId(b.eventId), payload,
+    caller, eventId, epoch: b.epoch, payloadCipher: payload === "ok" ? b.payloadCipher as string : "",
+    eventIdOk, payload,
   };
+}
+
+type SizeStatus = "ok" | "bad" | "too_large";
+/** A metaCipher's validity, measured before meta is read and reported after. */
+function metaCipherStatus(v: unknown): SizeStatus {
+  if (typeof v !== "string") throw new BadRequest();
+  const len = v.length > 0 ? decodedByteLength(v) : null;
+  return len === null || len === 0 ? "bad" : len > GROUP_LIMITS.maxMetaBytes ? "too_large" : "ok";
+}
+
+/** A client eventId: structurally wrong → 400 bad_request now; not a ULID → bad_event_id later. */
+function parseEventId(v: unknown): { eventId: string; eventIdOk: boolean } {
+  if (typeof v !== "string" || v.length > 64) throw new BadRequest();
+  return { eventId: v, eventIdOk: isValidEventId(v) };
+}
+
+interface WrapIn { memberId: string; wrapped: string; sig: string }
+/**
+ * A wraps array. Structure (array of {memberId, wrapped, sig} strings, no
+ * repeated memberId, at most maxMembers) is checked now; byte lengths
+ * (92 / 64) are recorded in `ok` and reported as bad_wrap after membership.
+ */
+function parseWraps(v: unknown): { wraps: WrapIn[]; ok: boolean } {
+  if (!Array.isArray(v) || v.length > GROUP_LIMITS.maxMembers) throw new BadRequest();
+  const seen = new Set<string>();
+  const wraps: WrapIn[] = [];
+  let ok = true;
+  for (const w of v) {
+    if (!w || typeof w !== "object") throw new BadRequest();
+    const { memberId, wrapped, sig } = w as Record<string, unknown>;
+    if (!isValidMemberId(memberId) || seen.has(memberId) || typeof wrapped !== "string" || typeof sig !== "string") throw new BadRequest();
+    seen.add(memberId);
+    if (!isB64Bytes(wrapped, GROUP_LIMITS.wrappedBytes) || !isB64Bytes(sig, GROUP_LIMITS.sigBytes)) ok = false;
+    wraps.push({ memberId, wrapped, sig });
+  }
+  return { wraps, ok };
+}
+
+interface PutKeysRequest { caller: Caller; epoch: number; wraps: WrapIn[]; wrapsOk: boolean }
+function parsePutKeys(b: Record<string, unknown>): PutKeysRequest {
+  const caller = parseCaller(b.caller);
+  if (!isNonNegInt(b.epoch)) throw new BadRequest();
+  const { wraps, ok } = parseWraps(b.wraps);
+  return { caller, epoch: b.epoch, wraps, wrapsOk: ok };
+}
+
+interface RotateRequest extends PutKeysRequest { eventId: string; eventIdOk: boolean; metaCipher: string; metaStatus: SizeStatus }
+function parseRotate(b: Record<string, unknown>): RotateRequest {
+  return { ...parsePutKeys(b), ...parseEventId(b.eventId), metaCipher: b.metaCipher as string, metaStatus: metaCipherStatus(b.metaCipher) };
+}
+
+interface MetaRequest { caller: Caller; eventId: string; eventIdOk: boolean; metaCipher: string; metaStatus: SizeStatus; joinPolicy?: JoinPolicy; removeAnonymous: boolean }
+function parseMetaUpdate(b: Record<string, unknown>): MetaRequest {
+  const caller = parseCaller(b.caller);
+  const { eventId, eventIdOk } = parseEventId(b.eventId);
+  const metaStatus = metaCipherStatus(b.metaCipher);
+  if (b.joinPolicy !== undefined && (typeof b.joinPolicy !== "string" || !JOIN_POLICIES.has(b.joinPolicy))) throw new BadRequest();
+  if (b.removeAnonymous !== undefined && typeof b.removeAnonymous !== "boolean") throw new BadRequest();
+  // Dropping anonymous members only makes sense together with closing the door on them.
+  if (b.removeAnonymous === true && b.joinPolicy !== "accountOnly") throw new BadRequest();
+  return {
+    caller, eventId, eventIdOk, metaCipher: b.metaCipher as string, metaStatus,
+    joinPolicy: b.joinPolicy as JoinPolicy | undefined, removeAnonymous: b.removeAnonymous === true,
+  };
+}
+
+interface KickRequest { caller: Caller; targetMemberId: string }
+function parseKick(b: Record<string, unknown>): KickRequest {
+  const caller = parseCaller(b.caller);
+  if (!isValidMemberId(b.targetMemberId)) throw new BadRequest();
+  return { caller, targetMemberId: b.targetMemberId };
+}
+
+type NewEvent = Omit<GroupEvent, "seq">;
+export type RemoveReason = "leave" | "kick" | "replace";
+interface RemoveOpts {
+  /** The kicker (kick only). */
+  by?: string;
+  /** Events committed before / after the removal events, in the same write. */
+  before?: NewEvent[];
+  after?: NewEvent[];
+  extraWrites?: Record<string, unknown>;
 }
 
 export class GroupRoom {
@@ -245,13 +341,20 @@ export class GroupRoom {
    * (Ruling 5).
    */
   authorize(meta: GroupMeta, caller: Caller): GroupMember | Response {
+    const member = this.resolve(meta, caller);
+    if (member === "bearer_required") return this.json({ error: "bearer_required" }, 401);
+    return member ?? this.json({ error: "not_member" }, 403);
+  }
+
+  /** authorize() without the responses: the member, null, or the lane refusal. */
+  private resolve(meta: GroupMeta, caller: Caller): GroupMember | null | "bearer_required" {
     const member = meta.members.find((m) => m.memberId === caller.memberId);
-    if (!member) return this.json({ error: "not_member" }, 403);
+    if (!member) return null;
     if (member.kind === "anon") {
-      if (caller.lane === "key") return this.json({ error: "bearer_required" }, 401);
-      if (member.deviceId !== caller.deviceId) return this.json({ error: "not_member" }, 403);
+      if (caller.lane === "key") return "bearer_required";
+      if (member.deviceId !== caller.deviceId) return null;
     } else if (member.accountId !== caller.accountId) {
-      return this.json({ error: "not_member" }, 403);
+      return null;
     }
     return member;
   }
@@ -303,10 +406,26 @@ export class GroupRoom {
     return out;
   }
 
-  /** Every wrapped key held by `memberId`, across all epochs. */
-  private async keyKeysOf(memberId: string): Promise<string[]> {
-    const all = await this.ctx.storage.list({ prefix: "key:" });
-    return [...all.keys()].filter((k) => k.endsWith(`:${memberId}`));
+  /** Storage keys that die with these members: every wrap (all epochs), ticket and push stamp. */
+  private async memberKeys(ids: Set<string>): Promise<string[]> {
+    const out: string[] = [];
+    for (const k of (await this.ctx.storage.list({ prefix: "key:" })).keys()) if (ids.has(k.slice(KEY_MEMBER_AT))) out.push(k);
+    for (const [k, t] of await this.ctx.storage.list<TicketRecord>({ prefix: "tkt:" })) if (ids.has(t.memberId)) out.push(k);
+    for (const id of ids) out.push(`push:${id}`);
+    return out;
+  }
+
+  /**
+   * Idempotent replay of a client eventId: the stored event when it is this
+   * member's own event of `type`, a 409 event_id_taken when the id belongs
+   * to someone else (or another kind of event), null when it's unused.
+   */
+  private async replayOf(eventId: string, me: GroupMember, type: GroupEventType): Promise<GroupEvent | Response | null> {
+    const seq = await this.ctx.storage.get<number>(`eid:${eventId}`);
+    if (seq === undefined) return null;
+    const event = await this.ctx.storage.get<GroupEvent>(evKey(seq));
+    if (!event || event.authorMemberId !== me.memberId || event.type !== type) return this.json({ error: "event_id_taken" }, 409);
+    return event;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -353,9 +472,32 @@ export class GroupRoom {
         if (!meta) return this.json({ error: "not_found" }, 404);
         return await this.issueTicket(meta, caller, ticket, hash);
       }
+      if (path === "/keys/put") {
+        const req = parsePutKeys(body);
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.putKeys(meta, req);
+      }
+      if (path === "/rotate") {
+        const req = parseRotate(body);
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.rotate(meta, req);
+      }
+      if (path === "/meta") {
+        const req = parseMetaUpdate(body);
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.updateMeta(meta, req);
+      }
+      // kick reads meta itself: it has a hash to compute once it knows the target.
+      if (path === "/kick") return await this.kick(parseKick(body));
       const caller = parseCaller(body.caller);
       const meta = await this.getMeta();
       if (!meta) return this.json({ error: "not_found" }, 404);
+      if (path === "/keys/mine") return await this.keysMine(meta, caller);
+      if (path === "/meta-cipher") return await this.metaCipher(meta, caller);
+      if (path === "/leave") return await this.leave(meta, caller);
       if (path === "/view") return await this.view(meta, caller);
       if (path === "/close") return await this.close(meta, caller);
       return await this.resetInvite(meta, caller);
@@ -442,7 +584,17 @@ export class GroupRoom {
     } else if (caller.accountId !== member.accountId) {
       return this.json({ error: "identity_mismatch" }, 403);
     }
-    return { member, inviteCode: body.inviteCode, dryRun: body.dryRun === true, banKey: `ban:${await banHash(member)}` };
+    // Ban check covers every identity the caller authenticated as, not just
+    // the one it joins under: a kicked account must not slip back in as an
+    // anonymous member from its own device, nor a kicked anonymous device
+    // by signing in with an account on it. (The key lane's deviceId is
+    // self-reported, so it is neither trusted for nor held against anyone.)
+    // Binding above makes the member's own identity one of these.
+    const idents: string[] = [];
+    if (caller.accountId !== null) idents.push(identityOf({ kind: "account", accountId: caller.accountId }));
+    if (caller.lane === "bearer") idents.push(identityOf({ kind: "anon", deviceId: caller.deviceId }));
+    const banKeys = await Promise.all(idents.map(async (i) => `ban:${await sha256Hex(i)}`));
+    return { member, inviteCode: body.inviteCode, dryRun: body.dryRun === true, banKeys };
   }
 
   private async join(meta: GroupMeta, req: JoinRequest): Promise<Response> {
@@ -454,7 +606,7 @@ export class GroupRoom {
     // Idempotent short-circuit beats every check below: an existing member
     // replaying a stale invite link needs no fresh authorization.
     if (prior && prior.memberId === member.memberId) return this.json({ added: false }, 200);
-    if (await this.ctx.storage.get(req.banKey) !== undefined) return this.json({ error: "banned" }, 403);
+    if ((await this.ctx.storage.get(req.banKeys)).size > 0) return this.json({ error: "banned" }, 403);
     // Authoritative code check (D1's group_invites only maps code → groupId).
     if (meta.inviteCode !== req.inviteCode) return this.json({ error: "bad_code" }, 403);
     if (meta.state === "closed") return this.json({ error: "group_closed" }, 403);
@@ -469,21 +621,15 @@ export class GroupRoom {
       // old memberId out (with its wraps), new one in, ownership carried
       // over. No rotationDue: it's the same person, who already had those
       // keys. "srv:" ids embed the seq the event will get.
+      // Ownership moves first, so removeMember sees no owner leaving.
       const wasOwner = meta.ownerMemberId === prior.memberId;
-      meta.members = meta.members.filter((m) => m.memberId !== prior.memberId);
       meta.members.push(member);
       if (wasOwner) meta.ownerMemberId = member.memberId;
-      const events: Omit<GroupEvent, "seq">[] = [
-        { eventId: `srv:leave:${prior.memberId}:${meta.seq + 1}`, type: "leave", authorMemberId: prior.memberId, epoch: meta.epoch, createdAt: now },
-        { eventId: `srv:join:${member.memberId}:${meta.seq + 2}`, type: "join", authorMemberId: member.memberId, epoch: meta.epoch, createdAt: now },
-      ];
-      if (wasOwner) events[1].ownerMemberId = member.memberId;
-      const stale = [...await this.keyKeysOf(prior.memberId), `push:${prior.memberId}`];
-      // appendEvent commits these deletes with the events and meta in one go.
-      await this.appendEvent(meta, events, {}, stale);
-      // The old memberId is gone for good (its tickets die with it: upgrade
-      // checks membership), so its sockets get "removed", not "replaced".
-      this.closeMember(prior.memberId);
+      // removeMember writes leave(old) at seq+1, so the join is seq+2.
+      const joinEv: NewEvent = { eventId: `srv:join:${member.memberId}:${meta.seq + 2}`, type: "join", authorMemberId: member.memberId, epoch: meta.epoch, createdAt: now };
+      if (wasOwner) joinEv.ownerMemberId = member.memberId;
+      // The old memberId is gone for good, so its sockets get 4003 "removed".
+      await this.removeMember(meta, prior.memberId, "replace", { after: [joinEv] });
       return this.json({ added: true, replaced: true }, 201);
     }
 
@@ -531,17 +677,16 @@ export class GroupRoom {
   private async postMsg(meta: GroupMeta, req: MsgRequest): Promise<Response> {
     const me = this.authorize(meta, req.caller);
     if (me instanceof Response) return me;
+    // Exact-eventId replay: the original result, no re-validation, no
+    // fan-out — even once the room has closed, so a retry after a lost
+    // response still learns its post landed.
+    if (req.eventIdOk) {
+      const prior = await this.replayOf(req.eventId, me, "msg");
+      if (prior instanceof Response) return prior;
+      if (prior) return this.json({ seq: prior.seq, event: prior, recipients: [] }, 200);
+    }
     if (meta.state !== "open") return this.json({ error: "group_closed" }, 403);
     if (!req.eventIdOk) return this.json({ error: "bad_event_id" }, 400);
-
-    // Exact-eventId replay: the original result, no re-validation, no fan-out.
-    const existingSeq = await this.ctx.storage.get<number>(`eid:${req.eventId}`);
-    if (existingSeq !== undefined) {
-      const event = await this.ctx.storage.get<GroupEvent>(evKey(existingSeq));
-      // Another member's id: don't hand them a "success" for someone else's post.
-      if (event && event.authorMemberId !== me.memberId) return this.json({ error: "event_id_taken" }, 409);
-      return this.json({ seq: existingSeq, event, recipients: [] }, 200);
-    }
 
     if (req.epoch !== meta.epoch) return this.json({ error: "stale_epoch", epoch: meta.epoch }, 409);
     if (await this.ctx.storage.get(keyKey(meta.epoch, me.memberId)) === undefined) return this.json({ error: "awaiting_key" }, 403);
@@ -565,6 +710,241 @@ export class GroupRoom {
     // Push recipients are filled in by a later task.
     const recipients: PushRecipient[] = [];
     return this.json({ seq: event.seq, event, recipients }, 201);
+  }
+
+  // ---- key wraps ----------------------------------------------------------------
+  /** The caller's own wraps, every epoch still stored, oldest first. */
+  private async keysMine(meta: GroupMeta, caller: Caller): Promise<Response> {
+    const me = this.authorize(meta, caller);
+    if (me instanceof Response) return me;
+    const wraps: { epoch: number; wrapped: string; wrappedBy: string; sig: string }[] = [];
+    // Keys sort by zero-padded epoch, so the list is already ascending.
+    for (const [k, w] of await this.ctx.storage.list<WrapRecord>({ prefix: "key:" })) {
+      if (k.slice(KEY_MEMBER_AT) === me.memberId) wraps.push({ epoch: Number(k.slice(4, KEY_MEMBER_AT - 1)), wrapped: w.wrapped, wrappedBy: w.wrappedBy, sig: w.sig });
+    }
+    return this.json({ wraps });
+  }
+
+  /**
+   * Relays current-epoch wraps to members awaiting a key (Ruling 7): only a
+   * keyed ACCOUNT member may relay (an anonymous wrap can't be signature-
+   * checked), first write wins for members, the owner may overwrite. The
+   * route verifies each wrap's signature before this runs; the DO only
+   * checks sizes and membership.
+   */
+  private async putKeys(meta: GroupMeta, req: PutKeysRequest): Promise<Response> {
+    const me = this.authorize(meta, req.caller);
+    if (me instanceof Response) return me;
+    if (me.kind !== "account") return this.json({ error: "account_required" }, 403);
+    if (await this.ctx.storage.get(keyKey(meta.epoch, me.memberId)) === undefined) return this.json({ error: "not_keyed" }, 403);
+    if (req.epoch !== meta.epoch) return this.json({ error: "stale_epoch", epoch: meta.epoch }, 409);
+    const ids = new Set(meta.members.map((m) => m.memberId));
+    if (req.wraps.some((w) => !ids.has(w.memberId))) return this.json({ error: "unknown_member" }, 400);
+    if (!req.wrapsOk) return this.json({ error: "bad_wrap" }, 400);
+
+    const isOwner = me.memberId === meta.ownerMemberId;
+    const held = req.wraps.length ? await this.ctx.storage.get(req.wraps.map((w) => keyKey(meta.epoch, w.memberId))) : new Map();
+    const now = this.now();
+    const writes: Record<string, WrapRecord> = {};
+    const written: string[] = [];
+    const skipped: string[] = [];
+    for (const w of req.wraps) {
+      const k = keyKey(meta.epoch, w.memberId);
+      if (held.has(k) && !isOwner) { skipped.push(w.memberId); continue; }
+      writes[k] = { wrapped: w.wrapped, wrappedBy: me.memberId, sig: w.sig, createdAt: now };
+      written.push(w.memberId);
+    }
+    if (written.length) await this.ctx.storage.put(writes);
+    return this.json({ written, skipped });
+  }
+
+  /**
+   * Atomic epoch rotation (Ruling 9): owner only, open rooms only, epoch
+   * must be exactly current+1 and the wraps must cover exactly the current
+   * members — anyone joining or leaving after the owner read the member
+   * list makes this a 409 members_changed carrying the current memberIds,
+   * so a newcomer is never left without the new key and a removed member
+   * never gets it. Wraps, metacipher, meta and the `meta` event commit in
+   * one write.
+   */
+  private async rotate(meta: GroupMeta, req: RotateRequest): Promise<Response> {
+    const me = this.authorize(meta, req.caller);
+    if (me instanceof Response) return me;
+    if (req.eventIdOk) {
+      const prior = await this.replayOf(req.eventId, me, "meta");
+      if (prior instanceof Response) return prior;
+      if (prior) return this.json({ seq: prior.seq, epoch: prior.epoch }, 200);
+    }
+    if (me.memberId !== meta.ownerMemberId) return this.json({ error: "not_owner" }, 403);
+    if (meta.state !== "open") return this.json({ error: "group_closed" }, 403);
+    if (!req.eventIdOk) return this.json({ error: "bad_event_id" }, 400);
+    if (req.epoch !== meta.epoch + 1) return this.json({ error: "stale_epoch", epoch: meta.epoch }, 409);
+    if (!req.wrapsOk) return this.json({ error: "bad_wrap" }, 400);
+    if (req.metaStatus === "bad") return this.json({ error: "bad_request" }, 400);
+    const current = meta.members.map((m) => m.memberId);
+    const sent = new Set(req.wraps.map((w) => w.memberId));
+    if (sent.size !== current.length || current.some((id) => !sent.has(id))) {
+      return this.json({ error: "members_changed", memberIds: current }, 409);
+    }
+    if (req.metaStatus === "too_large") return this.json({ error: "too_large" }, 413);
+
+    const now = this.now();
+    const epoch = meta.epoch + 1;
+    const writes: Record<string, unknown> = { metacipher: req.metaCipher };
+    for (const w of req.wraps) writes[keyKey(epoch, w.memberId)] = { wrapped: w.wrapped, wrappedBy: me.memberId, sig: w.sig, createdAt: now } satisfies WrapRecord;
+    meta.epoch = epoch;
+    meta.metaVersion += 1;
+    meta.rotationDue = false;
+    const [ev] = await this.appendEvent(meta, { eventId: req.eventId, type: "meta", authorMemberId: me.memberId, epoch, createdAt: now }, writes);
+    return this.json({ seq: ev.seq, epoch }, 201);
+  }
+
+  // ---- metaCipher / settings (owner-only) ------------------------------------
+  /**
+   * Replaces the encrypted name/avatar blob and optionally the join policy.
+   * With removeAnonymous (only alongside joinPolicy "accountOnly") every
+   * anonymous member is removed in the same commit — one `kick` event each,
+   * NOT banned — which sets rotationDue. The `meta` event carries no
+   * payloadCipher; clients fetch /meta-cipher.
+   */
+  private async updateMeta(meta: GroupMeta, req: MetaRequest): Promise<Response> {
+    const me = this.authorize(meta, req.caller);
+    if (me instanceof Response) return me;
+    if (req.eventIdOk) {
+      const prior = await this.replayOf(req.eventId, me, "meta");
+      if (prior instanceof Response) return prior;
+      // The metaVersion of that write isn't kept; the current one is the best answer.
+      if (prior) return this.json({ seq: prior.seq, metaVersion: meta.metaVersion }, 200);
+    }
+    if (me.memberId !== meta.ownerMemberId) return this.json({ error: "not_owner" }, 403);
+    if (meta.state !== "open") return this.json({ error: "group_closed" }, 403);
+    if (!req.eventIdOk) return this.json({ error: "bad_event_id" }, 400);
+    if (req.metaStatus === "bad") return this.json({ error: "bad_request" }, 400);
+    if (req.metaStatus === "too_large") return this.json({ error: "too_large" }, 413);
+
+    const seq = meta.seq + 1;
+    meta.metaVersion += 1;
+    if (req.joinPolicy) meta.joinPolicy = req.joinPolicy;
+    const metaEv: NewEvent = { eventId: req.eventId, type: "meta", authorMemberId: me.memberId, epoch: meta.epoch, createdAt: this.now() };
+    const anonIds = req.removeAnonymous ? meta.members.filter((m) => m.kind === "anon").map((m) => m.memberId) : [];
+    await this.removeMembers(meta, anonIds, "kick", { by: me.memberId, before: [metaEv], extraWrites: { metacipher: req.metaCipher } });
+    return this.json({ seq, metaVersion: meta.metaVersion }, 201);
+  }
+
+  private async metaCipher(meta: GroupMeta, caller: Caller): Promise<Response> {
+    const me = this.authorize(meta, caller);
+    if (me instanceof Response) return me;
+    return this.json({ metaCipher: await this.ctx.storage.get<string>("metacipher"), metaVersion: meta.metaVersion });
+  }
+
+  // ---- leave / kick -------------------------------------------------------------
+  /** Leaving is idempotent: a non-member gets 200 with `removed: null`. */
+  private async leave(meta: GroupMeta, caller: Caller): Promise<Response> {
+    const me = this.resolve(meta, caller);
+    if (me === "bearer_required") return this.json({ error: "bearer_required" }, 401);
+    if (!me) return this.json({ remaining: meta.members.length, removed: null });
+    await this.removeMember(meta, me.memberId, "leave");
+    return this.json({ remaining: meta.members.length, removed: removedView(me) });
+  }
+
+  /**
+   * Owner-only; the owner can't kick itself. Removes the target and bans
+   * its identity (Ruling 13) in one commit. The ban key is a sha256 of the
+   * target's identity, known only once meta is read — and hashing is not
+   * storage I/O, so it lets other requests in. Hence: read meta, hash,
+   * then read meta again and decide only on that second read (nothing but
+   * storage between it and the commit). If the memberId's holder changed in
+   * between, hash again (bounded).
+   */
+  private async kick(req: KickRequest): Promise<Response> {
+    let hashed = null as { ident: string; key: string } | null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const meta = await this.getMeta();
+      if (!meta) return this.json({ error: "not_found" }, 404);
+      const me = this.authorize(meta, req.caller);
+      if (me instanceof Response) return me;
+      if (me.memberId !== meta.ownerMemberId) return this.json({ error: "not_owner" }, 403);
+      if (req.targetMemberId === me.memberId) return this.json({ error: "kick_self" }, 400);
+      const target = meta.members.find((m) => m.memberId === req.targetMemberId);
+      if (!target) return this.json({ removed: null });
+      const ident = identityOf(target);
+      if (hashed?.ident !== ident) {
+        hashed = { ident, key: `ban:${await sha256Hex(ident)}` };
+        continue; // `meta` is stale now — read it again
+      }
+      await this.removeMember(meta, target.memberId, "kick", { by: me.memberId, extraWrites: { [hashed.key]: 1 } });
+      return this.json({ removed: removedView(target) });
+    }
+    return this.json({ error: "busy" }, 503);
+  }
+
+  /**
+   * Takes one member out of the room — see removeMembers.
+   * `reason`: "leave" (own choice), "kick" (by the owner, `opts.by`), or
+   * "replace" (same identity rejoined from a new device, Ruling 12).
+   */
+  async removeMember(meta: GroupMeta, memberId: string, reason: RemoveReason, opts: RemoveOpts = {}): Promise<GroupMember | null> {
+    const [m] = await this.removeMembers(meta, [memberId], reason, opts);
+    return m ?? null;
+  }
+
+  /**
+   * Removes members in ONE commit together with `opts.before` / `opts.after`
+   * events and `opts.extraWrites`: drops every wrap (all epochs), ticket and
+   * push stamp they hold, writes a `leave` (or, for kicks, a `kick` with
+   * targetMemberId) per member, sets rotationDue for leave/kick (not for a
+   * replacement — same person, same keys), and hands ownership on when the
+   * owner leaves (Ruling 11: earliest-joined remaining account member; none
+   * → room closes, ownerMemberId null; the `leave` event carries the new
+   * ownerMemberId). Their sockets are closed 4003 after the commit. If no
+   * member is left, the whole room is wiped instead. Never bans (kick
+   * passes its ban key in extraWrites). Awaits storage only.
+   */
+  private async removeMembers(meta: GroupMeta, memberIds: string[], reason: RemoveReason, opts: RemoveOpts = {}): Promise<GroupMember[]> {
+    const ids = new Set(memberIds);
+    const removed = meta.members.filter((m) => ids.has(m.memberId));
+    const events: NewEvent[] = [...(opts.before ?? [])];
+    if (removed.length === 0 && events.length === 0 && !opts.after?.length) return [];
+    meta.members = meta.members.filter((m) => !ids.has(m.memberId));
+    if (meta.members.length === 0) {
+      await this.wipe();
+      return removed;
+    }
+    const now = this.now();
+    for (const m of removed) {
+      const seq = meta.seq + events.length + 1;
+      const ev: NewEvent = reason === "kick"
+        ? { eventId: `srv:kick:${m.memberId}:${seq}`, type: "kick", authorMemberId: opts.by ?? "", targetMemberId: m.memberId, epoch: meta.epoch, createdAt: now }
+        : { eventId: `srv:leave:${m.memberId}:${seq}`, type: "leave", authorMemberId: m.memberId, epoch: meta.epoch, createdAt: now };
+      if (meta.ownerMemberId === m.memberId) {
+        // Only a leave gets here: kick_self is refused, and a replacement
+        // moves ownership to the new memberId before calling.
+        const heir = meta.members.filter((x) => x.kind === "account").reduce<GroupMember | null>((a, b) => (a && a.joinedAt <= b.joinedAt ? a : b), null);
+        meta.ownerMemberId = heir?.memberId ?? null;
+        if (heir) ev.ownerMemberId = heir.memberId;
+        else meta.state = "closed";
+      }
+      events.push(ev);
+    }
+    if (removed.length && reason !== "replace") meta.rotationDue = true;
+    events.push(...(opts.after ?? []));
+    const deletes = removed.length ? await this.memberKeys(new Set(removed.map((m) => m.memberId))) : [];
+    await this.appendEvent(meta, events, opts.extraWrites, deletes);
+    for (const m of removed) {
+      this.closeMember(m.memberId);
+      this.postTimes.delete(m.memberId);
+    }
+    return removed;
+  }
+
+  /** The last member left: close every socket and delete everything (alarm included). */
+  private async wipe(): Promise<void> {
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.close(4003, "removed"); } catch { /* already closing */ }
+    }
+    this.postTimes.clear();
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
   }
 
   // ---- websocket ---------------------------------------------------------------
@@ -625,7 +1005,7 @@ export class GroupRoom {
   }
 
   private expired(ws: WebSocket, now: number): boolean {
-    return now - this.att(ws).connectedAt > GROUP_LIMITS.hardCapMs;
+    return now - this.att(ws).connectedAt >= GROUP_LIMITS.hardCapMs;
   }
 
   /** Closes every socket past the 2 h cap; returns the ones still alive. */
