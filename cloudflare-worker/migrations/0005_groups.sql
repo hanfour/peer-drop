@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS group_invites (
 );
 CREATE INDEX IF NOT EXISTS group_invites_group ON group_invites(group_id);
 -- reports: SQLite needs a table rebuild to relax NOT NULL and add a CHECK
-DROP TABLE IF EXISTS reports_new;
 CREATE TABLE reports_new (
   id TEXT PRIMARY KEY,
   reporter_account_id TEXT NULL,
