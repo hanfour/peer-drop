@@ -1,6 +1,41 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Friends in this category see you as offline right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends in this category see you as offline right now."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "このカテゴリの友だちには、今あなたがオフラインに見えます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "이 카테고리의 친구들에게는 지금 오프라인으로 보입니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "这个分类的朋友目前会看到你离线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個分類的朋友目前會看到你離線。"
+          }
+        }
+      }
+    },
     "Status for this category": {
       "extractionState": "manual",
       "localizations": {

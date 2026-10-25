@@ -136,7 +136,7 @@ struct CategoryDetailView: View, PaperThemed {
                 Text("Members")
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
-                    if hiddenNow { Text("This friend's category shows you as offline") }
+                    if hiddenNow { Text("Friends in this category see you as offline right now.") }
                     if members.isEmpty { Text("No friends in this category yet.") }
                 }
             }
