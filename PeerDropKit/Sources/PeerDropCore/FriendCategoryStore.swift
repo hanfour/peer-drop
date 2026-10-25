@@ -92,6 +92,34 @@ public final class FriendCategoryStore: ObservableObject {
         save()
     }
 
+    /// Rejects (returns false, no change) an unknown category or an invalid schedule window.
+    @discardableResult
+    public func setPresence(_ presence: CategoryPresence, for categoryID: String) -> Bool {
+        guard let i = categories.firstIndex(where: { $0.id == categoryID }) else { return false }
+        if case .scheduled(let w) = presence, !w.isValid { return false }
+        categories[i].presence = presence
+        save()
+        return true
+    }
+
+    /// Cleans the text (see `PresencePolicy.cleanStatusMessage`); blank clears it.
+    /// Rejects an unknown category or text longer than `maxStatusMessageLength`.
+    @discardableResult
+    public func setStatusMessage(_ raw: String, for categoryID: String) -> Bool {
+        guard let i = categories.firstIndex(where: { $0.id == categoryID }) else { return false }
+        let clean = PresencePolicy.cleanStatusMessage(raw)
+        if let clean, clean.count > PresencePolicy.maxStatusMessageLength { return false }
+        categories[i].statusMessage = clean
+        save()
+        return true
+    }
+
+    public func setShowStatusMessage(_ show: Bool, for categoryID: String) {
+        guard let i = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+        categories[i].showStatusMessage = show
+        save()
+    }
+
     public func assign(friendID: String, to categoryID: String?) {
         for i in categories.indices { categories[i].friendIDs.removeAll { $0 == friendID } }
         if let categoryID, let i = categories.firstIndex(where: { $0.id == categoryID }) {
