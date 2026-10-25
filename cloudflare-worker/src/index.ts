@@ -23,6 +23,7 @@ import { verifyPoW } from "./pow";
 import { handleNotesRoute } from "./notes";
 import { handleAccountSettingsRoute } from "./accountSettings";
 import { handleDiaryRoute } from "./diary";
+import { handleGroupRoute } from "./group";
 import { handleRendezvous } from "./rendezvousRoute";
 import { buildIceServers } from "./turnIce";
 
@@ -118,6 +119,9 @@ function generateRoomCode(): string {
 // one surface — e.g. message delivery — can't starve unrelated surfaces like
 // room creation for the same IP.
 export function rateLimitClass(path: string, _method: string): string {
+  // Group chat gets its own budget so a busy room can't starve the other
+  // /v3 surfaces (checked before the generic /v3/ prefix).
+  if (path === "/v3/groups" || path.startsWith("/v3/groups/")) return "groups";
   if (path.startsWith("/v3/")) return "v3";
   if (path.startsWith("/v2/keys")) return "keys";
   if (path.startsWith("/v2/messages")) return "messages";
@@ -1454,6 +1458,13 @@ export default {
       return jsonResponse({ accountId, nickname, token, expiresInSeconds: 900 }, 201);
     }
 
+    // /v3/groups* — group chat rooms. Sits BEFORE the account-scoped /v3
+    // gate below: an anonymous member has a device token but no account
+    // scope. group.ts decides per route what identity it needs.
+    if (path === "/v3/groups" || path.startsWith("/v3/groups/")) {
+      return await handleGroupRoute(request, url, path, env, { push: { send: sendAPNs, topicFor: (p) => selectApnsTopic(p, env) }, authorize: (r) => authorizeGroupCaller(r, env) });
+    }
+
     // GET /v3/admin/reports — operator view of the report archive. Keyed by
     // ANALYTICS_KEY (not an account token), so it must sit before the
     // account-scoped /v3 dispatch below.
@@ -1581,6 +1592,26 @@ export async function authorizeV3(request: Request, env: Env): Promise<V3Auth | 
   if (!authed) return null;
   const accountId = accountIdFromScope(authed.payload.scope);
   return accountId ? { deviceId: authed.payload.deviceId, accountId, lane: authed.lane } : null;
+}
+
+export interface GroupAuth { deviceId: string; accountId: string | null; lane: AuthLane }
+
+/**
+ * Authentication for /v3/groups*: any device (Bearer of any scope, or the
+ * key lane), with the account it is signed in to — null for a device that
+ * isn't. On the Bearer lane a not-yet-account-scoped token (issued before
+ * the device registered, valid ≤ 15 min) still gets the device's account
+ * from D1: the caller must carry EVERY identity it has, so a kicked account
+ * can't rejoin a room anonymously from its own device on an old token. On
+ * the key lane the account always comes from that D1 lookup of the
+ * self-reported device id, never from anything else the client sends.
+ */
+export async function authorizeGroupCaller(request: Request, env: Env): Promise<GroupAuth | null> {
+  const authed = await authorizeDeviceWithLane(request, env);
+  if (!authed) return null;
+  let accountId = accountIdFromScope(authed.payload.scope);
+  if (!accountId && authed.lane === "bearer") accountId = accountIdFromScope(await scopeForDevice(env.ACCOUNTS_DB, authed.payload.deviceId));
+  return { deviceId: authed.payload.deviceId, accountId, lane: authed.lane };
 }
 
 /**

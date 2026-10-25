@@ -1,6 +1,7 @@
 // Pure helpers shared by the GroupRoom DO and the /v3/groups routes: id
-// formats and byte-length / hashing utilities. (Signature-message assembly
-// and Ed25519 verification land here too, in a later task.)
+// formats, byte-length / hashing utilities, and the signed-message formats
+// the routes verify against an account's Ed25519 `accounts.signing_key`
+// (Ruling 6). Task 8's shared test vectors pin these byte layouts for G1b.
 
 /** 26-char Crockford base32 — the ULID alphabet (no I, L, O, U). */
 export const GROUP_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -26,6 +27,62 @@ export function decodedByteLength(b64: string): number | null {
     return atob(b64).length;
   } catch {
     return null;
+  }
+}
+
+/** Strict base64 → bytes, or null. */
+export function decodeB64(b64: string): Uint8Array | null {
+  if (decodedByteLength(b64) === null) return null;
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+function concat(parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+
+/**
+ * What an account member signs to bind its room public key to this room and
+ * seat: utf8("PDGRPMK1") ‖ utf8(groupId) ‖ utf8(memberId) ‖ utf8(accountId)
+ * ‖ pubKey. Every field is fixed-length (26 / 26 / 8 / 32), so no separators
+ * are needed; the label separates it from every other signed message.
+ */
+export function memberKeyMessage(groupId: string, memberId: string, accountId: string, pubKey: Uint8Array): Uint8Array {
+  return concat([utf8("PDGRPMK1"), utf8(groupId), utf8(memberId), utf8(accountId), pubKey]);
+}
+
+/**
+ * What the wrapping member signs for one room-key wrap:
+ * utf8("PDGRPWK1") ‖ utf8(groupId) ‖ UInt32BE(epoch) ‖ utf8(targetMemberId)
+ * ‖ utf8(wrapperMemberId) ‖ wrapped (26 / 4 / 26 / 26 / 92 bytes).
+ */
+export function wrapMessage(groupId: string, epoch: number, targetMemberId: string, wrapperMemberId: string, wrapped: Uint8Array): Uint8Array {
+  const e = new Uint8Array(4);
+  new DataView(e.buffer).setUint32(0, epoch >>> 0, false);
+  return concat([utf8("PDGRPWK1"), utf8(groupId), e, utf8(targetMemberId), utf8(wrapperMemberId), wrapped]);
+}
+
+/**
+ * Ed25519-verifies `sigB64` over `message` with the account's registered
+ * signing key (`accounts.signing_key`). Any problem — unknown account,
+ * malformed signature, D1 error — is simply `false`.
+ */
+export async function verifyAccountSig(db: D1Database, accountId: string, message: Uint8Array, sigB64: string): Promise<boolean> {
+  try {
+    const sig = decodeB64(sigB64);
+    if (!sig || sig.length !== 64) return false;
+    const row = await db.prepare("SELECT signing_key FROM accounts WHERE account_id = ?1").bind(accountId).first<{ signing_key: ArrayBuffer }>();
+    if (!row?.signing_key) return false;
+    const raw = new Uint8Array(row.signing_key);
+    if (raw.length !== 32) return false;
+    const key = await crypto.subtle.importKey("raw", raw, { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, sig, message);
+  } catch {
+    return false;
   }
 }
 
