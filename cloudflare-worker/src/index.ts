@@ -38,6 +38,7 @@ export interface Env {
   ACCOUNT_INBOX: DurableObjectNamespace;
   DIARY_ROOM: DurableObjectNamespace;
   RENDEZVOUS_ROOM: DurableObjectNamespace;
+  GROUP_ROOM: DurableObjectNamespace;
   // D1
   ACCOUNTS_DB: D1Database;
   // Secrets
@@ -2142,3 +2143,4 @@ export class DeviceInbox {
 export { AccountInbox } from "./accountInbox";
 export { DiaryRoom } from "./diaryRoom";
 export { RendezvousRoom } from "./rendezvousRoom";
+export { GroupRoom } from "./groupRoom";
