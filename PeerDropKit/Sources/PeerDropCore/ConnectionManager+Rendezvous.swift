@@ -368,13 +368,20 @@ extension ConnectionManager {
     /// once the connection is verified. A Project E peer only runs its key
     /// check on it (same key ⇒ harmless). Never sent in plaintext: the strict
     /// channel wraps every business frame.
+    ///
+    /// `advertisedStatusUpdate` turns true only once that HELLO is on the
+    /// wire, so no `.statusUpdate` can overtake it (the peer would drop one
+    /// that arrives before it learned our flag); a peer capability learned in
+    /// the meantime is served right after. A failed send advertises nothing.
     private func sendRendezvousCapabilityHello(_ pc: PeerConnection) {
         let identity = localIdentity.withoutNotesExchange()
         guard let hello = try? PeerMessage.hello(identity: identity) else { return }
-        pc.advertisedStatusUpdate = identity.supportsStatusUpdate
-        Task { @MainActor [weak pc] in
+        Task { @MainActor [weak self, weak pc] in
             guard let pc else { return }
-            try? await pc.sendMessage(hello)
+            do { try await pc.sendMessage(hello) } catch { return }
+            guard let self, self.rendezvousConnections[pc.id] === pc else { return }
+            pc.advertisedStatusUpdate = identity.supportsStatusUpdate
+            self.sendStatusUpdateIfNeeded(to: pc)
         }
     }
 
@@ -466,6 +473,7 @@ extension ConnectionManager {
         pc.rendezvousAwaitingConfirmation = false
         pc.cancel()
         pc.updateState(.disconnected)
+        forgetSentStatus(for: pc)
         chatManager.setTyping(false, for: pc.id)
         bumpSecurityEpoch()
         objectWillChange.send()

@@ -32,6 +32,15 @@ private final class SUScriptedPeer {
     let pc: PeerConnection
     let serverHello: PeerIdentity
     var reader: Task<Void, Never>?
+    /// Every frame as it came off the wire (outer type).
+    var wireTypes: [MessageType] = []
+    /// Every frame the peer's PeerConnection delivered (envelopes decrypted).
+    var inbox: [PeerMessage] = []
+    var statusUpdates: [StatusUpdatePayload] {
+        inbox.filter { $0.type == .statusUpdate }.compactMap { m in
+            m.payload.flatMap { try? JSONDecoder().decode(StatusUpdatePayload.self, from: $0) }
+        }
+    }
 
     init(key: SUEphemeralKey, identity: PeerIdentity, socket: NWConnection, pc: PeerConnection, serverHello: PeerIdentity) {
         self.key = key; self.identity = identity; self.socket = socket; self.pc = pc; self.serverHello = serverHello
@@ -45,6 +54,8 @@ final class ConnectionManagerStatusUpdateTests: XCTestCase {
     private var clients: [NWConnection] = []
     private var peers: [SUScriptedPeer] = []
     private var keyDir: URL!
+    private var catDir: URL!
+    private var suite: String!
     private var touchedPeers: [String] = []
     /// Payloads the CM accepted and handed on (in order).
     private var accepted: [(StatusUpdatePayload, String)] = []
@@ -52,9 +63,14 @@ final class ConnectionManagerStatusUpdateTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         keyDir = FileManager.default.temporaryDirectory.appendingPathComponent("cmsu-\(UUID().uuidString)")
+        catDir = FileManager.default.temporaryDirectory.appendingPathComponent("cmsu-cat-\(UUID().uuidString)")
+        suite = "cmsu-\(UUID().uuidString)"
         PeerDropPersistence.fileStore = .init(directory: keyDir, namespace: "cmsutest")
         UserDefaults.standard.set(false, forKey: "peerDropClipboardSyncEnabled")
-        cm = ConnectionManager()
+        let store = FriendCategoryStore(directory: catDir,
+                                        encryptor: ChatDataEncryptor(testKey: SymmetricKey(size: .bits256)),
+                                        migrationDefaults: UserDefaults(suiteName: suite)!)
+        cm = ConnectionManager(categoryStore: store)
         cm.trustedContactStore.removeAll()
         accepted = []
         cm.statusUpdateAcceptedForTesting = { [weak self] payload, pc in
@@ -77,8 +93,10 @@ final class ConnectionManagerStatusUpdateTests: XCTestCase {
         cm.trustedContactStore.removeAll()
         cm = nil
         UserDefaults.standard.removeObject(forKey: "peerDropClipboardSyncEnabled")
+        UserDefaults().removePersistentDomain(forName: suite)
         PeerDropPersistence.fileStore = nil
         try? FileManager.default.removeItem(at: keyDir)
+        try? FileManager.default.removeItem(at: catDir)
         try await super.tearDown()
     }
 
@@ -199,7 +217,169 @@ final class ConnectionManagerStatusUpdateTests: XCTestCase {
         XCTAssertFalse(PeerConnection.unwrappedControlTypes.contains(.statusUpdate))
     }
 
+    // MARK: - Task 4: sending
+
+    func testConnectSendsCurrentStatusInsideEnvelope() async throws {
+        let id = UUID().uuidString
+        category(holding: id, message: "在山上")
+        let peer = try await connectPeer(id: id)
+        let got = await poll { !peer.statusUpdates.isEmpty }
+        XCTAssertTrue(got, "no statusUpdate after connecting")
+        XCTAssertEqual(peer.statusUpdates.map(\.text), ["在山上"])
+        XCTAssertFalse(peer.wireTypes.contains(.statusUpdate), "statusUpdate on the wire in plaintext")
+        XCTAssertTrue(peer.wireTypes.contains(.secureEnvelope))
+        XCTAssertTrue(cm.connections[id]?.state.isConnected ?? false)
+    }
+
+    func testUncategorizedFriendGetsNilOnConnect() async throws {
+        let peer = try await connectPeer()
+        let got = await poll { !peer.statusUpdates.isEmpty }
+        XCTAssertTrue(got, "no statusUpdate after connecting")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(peer.statusUpdates.count, 1)
+        XCTAssertNil(peer.statusUpdates.first?.text)
+    }
+
+    func testShowStatusOffSendsNil() async throws {
+        let id = UUID().uuidString
+        let catID = category(holding: id, message: "在山上", show: false)
+        let peer = try await connectPeer(id: id)
+        _ = await poll { !peer.statusUpdates.isEmpty }
+        XCTAssertEqual(peer.statusUpdates.map(\.text), [nil], "a hidden message is sent as nil")
+
+        // Turning it on, then off again, while connected.
+        cm.categoryStore.setShowStatusMessage(true, for: catID)
+        _ = await poll { peer.statusUpdates.count == 2 }
+        cm.categoryStore.setShowStatusMessage(false, for: catID)
+        _ = await poll { peer.statusUpdates.count == 3 }
+        XCTAssertEqual(peer.statusUpdates.map(\.text), [nil, "在山上", nil])
+    }
+
+    func testEditingMessageResendsOnlyOnChange() async throws {
+        let id = UUID().uuidString
+        let catID = category(holding: id, message: "在山上")
+        let peer = try await connectPeer(id: id)
+        _ = await poll { !peer.statusUpdates.isEmpty }
+
+        XCTAssertTrue(cm.categoryStore.setStatusMessage("下山了", for: catID))
+        _ = await poll { peer.statusUpdates.count == 2 }
+        // Same value twice: the category publishes, nothing is resent.
+        XCTAssertTrue(cm.categoryStore.setStatusMessage("下山了", for: catID))
+        XCTAssertTrue(cm.categoryStore.setStatusMessage("  下山了 ", for: catID))
+        // An unrelated edit (rename) sends nothing either.
+        XCTAssertTrue(cm.categoryStore.rename(id: catID, to: "山友"))
+        // Wire order follows call order, so the next change is a barrier.
+        XCTAssertTrue(cm.categoryStore.setStatusMessage("到家", for: catID))
+        let done = await poll { peer.statusUpdates.last?.text == "到家" }
+        XCTAssertTrue(done)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertEqual(peer.statusUpdates.map(\.text), ["在山上", "下山了", "到家"])
+    }
+
+    func testMovingFriendOutOfCategorySendsNil() async throws {
+        let id = UUID().uuidString
+        category(holding: id, message: "在山上")
+        let peer = try await connectPeer(id: id)
+        _ = await poll { !peer.statusUpdates.isEmpty }
+        cm.categoryStore.assign(friendID: id, to: nil)
+        let cleared = await poll { peer.statusUpdates.count == 2 }
+        XCTAssertTrue(cleared)
+        XCTAssertEqual(peer.statusUpdates.map(\.text), ["在山上", nil])
+        XCTAssertTrue(cm.connections[id]?.state.isConnected ?? false)
+    }
+
+    func testCategoryEditNeverSendsToLegacyPeer() async throws {
+        let id = UUID().uuidString
+        let catID = category(holding: id, message: "在山上")
+        let peer = try await connectPeer(id: id, advertiseStatus: false)
+        XCTAssertTrue(cm.categoryStore.setStatusMessage("下山了", for: catID))
+        cm.categoryStore.setShowStatusMessage(false, for: catID)
+        cm.categoryStore.setShowStatusMessage(true, for: catID)
+        cm.categoryStore.assign(friendID: id, to: nil)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        try await drain(peer)
+        XCTAssertFalse(peer.inbox.contains { $0.type == .statusUpdate }, "a legacy peer received a statusUpdate")
+        XCTAssertFalse(peer.wireTypes.contains(.statusUpdate))
+        XCTAssertTrue(cm.connections[id]?.state.isConnected ?? false, "the legacy connection was dropped")
+    }
+
+    /// Review Focus #1: the send path itself refuses a peer whose HELLO
+    /// lacked the flag, even when forced.
+    func testNoStatusUpdateToPeerWithoutFlag() async throws {
+        let id = UUID().uuidString
+        category(holding: id, message: "在山上")
+        let peer = try await connectPeer(id: id, advertiseStatus: false)
+        let pc = try XCTUnwrap(cm.connections[id])
+        cm.sendStatusUpdateIfNeeded(to: pc, force: true)
+        cm.broadcastStatusUpdates()
+        XCTAssertNil(cm.sentStatusTexts[ObjectIdentifier(pc)], "recorded as sent to a legacy peer")
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertFalse(peer.inbox.contains { $0.type == .statusUpdate })
+        XCTAssertFalse(peer.wireTypes.contains(.statusUpdate))
+        XCTAssertTrue(cm.connections[id]?.state.isConnected ?? false)
+    }
+
+    // MARK: - Task 4: receiving
+
+    func testReceivedStatusStoredOnRecord() async throws {
+        let peer = try await connectPeer()
+        let id = peer.identity.id
+        XCTAssertNotNil(cm.deviceStore.records.first { $0.id == id }, "accept records the device")
+        let when = Date(timeIntervalSince1970: 1_800_000_000)
+        try await peer.pc.sendMessage(try PeerMessage.statusUpdate(
+            StatusUpdatePayload(text: " 在圖書館\n晚點回 ", updatedAt: when), senderID: id))
+        let stored = await poll { self.cm.deviceStore.records.first { $0.id == id }?.statusMessage == "在圖書館 晚點回" }
+        XCTAssertTrue(stored, "status never stored on the record")
+        XCTAssertEqual(cm.deviceStore.records.first { $0.id == id }?.statusUpdatedAt, when)
+    }
+
+    func testReceivedStatusAppliesToEveryRecordOfThePerson() async throws {
+        let peer = try await connectPeer()
+        let id = peer.identity.id
+        let tag = UUID().uuidString.prefix(6)
+        // A relay record linked by the identity id, and one linked by device id.
+        let relayID = "relay-\(tag)", otherID = "bt-\(tag)", strangerID = "dev-\(tag)"
+        touchedPeers += [relayID, otherID, strangerID]
+        cm.deviceStore.addOrUpdate(id: relayID, displayName: "Pat relay \(tag)", sourceType: "relay", host: nil, port: nil)
+        XCTAssertTrue(cm.deviceStore.setPeerIdentityId(for: relayID, identityId: id))
+        cm.deviceStore.addOrUpdate(id: otherID, displayName: "Pat bt \(tag)", sourceType: "bluetooth", host: nil, port: nil)
+        cm.deviceStore.updatePeerDeviceId(for: otherID, deviceId: id)
+        cm.deviceStore.addOrUpdate(id: strangerID, displayName: "Stranger \(tag)", sourceType: "bonjour", host: nil, port: nil)
+
+        try await peer.pc.sendMessage(try PeerMessage.statusUpdate(
+            StatusUpdatePayload(text: "在山上", updatedAt: Date()), senderID: id))
+        let status = { (rid: String) in self.cm.deviceStore.records.first { $0.id == rid }?.statusMessage }
+        let all = await poll { status(id) == "在山上" && status(relayID) == "在山上" && status(otherID) == "在山上" }
+        XCTAssertTrue(all, "status not on every record: \([id, relayID, otherID].map(status))")
+        XCTAssertNil(status(strangerID), "an unrelated record got the status")
+    }
+
+    func testReceivedNilClearsStatus() async throws {
+        let peer = try await connectPeer()
+        let id = peer.identity.id
+        try await peer.pc.sendMessage(try PeerMessage.statusUpdate(
+            StatusUpdatePayload(text: "在山上", updatedAt: Date()), senderID: id))
+        _ = await poll { self.cm.deviceStore.records.first { $0.id == id }?.statusMessage == "在山上" }
+        // Last received wins, even with an older timestamp (peer clock skew).
+        let older = Date(timeIntervalSince1970: 1_000)
+        try await peer.pc.sendMessage(try PeerMessage.statusUpdate(
+            StatusUpdatePayload(text: nil, updatedAt: older), senderID: id))
+        let cleared = await poll { self.cm.deviceStore.records.first { $0.id == id }?.statusUpdatedAt == older }
+        XCTAssertTrue(cleared)
+        XCTAssertNil(cm.deviceStore.records.first { $0.id == id }?.statusMessage)
+    }
+
     // MARK: - Helpers
+
+    /// A category holding `friendID` with a status message; returns its id.
+    @discardableResult
+    private func category(holding friendID: String, message: String, show: Bool = true) -> String {
+        let cat = cm.categoryStore.create(name: "分類\(UUID().uuidString.prefix(4))")!
+        cm.categoryStore.assign(friendID: friendID, to: cat.id)
+        XCTAssertTrue(cm.categoryStore.setStatusMessage(message, for: cat.id))
+        cm.categoryStore.setShowStatusMessage(show, for: cat.id)
+        return cat.id
+    }
 
     private func poll(timeout: TimeInterval = 4, _ condition: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
@@ -255,11 +435,11 @@ final class ConnectionManagerStatusUpdateTests: XCTestCase {
     /// and warms both ratchet directions. `advertiseStatus` sets the peer's
     /// HELLO `supportsStatusUpdate`; `beforeSecure` runs on the raw socket
     /// after the CM's HELLO and before the handshake.
-    private func connectPeer(advertiseStatus: Bool = true,
+    private func connectPeer(id: String = UUID().uuidString, advertiseStatus: Bool = true,
                              beforeSecure: ((NWConnection, PeerIdentity) async throws -> Void)? = nil)
         async throws -> SUScriptedPeer {
         let key = SUEphemeralKey()
-        let ident = PeerIdentity(id: UUID().uuidString, displayName: "Pat", identityPublicKey: key.raw,
+        let ident = PeerIdentity(id: id, displayName: "Pat", identityPublicKey: key.raw,
                                  supportsSecureChannel: true, supportsStatusUpdate: advertiseStatus)
         touchedPeers.append(ident.id)
         let socket = try await dialManager()
@@ -278,9 +458,11 @@ final class ConnectionManagerStatusUpdateTests: XCTestCase {
         let pc = PeerConnection(peerID: serverHello.id, connection: socket, peerIdentity: serverHello,
                                 localIdentity: ident, state: .connected)
         let peer = SUScriptedPeer(key: key, identity: ident, socket: socket, pc: pc, serverHello: serverHello)
+        pc.onMessageReceived = { [weak peer] in peer?.inbox.append($0) }
         await pc.startSecureChannelNegotiation(peerSupportsSecureChannel: true, identity: key)
         peer.reader = Task { @MainActor in
             while let m = try? await socket.receiveMessage(timeout: 30) {
+                peer.wireTypes.append(m.type)
                 if m.type == .secureHandshake {
                     try? await pc.handleIncomingSecureHandshake(m, identity: key)
                 } else {

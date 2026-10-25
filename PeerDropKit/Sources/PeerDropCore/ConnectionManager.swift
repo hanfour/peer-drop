@@ -443,6 +443,10 @@ public final class ConnectionManager: ObservableObject {
     /// The single wake-up at the next schedule boundary
     /// (`ConnectionManager+Presence.swift`).
     var presenceTimer: Timer?
+    /// The status text last sent on each live connection (a nil value = we
+    /// sent "no status"; no key = nothing sent yet). See
+    /// `ConnectionManager+StatusUpdate.swift`.
+    var sentStatusTexts: [ObjectIdentifier: String?] = [:]
     public let clipboardSyncManager = ClipboardSyncManager()
     public let trustedContactStore = TrustedContactStore(
         storageKey: PeerDropPersistence.scopedKey("trusted-contacts"))
@@ -872,7 +876,11 @@ public final class ConnectionManager: ObservableObject {
         self.categoryStore.$categories
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.reevaluatePresence() }
+            .sink { [weak self] _ in
+                // Close what became hidden first; the closed ones get nothing.
+                self?.reevaluatePresence()
+                self?.broadcastStatusUpdates()
+            }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
             .merge(with: NotificationCenter.default.publisher(for: .NSSystemClockDidChange))
@@ -981,6 +989,7 @@ public final class ConnectionManager: ObservableObject {
             pendingPeerIdentityIds.removeValue(forKey: peerID)
             replaced.isRelayPlaceholder = false
             tearDownNotesExchange(for: replaced)
+            forgetSentStatus(for: replaced)
         }
         connections[peerID] = peerConnection
 
@@ -1042,6 +1051,7 @@ public final class ConnectionManager: ObservableObject {
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
             tearDownNotesExchange(for: removed)
+            forgetSentStatus(for: removed)
         }
 
         // Update focused peer if needed
@@ -4082,6 +4092,9 @@ public final class ConnectionManager: ObservableObject {
             }
             checkPeerTrust(peerIdentity: identity)
             triggerSecureChannelNegotiation(for: peerConnection)
+            // Project F2: the real identity may change the effective status
+            // (gated; normally a no-op until the channel is secured).
+            sendStatusUpdateIfNeeded(to: peerConnection)
             logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
 
         case .notesExchange:
@@ -5101,6 +5114,10 @@ public final class ConnectionManager: ObservableObject {
                 try? await peerConnection.sendMessage(msg)
             }
         }
+
+        // Project F2: our current status for this friend (gated; a responder's
+        // send waits in `sendMessage` until the ratchet can encrypt).
+        sendStatusUpdateIfNeeded(to: peerConnection, force: true)
     }
 
     /// Set the published prompt that drives `FirstContactVerificationSheet`
