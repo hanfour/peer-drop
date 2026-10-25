@@ -96,10 +96,14 @@ const ROOM_TTL_SECONDS = 600; // 10 minutes
 // to be a function, a class, or an ExportedHandler — a plain numeric export
 // crashes the whole local runtime before it binds a port
 // ("Incorrect type for map entry 'RATE_LIMIT_MAX_REQUESTS'"), which blocked
-// every local E2E run. Nothing imports these from here (rate-limit.spec.ts
-// declares its own copy of the limit it asserts against).
+// every local E2E run. Nothing imports these constants from here (rate-limit.spec.ts
+// declares its own copy of the limits it asserts against).
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30;
+// Per-route-class overrides; every other class keeps the default of 30.
+const RATE_LIMITS: Record<string, number> = { groups: 120 };
+export function rateLimitMax(routeClass: string): number {
+  return RATE_LIMITS[routeClass] ?? 30;
+}
 // KV min TTL is 60s; give the counter key a little slack past the window so it
 // survives to the window edge, then self-expires (no cleanup job needed).
 const RATE_LIMIT_TTL_SECONDS = 120;
@@ -165,7 +169,7 @@ async function isRateLimited(env: Env, ip: string, routeClass: string): Promise<
     const ipHash = await hashClientIp(ip, env.TOKEN_SECRET);
     const key = rateLimitKey(ipHash, routeClass, Date.now());
     const current = parseInt((await env.ROOMS.get(key)) ?? "0", 10) || 0;
-    if (current >= RATE_LIMIT_MAX_REQUESTS) return true;
+    if (current >= rateLimitMax(routeClass)) return true;
     await env.ROOMS.put(key, String(current + 1), { expirationTtl: RATE_LIMIT_TTL_SECONDS });
     return false;
   } catch {

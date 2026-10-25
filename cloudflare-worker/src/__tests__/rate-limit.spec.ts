@@ -1,28 +1,20 @@
 /**
- * #7 — Rate limiter. Coverage for the KV-backed limiter in src/index.ts
- * (`isRateLimited`, `rateLimitClass`).
+ * #7 — 測試 src/index.ts 的 KV 限流器（`isRateLimited`、`rateLimitClass`、
+ * `rateLimitMax`）。計數器以路由類別、IP 雜湊與分鐘視窗為鍵寫入 KV，讓
+ * 不同 isolate／colo 共用預算。每個 (IP、路由類別) 各自計數：groups 為
+ * 每分鐘 120 次，其餘類別為每分鐘 30 次。IP 取自 `CF-Connecting-IP`；
+ * 缺少標頭時的 "unknown" 刻意不限制，因為 Cloudflare 正式流量一定會帶上
+ * 此標頭，合併所有未知呼叫者反而會造成共用桶。
  *
- * The old limiter was a module-level `Map` living in one isolate's memory:
- * Cloudflare runs many isolates across many colos, so each isolate handed out
- * its own independent 30/min budget → the effective global limit was
- * unbounded. The replacement stores a windowed counter in KV keyed by
- * (route class + keyed IP hash + minute window), so the budget is shared
- * across isolates/colos.
- *
- * Limits: RATE_LIMIT_MAX_REQUESTS = 30 / RATE_LIMIT_WINDOW_MS = 60_000ms,
- * per (IP, route class). Keyed by `CF-Connecting-IP`; the header-absent
- * "unknown" case is intentionally NOT limited (it only occurs off-edge / in
- * tests — Cloudflare always populates CF-Connecting-IP for real traffic, so a
- * shared "unknown" bucket would only merge unrelated callers).
- *
- * Each test below uses a unique synthetic IP so counters never bleed between
- * tests regardless of storage-isolation mode.
+ * 每個測試使用不同的合成 IP，避免計數器在不同測試間互相影響。
  */
 
 import { SELF, env } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
+import { rateLimitMax } from "../index";
 
 const API_KEY = "test-api-key-12345";
+// 舊有路由類別測試維持 30 次上限；groups 的額外案例直接測 120 次。
 const RATE_LIMIT_MAX_REQUESTS = 30;
 
 async function pingRoom(ip: string): Promise<Response> {
@@ -44,6 +36,37 @@ async function pingDebugReport(ip: string): Promise<Response> {
     body: JSON.stringify({ type: "test", error: "x" }),
   });
 }
+
+async function pingV3Path(path: string, ip: string): Promise<Response> {
+  // 限流器會先於 /v3 路由的驗證執行，因此刻意不附憑證。
+  return await SELF.fetch(`https://example.com${path}`, {
+    headers: { "CF-Connecting-IP": ip },
+  });
+}
+
+describe("rate-limit — route-class budgets", () => {
+  it("returns the configured limit for groups and the default for other classes", () => {
+    expect(rateLimitMax("groups")).toBe(120);
+    expect(rateLimitMax("v3")).toBe(30);
+    expect(rateLimitMax("unknown-class")).toBe(30);
+  });
+
+  it("allows 120 group requests and returns 429 on the 121st", async () => {
+    const ip = "10.0.0.220";
+    for (let i = 0; i < 120; i++) {
+      expect((await pingV3Path("/v3/groups", ip)).status).not.toBe(429);
+    }
+    expect((await pingV3Path("/v3/groups", ip)).status).toBe(429);
+  });
+
+  it("keeps the v3 diaries limit at 30 requests", async () => {
+    const ip = "10.0.0.221";
+    for (let i = 0; i < RATE_LIMIT_MAX_REQUESTS; i++) {
+      expect((await pingV3Path("/v3/diaries", ip)).status).not.toBe(429);
+    }
+    expect((await pingV3Path("/v3/diaries", ip)).status).toBe(429);
+  });
+});
 
 describe("rate-limit — per-IP counter", () => {
   it("allows 30 sequential requests from the same IP", async () => {
