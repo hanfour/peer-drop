@@ -11,6 +11,15 @@ public struct ScheduleWindow: Codable, Equatable {
         self.startMinute = startMinute
         self.endMinute = endMinute
     }
+
+    /// Weekdays within 1...7, minutes within 0...1439, and a non-empty span
+    /// (`start == end` is ambiguous, so it is rejected).
+    public var isValid: Bool {
+        weekdays.isSubset(of: Set(1...7))
+            && (0...1439).contains(startMinute)
+            && (0...1439).contains(endMinute)
+            && startMinute != endMinute
+    }
 }
 
 public enum CategoryPresence: Codable, Equatable {

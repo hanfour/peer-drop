@@ -51,7 +51,9 @@ public final class DeviceRecordStore: ObservableObject {
                     connectionHistory: merged.connectionHistory,
                     certificateFingerprint: merged.certificateFingerprint,
                     peerDeviceId: merged.peerDeviceId,
-                    peerIdentityId: merged.peerIdentityId
+                    peerIdentityId: merged.peerIdentityId,
+                    statusMessage: merged.statusMessage,
+                    statusUpdatedAt: merged.statusUpdatedAt
                 )
                 records.append(finalRecord)
             } else {
@@ -181,6 +183,19 @@ public final class DeviceRecordStore: ObservableObject {
         records[index].peerIdentityId = identityId
         save()
         return true
+    }
+
+    /// Project F2: store a friend's received status message on each record in
+    /// `ids` (all records of that person). Never inserts; saves only on change.
+    public func setStatus(_ text: String?, updatedAt: Date, forRecordIDs ids: Set<String>) {
+        var changed = false
+        for i in records.indices where ids.contains(records[i].id) {
+            guard records[i].statusMessage != text || records[i].statusUpdatedAt != updatedAt else { continue }
+            records[i].statusMessage = text
+            records[i].statusUpdatedAt = updatedAt
+            changed = true
+        }
+        if changed { save() }
     }
 
     /// Snapshot of current records (for device picker / UI lists).

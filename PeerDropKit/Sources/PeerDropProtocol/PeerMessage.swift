@@ -20,6 +20,11 @@ public struct PeerMessage: Codable {
         return PeerMessage(type: .notesExchange, payload: data, senderID: senderID)
     }
 
+    public static func statusUpdate(_ payload: StatusUpdatePayload, senderID: String) throws -> PeerMessage {
+        let data = try JSONEncoder().encode(payload)
+        return PeerMessage(type: .statusUpdate, payload: data, senderID: senderID)
+    }
+
     public static func deviceIdExchange(deviceId: String, senderID: String) throws -> PeerMessage {
         let data = try JSONEncoder().encode(DeviceIdExchangePayload(deviceId: deviceId))
         return PeerMessage(type: .deviceIdExchange, payload: data, senderID: senderID)

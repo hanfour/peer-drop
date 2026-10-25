@@ -163,8 +163,12 @@ enum FriendSubtitle {
         return f
     }()
 
-    static func text(presence: PeerPresence, lastConnected: Date, connectionCount: Int, source: String, isConnecting: Bool = false, now: Date = Date()) -> String {
+    /// `statusMessage` (Project F2: what the friend's category tells us) replaces the presence text,
+    /// except while a connection attempt is in progress.
+    static func text(presence: PeerPresence, lastConnected: Date, connectionCount: Int, source: String, isConnecting: Bool = false,
+                     statusMessage: String? = nil, now: Date = Date()) -> String {
         if isConnecting && presence != .online { return String(localized: "Connecting...") }
+        if let status = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !status.isEmpty { return status }
         switch presence {
         case .online:
             return source == "relay"

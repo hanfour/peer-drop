@@ -250,6 +250,11 @@ public final class ConnectionManager: ObservableObject {
     var notesExchangeAccountCancellable: AnyCancellable?
     var notesExchangeRetryInFlight = false
     var notesExchangeRetryRequested = false
+
+    // MARK: - Status update (Project F2; logic in ConnectionManager+StatusUpdate.swift)
+
+    /// Test-only observer: every `.statusUpdate` payload that passed the gate.
+    var statusUpdateAcceptedForTesting: ((StatusUpdatePayload, PeerConnection) -> Void)?
     /// Wall clock for pending-binding age (persists across launches; injectable).
     var notesPendingBindingClock: () -> Date = { Date() }
     /// Debounce before a network-recovery retry of pending bindings.
@@ -368,6 +373,8 @@ public final class ConnectionManager: ObservableObject {
         var accepted = false
         /// Whether the HELLO we sent on this socket carried `supportsNotesExchange`.
         var advertisedNotesExchange: Bool?
+        /// Whether the HELLO we sent on this socket carried `supportsStatusUpdate`.
+        var advertisedStatusUpdate: Bool?
         init(connection: NWConnection, generation: UUID, peer: DiscoveredPeer) {
             self.connection = connection
             self.generation = generation
@@ -429,6 +436,17 @@ public final class ConnectionManager: ObservableObject {
     /// Friend categories (Project F1). Built from the legacy `groupStore.groups`
     /// so old DeviceGroups migrate once into categories.
     public let categoryStore: FriendCategoryStore
+    /// Project F2: the instant and calendar presence is judged at (seams for
+    /// tests; production follows the system clock and time zone).
+    var presenceClock: () -> Date = { Date() }
+    var presenceCalendar: Calendar = .autoupdatingCurrent
+    /// The single wake-up at the next schedule boundary
+    /// (`ConnectionManager+Presence.swift`).
+    var presenceTimer: Timer?
+    /// The status text last sent on each live connection (a nil value = we
+    /// sent "no status"; no key = nothing sent yet). See
+    /// `ConnectionManager+StatusUpdate.swift`.
+    var sentStatusTexts: [ObjectIdentifier: String?] = [:]
     public let clipboardSyncManager = ClipboardSyncManager()
     public let trustedContactStore = TrustedContactStore(
         storageKey: PeerDropPersistence.scopedKey("trusted-contacts"))
@@ -853,6 +871,22 @@ public final class ConnectionManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.rendezvousManager?.contactsDidChange() }
             .store(in: &cancellables)
+        // Project F2: a category edit (presence, membership) or a clock / time
+        // zone change re-applies presence to live connections and the timer.
+        self.categoryStore.$categories
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                // Close what became hidden first; the closed ones get nothing.
+                self?.reevaluatePresence()
+                self?.broadcastStatusUpdates()
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+            .merge(with: NotificationCenter.default.publisher(for: .NSSystemClockDidChange))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reevaluatePresence() }
+            .store(in: &cancellables)
 
         // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
         clipboardSyncManager.onClipboardChanged = { [weak self] payload in
@@ -955,6 +989,7 @@ public final class ConnectionManager: ObservableObject {
             pendingPeerIdentityIds.removeValue(forKey: peerID)
             replaced.isRelayPlaceholder = false
             tearDownNotesExchange(for: replaced)
+            forgetSentStatus(for: replaced)
         }
         connections[peerID] = peerConnection
 
@@ -1016,6 +1051,7 @@ public final class ConnectionManager: ObservableObject {
         if let removed = connections.removeValue(forKey: peerID) {
             removed.isRelayPlaceholder = false
             tearDownNotesExchange(for: removed)
+            forgetSentStatus(for: removed)
         }
 
         // Update focused peer if needed
@@ -1510,6 +1546,12 @@ public final class ConnectionManager: ObservableObject {
             logger.info("reconnect skipped — a connection request is awaiting consent")
             return
         }
+        // Project F2: a dial to a friend whose category hides us is refused —
+        // don't burn a back-off attempt on it either.
+        guard connections[peer.id]?.state.isConnected == true || isFriendVisible(aliases: [peer.id]) else {
+            logger.info("reconnect skipped — this friend's category shows us offline")
+            return
+        }
 
         Task {
             guard let delay = await reconnectController.nextDelay() else {
@@ -1527,11 +1569,14 @@ public final class ConnectionManager: ObservableObject {
             let deferred = await MainActor.run { () -> Bool in
                 // A consent sheet came up during the back-off: skip this retry.
                 guard self.pendingIncomingRequest == nil else { return true }
+                // The friend became hidden during the back-off: skip it too.
+                guard self.connections[peer.id]?.state.isConnected == true
+                        || self.isFriendVisible(aliases: [peer.id]) else { return true }
                 self.requestConnection(to: peer)
                 return false
             }
             if deferred {
-                logger.info("reconnect retry skipped — a connection request is awaiting consent")
+                logger.info("reconnect retry skipped — consent pending or friend hidden")
                 await reconnectController.refund()
             }
         }
@@ -1853,6 +1898,9 @@ public final class ConnectionManager: ObservableObject {
         connections[peerID] = peerConnection
     }
 
+    /// Test-only: whether a dial is in flight.
+    var _hasDialAttemptForTesting: Bool { dialAttempt != nil }
+
     /// Test-only: install `peerConnection` through the real `addConnection`
     /// (wires the receive loop), as a plain non-relay connection.
     public func _addConnectionForTesting(_ peerConnection: PeerConnection) {
@@ -1905,6 +1953,11 @@ public final class ConnectionManager: ObservableObject {
     /// Test-only: whether any live session for `peerID` is ticking.
     public func _notesExchangeTickActiveForTesting(_ peerID: String) -> Bool {
         notesExchangeSessions.values.contains { $0.peerID == peerID && $0.tickTask != nil }
+    }
+
+    /// Test-only: set the peer `reconnect()` dials.
+    public func _setLastConnectedPeerForTesting(_ peer: DiscoveredPeer?) {
+        lastConnectedPeer = peer
     }
 
     /// Test-only: reconnect back-off attempts consumed so far.
@@ -2095,6 +2148,8 @@ public final class ConnectionManager: ObservableObject {
                 }
                 Task { await diaryStore.syncList() }
             }
+            // Project F2: a schedule boundary may have passed in the background.
+            reevaluatePresence()
             // Project E: rejoin the rendezvous rooms.
             rendezvousAppDidBecomeActive()
             // Restart discovery when returning to foreground
@@ -2125,6 +2180,9 @@ public final class ConnectionManager: ObservableObject {
             // Project E (iOS only): leave every room and close every
             // cross-network connection quietly.
             rendezvousAppDidEnterBackground()
+            // Project F2: iOS suspends; the timer is re-armed on `.active`.
+            // The Mac keeps enforcing schedules in the background.
+            if rendezvousClosesOnBackground { cancelPresenceTimer() }
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
@@ -2356,19 +2414,25 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Connection Request (Outgoing)
 
     public func requestConnection(to peer: DiscoveredPeer) {
+        // Already connected (e.g. an exempt relay-code link to a friend whose
+        // category hides us): just focus it — nothing new is revealed.
+        if let existingConn = connections[peer.id], existingConn.state.isConnected {
+            focusedPeerID = peer.id
+            return
+        }
+
+        // Project F2: their category shows us offline — don't reveal us by dialing.
+        guard isFriendVisible(aliases: [peer.id]) else {
+            statusToast = String(localized: "This friend's category shows you as offline")
+            return
+        }
+
         // #161 m-3: while the consent sheet is up, answer it first. Dialing now
         // would cancel the pending socket (it is `activeConnection`) and leave
         // `state` stuck at `.incomingRequest` next to a live PeerConnection.
         guard pendingIncomingRequest == nil else {
             logger.info("requestConnection ignored — a connection request is awaiting consent")
             statusToast = String(localized: "Respond to the pending connection request first")
-            return
-        }
-
-        // Check if already connected to this peer
-        if let existingConn = connections[peer.id], existingConn.state.isConnected {
-            // Just focus on this connection
-            focusedPeerID = peer.id
             return
         }
 
@@ -2493,6 +2557,7 @@ public final class ConnectionManager: ObservableObject {
                 // Tailnet is not face to face: no notes-exchange flag there.
                 let helloIdentity = notesExchangeHelloIdentity(for: connection)
                 attempt.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                attempt.advertisedStatusUpdate = helloIdentity.supportsStatusUpdate
                 let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await connection.sendMessage(hello)
                 logger.info("HELLO sent. Sending CONNECTION_REQUEST...")
@@ -2584,6 +2649,12 @@ public final class ConnectionManager: ObservableObject {
                 // `relay-*` ids are reserved for relay placeholders (#161 I-1).
                 guard !Self.isReservedPeerID(peerIdentity.id) else {
                     logger.warning("Incoming HELLO claims a reserved relay id; rejecting")
+                    connection.cancel()
+                    return
+                }
+                // Project F2: their category shows us offline — drop the socket
+                // without a reply (no consent, no TOFU, no toast).
+                guard isFriendVisible(identity: peerIdentity) else {
                     connection.cancel()
                     return
                 }
@@ -2956,6 +3027,7 @@ public final class ConnectionManager: ObservableObject {
                 try await request.connection.sendMessage(accept)
                 let helloIdentity = notesExchangeHelloIdentity(for: request.connection)
                 peerConnection.advertisedNotesExchange = helloIdentity.supportsNotesExchange
+                peerConnection.advertisedStatusUpdate = helloIdentity.supportsStatusUpdate
                 let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await request.connection.sendMessage(hello)
                 #if DEBUG
@@ -3008,6 +3080,21 @@ public final class ConnectionManager: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Project F2: the friend behind the pending consent sheet is now hidden
+    /// by their category. Dismiss the sheet and drop the socket quietly — no
+    /// `.connectionReject` frame, no toast; to them we simply went offline.
+    func dismissPendingIncomingRequestQuietly() {
+        guard let request = pendingIncomingRequest else { return }
+        consentMonitorTask?.cancel()
+        consentMonitorTask = nil
+        consentTimeoutTask?.cancel()
+        consentTimeoutTask = nil
+        pendingIncomingRequest = nil
+        request.connection.cancel()
+        if activeConnection === request.connection { activeConnection = nil }
+        if case .incomingRequest = state { transition(to: .discovering) }
     }
 
     public func rejectConnection() {
@@ -3452,7 +3539,10 @@ public final class ConnectionManager: ObservableObject {
         Task {
             do {
                 // Relay is not face to face: never advertise notes exchange.
-                let hello = try PeerMessage.hello(identity: localIdentity.withoutNotesExchange())
+                // The status-update flag stays (recorded before the send).
+                let helloIdentity = localIdentity.withoutNotesExchange()
+                peerConnection.advertisedStatusUpdate = helloIdentity.supportsStatusUpdate
+                let hello = try PeerMessage.hello(identity: helloIdentity)
                 try await peerConnection.sendMessage(hello)
                 // Exchange stable device ID so future invites can route directly.
                 let idExchange = try PeerMessage.deviceIdExchange(
@@ -4016,6 +4106,9 @@ public final class ConnectionManager: ObservableObject {
             }
             checkPeerTrust(peerIdentity: identity)
             triggerSecureChannelNegotiation(for: peerConnection)
+            // Project F2: the real identity may change the effective status
+            // (gated; normally a no-op until the channel is secured).
+            sendStatusUpdateIfNeeded(to: peerConnection)
             logger.info("Per-peer hello: identity updated for \(peerID) → \(identity.displayName, privacy: .public)")
 
         case .notesExchange:
@@ -4024,6 +4117,11 @@ public final class ConnectionManager: ObservableObject {
             // of content).
             guard origin == .envelope, peerConnection.secureChannelState == .secured else { return }
             handleNotesExchangeMessage(message, on: peerConnection, origin: origin)
+
+        case .statusUpdate:
+            // Project F2: gated like `.notesExchange` (envelope, secured, both
+            // flags); anything else is dropped silently.
+            handleStatusUpdateMessage(message, on: peerConnection, origin: origin)
 
         case .secureHandshake, .secureEnvelope:
             // Safety net (should be unreachable). The single-reader handoff
@@ -4072,6 +4170,10 @@ public final class ConnectionManager: ObservableObject {
                 peerIdentity = identity
             }
             if let identity = peerIdentity {
+                guard isFriendVisible(identity: identity) else {
+                    abandonDialToHiddenFriend(attempt)
+                    return
+                }
                 guard installInitiatorPeerConnection(identity: identity, attempt: attempt) else { return }
             }
 
@@ -4109,6 +4211,10 @@ public final class ConnectionManager: ObservableObject {
             guard let payload = message.payload,
                   let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) else {
                 logger.warning("Initiator loop: undecodable HELLO; ignoring")
+                return
+            }
+            guard isFriendVisible(identity: identity) else {
+                abandonDialToHiddenFriend(attempt)
                 return
             }
             guard installInitiatorPeerConnection(identity: identity, attempt: attempt) else { return }
@@ -4188,6 +4294,30 @@ public final class ConnectionManager: ObservableObject {
         }
     }
 
+    /// Project F2: the dialed peer turned out (legacy Bonjour id ≠ identity
+    /// id) to be a friend whose category hides us. Drop the socket quietly:
+    /// no toast, no failure recorded. The global state leaves `.requesting`
+    /// the way a quiet hang-up would (`.disconnected` → `.discovering`).
+    private func abandonDialToHiddenFriend(_ attempt: DialAttempt) {
+        let connection = attempt.connection
+        if dialAttempt === attempt { dialAttempt = nil }
+        connection.cancel()
+        if activeConnection === connection { activeConnection = nil }
+        if hasOtherConnections(than: connection) {
+            updateGlobalState()
+            return
+        }
+        cancelTimeouts()
+        // A legacy acceptor's identity-less accept already moved us to `.connected`.
+        switch state {
+        case .requesting, .connecting, .connected:
+            transition(to: .disconnected)
+            transition(to: .discovering)
+        default:
+            break
+        }
+    }
+
     /// Create + install the PeerConnection for the socket this initiator
     /// dialed. Refuses (and ends the dial) if the id is a reserved `relay-*`
     /// id or already in use — as a `connections` key or as the identity an
@@ -4211,6 +4341,7 @@ public final class ConnectionManager: ObservableObject {
             state: .connected
         )
         peerConnection.advertisedNotesExchange = attempt.advertisedNotesExchange
+        peerConnection.advertisedStatusUpdate = attempt.advertisedStatusUpdate
         sendSacrificialPingIfLegacyAcceptor(identity, on: connection)
         addConnection(peerConnection)
         // A dial is user-initiated: the user chose this peer, so it gets the
@@ -4997,6 +5128,10 @@ public final class ConnectionManager: ObservableObject {
                 try? await peerConnection.sendMessage(msg)
             }
         }
+
+        // Project F2: our current status for this friend (gated; a responder's
+        // send waits in `sendMessage` until the ratchet can encrypt).
+        sendStatusUpdateIfNeeded(to: peerConnection, force: true)
     }
 
     /// Set the published prompt that drives `FirstContactVerificationSheet`
@@ -5352,12 +5487,7 @@ extension ConnectionManager {
     /// Same decision for a peer identity (e.g. an incoming connection request
     /// that has no `PeerConnection` yet).
     func shouldPresentNotification(forIdentity identity: PeerIdentity, extraIDs: [String] = []) -> Bool {
-        var ids = [identity.id] + extraIDs
-        if let key = identity.identityPublicKey,
-           let deviceID = trustedContactStore.find(byPublicKey: key)?.deviceId {
-            ids.append(deviceID)
-        }
-        return shouldPresentNotification(forPeer: ids)
+        shouldPresentNotification(forPeer: friendAliasIDs(forIdentity: identity, extraIDs: extraIDs))
     }
 
     /// Every id the friend behind `ids` may be stored under, as a closure over:

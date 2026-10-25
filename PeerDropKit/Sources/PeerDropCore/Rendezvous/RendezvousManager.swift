@@ -207,6 +207,10 @@ public final class RendezvousManager: ObservableObject {
     private let jitterSource: RendezvousJitterSource
     private let ticker: RendezvousTicker
     private let sessionTags: RendezvousSessionTagStore
+    /// Project F2: whether the contact's category lets them see us online now.
+    /// Evaluated live on every reconcile; a hidden contact's room is left
+    /// (`.disabled`: nothing sent).
+    private let visible: (TrustedContact) -> Bool
 
     private var rooms: [Key: Room] = [:]
     /// Last connection-layer failure per contact (in memory, never logged).
@@ -241,9 +245,11 @@ public final class RendezvousManager: ObservableObject {
         clock: RendezvousClock = SystemRendezvousClock(),
         jitter: RendezvousJitterSource = SystemRendezvousJitter(),
         ticker: RendezvousTicker? = nil,
-        sessionTags: RendezvousSessionTagStore = .process
+        sessionTags: RendezvousSessionTagStore = .process,
+        visible: @escaping (TrustedContact) -> Bool = { _ in true }
     ) {
         self.contacts = contacts
+        self.visible = visible
         self.secrets = secrets
         self.direct = direct
         self.installer = installer
@@ -361,7 +367,7 @@ public final class RendezvousManager: ObservableObject {
                 continue
             }
         }
-        return Self.activeContacts(all, excluding: Set(suspensions.keys))
+        return Self.activeContacts(all, excluding: Set(suspensions.keys), visible: visible)
     }
 
     public func linkState(for contactID: UUID) -> RendezvousLinkState {
@@ -382,11 +388,15 @@ public final class RendezvousManager: ObservableObject {
 
     // MARK: - Reconcile
 
-    /// Enabled + eligible contacts, deterministic order, capped at 5.
-    static func activeContacts(_ all: [TrustedContact], excluding excluded: Set<UUID> = []) -> [TrustedContact] {
+    /// Enabled + eligible + visible contacts, deterministic order, capped at 5.
+    /// `visible` filters only AFTER eligibility, which must see every contact
+    /// (device-id / key uniqueness is judged among `all`, hidden ones included).
+    static func activeContacts(_ all: [TrustedContact], excluding excluded: Set<UUID> = [],
+                               visible: (TrustedContact) -> Bool = { _ in true }) -> [TrustedContact] {
         Array(all
             .filter { !excluded.contains($0.id) }
             .filter { $0.isRendezvousEnabled && TrustedContactStore.isRendezvousEligible($0, among: all) }
+            .filter(visible)
             .sorted { $0.id.uuidString < $1.id.uuidString }
             .prefix(TrustedContactStore.maxRendezvousContacts))
     }

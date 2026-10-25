@@ -44,11 +44,17 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
     /// `MessageType`. Never advertised over the relay (not face to face) nor by
     /// headless CLI peers. Absent ⇒ `false`.
     public let supportsNotesExchange: Bool
+    /// Project F2: peer understands the `.statusUpdate` message (the status
+    /// message of the category it filed us under). Both sides must advertise
+    /// it before either sends one — older builds DROP THE CONNECTION on an
+    /// unknown `MessageType`. Advertised on every transport, including by
+    /// headless CLI peers (receive-only). Absent ⇒ `false`.
+    public let supportsStatusUpdate: Bool
 
     /// What this build advertises in its hello.
     public static let currentSecureChannelVersion = 2
 
-    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion, supportsNotesExchange: Bool = false) {
+    public init(displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion, supportsNotesExchange: Bool = false, supportsStatusUpdate: Bool = false) {
         self.id = UUID().uuidString
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -58,9 +64,10 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.isHeadless = isHeadless
         self.secureChannelVersion = secureChannelVersion
         self.supportsNotesExchange = supportsNotesExchange
+        self.supportsStatusUpdate = supportsStatusUpdate
     }
 
-    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion, supportsNotesExchange: Bool = false) {
+    public init(id: String, displayName: String, certificateFingerprint: String? = nil, identityPublicKey: Data? = nil, identityFingerprint: String? = nil, supportsSecureChannel: Bool = true, isHeadless: Bool = false, secureChannelVersion: Int = PeerIdentity.currentSecureChannelVersion, supportsNotesExchange: Bool = false, supportsStatusUpdate: Bool = false) {
         self.id = id
         self.displayName = displayName
         self.certificateFingerprint = certificateFingerprint
@@ -70,6 +77,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         self.isHeadless = isHeadless
         self.secureChannelVersion = secureChannelVersion
         self.supportsNotesExchange = supportsNotesExchange
+        self.supportsStatusUpdate = supportsStatusUpdate
     }
 
     // MARK: - Codable (backward-compat decode)
@@ -81,6 +89,7 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         case isHeadless
         case secureChannelVersion
         case supportsNotesExchange
+        case supportsStatusUpdate
     }
 
     public init(from decoder: Decoder) throws {
@@ -99,14 +108,26 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
         // tolerance, see `secureChannelVersion`).
         self.secureChannelVersion = try c.decodeIfPresent(Int.self, forKey: .secureChannelVersion) ?? 1
         self.supportsNotesExchange = try c.decodeIfPresent(Bool.self, forKey: .supportsNotesExchange) ?? false
+        self.supportsStatusUpdate = try c.decodeIfPresent(Bool.self, forKey: .supportsStatusUpdate) ?? false
     }
 
     /// Copy with the notes-exchange capability withheld (relay HELLOs).
+    /// Keeps `supportsStatusUpdate`: relay and rendezvous HELLOs carry it.
     public func withoutNotesExchange() -> PeerIdentity {
         PeerIdentity(id: id, displayName: displayName, certificateFingerprint: certificateFingerprint,
                      identityPublicKey: identityPublicKey, identityFingerprint: identityFingerprint,
                      supportsSecureChannel: supportsSecureChannel, isHeadless: isHeadless,
-                     secureChannelVersion: secureChannelVersion, supportsNotesExchange: false)
+                     secureChannelVersion: secureChannelVersion, supportsNotesExchange: false,
+                     supportsStatusUpdate: supportsStatusUpdate)
+    }
+
+    /// Copy with the status-update capability withheld.
+    public func withoutStatusUpdate() -> PeerIdentity {
+        PeerIdentity(id: id, displayName: displayName, certificateFingerprint: certificateFingerprint,
+                     identityPublicKey: identityPublicKey, identityFingerprint: identityFingerprint,
+                     supportsSecureChannel: supportsSecureChannel, isHeadless: isHeadless,
+                     secureChannelVersion: secureChannelVersion, supportsNotesExchange: supportsNotesExchange,
+                     supportsStatusUpdate: false)
     }
 
     private static let localIDKey = "peerDropLocalIdentityID"
@@ -161,7 +182,10 @@ public struct PeerIdentity: Codable, Identifiable, Hashable {
             // terminal/agent peer rather than a real user device.
             isHeadless: PeerDropPersistence.fileStore != nil,
             // Headless CLI peers have no notes UI: never advertise.
-            supportsNotesExchange: PeerDropPersistence.fileStore == nil
+            supportsNotesExchange: PeerDropPersistence.fileStore == nil,
+            // Every build that understands `.statusUpdate` says so, headless
+            // CLI included (it only receives; cross-version runs rely on it).
+            supportsStatusUpdate: true
         )
     }
 }

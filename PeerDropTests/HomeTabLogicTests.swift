@@ -109,6 +109,32 @@ final class HomeTabLogicTests: XCTestCase {
                        String(localized: "Connected · Local network"))
     }
 
+    // MARK: - Project F2: status message subtitle
+
+    func testSubtitlePrefersStatusMessage() {
+        let now = Date()
+        let text = FriendSubtitle.text(presence: .offline, lastConnected: now.addingTimeInterval(-3600), connectionCount: 2,
+                                       source: "bonjour", statusMessage: "在山上", now: now)
+        XCTAssertEqual(text, "在山上")
+        XCTAssertEqual(FriendSubtitle.text(presence: .online, lastConnected: now, connectionCount: 2, source: "relay",
+                                           statusMessage: "在山上", now: now), "在山上")
+    }
+
+    func testSubtitleConnectingBeatsStatusMessage() {
+        XCTAssertEqual(FriendSubtitle.text(presence: .nearby, lastConnected: Date(), connectionCount: 1, source: "bonjour",
+                                           isConnecting: true, statusMessage: "在山上"),
+                       String(localized: "Connecting..."))
+    }
+
+    func testSubtitleIgnoresEmptyStatusMessage() {
+        XCTAssertEqual(FriendSubtitle.text(presence: .offline, lastConnected: Date(), connectionCount: 0, source: "bonjour",
+                                           statusMessage: ""),
+                       String(localized: "Not connected yet"))
+        XCTAssertEqual(FriendSubtitle.text(presence: .nearby, lastConnected: Date(), connectionCount: 0, source: "bonjour",
+                                           statusMessage: "   "),
+                       String(localized: "Nearby · ready to connect"))
+    }
+
     func testSectionsUseResolvedNameForSearchAndSort() {
         let all = [rec("1", "relay-ab12"), rec("2", "Zed")]
         let names = ["1": "Amy", "2": "Zed"]

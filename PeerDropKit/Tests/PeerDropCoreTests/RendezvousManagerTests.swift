@@ -422,6 +422,68 @@ final class RendezvousManagerTests: XCTestCase {
         XCTAssertEqual(manager.roomCount, 0)
     }
 
+    // MARK: Project F2: category presence
+
+    /// A manager whose `visible` filter is the test's `visibleNow` flag.
+    func makeVisibilityManager(_ visibleNow: @escaping () -> Bool) {
+        manager = RendezvousManager(
+            contacts: { [unowned self] in self.contacts },
+            secrets: IdentityRendezvousSecretProvider(identity: me),
+            direct: direct, installer: installer, signaling: factory, negotiators: negotiators,
+            clock: clock, jitter: jitter, ticker: ticker, sessionTags: tags,
+            visible: { _ in visibleNow() })
+    }
+
+    func testInvisibleContactGetsNoRoomAndVisibleAgainRejoins() {
+        var visibleNow = false
+        makeVisibilityManager { visibleNow }
+        let c = addFriend()
+        manager.appDidBecomeActive()
+        XCTAssertTrue(factory.made.isEmpty, "a hidden friend gets no room")
+        XCTAssertEqual(manager.linkState(for: c.id), .inactive)
+        visibleNow = true
+        manager.contactsDidChange()
+        XCTAssertEqual(factory.made.count, 1)
+        XCTAssertEqual(manager.linkState(for: c.id), .connecting)
+    }
+
+    func testBecomingInvisibleLeavesRoomAndSendsNothingExtra() {
+        var visibleNow = true
+        makeVisibilityManager { visibleNow }
+        let c = addFriend(role: .answerer)
+        manager.appDidBecomeActive()
+        let t = factory.made[0]
+        authenticate(t)
+        XCTAssertEqual(t.sentSignals, [.ready])
+        visibleNow = false
+        manager.contactsDidChange()
+        XCTAssertTrue(t.closed)
+        XCTAssertEqual(t.sentSignals, [.ready], "no reject/farewell frame")
+        XCTAssertEqual(manager.roomCount, 0)
+        XCTAssertEqual(manager.linkState(for: c.id), .inactive)
+        clock.advance(3600); manager.tick()
+        XCTAssertEqual(factory.made.count, 1, "never rejoins while hidden")
+    }
+
+    /// The visibility filter runs after eligibility over ALL contacts: hiding
+    /// one of two contacts sharing a device id must not make the other eligible.
+    func testVisibilityFilterDoesNotChangeDeviceIdUniqueness() {
+        let a = addFriend()
+        var b = friend(name: "dup").1
+        b.deviceId = a.deviceId
+        contacts.append(b)
+        manager = RendezvousManager(
+            contacts: { [unowned self] in self.contacts },
+            secrets: IdentityRendezvousSecretProvider(identity: me),
+            direct: direct, installer: installer, signaling: factory, negotiators: negotiators,
+            clock: clock, jitter: jitter, ticker: ticker, sessionTags: tags,
+            visible: { $0.id != b.id })
+        manager.appDidBecomeActive()
+        XCTAssertTrue(factory.made.isEmpty, "a's device id is still shared with b")
+        XCTAssertEqual(manager.linkState(for: a.id), .inactive)
+        XCTAssertTrue(RendezvousManager.activeContacts(contacts, visible: { $0.id != b.id }).isEmpty)
+    }
+
     // MARK: Background
 
     func testBackgroundClosesEverythingAndSendsNothing() async {

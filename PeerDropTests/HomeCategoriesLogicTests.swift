@@ -149,4 +149,45 @@ final class HomeCategoriesLogicTests: XCTestCase {
         store.move(person: ["a", "b"], record: "a", to: nil)
         XCTAssertNil(store.category(containingAnyOf: ["a", "b"]))
     }
+
+    // MARK: - Project F2: presence on the category row and the schedule editor
+
+    func testCategoryRowAccessibilityMentionsPresence() {
+        let online = CategoryRowAccessibility.label(name: "Family", count: 2, notificationsEnabled: true,
+                                                    presence: .online, hiddenNow: false)
+        XCTAssertEqual(online, CategoryRowAccessibility.label(name: "Family", count: 2, notificationsEnabled: true))
+        XCTAssertFalse(online.contains(String(localized: "Shown as offline")))
+
+        let offline = CategoryRowAccessibility.label(name: "Family", count: 2, notificationsEnabled: true,
+                                                     presence: .offline, hiddenNow: true)
+        XCTAssertTrue(offline.hasSuffix(", " + String(localized: "Shown as offline")), offline)
+
+        let window = ScheduleWindow(weekdays: [], startMinute: 1320, endMinute: 420)
+        let inside = CategoryRowAccessibility.label(name: "Family", count: 2, notificationsEnabled: false,
+                                                    presence: .scheduled(window), hiddenNow: true)
+        XCTAssertTrue(inside.hasSuffix(String(localized: "Notifications off") + ", " + String(localized: "Offline now (scheduled)")), inside)
+
+        let outside = CategoryRowAccessibility.label(name: "Family", count: 2, notificationsEnabled: true,
+                                                     presence: .scheduled(window), hiddenNow: false)
+        XCTAssertTrue(outside.hasSuffix(", " + String(localized: "Offline on a schedule")), outside)
+    }
+
+    func testOrderedWeekdaysStartsAtFirstWeekday() {
+        XCTAssertEqual(ScheduleEditorLogic.orderedWeekdays(firstWeekday: 2), [2, 3, 4, 5, 6, 7, 1])
+        XCTAssertEqual(ScheduleEditorLogic.orderedWeekdays(firstWeekday: 1), [1, 2, 3, 4, 5, 6, 7])
+        XCTAssertEqual(ScheduleEditorLogic.orderedWeekdays(firstWeekday: 7), [7, 1, 2, 3, 4, 5, 6])
+    }
+
+    func testMinutesRoundTrip() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Taipei")!
+        let day = Date(timeIntervalSince1970: 1_761_350_400)   // 2025-10-25 08:00 Taipei
+        let date = ScheduleEditorLogic.date(fromMinutes: 1320, on: day, calendar: calendar)
+        XCTAssertEqual(ScheduleEditorLogic.minutes(from: date, calendar: calendar), 1320)
+        XCTAssertEqual(calendar.component(.hour, from: date), 22)
+        XCTAssertEqual(ScheduleEditorLogic.minutes(from: ScheduleEditorLogic.date(fromMinutes: 0, on: day, calendar: calendar),
+                                                   calendar: calendar), 0)
+        XCTAssertEqual(ScheduleEditorLogic.minutes(from: ScheduleEditorLogic.date(fromMinutes: 1439, on: day, calendar: calendar),
+                                                   calendar: calendar), 1439)
+    }
 }

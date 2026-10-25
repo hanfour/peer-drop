@@ -174,6 +174,21 @@ public final class PeerConnection: ObservableObject, Identifiable {
     /// the notes-exchange gate (fail closed).
     var advertisedNotesExchange: Bool?
 
+    /// Whether the HELLO WE sent on this connection advertised `supportsStatusUpdate`
+    /// (Project F2). nil = unknown, treated as "no" by `StatusUpdateGate` (fail closed).
+    /// A rendezvous connection starts at `false` and turns `true` only once its
+    /// encrypted HELLO has been sent.
+    var advertisedStatusUpdate: Bool?
+
+    /// A rendezvous connection's capability, learned ONLY from an encrypted HELLO
+    /// on a verified connection (its `peerIdentity` is pinned and never re-pointed).
+    var rendezvousPeerSupportsStatusUpdate = false
+
+    /// Whether the peer said it understands `.statusUpdate` on this connection.
+    var peerSupportsStatusUpdate: Bool {
+        isRendezvous ? rendezvousPeerSupportsStatusUpdate : peerIdentity.supportsStatusUpdate
+    }
+
     /// Update the pinning verdict from outside (called by ConnectionManager
     /// after running the TrustedContactStore lookup in the
     /// `onSecureChannelEstablished` callback). Keeps `pinningVerdict`'s

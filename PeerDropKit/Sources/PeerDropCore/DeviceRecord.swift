@@ -21,6 +21,11 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
     /// HELLO swap. Chat history for a relay peer is stored under it, so an
     /// offline record can still find its thread. Optional; old data decodes.
     public var peerIdentityId: String?
+    /// Project F2: the friend's category status message as last received
+    /// (nil = none / hidden), and the sender's timestamp for it. Optional;
+    /// old data decodes.
+    public var statusMessage: String?
+    public var statusUpdatedAt: Date?
 
     public init(
         id: String,
@@ -33,7 +38,9 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         connectionHistory: [Date] = [],
         certificateFingerprint: String? = nil,
         peerDeviceId: String? = nil,
-        peerIdentityId: String? = nil
+        peerIdentityId: String? = nil,
+        statusMessage: String? = nil,
+        statusUpdatedAt: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -46,6 +53,8 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         self.certificateFingerprint = certificateFingerprint
         self.peerDeviceId = peerDeviceId
         self.peerIdentityId = peerIdentityId
+        self.statusMessage = statusMessage
+        self.statusUpdatedAt = statusUpdatedAt
     }
 
     public var relativeLastConnected: String {
@@ -68,5 +77,10 @@ public struct DeviceRecord: Identifiable, Codable, Hashable {
         self.certificateFingerprint = self.certificateFingerprint ?? other.certificateFingerprint
         self.peerDeviceId = self.peerDeviceId ?? other.peerDeviceId
         self.peerIdentityId = self.peerIdentityId ?? other.peerIdentityId
+        // The newer status wins (a newer cleared status included).
+        if let theirs = other.statusUpdatedAt, theirs > (self.statusUpdatedAt ?? .distantPast) {
+            self.statusMessage = other.statusMessage
+            self.statusUpdatedAt = theirs
+        }
     }
 }

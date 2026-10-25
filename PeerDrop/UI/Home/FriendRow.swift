@@ -24,7 +24,7 @@ struct FriendRow: View, PaperThemed {
     private var subtitle: String {
         FriendSubtitle.text(presence: presence, lastConnected: record.lastConnected,
                             connectionCount: record.connectionCount, source: record.sourceType,
-                            isConnecting: isConnecting)
+                            isConnecting: isConnecting, statusMessage: record.statusMessage)
     }
 
     private var accessibilityText: String {

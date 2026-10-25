@@ -1,6 +1,671 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "While offline (or inside the schedule), friends in this category see you as offline and can't connect to you, and you won't be connected to them either. They can still reach you with a room code or a relay invite you accept. On the same Wi-Fi they may still see this device under Nearby.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While offline (or inside the schedule), friends in this category see you as offline and can't connect to you, and you won't be connected to them either. They can still reach you with a room code or a relay invite you accept. On the same Wi-Fi they may still see this device under Nearby."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフライン中（またはスケジュールの時間内）は、このカテゴリの友だちにはあなたがオフラインに見え、あなたに接続できません。あなたからも接続しません。ただし、ルームコードや、あなたが承諾したリレー招待では連絡できます。同じ Wi-Fi では「近く」にこのデバイスが表示されることがあります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "오프라인일 때(또는 일정 시간 안에는) 이 카테고리의 친구에게는 오프라인으로 보이며 나에게 연결할 수 없고, 나도 그들과 연결되지 않습니다. 단, 방 코드나 내가 수락한 릴레이 초대로는 연락할 수 있습니다. 같은 Wi-Fi에서는 '근처'에 이 기기가 계속 보일 수 있습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "离线时（或在排程时段内），这个分类的朋友会看到你离线，也无法连接到你；你也不会和他们连接。不过他们仍可以用房间代码，或通过你接受的中继邀请联系你。在同一个 Wi-Fi 下，他们仍可能在“附近”看到这台设备。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "離線時（或在排程時段內），這個分類的朋友會看到你離線，也無法連線到你；你也不會和他們連線。不過他們仍可以用房號，或透過你接受的中繼邀請聯絡你。在同一個 Wi-Fi 下，他們仍可能在「附近」看到這台裝置。"
+          }
+        }
+      }
+    },
+    "End-to-end encrypted, sent directly to friends in this category while you're connected; never stored on a server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End-to-end encrypted, sent directly to friends in this category while you're connected; never stored on a server."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "エンドツーエンドで暗号化され、接続中にこのカテゴリの友だちへ直接送られます。サーバーには保存されません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "종단간 암호화되어 연결되어 있을 때 이 카테고리의 친구에게 직접 전송되며, 서버에는 저장되지 않습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "端到端加密，只会在连接时直接发送给这个分类的朋友，不会存储在服务器上。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端對端加密，只會在連線時直接傳給這個分類的朋友，不會儲存在伺服器上。"
+          }
+        }
+      }
+    },
+    "Friends in this category see you as offline right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends in this category see you as offline right now."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "このカテゴリの友だちには、今あなたがオフラインに見えます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "이 카테고리의 친구들에게는 지금 오프라인으로 보입니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "这个分类的朋友目前会看到你离线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個分類的朋友目前會看到你離線。"
+          }
+        }
+      }
+    },
+    "Status for this category": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status for this category"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "このカテゴリに表示する状態"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "이 카테고리에 표시할 상태"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "对这个分类显示的状态"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對這個分類顯示的狀態"
+          }
+        }
+      }
+    },
+    "Show as online": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show as online"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オンライン"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "온라인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "在线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上線"
+          }
+        }
+      }
+    },
+    "Show as offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show as offline"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフライン"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "오프라인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "离线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "離線"
+          }
+        }
+      }
+    },
+    "Offline on a schedule": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline on a schedule"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "スケジュールでオフライン"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "예약된 시간에 오프라인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "定时离线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定時離線"
+          }
+        }
+      }
+    },
+    "Offline from": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline from"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフライン開始"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "오프라인 시작"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "离线开始"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "離線開始"
+          }
+        }
+      }
+    },
+    "Until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Until"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフライン終了"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "오프라인 종료"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "离线结束"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "離線結束"
+          }
+        }
+      }
+    },
+    "No days selected means every day.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No days selected means every day."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "曜日を選ばない場合は毎日になります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "요일을 선택하지 않으면 매일입니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "没有选择星期表示每天。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有選擇星期代表每天。"
+          }
+        }
+      }
+    },
+    "Start and end can't be the same time.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start and end can't be the same time."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "開始と終了を同じ時刻にはできません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "시작과 종료를 같은 시간으로 설정할 수 없습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "开始和结束不能是同一个时间。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始與結束不能是同一個時間。"
+          }
+        }
+      }
+    },
+    "Friends in this category see you as offline and can't connect to you, and you won't be connected to them either. On the same Wi-Fi they may still see this device under Nearby.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends in this category see you as offline and can't connect to you, and you won't be connected to them either. On the same Wi-Fi they may still see this device under Nearby."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "このカテゴリの友だちにはあなたがオフラインに見え、あなたに接続できません。あなたからも接続しません。同じ Wi-Fi では「近く」にこのデバイスが表示されることがあります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "이 카테고리의 친구에게는 오프라인으로 보이며 나에게 연결할 수 없고, 나도 그들과 연결되지 않습니다. 같은 Wi-Fi에서는 '근처'에 이 기기가 계속 보일 수 있습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "这个分类的朋友会看到你离线，也无法连接到你；你也不会和他们连接。在同一个 Wi-Fi 下，他们仍可能在“附近”看到这台设备。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個分類的朋友會看到你離線，也無法連線到你；你也不會和他們連線。在同一個 Wi-Fi 下，他們仍可能在「附近」看到這台裝置。"
+          }
+        }
+      }
+    },
+    "Status message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status message"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ステータスメッセージ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "상태 메시지"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "状态消息"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "狀態消息"
+          }
+        }
+      }
+    },
+    "Show status message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show status message"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ステータスメッセージを表示"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "상태 메시지 표시"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "显示状态消息"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示狀態消息"
+          }
+        }
+      }
+    },
+    "Up to 60 characters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up to 60 characters."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "最大 60 文字。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "최대 60자."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "最多 60 个字。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多 60 字。"
+          }
+        }
+      }
+    },
+    "Sent directly to friends in this category while you're connected, never through a server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent directly to friends in this category while you're connected, never through a server."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "接続中にこのカテゴリの友だちへ直接送られ、サーバーは経由しません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "연결되어 있을 때 이 카테고리의 친구에게 직접 전송되며, 서버를 거치지 않습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "只会在连接时直接发送给这个分类的朋友，不经过服务器。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只會在連線時直接傳給這個分類的朋友，不經過伺服器。"
+          }
+        }
+      }
+    },
+    "This friend's category shows you as offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This friend's category shows you as offline"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "この友だちのカテゴリでは現在オフライン表示です"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "이 친구의 카테고리에서 현재 오프라인으로 표시됩니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "这位朋友的分类目前显示你离线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這位朋友的分類目前顯示你離線"
+          }
+        }
+      }
+    },
+    "Shown as offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shown as offline"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフライン表示"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "오프라인으로 표시"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "显示为离线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示為離線"
+          }
+        }
+      }
+    },
+    "Offline now (scheduled)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline now (scheduled)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "スケジュールによりオフライン中"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "예약으로 오프라인 중"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "定时离线中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定時離線中"
+          }
+        }
+      }
+    },
     "Category: %@": {
       "extractionState": "manual",
       "localizations": {

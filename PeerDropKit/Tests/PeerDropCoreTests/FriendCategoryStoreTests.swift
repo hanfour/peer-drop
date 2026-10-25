@@ -44,6 +44,39 @@ final class FriendCategoryStoreTests: XCTestCase {
         XCTAssertEqual(s.categories.count, 20)
     }
 
+    func testSetPresenceRejectsInvalidScheduleAndPersists() {
+        let s = makeStore()
+        let c = s.create(name: "A")!
+        let bad = ScheduleWindow(weekdays: [], startMinute: 600, endMinute: 600)
+        XCTAssertFalse(s.setPresence(.scheduled(bad), for: c.id))
+        XCTAssertEqual(s.categories[0].presence, .online)
+        XCTAssertFalse(s.setPresence(.offline, for: "missing"))
+        let good = ScheduleWindow(weekdays: [6], startMinute: 1320, endMinute: 420)
+        XCTAssertTrue(s.setPresence(.scheduled(good), for: c.id))
+        XCTAssertEqual(makeStore().categories[0].presence, .scheduled(good))
+    }
+
+    func testSetStatusMessageTrimsRejectsOverlongAndClears() {
+        let s = makeStore()
+        let c = s.create(name: "A")!
+        XCTAssertTrue(s.setStatusMessage("  hello\nworld ", for: c.id))
+        XCTAssertEqual(s.categories[0].statusMessage, "hello world")
+        XCTAssertFalse(s.setStatusMessage(String(repeating: "😀", count: 61), for: c.id))
+        XCTAssertEqual(s.categories[0].statusMessage, "hello world")
+        XCTAssertTrue(s.setStatusMessage(String(repeating: "😀", count: 60), for: c.id))
+        XCTAssertTrue(s.setStatusMessage("  ", for: c.id))
+        XCTAssertNil(s.categories[0].statusMessage)
+        XCTAssertNil(makeStore().categories[0].statusMessage)
+    }
+
+    func testSetShowStatusMessagePersists() {
+        let s = makeStore()
+        let c = s.create(name: "A")!
+        s.setShowStatusMessage(false, for: c.id)
+        XCTAssertFalse(s.categories[0].showStatusMessage)
+        XCTAssertFalse(makeStore().categories[0].showStatusMessage)
+    }
+
     func testAssignKeepsOneCategoryPerFriend() {
         let s = makeStore()
         let a = s.create(name: "A")!, b = s.create(name: "B")!

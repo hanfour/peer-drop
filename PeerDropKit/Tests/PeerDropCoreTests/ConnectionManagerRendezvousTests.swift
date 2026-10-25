@@ -309,6 +309,9 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
         XCTAssertTrue(installed.rendezvousVerified)
         // Wait for the ratchet bootstrap so either side can send.
         _ = await poll { peer.pc.secureChannelState == .secured }
+        // And for the post-confirmation capability HELLO (F2), so frame counts
+        // taken by the caller are stable.
+        _ = await poll { peer.inbox.contains { $0.type == .hello } }
         return (installed, peer, end)
     }
 
@@ -540,6 +543,7 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
         let n = await openLiveConnection(h, friend: friend)
         await rvWaitUntil { h.manager.linkState(for: friend.id) == .connected }
         XCTAssertNotNil(cm.rendezvousConnections[friend.deviceId!])
+        await rvWaitUntil { peer.inbox.contains { $0.type == .hello } }   // F2 capability HELLO landed
         let framesBefore = cmEnd.sent.count
 
         let direct = PeerConnection(peerID: friend.deviceId!, transport: RVPipeEnd.pair().0,
@@ -616,6 +620,168 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
         XCTAssertEqual(NotesExchangeGate.evaluate(cm.notesExchangeFacts(for: pc)), .denied(.notLocalDirect))
         XCTAssertNotEqual(cm.notesExchangeAvailability(with: friend.deviceId!), .allowed)
         XCTAssertNotEqual(cm.pressExchangeNotes(with: friend.deviceId!), .allowed)
+    }
+
+    // MARK: Project F2 status-update capability
+
+    func testConfirmedRendezvousSendsEncryptedHelloWithFlag() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (maybePC, peer, cmEnd) = install(friend, peerKey: key)
+        let pending = try XCTUnwrap(maybePC)
+        XCTAssertEqual(pending.advertisedStatusUpdate, false, "nothing advertised before the encrypted HELLO")
+        let done = await poll { !self.recorder.secure.isEmpty }
+        XCTAssertTrue(done)
+        XCTAssertTrue(pending.rendezvousVerified)
+
+        let gotHello = await poll { peer.inbox.contains { $0.type == .hello } }
+        XCTAssertTrue(gotHello, "no HELLO after confirmation")
+        let hello = try XCTUnwrap(peer.inbox.first { $0.type == .hello })
+        XCTAssertEqual(peer.inbox.first { $0.type != .typingIndicator }?.type, .hello,
+                       "the HELLO is the first business frame after confirmation")
+        let claimed = try JSONDecoder().decode(PeerIdentity.self, from: try XCTUnwrap(hello.payload))
+        XCTAssertTrue(claimed.supportsStatusUpdate)
+        XCTAssertFalse(claimed.supportsNotesExchange, "never face to face")
+        XCTAssertEqual(claimed.identityPublicKey, cm.localIdentity.identityPublicKey)
+        XCTAssertEqual(pending.advertisedStatusUpdate, true)
+        // It travelled inside an envelope: nothing but handshake/envelope frames on the wire.
+        XCTAssertTrue(cmEnd.sent.allSatisfy { $0.type == .secureHandshake || $0.type == .secureEnvelope },
+                      "plaintext frame on the wire: \(cmEnd.sent.map(\.type))")
+    }
+
+    func testRendezvousCapabilityOnlyFromEncryptedHello() async throws {
+        let flagged = { (id: String, k: Data) in
+            PeerIdentity(id: id, displayName: "Renamed", identityPublicKey: k, supportsStatusUpdate: true)
+        }
+        // (a) Before the channel: a plaintext HELLO with the pinned key is let
+        // through for its key check, but grants nothing.
+        let key1 = RendezvousTestIdentity()
+        let friend1 = try addFriend(key: key1, name: "Early")
+        let (maybeEarly, earlyPeer, _) = install(friend1, peerKey: key1, respond: false)
+        let early = try XCTUnwrap(maybeEarly)
+        try await earlyPeer.sendRaw(try PeerMessage.hello(identity: flagged(friend1.deviceId!, key1.raw)))
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(cm.rendezvousConnections[friend1.deviceId!] === early, "matching HELLO is harmless")
+        XCTAssertFalse(early.rendezvousPeerSupportsStatusUpdate)
+        XCTAssertFalse(early.peerSupportsStatusUpdate)
+
+        // (b) Verified: plaintext still grants nothing; the encrypted one does,
+        // without re-pointing the identity.
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (pc, peer, end) = try await installVerified(friend, key: key)
+        XCTAssertFalse(pc.peerSupportsStatusUpdate)
+        try await peer.sendRaw(try PeerMessage.hello(identity: flagged(friend.deviceId!, key.raw)))
+        try await peer.send(text("marker-1", from: friend.deviceId!))
+        _ = await poll { (self.cm.chatManager.unreadCounts[friend.deviceId!] ?? 0) >= 1 }
+        XCTAssertFalse(pc.rendezvousPeerSupportsStatusUpdate, "a plaintext HELLO set the capability")
+
+        try await peer.send(try PeerMessage.hello(identity: flagged("someone-else", key.raw)))
+        let learned = await poll { pc.rendezvousPeerSupportsStatusUpdate }
+        XCTAssertTrue(learned, "encrypted HELLO never taught the capability")
+        XCTAssertTrue(pc.peerSupportsStatusUpdate)
+        XCTAssertFalse(end.closed)
+        XCTAssertTrue(cm.rendezvousConnections[friend.deviceId!] === pc)
+        XCTAssertEqual(pc.peerIdentity.id, friend.deviceId, "identity is never re-pointed by HELLO")
+        XCTAssertEqual(pc.peerIdentity.displayName, friend.displayName)
+        XCTAssertFalse(pc.peerIdentity.supportsStatusUpdate, "peerIdentity untouched")
+        XCTAssertTrue(StatusUpdateGate.allows(cm.statusUpdateFacts(for: pc)))
+
+        // An encrypted HELLO without the flag (e.g. a downgrade) clears it again.
+        try await peer.send(try PeerMessage.hello(identity: PeerIdentity(
+            id: friend.deviceId!, displayName: "Mika", identityPublicKey: key.raw)))
+        let cleared = await poll { !pc.rendezvousPeerSupportsStatusUpdate }
+        XCTAssertTrue(cleared)
+    }
+
+    func testLegacyRendezvousPeerWithoutHelloNeverGetsCapability() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (pc, peer, end) = try await installVerified(friend, key: key)
+        // A Project E build never sends a HELLO; chat still flows.
+        try await peer.send(text("hi", from: friend.deviceId!))
+        _ = await poll { (self.cm.chatManager.unreadCounts[friend.deviceId!] ?? 0) >= 1 }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(pc.rendezvousPeerSupportsStatusUpdate)
+        XCTAssertFalse(pc.peerSupportsStatusUpdate)
+        XCTAssertFalse(StatusUpdateGate.allows(cm.statusUpdateFacts(for: pc)))
+        // A status frame from it is dropped and the connection survives.
+        let m = try PeerMessage.statusUpdate(StatusUpdatePayload(text: "x", updatedAt: Date()), senderID: friend.deviceId!)
+        XCTAssertNil(cm.acceptedStatusUpdate(m, on: pc, origin: .envelope))
+        try await peer.send(m)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(end.closed)
+        XCTAssertTrue(cm.rendezvousConnections[friend.deviceId!] === pc)
+    }
+
+    // MARK: Project F2 Task 4: status messages over rendezvous
+
+    private func statusUpdates(_ peer: ScriptedRVPeer) -> [StatusUpdatePayload] {
+        peer.inbox.filter { $0.type == .statusUpdate }.compactMap { m in
+            m.payload.flatMap { try? JSONDecoder().decode(StatusUpdatePayload.self, from: $0) }
+        }
+    }
+
+    func testRendezvousSendsStatusOnlyAfterPeerEncryptedHello() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (pc, peer, cmEnd) = try await installVerified(friend, key: key)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(statusUpdates(peer).isEmpty, "status sent before the peer advertised the flag")
+
+        let flagged = PeerIdentity(id: friend.deviceId!, displayName: "Mika", identityPublicKey: key.raw,
+                                   supportsStatusUpdate: true)
+        try await peer.send(try PeerMessage.hello(identity: flagged))
+        let got = await poll { !self.statusUpdates(peer).isEmpty }
+        XCTAssertTrue(got, "no statusUpdate after the peer's encrypted HELLO")
+        XCTAssertNil(statusUpdates(peer).first?.text, "uncategorized friend: nil")
+
+        // Every later encrypted HELLO re-learns the flag; unchanged text is not resent.
+        try await peer.send(try PeerMessage.hello(identity: flagged))
+        try await peer.send(text("marker", from: friend.deviceId!))
+        _ = await poll { (self.cm.chatManager.unreadCounts[friend.deviceId!] ?? 0) >= 1 }
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertEqual(statusUpdates(peer).count, 1, "resent on a repeated HELLO")
+        XCTAssertTrue(cmEnd.sent.allSatisfy { $0.type == .secureHandshake || $0.type == .secureEnvelope },
+                      "plaintext frame on the wire: \(cmEnd.sent.map(\.type))")
+        XCTAssertTrue(cm.rendezvousConnections[friend.deviceId!] === pc)
+    }
+
+    /// The peer's flagged HELLO is its very first envelope, so the CM learns
+    /// the capability before its own HELLO is on the wire: the status must
+    /// still follow our HELLO (an earlier one would be dropped by the peer).
+    func testRendezvousStatusFollowsOurHelloWhenCapabilityLearnedFirst() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (maybePC, peer, _) = install(friend, peerKey: key)
+        peer.sendsBootstrap = false
+        let pc = try XCTUnwrap(maybePC)
+        _ = await poll { peer.pc.secureChannelState == .secured }
+        try await peer.send(try PeerMessage.hello(identity: PeerIdentity(
+            id: friend.deviceId!, displayName: "Mika", identityPublicKey: key.raw, supportsStatusUpdate: true)))
+        let got = await poll { !self.statusUpdates(peer).isEmpty }
+        XCTAssertTrue(got, "no statusUpdate")
+        XCTAssertTrue(pc.rendezvousVerified)
+        let helloIndex = try XCTUnwrap(peer.inbox.firstIndex { $0.type == .hello })
+        let statusIndex = try XCTUnwrap(peer.inbox.firstIndex { $0.type == .statusUpdate })
+        XCTAssertLessThan(helloIndex, statusIndex, "statusUpdate overtook our HELLO")
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertEqual(statusUpdates(peer).count, 1)
+    }
+
+    func testLegacyRendezvousPeerNeverReceivesStatusUpdate() async throws {
+        let key = RendezvousTestIdentity()
+        let friend = try addFriend(key: key)
+        let (pc, peer, end) = try await installVerified(friend, key: key)
+        try await peer.send(text("hi", from: friend.deviceId!))
+        _ = await poll { (self.cm.chatManager.unreadCounts[friend.deviceId!] ?? 0) >= 1 }
+        cm.sendStatusUpdateIfNeeded(to: pc, force: true)
+        cm.broadcastStatusUpdates()
+        XCTAssertNil(cm.sentStatusTexts[ObjectIdentifier(pc)])
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(statusUpdates(peer).isEmpty, "a Project E peer received a statusUpdate")
+        XCTAssertFalse(end.closed)
+        XCTAssertTrue(cm.rendezvousConnections[friend.deviceId!] === pc)
     }
 
     func testNonChatFramesAreDropped() async throws {
@@ -770,6 +936,7 @@ final class ConnectionManagerRendezvousTests: XCTestCase {
         h.negotiators.makeTransport = { cmEnd }
         _ = await openLiveConnection(h, friend: friend)
         await rvWaitUntil { h.manager.linkState(for: friend.id) == .connected }
+        await rvWaitUntil { peer.inbox.contains { $0.type == .hello } }   // F2 capability HELLO landed
         let framesBefore = cmEnd.sent.count
         let signalsBefore = h.signaling.made.map(\.sent.count)
 

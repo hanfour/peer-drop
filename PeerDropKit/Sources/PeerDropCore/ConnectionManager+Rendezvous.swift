@@ -68,13 +68,15 @@ public final class RendezvousConnectionBridge: DirectConnectionChecker, Rendezvo
 
 extension ConnectionManager {
 
-    /// Frames a verified rendezvous connection may deliver (chat only). File
-    /// transfer, calls, clipboard, NearbyInteraction, device-id exchange and
-    /// the notes exchange are not carried cross-network (they would drive
-    /// global state / UI, or are face-to-face only).
+    /// Frames a verified rendezvous connection may deliver (chat, plus the
+    /// gated Project F2 status update). File transfer, calls, clipboard,
+    /// NearbyInteraction, device-id exchange and the notes exchange are not
+    /// carried cross-network (they would drive global state / UI, or are
+    /// face-to-face only).
     static let rendezvousDispatchedTypes: Set<MessageType> = [
         .textMessage, .mediaMessage, .messageReceipt, .typingIndicator, .reaction,
         .chatReject, .messageEdit, .messageDelete, .ping, .pong,
+        .statusUpdate,
     ]
 
     var rendezvousEvents: RendezvousConnectionEventSink? {
@@ -109,7 +111,15 @@ extension ConnectionManager {
     /// the background. Idempotent. For launch paths that miss the first
     /// `.active` scene phase (Mac `onAppear`) and for wake from sleep.
     public func startRendezvousIfForeground() {
-        guard rendezvousAppIsForeground else { return }
+        // Project F2: the clock may have crossed a schedule boundary while
+        // asleep (Mac wake comes through here) — re-check even when the app
+        // is in the background, since the Mac keeps enforcing there.
+        reevaluatePresence()
+        guard rendezvousAppIsForeground else {
+            // iOS runs no presence timer in the background; don't leave one armed.
+            if rendezvousClosesOnBackground { cancelPresenceTimer() }
+            return
+        }
         rendezvousAppDidBecomeActive()
     }
 
@@ -151,7 +161,8 @@ extension ConnectionManager {
         let m = RendezvousManager.live(
             contacts: { [weak self] in self?.trustedContactStore.contacts ?? [] },
             direct: rendezvousBridge,
-            installer: rendezvousBridge)
+            installer: rendezvousBridge,
+            visible: { [weak self] c in self?.isFriendVisible(contact: c) ?? true })
         attachRendezvousManager(m)
         return m
         #else
@@ -195,14 +206,17 @@ extension ConnectionManager {
     /// The store's current copy of `contact`, if it may be auto-connected now:
     /// opted in and eligible (bound account, no pending claim, not blocked,
     /// unique key, device id), with the same key and device id the manager saw.
-    /// Eligibility includes a device id unique among contacts (I-3).
+    /// Eligibility includes a device id unique among contacts (I-3). Project
+    /// F2: the friend's category must also show us online right now (checked
+    /// live, so a schedule boundary racing a negotiation still refuses).
     private func currentRendezvousContact(id: UUID, key: Data?, deviceId: String?) -> TrustedContact? {
         let all = trustedContactStore.contacts
         guard let c = all.first(where: { $0.id == id }),
               c.identityPublicKey == key,
               c.deviceId == deviceId,
               c.isRendezvousEnabled,
-              TrustedContactStore.isRendezvousEligible(c, among: all) else { return nil }
+              TrustedContactStore.isRendezvousEligible(c, among: all),
+              isFriendVisible(contact: c) else { return nil }
         return c
     }
 
@@ -231,6 +245,9 @@ extension ConnectionManager {
         pc.rendezvousContactID = c.id
         pc.isRelayTransport = true          // not face to face: Project C's gate refuses it
         pc.advertisedNotesExchange = false
+        // Project F2: nothing advertised until the encrypted HELLO goes out
+        // after key confirmation (`confirmRendezvousConnection`).
+        pc.advertisedStatusUpdate = false
         pc.requiresStrictSecureChannel = true
         pc.handshakeFallbackNanoseconds = rendezvousSecureChannelTimeoutNanoseconds
 
@@ -348,6 +365,29 @@ extension ConnectionManager {
         reportRendezvousOutcome(pc, ok: true, reason: nil)
         bumpSecurityEpoch()
         objectWillChange.send()
+        sendRendezvousCapabilityHello(pc)
+    }
+
+    /// Project F2: the install-time identity is pinned and Project E peers
+    /// never send a HELLO, so capabilities are exchanged in one ENCRYPTED HELLO
+    /// once the connection is verified. A Project E peer only runs its key
+    /// check on it (same key ⇒ harmless). Never sent in plaintext: the strict
+    /// channel wraps every business frame.
+    ///
+    /// `advertisedStatusUpdate` turns true only once that HELLO is on the
+    /// wire, so no `.statusUpdate` can overtake it (the peer would drop one
+    /// that arrives before it learned our flag); a peer capability learned in
+    /// the meantime is served right after. A failed send advertises nothing.
+    private func sendRendezvousCapabilityHello(_ pc: PeerConnection) {
+        let identity = localIdentity.withoutNotesExchange()
+        guard let hello = try? PeerMessage.hello(identity: identity) else { return }
+        Task { @MainActor [weak self, weak pc] in
+            guard let pc else { return }
+            do { try await pc.sendMessage(hello) } catch { return }
+            guard let self, self.rendezvousConnections[pc.id] === pc else { return }
+            pc.advertisedStatusUpdate = identity.supportsStatusUpdate
+            self.sendStatusUpdateIfNeeded(to: pc)
+        }
     }
 
     // MARK: - Dispatch
@@ -375,6 +415,12 @@ extension ConnectionManager {
                 // plaintext one may be anyone's (never suspends).
                 closeRendezvousConnection(pc, reason: origin == .envelope ? .helloMismatch : .helloMismatchUnauthenticated)
                 return
+            }
+            // Project F2: only the friend's own (encrypted, verified) word sets
+            // the capability; `peerIdentity` stays pinned.
+            if origin == .envelope, pc.rendezvousVerified {
+                pc.rendezvousPeerSupportsStatusUpdate = claimed.supportsStatusUpdate
+                statusUpdateCapabilityLearned(pc)
             }
             return
         case .disconnect:
@@ -418,7 +464,9 @@ extension ConnectionManager {
     }
 
     /// Remove and close without any frame (`cancel()`, never `disconnect()`).
-    private func removeRendezvousConnection(_ pc: PeerConnection) {
+    /// Reports nothing to the manager (also used by Project F2's presence
+    /// enforcement: a friend hidden on purpose is not a link failure).
+    func removeRendezvousConnection(_ pc: PeerConnection) {
         guard rendezvousConnections[pc.id] === pc else { return }
         rendezvousConnections[pc.id] = nil
         pc.onDisconnected = nil
@@ -430,6 +478,7 @@ extension ConnectionManager {
         pc.rendezvousAwaitingConfirmation = false
         pc.cancel()
         pc.updateState(.disconnected)
+        forgetSentStatus(for: pc)
         chatManager.setTyping(false, for: pc.id)
         bumpSecurityEpoch()
         objectWillChange.send()
