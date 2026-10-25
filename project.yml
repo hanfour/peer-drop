@@ -112,6 +112,7 @@ targets:
         NSNearbyInteractionUsageDescription: "PeerDrop uses Nearby Interaction to measure the distance and direction of nearby devices for precise file sharing."
         NSCameraUsageDescription: "PeerDrop needs camera access to capture photos for sharing in chats."
         NSPhotoLibraryUsageDescription: "PeerDrop needs photo library access to share photos and videos in chats."
+        NSContactsUsageDescription: "PeerDrop shows your contacts so you can invite them. Your contacts stay on this phone and are never uploaded."
         PeerDropWorkerAPIKey: "$(PEERDROP_WORKER_API_KEY)"
         # Crypto-policy trust roots — DUAL-KEY OVERLAP (2026-07-05).
         # [0] PRODUCTION key: private half held OFFLINE (1Password), never

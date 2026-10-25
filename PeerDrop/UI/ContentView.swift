@@ -213,7 +213,7 @@ struct ContentView: View {
                 selectedTab = .nearby
             }
         } message: {
-            Text(errorMessage ?? "An unknown error occurred.")
+            Text(LocalizedStringKey(errorMessage ?? "An unknown error occurred."))
         }
         .fullScreenCover(isPresented: Binding(
             get: { !hasCompletedOnboarding && !ScreenshotModeProvider.shared.isActive },
@@ -226,12 +226,18 @@ struct ContentView: View {
             previousConnectionState = newState
             selectedTab = AppTab.tabAfterConnectionChange(from: oldState, to: newState, current: selectedTab)
             switch newState {
-            case .failed(let reason):
-                // Only show alert if not suppressed (e.g., ChatView handles it locally).
-                // Recommendation card is now persistent in NearbyTab.
-                if !connectionManager.suppressErrorAlert {
+            case .failed:
+                // A dropped live connection is a quiet toast; only a failed attempt gets the alert
+                // (and not while a chat is open: it shows its own banner).
+                switch ConnectionErrorPolicy.presentation(from: oldState, to: newState,
+                                                          suppressAlert: connectionManager.suppressErrorAlert) {
+                case .alert(let reason):
                     errorMessage = reason
                     showError = true
+                case .toast(let key):
+                    connectionManager.statusToast = key
+                case .none:
+                    break
                 }
             case .rejected:
                 // Always show rejected alert (user needs to know)
@@ -249,7 +255,7 @@ struct ContentView: View {
         }
         .onChange(of: connectionManager.statusToast) { _ in
             guard let message = connectionManager.statusToast else { return }
-            statusToastMessage = message
+            statusToastMessage = NSLocalizedString(message, comment: "")
             connectionManager.statusToast = nil
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 showStatusToast = true
