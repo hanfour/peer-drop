@@ -20,6 +20,13 @@
 //
 // Every endpoint except /init answers 404 without touching storage when there
 // is no `meta`, so a stray id can never materialise a room.
+//
+// Concurrency rule for every handler: read and validate the request body
+// FIRST, then getMeta(), and between getMeta() and the final put await
+// nothing but storage operations. Awaiting the body (or any other non-storage
+// I/O) opens the DO's input gate, so another request could run and commit
+// in between — a handler holding an earlier `meta` snapshot would then
+// overwrite it (lost joins, seq going backwards, the 50-member cap broken).
 import { generateAccountId } from "./account";
 import { decodedByteLength, isValidGroupId, isValidMemberId, sha256Hex } from "./groupSig";
 
@@ -47,15 +54,19 @@ const banHash = (m: { kind: GroupMemberKind; accountId?: string; deviceId?: stri
 
 class BadRequest extends Error {}
 
-const isNonEmptyString = (v: unknown): v is string => typeof v === "string" && v.length > 0;
-/** True when `v` is base64 decoding to exactly `n` bytes. */
+const MAX_ACCOUNT_ID_LEN = 64;
+const MAX_DEVICE_ID_LEN = 128;
+const MAX_INVITE_CODE_LEN = 64;
+
+const isBoundedString = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
+/** True when `v` is strict base64 decoding to exactly `n` bytes. */
 const isB64Bytes = (v: unknown, n: number): v is string => typeof v === "string" && decodedByteLength(v) === n;
 
 function parseCaller(v: unknown): Caller {
   const c = v as Partial<Caller> | null;
   if (!c || typeof c !== "object") throw new BadRequest();
-  if (!isNonEmptyString(c.memberId) || !isNonEmptyString(c.deviceId)) throw new BadRequest();
-  if (c.accountId !== null && !isNonEmptyString(c.accountId)) throw new BadRequest();
+  if (!isValidMemberId(c.memberId) || !isBoundedString(c.deviceId, MAX_DEVICE_ID_LEN)) throw new BadRequest();
+  if (c.accountId !== null && !isBoundedString(c.accountId, MAX_ACCOUNT_ID_LEN)) throw new BadRequest();
   if (c.lane !== "bearer" && c.lane !== "key") throw new BadRequest();
   return { memberId: c.memberId, accountId: c.accountId, deviceId: c.deviceId, lane: c.lane };
 }
@@ -64,22 +75,58 @@ function parseCaller(v: unknown): Caller {
  * Builds a member from an untrusted join body, copying only the fields its
  * kind allows. An account member carrying a deviceId is rejected outright
  * (this DO never stores an account member's device — Ruling 14).
+ * `joinedEpoch` is filled in once the room's meta has been read.
  */
-function parseJoinMember(v: unknown, now: number, epoch: number): GroupMember {
+function parseJoinMember(v: unknown, now: number): GroupMember {
   const m = v as Record<string, unknown> | null;
   if (!m || typeof m !== "object") throw new BadRequest();
   if (!isValidMemberId(m.memberId) || !isB64Bytes(m.pubKey, GROUP_LIMITS.pubKeyBytes)) throw new BadRequest();
   if (m.kind === "account") {
-    if (!isNonEmptyString(m.accountId) || m.deviceId !== undefined) throw new BadRequest();
+    if (!isBoundedString(m.accountId, MAX_ACCOUNT_ID_LEN) || m.deviceId !== undefined) throw new BadRequest();
     if (!isB64Bytes(m.pubKeySig, GROUP_LIMITS.sigBytes)) throw new BadRequest();
-    return { memberId: m.memberId, kind: "account", accountId: m.accountId, joinedAt: now, joinedEpoch: epoch, pubKey: m.pubKey, pubKeySig: m.pubKeySig };
+    return { memberId: m.memberId, kind: "account", accountId: m.accountId, joinedAt: now, joinedEpoch: 0, pubKey: m.pubKey, pubKeySig: m.pubKeySig };
   }
   if (m.kind === "anon") {
-    if (!isNonEmptyString(m.deviceId) || m.accountId !== undefined) throw new BadRequest();
-    return { memberId: m.memberId, kind: "anon", deviceId: m.deviceId, joinedAt: now, joinedEpoch: epoch, pubKey: m.pubKey };
+    if (!isBoundedString(m.deviceId, MAX_DEVICE_ID_LEN) || m.accountId !== undefined) throw new BadRequest();
+    return { memberId: m.memberId, kind: "anon", deviceId: m.deviceId, joinedAt: now, joinedEpoch: 0, pubKey: m.pubKey };
   }
   throw new BadRequest();
 }
+
+interface InitRequest {
+  groupId: string;
+  owner: { memberId: string; accountId: string; pubKey: string; pubKeySig: string };
+  ownerWrap: { wrapped: string; sig: string };
+  metaCipher: string;
+  joinPolicy: JoinPolicy;
+  inviteCode?: string;
+}
+
+/** Validates an /init body; a 413 for an oversized metaCipher, else throws BadRequest. */
+function parseInit(b: Record<string, unknown>): InitRequest | "too_large" {
+  const owner = b.owner as Record<string, unknown> | null;
+  const wrap = b.ownerWrap as Record<string, unknown> | null;
+  if (!owner || typeof owner !== "object" || !wrap || typeof wrap !== "object") throw new BadRequest();
+  if (!isValidGroupId(b.groupId) || !isValidMemberId(owner.memberId) || !isBoundedString(owner.accountId, MAX_ACCOUNT_ID_LEN)) throw new BadRequest();
+  if (!isB64Bytes(owner.pubKey, GROUP_LIMITS.pubKeyBytes) || !isB64Bytes(owner.pubKeySig, GROUP_LIMITS.sigBytes)) throw new BadRequest();
+  if (!isB64Bytes(wrap.wrapped, GROUP_LIMITS.wrappedBytes) || !isB64Bytes(wrap.sig, GROUP_LIMITS.sigBytes)) throw new BadRequest();
+  if (typeof b.joinPolicy !== "string" || !JOIN_POLICIES.has(b.joinPolicy)) throw new BadRequest();
+  if (b.inviteCode !== undefined && !isBoundedString(b.inviteCode, MAX_INVITE_CODE_LEN)) throw new BadRequest();
+  if (typeof b.metaCipher !== "string" || b.metaCipher.length === 0) throw new BadRequest();
+  const metaLen = decodedByteLength(b.metaCipher);
+  if (metaLen === null) throw new BadRequest();
+  if (metaLen > GROUP_LIMITS.maxMetaBytes) return "too_large";
+  return {
+    groupId: b.groupId,
+    owner: { memberId: owner.memberId, accountId: owner.accountId, pubKey: owner.pubKey, pubKeySig: owner.pubKeySig },
+    ownerWrap: { wrapped: wrap.wrapped, sig: wrap.sig },
+    metaCipher: b.metaCipher,
+    joinPolicy: b.joinPolicy as JoinPolicy,
+    inviteCode: b.inviteCode as string | undefined,
+  };
+}
+
+interface JoinRequest { member: GroupMember; inviteCode: unknown; dryRun: boolean; banKey: string }
 
 /** Same person? Account members by accountId, anonymous ones by deviceId. */
 const sameIdentity = (a: GroupMember, b: GroupMember): boolean =>
@@ -87,6 +134,8 @@ const sameIdentity = (a: GroupMember, b: GroupMember): boolean =>
 
 /** A member as any other member may see it: never the deviceId. */
 const stripDevice = ({ deviceId: _d, ...rest }: GroupMember): GroupMember => rest;
+
+const KNOWN_PATHS = new Set(["/init", "/view", "/join", "/close", "/invite/reset"]);
 
 export class GroupRoom {
   ctx: DurableObjectState;
@@ -158,22 +207,31 @@ export class GroupRoom {
 
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (request.method !== "POST") return this.json({ error: "not_found" }, 404);
+    if (request.method !== "POST" || !KNOWN_PATHS.has(path)) return this.json({ error: "not_found" }, 404);
     try {
-      if (path === "/init") return await this.init(request);
-      // Everything else requires an existing room — checked before even
-      // parsing the body, and nothing below writes for a missing meta.
-      const meta = await this.getMeta();
-      if (!meta) return this.json({ error: "not_found" }, 404);
+      // 1. Body first (this await opens the input gate — see file header).
       const body = await request.json().catch(() => { throw new BadRequest(); }) as Record<string, unknown>;
       if (!body || typeof body !== "object") throw new BadRequest();
-      switch (path) {
-        case "/view": return await this.view(meta, parseCaller(body.caller));
-        case "/join": return await this.join(meta, body);
-        case "/close": return await this.close(meta, parseCaller(body.caller));
-        case "/invite/reset": return await this.resetInvite(meta, parseCaller(body.caller));
+      // 2. Validate and do any non-storage async work (hashing) up front.
+      if (path === "/init") {
+        const init = parseInit(body);
+        if (init === "too_large") return this.json({ error: "too_large" }, 413);
+        return await this.init(init);
       }
-      return this.json({ error: "not_found" }, 404);
+      if (path === "/join") {
+        const req = await this.parseJoin(body);
+        if (req instanceof Response) return req;
+        // 3. Only now read meta; nothing below awaits non-storage I/O.
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.join(meta, req);
+      }
+      const caller = parseCaller(body.caller);
+      const meta = await this.getMeta();
+      if (!meta) return this.json({ error: "not_found" }, 404);
+      if (path === "/view") return await this.view(meta, caller);
+      if (path === "/close") return await this.close(meta, caller);
+      return await this.resetInvite(meta, caller);
     } catch (e) {
       if (e instanceof BadRequest) return this.json({ error: "bad_request" }, 400);
       throw e;
@@ -181,24 +239,8 @@ export class GroupRoom {
   }
 
   // ---- create / idempotent re-create -----------------------------------
-  private async init(request: Request): Promise<Response> {
-    const body = await request.json().catch(() => { throw new BadRequest(); }) as {
-      groupId?: unknown; owner?: Record<string, unknown>; ownerWrap?: Record<string, unknown>;
-      metaCipher?: unknown; joinPolicy?: unknown; inviteCode?: unknown;
-    };
-    const owner = body?.owner;
-    const wrap = body?.ownerWrap;
-    if (!owner || typeof owner !== "object" || !wrap || typeof wrap !== "object") throw new BadRequest();
-    if (!isValidGroupId(body.groupId) || !isValidMemberId(owner.memberId) || !isNonEmptyString(owner.accountId)) throw new BadRequest();
-    if (!isB64Bytes(owner.pubKey, GROUP_LIMITS.pubKeyBytes) || !isB64Bytes(owner.pubKeySig, GROUP_LIMITS.sigBytes)) throw new BadRequest();
-    if (!isB64Bytes(wrap.wrapped, GROUP_LIMITS.wrappedBytes) || !isB64Bytes(wrap.sig, GROUP_LIMITS.sigBytes)) throw new BadRequest();
-    if (typeof body.joinPolicy !== "string" || !JOIN_POLICIES.has(body.joinPolicy)) throw new BadRequest();
-    if (body.inviteCode !== undefined && !isNonEmptyString(body.inviteCode)) throw new BadRequest();
-    if (!isNonEmptyString(body.metaCipher)) throw new BadRequest();
-    const metaLen = decodedByteLength(body.metaCipher);
-    if (metaLen === null) throw new BadRequest();
-    if (metaLen > GROUP_LIMITS.maxMetaBytes) return this.json({ error: "too_large" }, 413);
-
+  private async init(body: InitRequest): Promise<Response> {
+    const { owner, ownerWrap: wrap } = body;
     const existing = await this.getMeta();
     if (existing) {
       const existingOwner = existing.members.find((m) => m.memberId === existing.ownerMemberId);
@@ -213,7 +255,7 @@ export class GroupRoom {
       groupId: body.groupId,
       ownerMemberId: owner.memberId,
       members: [{ memberId: owner.memberId, kind: "account", accountId: owner.accountId, joinedAt: now, joinedEpoch: 1, pubKey: owner.pubKey, pubKeySig: owner.pubKeySig }],
-      joinPolicy: body.joinPolicy as JoinPolicy,
+      joinPolicy: body.joinPolicy,
       discoverability: "private",
       state: "open",
       epoch: 1,
@@ -225,8 +267,10 @@ export class GroupRoom {
       createdAt: now,
     };
     const ownerWrap: WrapRecord = { wrapped: wrap.wrapped, wrappedBy: owner.memberId, sig: wrap.sig, createdAt: now };
-    await this.ctx.storage.put({ meta, metacipher: body.metaCipher, [keyKey(1, owner.memberId)]: ownerWrap });
-    await this.ctx.storage.setAlarm(now + DAY_MS);
+    // Both issued before either is awaited, so they commit together.
+    const put = this.ctx.storage.put({ meta, metacipher: body.metaCipher, [keyKey(1, owner.memberId)]: ownerWrap });
+    const alarm = this.ctx.storage.setAlarm(now + DAY_MS);
+    await Promise.all([put, alarm]);
     return this.json(meta, 201);
   }
 
@@ -251,18 +295,41 @@ export class GroupRoom {
   }
 
   // ---- join ------------------------------------------------------------------
-  private async join(meta: GroupMeta, body: Record<string, unknown>): Promise<Response> {
-    const now = this.now();
-    const member = parseJoinMember(body.member, now, meta.epoch);
-    const dryRun = body.dryRun === true;
+  /**
+   * Validates a join body and binds the joining identity to the
+   * authenticated caller: the DO never takes the member's accountId /
+   * deviceId on the body's word. An account member must be the caller's own
+   * accountId (on either lane — the route only puts an accountId in `caller`
+   * that it authenticated, including the Mac key lane's device→account
+   * lookup); an anonymous member must be the caller's own deviceId AND come
+   * over the Bearer lane, the same Ruling-5 rule as authorize(). Runs before
+   * getMeta, so it is also where the ban hash is computed.
+   */
+  private async parseJoin(body: Record<string, unknown>): Promise<JoinRequest | Response> {
+    const caller = parseCaller(body.caller);
+    const member = parseJoinMember(body.member, this.now());
+    if (caller.memberId !== member.memberId) throw new BadRequest();
+    if (member.kind === "anon") {
+      if (caller.lane === "key") return this.json({ error: "bearer_required" }, 401);
+      if (caller.deviceId !== member.deviceId) return this.json({ error: "identity_mismatch" }, 403);
+    } else if (caller.accountId !== member.accountId) {
+      return this.json({ error: "identity_mismatch" }, 403);
+    }
+    return { member, inviteCode: body.inviteCode, dryRun: body.dryRun === true, banKey: `ban:${await banHash(member)}` };
+  }
+
+  private async join(meta: GroupMeta, req: JoinRequest): Promise<Response> {
+    const { member, dryRun } = req;
+    member.joinedEpoch = meta.epoch;
+    const now = member.joinedAt;
 
     const prior = meta.members.find((m) => sameIdentity(m, member));
     // Idempotent short-circuit beats every check below: an existing member
     // replaying a stale invite link needs no fresh authorization.
     if (prior && prior.memberId === member.memberId) return this.json({ added: false }, 200);
-    if (await this.ctx.storage.get(`ban:${await banHash(member)}`) !== undefined) return this.json({ error: "banned" }, 403);
+    if (await this.ctx.storage.get(req.banKey) !== undefined) return this.json({ error: "banned" }, 403);
     // Authoritative code check (D1's group_invites only maps code → groupId).
-    if (meta.inviteCode !== body.inviteCode) return this.json({ error: "bad_code" }, 403);
+    if (meta.inviteCode !== req.inviteCode) return this.json({ error: "bad_code" }, 403);
     if (meta.state === "closed") return this.json({ error: "group_closed" }, 403);
     if (member.kind === "anon" && meta.joinPolicy === "accountOnly") return this.json({ error: "account_required" }, 403);
     // A replacement doesn't grow the room, so the old seat doesn't count.
@@ -270,7 +337,6 @@ export class GroupRoom {
     if (meta.members.some((m) => m.memberId === member.memberId)) return this.json({ error: "member_id_taken" }, 409);
     if (dryRun) return this.json({ added: true, replaced: !!prior }, 201);
 
-    const events: Omit<GroupEvent, "seq">[] = [];
     if (prior) {
       // Ruling 12: same identity on a new device takes over atomically —
       // old memberId out (with its wraps), new one in, ownership carried
@@ -280,10 +346,11 @@ export class GroupRoom {
       meta.members = meta.members.filter((m) => m.memberId !== prior.memberId);
       meta.members.push(member);
       if (wasOwner) meta.ownerMemberId = member.memberId;
-      events.push({ eventId: `srv:leave:${prior.memberId}:${meta.seq + 1}`, type: "leave", authorMemberId: prior.memberId, epoch: meta.epoch, createdAt: now });
-      const joinEv: Omit<GroupEvent, "seq"> = { eventId: `srv:join:${member.memberId}:${meta.seq + 2}`, type: "join", authorMemberId: member.memberId, epoch: meta.epoch, createdAt: now };
-      if (wasOwner) joinEv.ownerMemberId = member.memberId;
-      events.push(joinEv);
+      const events: Omit<GroupEvent, "seq">[] = [
+        { eventId: `srv:leave:${prior.memberId}:${meta.seq + 1}`, type: "leave", authorMemberId: prior.memberId, epoch: meta.epoch, createdAt: now },
+        { eventId: `srv:join:${member.memberId}:${meta.seq + 2}`, type: "join", authorMemberId: member.memberId, epoch: meta.epoch, createdAt: now },
+      ];
+      if (wasOwner) events[1].ownerMemberId = member.memberId;
       const stale = [...await this.keyKeysOf(prior.memberId), `push:${prior.memberId}`];
       // No await between the delete and appendEvent's put: the DO coalesces
       // both into one atomic write.

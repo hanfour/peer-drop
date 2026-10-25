@@ -14,8 +14,14 @@ export const isValidMemberId = isId;
 /** eventId: client-generated ULID for idempotent event posts. */
 export const isValidEventId = isId;
 
-/** atob() length of a base64 string, or null if it isn't valid base64. */
+// Strict standard base64: whole 4-char groups, padding only at the end.
+// atob() alone is lenient (accepts whitespace and missing padding), which
+// would let two different strings stand for the same bytes.
+const B64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/** Decoded byte length of a strict base64 string, or null if it isn't one. */
 export function decodedByteLength(b64: string): number | null {
+  if (typeof b64 !== "string" || b64.length % 4 !== 0 || !B64_RE.test(b64)) return null;
   try {
     return atob(b64).length;
   } catch {
