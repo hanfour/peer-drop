@@ -49,8 +49,8 @@ final class ClipboardSyncTests: XCTestCase {
     }
 
     func testFeatureSettingsClipboardSync() {
-        // Default should be enabled
+        // Off by default: nothing reads or broadcasts the clipboard unless it is explicitly turned on.
         UserDefaults.standard.removeObject(forKey: "peerDropClipboardSyncEnabled")
-        XCTAssertTrue(FeatureSettings.isClipboardSyncEnabled)
+        XCTAssertFalse(FeatureSettings.isClipboardSyncEnabled)
     }
 }

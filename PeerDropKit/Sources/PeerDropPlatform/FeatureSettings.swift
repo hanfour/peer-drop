@@ -21,9 +21,10 @@ public enum FeatureSettings {
         guard UserDefaults.standard.object(forKey: "peerDropNearbyInteractionEnabled") != nil else { return true }
         return UserDefaults.standard.bool(forKey: "peerDropNearbyInteractionEnabled")
     }
+    /// Off unless explicitly enabled: automatic clipboard sync reads everything the person copies and sends
+    /// it to every connected peer, which must never happen silently.
     public static var isClipboardSyncEnabled: Bool {
-        guard UserDefaults.standard.object(forKey: "peerDropClipboardSyncEnabled") != nil else { return true }
-        return UserDefaults.standard.bool(forKey: "peerDropClipboardSyncEnabled")
+        UserDefaults.standard.bool(forKey: "peerDropClipboardSyncEnabled")
     }
     public static var isRelayEnabled: Bool {
         guard UserDefaults.standard.object(forKey: "peerDropRelayEnabled") != nil else { return true }
