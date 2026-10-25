@@ -205,7 +205,7 @@ const stripDevice = ({ deviceId: _d, devHash: _h, ...rest }: GroupMember): Group
 const KNOWN_PATHS = new Set([
   "/init", "/view", "/join", "/close", "/invite/reset", "/events/list", "/events/msg", "/ws-ticket",
   "/keys/mine", "/keys/put", "/rotate", "/meta", "/meta-cipher", "/leave", "/kick", "/request-key",
-  "/account-member",
+  "/account-member", "/event/get",
 ]);
 
 const WS_OPEN = 1;
@@ -545,6 +545,14 @@ export class GroupRoom {
         const meta = await this.getMeta();
         return this.json({ member: !!meta && meta.members.some((m) => m.kind === "account" && m.accountId === body.accountId) });
       }
+      if (path === "/event/get") {
+        const caller = parseCaller(body.caller);
+        if (!isNonNegInt(body.seq)) throw new BadRequest();
+        const seq = body.seq;
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.eventGet(meta, caller, seq);
+      }
       const caller = parseCaller(body.caller);
       const meta = await this.getMeta();
       if (!meta) return this.json({ error: "not_found" }, 404);
@@ -728,6 +736,25 @@ export class GroupRoom {
     const out: { events: GroupEvent[]; firstSeq: number; nextSince?: number } = { events: page, firstSeq: meta.firstSeq };
     if (all.length > req.limit && page.length) out.nextSince = page[page.length - 1].seq;
     return this.json(out);
+  }
+
+  /**
+   * ROUTE-ONLY (the report route; never relayed to a client): one stored
+   * event plus who wrote it — `{kind:"account", accountId}`, or for an
+   * anonymous author `{kind:"anon", deviceId}` so the route can compute the
+   * Ruling-18 sender hash; `null` when the author is no longer a member.
+   * `callerKind` says which identity the caller acts as here (the report's
+   * reporter column). Read-only. 404 when the seq was never written or has
+   * been pruned.
+   */
+  private async eventGet(meta: GroupMeta, caller: Caller, seq: number): Promise<Response> {
+    const me = this.authorize(meta, caller);
+    if (me instanceof Response) return me;
+    const event = seq >= meta.firstSeq && seq <= meta.seq ? await this.ctx.storage.get<GroupEvent>(evKey(seq)) : undefined;
+    if (!event) return this.json({ error: "not_found" }, 404);
+    const a = meta.members.find((m) => m.memberId === event.authorMemberId);
+    const author = !a ? null : a.kind === "account" ? { kind: "account", accountId: a.accountId } : { kind: "anon", deviceId: a.deviceId };
+    return this.json({ event, author, callerKind: me.kind });
   }
 
   private async postMsg(meta: GroupMeta, req: MsgRequest): Promise<Response> {

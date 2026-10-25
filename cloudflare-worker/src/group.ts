@@ -32,7 +32,7 @@
 // PRIVACY: never log ids, codes, keys, signatures or ciphertext — only fixed
 // strings plus String(e) (same as diary.ts).
 import type { Env, GroupAuth } from "./index";
-import { bumpQuota, dayKey, json } from "./notes";
+import { bumpQuota, dayKey, json, NOTE_LIMITS, senderHash, ulid } from "./notes";
 import type { PushDeps } from "./notes";
 import { generateAccountId, normalizeAccountId } from "./account";
 import { GROUP_LIMITS, GROUP_PUSH } from "./groupRoom";
@@ -70,6 +70,10 @@ const ROOM_JOIN_LIMIT_PER_HOUR = 6;
  */
 const KEY_REQUEST_IDENTITY_LIMIT_PER_HOUR = 12;
 const MAX_TICKET_LEN = 64;
+const MAX_REPORT_BODY_BYTES = 8 * 1024;
+const REPORT_REASONS = new Set(["spam", "harassment", "other"]);
+/** Only content can be reported (Ruling 18): membership events carry nothing to judge. */
+const REPORTABLE_TYPES = new Set(["msg", "meta"]);
 /** wrapMessage encodes the epoch as UInt32BE: anything larger would alias a smaller epoch's signature. */
 const MAX_EPOCH = 0xFFFF_FFFF;
 const TOMBSTONE_PREFIX = "group-gone:";
@@ -502,6 +506,49 @@ async function performJoin(env: Env, auth: GroupAuth, groupId: string, input: Jo
   return json({ groupId, memberId: input.memberId, epoch: v.epoch, state: v.state, ownerMemberId: v.ownerMemberId }, added ? 201 : 200);
 }
 
+// ---- report -----------------------------------------------------------------
+
+type ReportAuthor = { kind: "account"; accountId: string } | { kind: "anon"; deviceId: string } | null;
+
+/**
+ * POST /v3/groups/:id/events/:seq/report — like a diary report: the server
+ * never sees plaintext, the reporter volunteers the decrypted `excerpt`.
+ * The reporter is the identity the caller holds IN THIS ROOM: an account
+ * member → reporter_account_id; an anonymous member → reporter_device_id
+ * (also when the device happens to be signed in — it chose to be
+ * anonymous here). sender_hash follows Ruling 18: account author →
+ * senderHash(accountId), anonymous author → senderHash("anon:"+deviceId)
+ * (links one abusive device across rooms — accepted, in the privacy
+ * notes), author no longer a member → NULL. Quota: 20 a day per reporter
+ * identity, the account's bucket shared with notes / diary reports.
+ */
+async function reportEvent(
+  env: Env, auth: GroupAuth, groupId: string, caller: Caller,
+  input: { seq: number; reason: string; excerpt: string | null },
+  call: (doPath: string, body: unknown) => Promise<Response>,
+): Promise<Response> {
+  const r = await call("/event/get", { caller, seq: input.seq });
+  if (!r.ok) return fromDo(r);
+  const { event, author, callerKind } = await r.json() as { event: { type: string }; author: ReportAuthor; callerKind: "account" | "anon" };
+  if (!REPORTABLE_TYPES.has(event.type)) return json({ error: "not_reportable" }, 400);
+  const asAccount = callerKind === "account" && auth.accountId !== null;
+  const quotaKey = asAccount ? `report-quota:${auth.accountId}:${dayKey()}` : `report-quota:dev:${await sha256Hex(auth.deviceId)}:${dayKey()}`;
+  if (!(await bumpQuota(env.V2_STORE, quotaKey, NOTE_LIMITS.reportsPerDay, 2 * 86400))) return json({ error: "rate_limited" }, 429);
+  const sh = !author ? null
+    : author.kind === "account" ? await senderHash(env.TOKEN_SECRET, author.accountId)
+    : await senderHash(env.TOKEN_SECRET, `anon:${author.deviceId}`);
+  const reportId = ulid();
+  try {
+    await env.ACCOUNTS_DB.prepare(
+      "INSERT INTO reports (id, reporter_account_id, reporter_device_id, sender_hash, inbox_item_id, diary_id, diary_seq, group_id, group_seq, reason, excerpt, created_at) VALUES (?1, ?2, ?3, ?4, NULL, NULL, NULL, ?5, ?6, ?7, ?8, ?9)",
+    ).bind(reportId, asAccount ? auth.accountId : null, asAccount ? null : auth.deviceId, sh, groupId, input.seq, input.reason, input.excerpt, Date.now()).run();
+  } catch (e) {
+    console.error("group report: D1 write failed", String(e));
+    return json({ error: "d1_error" }, 500);
+  }
+  return json({ id: reportId }, 201);
+}
+
 // ---- dispatcher -------------------------------------------------------------
 
 const MEMBER_ROUTES = new Set([
@@ -560,7 +607,8 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
 
   const m = path.match(/^\/v3\/groups\/([^/]+)(\/.*)?$/);
   const sub = m?.[2] ?? "";
-  if (!m || !MEMBER_ROUTES.has(`${request.method} ${sub}`)) return json({ error: "not_found" }, 404);
+  const reportMatch = request.method === "POST" ? sub.match(/^\/events\/(\d{1,15})\/report$/) : null;
+  if (!m || (!MEMBER_ROUTES.has(`${request.method} ${sub}`) && !reportMatch)) return json({ error: "not_found" }, 404);
   const groupId = m[1];
 
   // Bodies are read and validated before the existence check wakes nothing.
@@ -570,7 +618,18 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
   /** The validated fields of a content route's body (or query), passed on to the room. */
   let fields: Record<string, unknown> = {};
   let wraps: WrapIn[] = [];
-  if (route === "POST /events") {
+  let reportInput: { seq: number; reason: string; excerpt: string | null } | null = null;
+  if (reportMatch) {
+    const b = await readJsonBody(request, MAX_REPORT_BODY_BYTES);
+    if (b instanceof Response) return b.status === 413 ? b : json({ error: "invalid_report" }, 400);
+    if (typeof b.reason !== "string" || !REPORT_REASONS.has(b.reason)) return json({ error: "invalid_report" }, 400);
+    let excerpt: string | null = null;
+    if (b.excerpt !== undefined && b.excerpt !== null) {
+      if (typeof b.excerpt !== "string" || Array.from(b.excerpt).length > NOTE_LIMITS.excerptMaxChars) return json({ error: "invalid_report" }, 400);
+      excerpt = b.excerpt;
+    }
+    reportInput = { seq: Number(reportMatch[1]), reason: b.reason, excerpt };
+  } else if (route === "POST /events") {
     const b = await readJsonBody(request, MAX_EVENT_BODY_BYTES);
     if (b instanceof Response) return b;
     if (typeof b.eventId !== "string" || typeof b.epoch !== "number" || typeof b.payloadCipher !== "string") return json({ error: "missing_fields" }, 400);
@@ -627,6 +686,8 @@ export async function handleGroupRoute(request: Request, url: URL, path: string,
     }
     return r;
   };
+
+  if (reportInput) return reportEvent(env, auth, groupId, caller, reportInput, call);
 
   if (sub === "") {
     const r = await call("/view", { caller });
