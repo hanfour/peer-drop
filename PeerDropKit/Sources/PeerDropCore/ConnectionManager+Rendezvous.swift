@@ -112,6 +112,9 @@ extension ConnectionManager {
     /// `.active` scene phase (Mac `onAppear`) and for wake from sleep.
     public func startRendezvousIfForeground() {
         guard rendezvousAppIsForeground else { return }
+        // Project F2: the clock may have crossed a schedule boundary while
+        // asleep (Mac wake comes through here).
+        reevaluatePresence()
         rendezvousAppDidBecomeActive()
     }
 
@@ -153,7 +156,8 @@ extension ConnectionManager {
         let m = RendezvousManager.live(
             contacts: { [weak self] in self?.trustedContactStore.contacts ?? [] },
             direct: rendezvousBridge,
-            installer: rendezvousBridge)
+            installer: rendezvousBridge,
+            visible: { [weak self] c in self?.isFriendVisible(contact: c) ?? true })
         attachRendezvousManager(m)
         return m
         #else
@@ -197,14 +201,17 @@ extension ConnectionManager {
     /// The store's current copy of `contact`, if it may be auto-connected now:
     /// opted in and eligible (bound account, no pending claim, not blocked,
     /// unique key, device id), with the same key and device id the manager saw.
-    /// Eligibility includes a device id unique among contacts (I-3).
+    /// Eligibility includes a device id unique among contacts (I-3). Project
+    /// F2: the friend's category must also show us online right now (checked
+    /// live, so a schedule boundary racing a negotiation still refuses).
     private func currentRendezvousContact(id: UUID, key: Data?, deviceId: String?) -> TrustedContact? {
         let all = trustedContactStore.contacts
         guard let c = all.first(where: { $0.id == id }),
               c.identityPublicKey == key,
               c.deviceId == deviceId,
               c.isRendezvousEnabled,
-              TrustedContactStore.isRendezvousEligible(c, among: all) else { return nil }
+              TrustedContactStore.isRendezvousEligible(c, among: all),
+              isFriendVisible(contact: c) else { return nil }
         return c
     }
 

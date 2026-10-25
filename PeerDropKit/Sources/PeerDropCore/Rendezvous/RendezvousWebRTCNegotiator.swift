@@ -190,13 +190,15 @@ extension RendezvousManager {
         direct: DirectConnectionChecker,
         installer: RendezvousConnectionInstaller,
         baseURL: URL = WorkerURL.current(),
-        sessionTags: RendezvousSessionTagStore = .process
+        sessionTags: RendezvousSessionTagStore = .process,
+        visible: @escaping (TrustedContact) -> Bool = { _ in true }
     ) -> RendezvousManager {
         RendezvousManager(
             contacts: contacts, secrets: secrets, direct: direct, installer: installer,
             signaling: LiveRendezvousSignalingFactory(provider: secrets, baseURL: baseURL, sessionTags: sessionTags),
             negotiators: WebRTCRendezvousNegotiatorFactory(),
-            sessionTags: sessionTags)
+            sessionTags: sessionTags,
+            visible: visible)
     }
 }
 

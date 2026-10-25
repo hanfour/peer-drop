@@ -436,6 +436,13 @@ public final class ConnectionManager: ObservableObject {
     /// Friend categories (Project F1). Built from the legacy `groupStore.groups`
     /// so old DeviceGroups migrate once into categories.
     public let categoryStore: FriendCategoryStore
+    /// Project F2: the instant and calendar presence is judged at (seams for
+    /// tests; production follows the system clock and time zone).
+    var presenceClock: () -> Date = { Date() }
+    var presenceCalendar: Calendar = .autoupdatingCurrent
+    /// The single wake-up at the next schedule boundary
+    /// (`ConnectionManager+Presence.swift`).
+    var presenceTimer: Timer?
     public let clipboardSyncManager = ClipboardSyncManager()
     public let trustedContactStore = TrustedContactStore(
         storageKey: PeerDropPersistence.scopedKey("trusted-contacts"))
@@ -859,6 +866,18 @@ public final class ConnectionManager: ObservableObject {
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.rendezvousManager?.contactsDidChange() }
+            .store(in: &cancellables)
+        // Project F2: a category edit (presence, membership) or a clock / time
+        // zone change re-applies presence to live connections and the timer.
+        self.categoryStore.$categories
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reevaluatePresence() }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+            .merge(with: NotificationCenter.default.publisher(for: .NSSystemClockDidChange))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reevaluatePresence() }
             .store(in: &cancellables)
 
         // Wire clipboard sync: start monitoring and broadcast changes to all connected peers
@@ -1860,6 +1879,9 @@ public final class ConnectionManager: ObservableObject {
         connections[peerID] = peerConnection
     }
 
+    /// Test-only: whether a dial is in flight.
+    var _hasDialAttemptForTesting: Bool { dialAttempt != nil }
+
     /// Test-only: install `peerConnection` through the real `addConnection`
     /// (wires the receive loop), as a plain non-relay connection.
     public func _addConnectionForTesting(_ peerConnection: PeerConnection) {
@@ -2102,6 +2124,8 @@ public final class ConnectionManager: ObservableObject {
                 }
                 Task { await diaryStore.syncList() }
             }
+            // Project F2: a schedule boundary may have passed in the background.
+            reevaluatePresence()
             // Project E: rejoin the rendezvous rooms.
             rendezvousAppDidBecomeActive()
             // Restart discovery when returning to foreground
@@ -2132,6 +2156,9 @@ public final class ConnectionManager: ObservableObject {
             // Project E (iOS only): leave every room and close every
             // cross-network connection quietly.
             rendezvousAppDidEnterBackground()
+            // Project F2: iOS suspends; the timer is re-armed on `.active`.
+            // The Mac keeps enforcing schedules in the background.
+            if rendezvousClosesOnBackground { cancelPresenceTimer() }
             // Keep connection alive in background for active connection states
             switch state {
             case .connected, .transferring, .voiceCall:
@@ -2363,6 +2390,12 @@ public final class ConnectionManager: ObservableObject {
     // MARK: - Connection Request (Outgoing)
 
     public func requestConnection(to peer: DiscoveredPeer) {
+        // Project F2: their category shows us offline — don't reveal us by dialing.
+        guard isFriendVisible(aliases: [peer.id]) else {
+            statusToast = String(localized: "This friend's category shows you as offline")
+            return
+        }
+
         // #161 m-3: while the consent sheet is up, answer it first. Dialing now
         // would cancel the pending socket (it is `activeConnection`) and leave
         // `state` stuck at `.incomingRequest` next to a live PeerConnection.
@@ -2592,6 +2625,12 @@ public final class ConnectionManager: ObservableObject {
                 // `relay-*` ids are reserved for relay placeholders (#161 I-1).
                 guard !Self.isReservedPeerID(peerIdentity.id) else {
                     logger.warning("Incoming HELLO claims a reserved relay id; rejecting")
+                    connection.cancel()
+                    return
+                }
+                // Project F2: their category shows us offline — drop the socket
+                // without a reply (no consent, no TOFU, no toast).
+                guard isFriendVisible(identity: peerIdentity) else {
                     connection.cancel()
                     return
                 }
@@ -4089,6 +4128,10 @@ public final class ConnectionManager: ObservableObject {
                 peerIdentity = identity
             }
             if let identity = peerIdentity {
+                guard isFriendVisible(identity: identity) else {
+                    abandonDialToHiddenFriend(attempt)
+                    return
+                }
                 guard installInitiatorPeerConnection(identity: identity, attempt: attempt) else { return }
             }
 
@@ -4126,6 +4169,10 @@ public final class ConnectionManager: ObservableObject {
             guard let payload = message.payload,
                   let identity = try? JSONDecoder().decode(PeerIdentity.self, from: payload) else {
                 logger.warning("Initiator loop: undecodable HELLO; ignoring")
+                return
+            }
+            guard isFriendVisible(identity: identity) else {
+                abandonDialToHiddenFriend(attempt)
                 return
             }
             guard installInitiatorPeerConnection(identity: identity, attempt: attempt) else { return }
@@ -4210,6 +4257,30 @@ public final class ConnectionManager: ObservableObject {
     /// id or already in use — as a `connections` key or as the identity an
     /// existing connection is aliased to — so a dialed peer can never replace,
     /// shadow or re-point an existing connection (#161, I-1, M-2).
+    /// Project F2: the dialed peer turned out (legacy Bonjour id ≠ identity
+    /// id) to be a friend whose category hides us. Drop the socket quietly:
+    /// no toast, no failure recorded. The global state leaves `.requesting`
+    /// the way a quiet hang-up would (`.disconnected` → `.discovering`).
+    private func abandonDialToHiddenFriend(_ attempt: DialAttempt) {
+        let connection = attempt.connection
+        if dialAttempt === attempt { dialAttempt = nil }
+        connection.cancel()
+        if activeConnection === connection { activeConnection = nil }
+        if hasOtherConnections(than: connection) {
+            updateGlobalState()
+            return
+        }
+        cancelTimeouts()
+        // A legacy acceptor's identity-less accept already moved us to `.connected`.
+        switch state {
+        case .requesting, .connecting, .connected:
+            transition(to: .disconnected)
+            transition(to: .discovering)
+        default:
+            break
+        }
+    }
+
     private func installInitiatorPeerConnection(identity: PeerIdentity, attempt: DialAttempt) -> Bool {
         let connection = attempt.connection
         if let existing = connections[identity.id], existing.nwConnection === connection {
@@ -5370,12 +5441,7 @@ extension ConnectionManager {
     /// Same decision for a peer identity (e.g. an incoming connection request
     /// that has no `PeerConnection` yet).
     func shouldPresentNotification(forIdentity identity: PeerIdentity, extraIDs: [String] = []) -> Bool {
-        var ids = [identity.id] + extraIDs
-        if let key = identity.identityPublicKey,
-           let deviceID = trustedContactStore.find(byPublicKey: key)?.deviceId {
-            ids.append(deviceID)
-        }
-        return shouldPresentNotification(forPeer: ids)
+        shouldPresentNotification(forPeer: friendAliasIDs(forIdentity: identity, extraIDs: extraIDs))
     }
 
     /// Every id the friend behind `ids` may be stored under, as a closure over:
