@@ -5,7 +5,8 @@ import PeerDropCore
 /// A category's page (pushed from Home on both platforms): name (rename), notifications switch,
 /// "Connect All", the member list (tap opens the chat, swipe/menu removes from the category),
 /// "Add friends", and delete (members go back to the uncategorized Friends section).
-/// Presence / schedule / status message are F2 and deliberately not shown.
+/// Project F2: what friends in this category see (online / offline / scheduled) and the status message
+/// live in `CategoryStatusSection`; while the category hides us, "Connect All" is disabled.
 struct CategoryDetailView: View, PaperThemed {
     @EnvironmentObject var connectionManager: ConnectionManager
     @ObservedObject var store: FriendCategoryStore
@@ -22,6 +23,8 @@ struct CategoryDetailView: View, PaperThemed {
     @State private var isConnecting = false
     /// Bumped whenever the device records change (e.g. a member was forgotten), so the member list re-renders.
     @State private var recordsVersion = 0
+    /// Re-evaluated every 30 s so a schedule boundary updates "Connect All" and the status section.
+    @State private var now = Date()
 
     private var category: FriendCategory? { store.categories.first { $0.id == categoryID } }
 
@@ -60,10 +63,12 @@ struct CategoryDetailView: View, PaperThemed {
         .paperMode(.live)
         .onChange(of: category == nil) { gone in if gone { dismiss() } }
         .onReceive(connectionManager.deviceStore.$records.dropFirst()) { _ in recordsVersion &+= 1 }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
     private func content(_ category: FriendCategory, members: [Member]) -> some View {
-        List {
+        let hiddenNow = category.isHiddenNow(at: now)
+        return List {
             Section {
                 if renaming {
                     InlineCategoryNameField(initial: category.name, onCommit: { name in
@@ -101,6 +106,8 @@ struct CategoryDetailView: View, PaperThemed {
             }
             .listRowBackground(paper(.incomingBubble))
 
+            CategoryStatusSection(store: store, category: category, hiddenNow: hiddenNow)
+
             Section {
                 let notOnline = members.filter { $0.presence != .online }.map(\.record.id)
                 Button { connectAll(category, ids: notOnline) } label: {
@@ -113,7 +120,7 @@ struct CategoryDetailView: View, PaperThemed {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(notOnline.isEmpty || isConnecting)
+                .disabled(notOnline.isEmpty || isConnecting || hiddenNow)
                 .accessibilityIdentifier("category-connect-all")
 
                 ForEach(members, id: \.record.id) { member in memberRow(member) }
@@ -128,7 +135,10 @@ struct CategoryDetailView: View, PaperThemed {
             } header: {
                 Text("Members")
             } footer: {
-                if members.isEmpty { Text("No friends in this category yet.") }
+                VStack(alignment: .leading, spacing: 4) {
+                    if hiddenNow { Text("This friend's category shows you as offline") }
+                    if members.isEmpty { Text("No friends in this category yet.") }
+                }
             }
             .listRowBackground(paper(.incomingBubble))
 

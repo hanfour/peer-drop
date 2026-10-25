@@ -579,7 +579,8 @@ struct HomeTab: View, PaperThemed {
     private func categoryRow(_ row: HomeListLogic.CategorySection) -> some View {
         #if os(iOS)
         NavigationLink(value: CategoryRoute(id: row.id)) {
-            CategoryRow(name: row.category.name, count: row.count, notificationsEnabled: row.category.notificationsEnabled)
+            CategoryRow(name: row.category.name, count: row.count, notificationsEnabled: row.category.notificationsEnabled,
+                        presence: row.category.presence, hiddenNow: row.category.isHiddenNow())
         }
         .accessibilityIdentifier("category-row")
         .listRowBackground(rowBackground)
@@ -590,7 +591,7 @@ struct HomeTab: View, PaperThemed {
             showCategory = true
         } label: {
             CategoryRow(name: row.category.name, count: row.count, notificationsEnabled: row.category.notificationsEnabled,
-                        showsChevron: true)
+                        presence: row.category.presence, hiddenNow: row.category.isHiddenNow(), showsChevron: true)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("category-row")

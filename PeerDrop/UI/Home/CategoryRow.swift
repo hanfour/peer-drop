@@ -7,12 +7,17 @@ struct CategoryRoute: Hashable {
 }
 
 /// One row of Home's 分類 section: folder glyph, name, member count, a bell-slash when the
-/// category's notifications are off, and a chevron (the NavigationLink draws it on iOS).
+/// category's notifications are off, a presence glyph (Project F2: eye-slash = shown as offline,
+/// moon = inside its offline schedule now, clock = scheduled but online now), and a chevron
+/// (the NavigationLink draws it on iOS).
 struct CategoryRow: View, PaperThemed {
     @Environment(\.paperMode) var paperMode
     let name: String
     let count: Int
     let notificationsEnabled: Bool
+    var presence: CategoryPresence = .online
+    /// Whether the category hides us right now (`.offline`, or inside its schedule window).
+    var hiddenNow: Bool = false
     /// The Mac row is a plain button, so it draws its own chevron.
     var showsChevron = false
 
@@ -40,6 +45,12 @@ struct CategoryRow: View, PaperThemed {
                         .font(.footnote)
                         .foregroundStyle(paper(.datePillText))
                 }
+                if let glyph = CategoryRowAccessibility.presenceGlyph(presence: presence, hiddenNow: hiddenNow) {
+                    Image(systemName: glyph)
+                        .font(.footnote)
+                        .foregroundStyle(paper(.datePillText))
+                        .accessibilityIdentifier("category-row-presence")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if showsChevron {
@@ -52,15 +63,32 @@ struct CategoryRow: View, PaperThemed {
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: CategoryRowAccessibility.label(name: name, count: count,
-                                                                          notificationsEnabled: notificationsEnabled)))
+                                                                          notificationsEnabled: notificationsEnabled,
+                                                                          presence: presence, hiddenNow: hiddenNow)))
         .accessibilityAddTraits(.isButton)
     }
 }
 
 enum CategoryRowAccessibility {
-    static func label(name: String, count: Int, notificationsEnabled: Bool) -> String {
+    static func label(name: String, count: Int, notificationsEnabled: Bool,
+                      presence: CategoryPresence = .online, hiddenNow: Bool = false) -> String {
         var parts = [name, String(localized: "\(count) friends")]
         if !notificationsEnabled { parts.append(String(localized: "Notifications off")) }
+        switch presence {
+        case .online: break
+        case .offline: parts.append(String(localized: "Shown as offline"))
+        case .scheduled:
+            parts.append(hiddenNow ? String(localized: "Offline now (scheduled)") : String(localized: "Offline on a schedule"))
+        }
         return parts.joined(separator: ", ")
+    }
+
+    /// SF Symbol for the row's presence state; nil when the category shows us online.
+    static func presenceGlyph(presence: CategoryPresence, hiddenNow: Bool) -> String? {
+        switch presence {
+        case .online: return nil
+        case .offline: return "eye.slash"
+        case .scheduled: return hiddenNow ? "moon.zzz" : "clock"
+        }
     }
 }
