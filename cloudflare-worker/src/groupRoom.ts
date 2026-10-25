@@ -10,7 +10,7 @@
 //   eid:<eventId>                 → seq        (idempotency: POST /events resend)
 //   key:<epoch padded 10>:<memberId> → WrapRecord (room key wrapped to a member)
 //   ban:<sha256hex>               → 1          (kicked identity; Ruling 13)
-//   tkt:<sha256hex(ticket)>       → WebSocket ticket (later task)
+//   tkt:<sha256hex(ticket)>       → { memberId, exp }  (single-use WS ticket)
 //   push:<memberId>               → push throttle stamp (later task)
 //
 // D1 (group_members / group_invites) is only an index — the live membership
@@ -27,8 +27,31 @@
 // I/O) opens the DO's input gate, so another request could run and commit
 // in between — a handler holding an earlier `meta` snapshot would then
 // overwrite it (lost joins, seq going backwards, the 50-member cap broken).
+//
+// Retention: at most the newest 5,000 events (trimmed on every append) and
+// nothing older than 90 days (trimmed by the alarm). `firstSeq` is the oldest
+// seq still stored; a client whose `since` is below `firstSeq - 1` has a gap.
+//
+// WEBSOCKET (downstream only — posts go over HTTP, Ruling 1). Sockets are
+// accepted with the hibernation API, tagged with the memberId so a removed or
+// replaced member's sockets can be found and closed. Frames sent to clients
+// are only `{"t":"ev","e":<GroupEvent>}`; frames from clients are never
+// parsed or logged, they only refresh the socket's last-heard time.
+//
+// CLIENT CONTRACT (binding for G1b):
+//   - Get a ticket (POST /v3/groups/:id/ws-ticket, 60 s, single use), then
+//     GET /v3/groups/:id/ws?ticket=… with Upgrade: websocket.
+//   - Send the TEXT frame exactly "ping" every 30 s (auto-answered "pong",
+//     works while the DO hibernates). Protocol-level pings don't count; a
+//     socket silent for > 90 s is treated as not connected.
+//   - A socket lives at most 2 h. Close codes:
+//       4000 replaced — this member opened a third socket; the oldest goes.
+//       4001 expired  — 2 h hard cap reached: fetch a new ticket, reconnect,
+//                       catch up with GET events since your last seq.
+//       4003 removed  — you are no longer a member (left / kicked / taken
+//                       over by your own newer device): stop reconnecting.
 import { generateAccountId } from "./account";
-import { decodedByteLength, isValidGroupId, isValidMemberId, sha256Hex } from "./groupSig";
+import { decodedByteLength, isValidEventId, isValidGroupId, isValidMemberId, sha256Hex } from "./groupSig";
 
 export type GroupMemberKind = "account" | "anon";
 export type JoinPolicy = "accountOnly" | "anonymousAllowed";
@@ -135,15 +158,75 @@ const sameIdentity = (a: GroupMember, b: GroupMember): boolean =>
 /** A member as any other member may see it: never the deviceId. */
 const stripDevice = ({ deviceId: _d, ...rest }: GroupMember): GroupMember => rest;
 
-const KNOWN_PATHS = new Set(["/init", "/view", "/join", "/close", "/invite/reset"]);
+const KNOWN_PATHS = new Set(["/init", "/view", "/join", "/close", "/invite/reset", "/events/list", "/events/msg", "/ws-ticket"]);
+
+const WS_OPEN = 1;
+const ALARM_PRUNE_BATCH = 1000;
+const ALARM_RETRY_MS = 60_000;
+/** Storage get/put/delete take at most 128 keys per call. */
+const STORAGE_BATCH = 128;
+const TICKET_RE = /^[A-Za-z0-9_-]{43}$/;
+
+/** Hibernation-safe per-socket bookkeeping. */
+interface SocketAtt { memberId: string; connectedAt: number; last: number }
+interface TicketRecord { memberId: string; exp: number }
+
+function chunks<T>(xs: T[], n = STORAGE_BATCH): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+}
+
+function b64url(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+const isNonNegInt = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+interface ListRequest { caller: Caller; since: number; limit: number }
+function parseList(b: Record<string, unknown>): ListRequest {
+  const caller = parseCaller(b.caller);
+  if (b.since !== undefined && !isNonNegInt(b.since)) throw new BadRequest();
+  if (b.limit !== undefined && (typeof b.limit !== "number" || !Number.isSafeInteger(b.limit))) throw new BadRequest();
+  const limit = Math.min(Math.max((b.limit as number | undefined) ?? GROUP_LIMITS.eventsDefaultLimit, 1), GROUP_LIMITS.eventsMaxLimit);
+  return { caller, since: (b.since as number | undefined) ?? 0, limit };
+}
+
+/**
+ * A parsed /events/msg body. Format problems are recorded rather than thrown
+ * so they can be reported in the documented order (membership first) once
+ * meta has been read — the parsing itself still happens before getMeta.
+ */
+interface MsgRequest { caller: Caller; eventId: string; epoch: number; payloadCipher: string; eventIdOk: boolean; payload: "ok" | "bad" | "too_large" }
+function parseMsg(b: Record<string, unknown>): MsgRequest {
+  const caller = parseCaller(b.caller);
+  if (typeof b.eventId !== "string" || b.eventId.length > 64) throw new BadRequest();
+  if (!isNonNegInt(b.epoch)) throw new BadRequest();
+  const len = typeof b.payloadCipher === "string" && b.payloadCipher.length > 0 ? decodedByteLength(b.payloadCipher) : null;
+  const payload = len === null || len === 0 ? "bad" : len > GROUP_LIMITS.maxPayloadBytes ? "too_large" : "ok";
+  return {
+    caller, eventId: b.eventId, epoch: b.epoch, payloadCipher: payload === "ok" ? b.payloadCipher as string : "",
+    eventIdOk: isValidEventId(b.eventId), payload,
+  };
+}
 
 export class GroupRoom {
   ctx: DurableObjectState;
   /** Clock seam for tests. */
   now: () => number = () => Date.now();
 
+  /**
+   * Per-member post timestamps for the 30-a-minute limit. In memory only:
+   * it resets when the DO is evicted, which is an acceptable leak for a
+   * flood guard (the Worker's IP bucket still applies).
+   */
+  private postTimes = new Map<string, number[]>();
+
   constructor(ctx: DurableObjectState, _env: unknown) {
     this.ctx = ctx;
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
   private json(data: unknown, status = 200): Response {
@@ -175,15 +258,18 @@ export class GroupRoom {
 
   /**
    * Assigns the next seq(s) to `events` and commits them together with
-   * `meta` and `extraWrites` in one storage.put (atomic). Client-posted
+   * `meta`, `extraWrites` and `extraDeletes` atomically. Client-posted
    * events also get their `eid:` idempotency entry; "srv:" ids are reserved
    * for server-written events and can never be replayed by a client.
-   * (Pruning to maxEvents and WebSocket broadcast hook in here later.)
+   * Keeps at most GROUP_LIMITS.maxEvents: the oldest overflow (with its
+   * `eid:`) is deleted in the same commit and `firstSeq` moves up. Then
+   * fans the new events out to connected sockets.
    */
   async appendEvent(
     meta: GroupMeta,
     events: Omit<GroupEvent, "seq"> | Omit<GroupEvent, "seq">[],
     extraWrites: Record<string, unknown> = {},
+    extraDeletes: string[] = [],
   ): Promise<GroupEvent[]> {
     const out: GroupEvent[] = [];
     const writes: Record<string, unknown> = { ...extraWrites };
@@ -194,8 +280,26 @@ export class GroupRoom {
       if (!full.eventId.startsWith("srv:")) writes[`eid:${full.eventId}`] = full.seq;
       out.push(full);
     }
+    const deletes = [...extraDeletes];
+    const overflow = meta.seq - meta.firstSeq + 1 - GROUP_LIMITS.maxEvents;
+    if (overflow > 0) {
+      const oldKeys: string[] = [];
+      for (let s = meta.firstSeq; s < meta.firstSeq + overflow; s++) if (!(evKey(s) in writes)) oldKeys.push(evKey(s));
+      // A storage read (the input gate stays shut); every write below is
+      // issued after it with no await in between, so they commit as one.
+      for (const part of chunks(oldKeys)) {
+        for (const [k, ev] of await this.ctx.storage.get<GroupEvent>(part)) {
+          if (!ev.eventId.startsWith("srv:")) deletes.push(`eid:${ev.eventId}`);
+          deletes.push(k);
+        }
+      }
+      meta.firstSeq += overflow;
+    }
     writes.meta = meta;
-    await this.ctx.storage.put(writes);
+    const ops: Promise<unknown>[] = chunks(deletes).map((d) => this.ctx.storage.delete(d));
+    for (const part of chunks(Object.entries(writes))) ops.push(this.ctx.storage.put(Object.fromEntries(part)));
+    await Promise.all(ops);
+    for (const ev of out) this.broadcast(ev);
     return out;
   }
 
@@ -206,7 +310,9 @@ export class GroupRoom {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (request.method === "GET" && path === "/ws") return await this.upgrade(request, url);
     if (request.method !== "POST" || !KNOWN_PATHS.has(path)) return this.json({ error: "not_found" }, 404);
     try {
       // 1. Body first (this await opens the input gate — see file header).
@@ -225,6 +331,27 @@ export class GroupRoom {
         const meta = await this.getMeta();
         if (!meta) return this.json({ error: "not_found" }, 404);
         return await this.join(meta, req);
+      }
+      if (path === "/events/list") {
+        const req = parseList(body);
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.listEvents(meta, req);
+      }
+      if (path === "/events/msg") {
+        const req = parseMsg(body);
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.postMsg(meta, req);
+      }
+      if (path === "/ws-ticket") {
+        const caller = parseCaller(body.caller);
+        // Ticket and its hash are made before meta (crypto is non-storage I/O).
+        const ticket = b64url(crypto.getRandomValues(new Uint8Array(32)));
+        const hash = await sha256Hex(ticket);
+        const meta = await this.getMeta();
+        if (!meta) return this.json({ error: "not_found" }, 404);
+        return await this.issueTicket(meta, caller, ticket, hash);
       }
       const caller = parseCaller(body.caller);
       const meta = await this.getMeta();
@@ -352,13 +479,11 @@ export class GroupRoom {
       ];
       if (wasOwner) events[1].ownerMemberId = member.memberId;
       const stale = [...await this.keyKeysOf(prior.memberId), `push:${prior.memberId}`];
-      // No await between the delete and appendEvent's put: the DO coalesces
-      // both into one atomic write.
-      const del = this.ctx.storage.delete(stale);
-      await Promise.all([del, this.appendEvent(meta, events)]);
-      for (const ws of this.ctx.getWebSockets(prior.memberId)) {
-        try { ws.close(4001, "replaced"); } catch { /* already closing */ }
-      }
+      // appendEvent commits these deletes with the events and meta in one go.
+      await this.appendEvent(meta, events, {}, stale);
+      // The old memberId is gone for good (its tickets die with it: upgrade
+      // checks membership), so its sockets get "removed", not "replaced".
+      this.closeMember(prior.memberId);
       return this.json({ added: true, replaced: true }, 201);
     }
 
@@ -390,11 +515,211 @@ export class GroupRoom {
     return this.json({ inviteCode: meta.inviteCode, previousCode });
   }
 
-  // ---- daily maintenance -----------------------------------------------------
-  // Retention pruning (90 days), expired tickets and orphaned old-epoch wraps
-  // are added in a later task; for now this just keeps the daily cadence.
+  // ---- events ---------------------------------------------------------------
+  private async listEvents(meta: GroupMeta, req: ListRequest): Promise<Response> {
+    const me = this.authorize(meta, req.caller);
+    if (me instanceof Response) return me;
+    const from = Math.max(req.since, meta.firstSeq - 1);
+    const results = await this.ctx.storage.list<GroupEvent>({ prefix: "ev:", startAfter: evKey(from), limit: req.limit + 1 });
+    const all = [...results.values()];
+    const page = all.slice(0, req.limit);
+    const out: { events: GroupEvent[]; firstSeq: number; nextSince?: number } = { events: page, firstSeq: meta.firstSeq };
+    if (all.length > req.limit && page.length) out.nextSince = page[page.length - 1].seq;
+    return this.json(out);
+  }
+
+  private async postMsg(meta: GroupMeta, req: MsgRequest): Promise<Response> {
+    const me = this.authorize(meta, req.caller);
+    if (me instanceof Response) return me;
+    if (meta.state !== "open") return this.json({ error: "group_closed" }, 403);
+    if (!req.eventIdOk) return this.json({ error: "bad_event_id" }, 400);
+
+    // Exact-eventId replay: the original result, no re-validation, no fan-out.
+    const existingSeq = await this.ctx.storage.get<number>(`eid:${req.eventId}`);
+    if (existingSeq !== undefined) {
+      const event = await this.ctx.storage.get<GroupEvent>(evKey(existingSeq));
+      // Another member's id: don't hand them a "success" for someone else's post.
+      if (event && event.authorMemberId !== me.memberId) return this.json({ error: "event_id_taken" }, 409);
+      return this.json({ seq: existingSeq, event, recipients: [] }, 200);
+    }
+
+    if (req.epoch !== meta.epoch) return this.json({ error: "stale_epoch", epoch: meta.epoch }, 409);
+    if (await this.ctx.storage.get(keyKey(meta.epoch, me.memberId)) === undefined) return this.json({ error: "awaiting_key" }, 403);
+    if (req.payload === "bad") return this.json({ error: "bad_payload" }, 400);
+    if (req.payload === "too_large") return this.json({ error: "too_large" }, 413);
+
+    // Rate check and the slot it takes happen together, synchronously, so a
+    // parallel burst can't all pass before any is counted.
+    const now = this.now();
+    const recent = (this.postTimes.get(me.memberId) ?? []).filter((t) => now - t < 60_000);
+    if (recent.length >= GROUP_LIMITS.msgsPerMinutePerMember) {
+      this.postTimes.set(me.memberId, recent);
+      return this.json({ error: "rate_limited" }, 429);
+    }
+    recent.push(now);
+    this.postTimes.set(me.memberId, recent);
+
+    const [event] = await this.appendEvent(meta, {
+      eventId: req.eventId, type: "msg", authorMemberId: me.memberId, epoch: meta.epoch, payloadCipher: req.payloadCipher, createdAt: now,
+    });
+    // Push recipients are filled in by a later task.
+    const recipients: PushRecipient[] = [];
+    return this.json({ seq: event.seq, event, recipients }, 201);
+  }
+
+  // ---- websocket ---------------------------------------------------------------
+  private async issueTicket(meta: GroupMeta, caller: Caller, ticket: string, hash: string): Promise<Response> {
+    const me = this.authorize(meta, caller);
+    if (me instanceof Response) return me;
+    const expiresAt = this.now() + GROUP_LIMITS.ticketTtlMs;
+    const rec: TicketRecord = { memberId: me.memberId, exp: expiresAt };
+    await this.ctx.storage.put(`tkt:${hash}`, rec);
+    return this.json({ ticket, expiresAt });
+  }
+
+  /** GET /ws?ticket= — consumes the ticket and accepts a hibernating socket. */
+  private async upgrade(request: Request, url: URL): Promise<Response> {
+    if (request.headers.get("Upgrade") !== "websocket") return this.json({ error: "bad_request" }, 400);
+    const ticket = url.searchParams.get("ticket") ?? "";
+    const hash = TICKET_RE.test(ticket) ? await sha256Hex(ticket) : null;
+    const meta = await this.getMeta();
+    if (!meta) return this.json({ error: "not_found" }, 404);
+    const denied = () => this.json({ error: "denied" }, 403);
+    if (!hash) return denied();
+    const key = `tkt:${hash}`;
+    const rec = await this.ctx.storage.get<TicketRecord>(key);
+    if (!rec) return denied();
+    await this.ctx.storage.delete(key); // single use, even when it fails below
+    const now = this.now();
+    if (rec.exp < now || !meta.members.some((m) => m.memberId === rec.memberId)) return denied();
+
+    // At most socketsPerMember per member: the oldest makes room.
+    const mine = this.openSockets(rec.memberId);
+    if (mine.length >= GROUP_LIMITS.socketsPerMember) {
+      const oldest = mine.reduce((a, b) => (this.att(b).connectedAt < this.att(a).connectedAt ? b : a));
+      try { oldest.close(4000, "replaced"); } catch { /* already closing */ }
+    }
+
+    const [client, server] = Object.values(new WebSocketPair());
+    this.ctx.acceptWebSocket(server, [rec.memberId]);
+    const att: SocketAtt = { memberId: rec.memberId, connectedAt: now, last: now };
+    server.serializeAttachment(att);
+    // The alarm doubles as the 2 h reaper, so make sure it fires by then.
+    const cap = now + GROUP_LIMITS.hardCapMs;
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > cap) await this.ctx.storage.setAlarm(cap);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  private att(ws: WebSocket): SocketAtt {
+    try {
+      const a = ws.deserializeAttachment() as SocketAtt | null;
+      if (a && typeof a.connectedAt === "number") return a;
+    } catch { /* closed */ }
+    return { memberId: "", connectedAt: 0, last: 0 };
+  }
+
+  /** Sockets that are actually open (CLOSING ones don't count). */
+  private openSockets(memberId?: string): WebSocket[] {
+    return this.ctx.getWebSockets(memberId).filter((s) => s.readyState === WS_OPEN);
+  }
+
+  private expired(ws: WebSocket, now: number): boolean {
+    return now - this.att(ws).connectedAt > GROUP_LIMITS.hardCapMs;
+  }
+
+  /** Closes every socket past the 2 h cap; returns the ones still alive. */
+  private reapExpired(now: number): WebSocket[] {
+    const alive: WebSocket[] = [];
+    for (const ws of this.openSockets()) {
+      if (this.expired(ws, now)) {
+        try { ws.close(4001, "expired"); } catch { /* already closing */ }
+      } else {
+        alive.push(ws);
+      }
+    }
+    return alive;
+  }
+
+  /** Closes a removed member's sockets (tagged with its memberId). */
+  closeMember(memberId: string): void {
+    for (const ws of this.ctx.getWebSockets(memberId)) {
+      try { ws.close(4003, "removed"); } catch { /* already closing */ }
+    }
+  }
+
+  /** Sends `ev` to every live socket; ones past 2 h are closed instead. */
+  broadcast(ev: GroupEvent): void {
+    const frame = JSON.stringify({ t: "ev", e: ev });
+    for (const ws of this.reapExpired(this.now())) {
+      try { ws.send(frame); } catch { /* socket gone */ }
+    }
+  }
+
+  /** An open socket, within its 2 h, heard from (frame or ping) in the last 90 s. */
+  isConnected(memberId: string): boolean {
+    const now = this.now();
+    return this.openSockets(memberId).some((ws) => {
+      if (this.expired(ws, now)) return false;
+      const a = this.att(ws);
+      const auto = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
+      return now - Math.max(a.last, auto, a.connectedAt) <= GROUP_LIMITS.staleMs;
+    });
+  }
+
+  // Frames from clients are never parsed or logged — only "heard from now".
+  async webSocketMessage(ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {
+    try { ws.serializeAttachment({ ...this.att(ws), last: this.now() }); } catch { /* closing */ }
+  }
+
+  async webSocketClose(ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {
+    try { ws.close(1000, ""); } catch { /* already closed */ }
+  }
+
+  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    try { ws.close(1011, ""); } catch { /* already closed */ }
+  }
+
+  // ---- maintenance alarm -------------------------------------------------------
+  /**
+   * Daily (and at each socket's 2 h mark): drops events older than 90 days
+   * (≤ 1,000 a run, retrying in a minute while more remain), expired
+   * tickets, sockets past 2 h, and wraps of epochs that no retained event
+   * uses and that aren't current.
+   */
   async alarm(): Promise<void> {
-    if (!(await this.getMeta())) return;
-    await this.ctx.storage.setAlarm(this.now() + DAY_MS);
+    const meta = await this.getMeta();
+    if (!meta) return;
+    const now = this.now();
+    const cutoff = now - GROUP_LIMITS.retentionMs;
+
+    const scan = await this.ctx.storage.list<GroupEvent>({ prefix: "ev:", startAfter: evKey(meta.firstSeq - 1), limit: ALARM_PRUNE_BATCH + 1 });
+    const deletes: string[] = [];
+    let pruned = 0;
+    let oldestKept: GroupEvent | undefined;
+    for (const [k, ev] of scan) {
+      if (pruned >= ALARM_PRUNE_BATCH || ev.createdAt >= cutoff) { oldestKept = ev; break; }
+      deletes.push(k);
+      if (!ev.eventId.startsWith("srv:")) deletes.push(`eid:${ev.eventId}`);
+      meta.firstSeq = ev.seq + 1;
+      pruned++;
+    }
+    const more = pruned >= ALARM_PRUNE_BATCH && oldestKept !== undefined && oldestKept.createdAt < cutoff;
+
+    for (const [k, t] of await this.ctx.storage.list<TicketRecord>({ prefix: "tkt:" })) {
+      if (t.exp < now) deletes.push(k);
+    }
+    const keepFrom = Math.min(oldestKept?.epoch ?? meta.epoch, meta.epoch);
+    for (const k of (await this.ctx.storage.list({ prefix: "key:" })).keys()) {
+      if (Number(k.slice(4, 14)) < keepFrom) deletes.push(k);
+    }
+
+    const ops: Promise<unknown>[] = chunks(deletes).map((d) => this.ctx.storage.delete(d));
+    if (pruned > 0) ops.push(this.ctx.storage.put("meta", meta));
+    await Promise.all(ops);
+
+    let next = more ? now + ALARM_RETRY_MS : now + DAY_MS;
+    for (const ws of this.reapExpired(now)) next = Math.min(next, this.att(ws).connectedAt + GROUP_LIMITS.hardCapMs);
+    await this.ctx.storage.setAlarm(next);
   }
 }
