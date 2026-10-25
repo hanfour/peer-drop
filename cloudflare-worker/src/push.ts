@@ -25,6 +25,42 @@ export interface PushPayload {
   data: Record<string, unknown>;
 }
 
+/**
+ * One push to one device: reads `V2_STORE device:<deviceId>`
+ * (`{pushToken, platform}`) and sends `payload` to that token, with the
+ * record's platform (else `fallbackPlatform`) choosing the APNs topic.
+ * Returns whether a send was attempted (true even when the send itself
+ * failed). Never throws, and never logs the deviceId or the token.
+ */
+export async function pushToDevice(env: Env, deviceId: string, fallbackPlatform: string | null, payload: PushPayload, deps: PushDeps): Promise<boolean> {
+  if (!env.APNS_KEY_P8) return false;
+  let info: { pushToken?: string; platform?: string };
+  try {
+    const raw = await env.V2_STORE.get(`device:${deviceId}`);
+    if (!raw) return false;
+    info = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!info || typeof info.pushToken !== "string" || !info.pushToken) return false;
+  const topic = deps.topicFor(info.platform ?? fallbackPlatform ?? "ios");
+  try {
+    await deps.send(
+      info.pushToken,
+      payload.silent
+        ? { contentAvailable: true, customData: payload.data }
+        : { alert: payload.alert, sound: payload.sound, customData: payload.data },
+      { keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, p8Key: env.APNS_KEY_P8, bundleId: env.APNS_BUNDLE_ID },
+      payload.silent
+        ? { topicOverride: topic, pushType: "background", priority: 5 }
+        : { topicOverride: topic },
+    );
+  } catch (e) {
+    console.error("push failed", String(e));
+  }
+  return true;
+}
+
 /** APNs fan-out to every device bound to `accountId`. Never throws. */
 export async function fanOutPush(env: Env, accountId: string, payload: PushPayload, deps: PushDeps): Promise<{ attempted: number }> {
   if (!env.APNS_KEY_P8) return { attempted: 0 };
@@ -32,26 +68,7 @@ export async function fanOutPush(env: Env, accountId: string, payload: PushPaylo
   try {
     const devices = (await env.ACCOUNTS_DB.prepare("SELECT device_id, platform FROM account_devices WHERE account_id = ?1").bind(accountId).all<{ device_id: string; platform: string }>()).results;
     for (const d of devices) {
-      const raw = await env.V2_STORE.get(`device:${d.device_id}`);
-      if (!raw) continue;
-      let info: { pushToken?: string; platform?: string };
-      try { info = JSON.parse(raw); } catch { continue; }
-      if (!info.pushToken) continue;
-      attempted++;
-      try {
-        await deps.send(
-          info.pushToken,
-          payload.silent
-            ? { contentAvailable: true, customData: payload.data }
-            : { alert: payload.alert, sound: payload.sound, customData: payload.data },
-          { keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, p8Key: env.APNS_KEY_P8, bundleId: env.APNS_BUNDLE_ID },
-          payload.silent
-            ? { topicOverride: deps.topicFor(info.platform ?? d.platform), pushType: "background", priority: 5 }
-            : { topicOverride: deps.topicFor(info.platform ?? d.platform) },
-        );
-      } catch (e) {
-        console.error("push failed", d.device_id, String(e));
-      }
+      if (await pushToDevice(env, d.device_id, d.platform, payload, deps)) attempted++;
     }
   } catch (e) {
     console.error("push fan-out failed", String(e));

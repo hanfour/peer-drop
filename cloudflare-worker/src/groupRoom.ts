@@ -11,12 +11,26 @@
 //   key:<epoch padded 10>:<memberId> → WrapRecord (room key wrapped to a member)
 //   ban:<sha256hex>               → 1          (kicked identity; Ruling 13)
 //   tkt:<sha256hex(ticket)>       → { memberId, exp }  (single-use WS ticket)
-//   push:<memberId>               → push throttle stamp (later task)
+//   push:acct:<accountId>         → ms of the last msg push to that account
+//   push:dev:<sha256hex(deviceId)> → same, for an anonymous member's device
+//                                    (throttle keys follow the recipient
+//                                    IDENTITY, so a Ruling-12 device move
+//                                    doesn't reset them; dropped on leave/kick)
 //
 // D1 (group_members / group_invites) is only an index — the live membership
 // set, invite code and key epochs live here. An anonymous member's deviceId
 // exists ONLY in this DO's `meta` and never leaves it in any response; an
 // account member has no deviceId here at all (Ruling 14).
+//
+// PUSH (Ruling 14): the DO only names recipients, the route sends. A 201
+// /events/msg returns `recipients` — every member except the author that has
+// no live socket (for an account member: none of its sockets is live) and
+// wasn't pushed in the last 60 s — as {kind:"account", accountId} (the route
+// fans out to all of the account's devices from D1/KV at send time) or
+// {kind:"device", deviceId} (anonymous: its one stored device). A replay
+// (200) always answers `recipients: []`. /request-key names the keyed
+// account members other than the caller, unthrottled (the route caps it).
+// No device list or push token is ever stored here.
 //
 // `caller` (from the route) must carry EVERY identity it authenticated:
 // accountId whenever the device is signed in — also when it acts as an
@@ -57,19 +71,32 @@
 //                       over by your own newer device): stop reconnecting.
 import { generateAccountId } from "./account";
 import { decodedByteLength, isValidEventId, isValidGroupId, isValidMemberId, sha256Hex } from "./groupSig";
+import type { PushPayload } from "./push";
 
 export type GroupMemberKind = "account" | "anon";
 export type JoinPolicy = "accountOnly" | "anonymousAllowed";
 // account 成員：有 accountId、沒有 deviceId；anon 成員：有 deviceId、沒有 accountId（Ruling 14）
-export interface GroupMember { memberId: string; kind: GroupMemberKind; accountId?: string; deviceId?: string; joinedAt: number; joinedEpoch: number; pubKey: string; pubKeySig?: string }
+// `devHash` (anon only) = sha256hex(deviceId), the push-throttle key; never sent to clients.
+export interface GroupMember { memberId: string; kind: GroupMemberKind; accountId?: string; deviceId?: string; devHash?: string; joinedAt: number; joinedEpoch: number; pubKey: string; pubKeySig?: string }
 export type PushRecipient = { kind: "account"; accountId: string } | { kind: "device"; deviceId: string };
 export interface GroupMeta { groupId: string; ownerMemberId: string | null; members: GroupMember[]; joinPolicy: JoinPolicy; discoverability: "private"; state: "open" | "closed"; epoch: number; seq: number; firstSeq: number; inviteCode: string; metaVersion: number; rotationDue: boolean; createdAt: number }
 export type GroupEventType = "msg" | "join" | "leave" | "kick" | "meta";
-export interface GroupEvent { seq: number; eventId: string; type: GroupEventType; authorMemberId: string; epoch: number; payloadCipher?: string; targetMemberId?: string; ownerMemberId?: string; createdAt: number }
+// `meta` events carry the metaVersion they produced; a rotation's also has `rotated: true`
+// (so /rotate and /meta replays can tell their own events apart).
+export interface GroupEvent { seq: number; eventId: string; type: GroupEventType; authorMemberId: string; epoch: number; payloadCipher?: string; targetMemberId?: string; ownerMemberId?: string; metaVersion?: number; rotated?: true; createdAt: number }
 export interface WrapRecord { wrapped: string; wrappedBy: string; sig: string; createdAt: number }
 export interface Caller { memberId: string; accountId: string | null; deviceId: string; lane: "bearer" | "key" }
 export interface PublicMember { memberId: string; kind: GroupMemberKind; accountId?: string; joinedAt: number; pubKey: string; pubKeySig?: string; hasKey: boolean }
 export const GROUP_LIMITS = { maxMembers: 50, maxEvents: 5000, retentionMs: 90 * 86_400_000, maxPayloadBytes: 8 * 1024, maxMetaBytes: 400 * 1024, wrappedBytes: 92, sigBytes: 64, pubKeyBytes: 32, ticketTtlMs: 60_000, socketsPerMember: 2, staleMs: 90_000, hardCapMs: 2 * 3600_000, pushThrottleMs: 60_000, eventsDefaultLimit: 100, eventsMaxLimit: 500, msgsPerMinutePerMember: 30 } as const;
+
+/**
+ * Push payloads the route sends for this room (Task 7). Fixed text, no
+ * group name, no sender: the alert is the localized "有新訊息" only.
+ */
+export const GROUP_PUSH = {
+  message: (groupId: string): PushPayload => ({ alert: { "loc-key": "GROUP_MESSAGE" }, data: { type: "groupMessage", groupId } }),
+  keyRequest: (groupId: string): PushPayload => ({ silent: true, data: { type: "groupKeyRequest", groupId } }),
+};
 
 const DAY_MS = 86_400_000;
 const JOIN_POLICIES = new Set<string>(["accountOnly", "anonymousAllowed"]);
@@ -82,6 +109,12 @@ const KEY_MEMBER_AT = "key:".length + 10 + 1;
 /** The string whose sha256 is a member's `ban:` key (Ruling 13). */
 const identityOf = (m: { kind: GroupMemberKind; accountId?: string; deviceId?: string }): string =>
   m.kind === "account" ? `acct:${m.accountId}` : `dev:${m.deviceId}`;
+/** The push-throttle storage key of a member's identity (null: an anon member stored without devHash). */
+const pushKeyOf = (m: GroupMember): string | null =>
+  m.kind === "account" ? `push:acct:${m.accountId}` : m.devHash ? `push:dev:${m.devHash}` : null;
+/** Who to push for a member: the account (all its devices) or the one anonymous device. */
+const recipientOf = (m: GroupMember): PushRecipient =>
+  m.kind === "account" ? { kind: "account", accountId: m.accountId! } : { kind: "device", deviceId: m.deviceId! };
 /** What leave / kick tell the route about who went (never a deviceId). */
 const removedView = (m: GroupMember): { kind: GroupMemberKind; accountId?: string } =>
   m.kind === "account" ? { kind: "account", accountId: m.accountId } : { kind: "anon" };
@@ -166,12 +199,12 @@ interface JoinRequest { member: GroupMember; inviteCode: unknown; dryRun: boolea
 const sameIdentity = (a: GroupMember, b: GroupMember): boolean =>
   a.kind === b.kind && (a.kind === "account" ? a.accountId === b.accountId : a.deviceId === b.deviceId);
 
-/** A member as any other member may see it: never the deviceId. */
-const stripDevice = ({ deviceId: _d, ...rest }: GroupMember): GroupMember => rest;
+/** A member as any other member may see it: never the deviceId (nor its hash). */
+const stripDevice = ({ deviceId: _d, devHash: _h, ...rest }: GroupMember): GroupMember => rest;
 
 const KNOWN_PATHS = new Set([
   "/init", "/view", "/join", "/close", "/invite/reset", "/events/list", "/events/msg", "/ws-ticket",
-  "/keys/mine", "/keys/put", "/rotate", "/meta", "/meta-cipher", "/leave", "/kick",
+  "/keys/mine", "/keys/put", "/rotate", "/meta", "/meta-cipher", "/leave", "/kick", "/request-key",
 ]);
 
 const WS_OPEN = 1;
@@ -406,25 +439,37 @@ export class GroupRoom {
     return out;
   }
 
-  /** Storage keys that die with these members: every wrap (all epochs), ticket and push stamp. */
-  private async memberKeys(ids: Set<string>): Promise<string[]> {
+  /**
+   * Storage keys that die with these members: every wrap (all epochs) and
+   * ticket, plus — unless it is a Ruling-12 replacement, where the same
+   * identity stays — the identity's push-throttle stamp.
+   */
+  private async memberKeys(removed: GroupMember[], reason: RemoveReason): Promise<string[]> {
+    const ids = new Set(removed.map((m) => m.memberId));
     const out: string[] = [];
     for (const k of (await this.ctx.storage.list({ prefix: "key:" })).keys()) if (ids.has(k.slice(KEY_MEMBER_AT))) out.push(k);
     for (const [k, t] of await this.ctx.storage.list<TicketRecord>({ prefix: "tkt:" })) if (ids.has(t.memberId)) out.push(k);
-    for (const id of ids) out.push(`push:${id}`);
+    if (reason !== "replace") {
+      for (const m of removed) {
+        const k = pushKeyOf(m);
+        if (k) out.push(k);
+      }
+    }
     return out;
   }
 
   /**
    * Idempotent replay of a client eventId: the stored event when it is this
-   * member's own event of `type`, a 409 event_id_taken when the id belongs
-   * to someone else (or another kind of event), null when it's unused.
+   * member's own event of `type` (and, if given, passes `match`), a 409
+   * event_id_taken when the id belongs to someone else or another kind of
+   * event, null when it's unused. `match` separates /rotate's `meta` events
+   * (rotated: true) from /meta's, which share the type.
    */
-  private async replayOf(eventId: string, me: GroupMember, type: GroupEventType): Promise<GroupEvent | Response | null> {
+  private async replayOf(eventId: string, me: GroupMember, type: GroupEventType, match?: (e: GroupEvent) => boolean): Promise<GroupEvent | Response | null> {
     const seq = await this.ctx.storage.get<number>(`eid:${eventId}`);
     if (seq === undefined) return null;
     const event = await this.ctx.storage.get<GroupEvent>(evKey(seq));
-    if (!event || event.authorMemberId !== me.memberId || event.type !== type) return this.json({ error: "event_id_taken" }, 409);
+    if (!event || event.authorMemberId !== me.memberId || event.type !== type || (match && !match(event))) return this.json({ error: "event_id_taken" }, 409);
     return event;
   }
 
@@ -499,6 +544,7 @@ export class GroupRoom {
       if (path === "/meta-cipher") return await this.metaCipher(meta, caller);
       if (path === "/leave") return await this.leave(meta, caller);
       if (path === "/view") return await this.view(meta, caller);
+      if (path === "/request-key") return await this.requestKey(meta, caller);
       if (path === "/close") return await this.close(meta, caller);
       return await this.resetInvite(meta, caller);
     } catch (e) {
@@ -594,6 +640,8 @@ export class GroupRoom {
     if (caller.accountId !== null) idents.push(identityOf({ kind: "account", accountId: caller.accountId }));
     if (caller.lane === "bearer") idents.push(identityOf({ kind: "anon", deviceId: caller.deviceId }));
     const banKeys = await Promise.all(idents.map(async (i) => `ban:${await sha256Hex(i)}`));
+    // The anonymous member's push-throttle key, hashed now (not after getMeta).
+    if (member.kind === "anon") member.devHash = await sha256Hex(member.deviceId!);
     return { member, inviteCode: body.inviteCode, dryRun: body.dryRun === true, banKeys };
   }
 
@@ -704,12 +752,50 @@ export class GroupRoom {
     recent.push(now);
     this.postTimes.set(me.memberId, recent);
 
+    const { recipients, stamps } = await this.msgRecipients(meta, me, now);
     const [event] = await this.appendEvent(meta, {
       eventId: req.eventId, type: "msg", authorMemberId: me.memberId, epoch: meta.epoch, payloadCipher: req.payloadCipher, createdAt: now,
-    });
-    // Push recipients are filled in by a later task.
-    const recipients: PushRecipient[] = [];
+    }, stamps);
     return this.json({ seq: event.seq, event, recipients }, 201);
+  }
+
+  /**
+   * Who a new msg by `me` should push: every other member without a live
+   * socket (isConnected covers all of a member's sockets) whose identity's
+   * throttle stamp is absent or ≥ 60 s old. Returns the new stamps for the
+   * caller to commit with the event — only a storage read happens here, so
+   * parallel posts can't both pass the same stamp.
+   */
+  private async msgRecipients(meta: GroupMeta, me: GroupMember, now: number): Promise<{ recipients: PushRecipient[]; stamps: Record<string, number> }> {
+    const offline = meta.members.filter((m) => m.memberId !== me.memberId && !this.isConnected(m.memberId));
+    const keys = offline.map(pushKeyOf).filter((k): k is string => k !== null);
+    const last = keys.length ? await this.ctx.storage.get<number>(keys) : new Map<string, number>();
+    const recipients: PushRecipient[] = [];
+    const stamps: Record<string, number> = {};
+    for (const m of offline) {
+      const k = pushKeyOf(m);
+      if (k) {
+        const t = last.get(k);
+        if (t !== undefined && now - t < GROUP_LIMITS.pushThrottleMs) continue;
+        stamps[k] = now;
+      }
+      recipients.push(recipientOf(m));
+    }
+    return { recipients, stamps };
+  }
+
+  /**
+   * Who to ask for the current key: the account members (other than the
+   * caller) holding a current-epoch wrap — only they may relay (Ruling 7).
+   * Not throttled here; the route caps it at 6 an hour per member. No writes.
+   */
+  private async requestKey(meta: GroupMeta, caller: Caller): Promise<Response> {
+    const me = this.authorize(meta, caller);
+    if (me instanceof Response) return me;
+    const others = meta.members.filter((m) => m.kind === "account" && m.memberId !== me.memberId);
+    const held = others.length ? await this.ctx.storage.get(others.map((m) => keyKey(meta.epoch, m.memberId))) : new Map();
+    const recipients = others.filter((m) => held.has(keyKey(meta.epoch, m.memberId))).map(recipientOf);
+    return this.json({ recipients });
   }
 
   // ---- key wraps ----------------------------------------------------------------
@@ -771,7 +857,7 @@ export class GroupRoom {
     const me = this.authorize(meta, req.caller);
     if (me instanceof Response) return me;
     if (req.eventIdOk) {
-      const prior = await this.replayOf(req.eventId, me, "meta");
+      const prior = await this.replayOf(req.eventId, me, "meta", (e) => e.rotated === true);
       if (prior instanceof Response) return prior;
       if (prior) return this.json({ seq: prior.seq, epoch: prior.epoch }, 200);
     }
@@ -795,7 +881,7 @@ export class GroupRoom {
     meta.epoch = epoch;
     meta.metaVersion += 1;
     meta.rotationDue = false;
-    const [ev] = await this.appendEvent(meta, { eventId: req.eventId, type: "meta", authorMemberId: me.memberId, epoch, createdAt: now }, writes);
+    const [ev] = await this.appendEvent(meta, { eventId: req.eventId, type: "meta", authorMemberId: me.memberId, epoch, metaVersion: meta.metaVersion, rotated: true, createdAt: now }, writes);
     return this.json({ seq: ev.seq, epoch }, 201);
   }
 
@@ -811,10 +897,10 @@ export class GroupRoom {
     const me = this.authorize(meta, req.caller);
     if (me instanceof Response) return me;
     if (req.eventIdOk) {
-      const prior = await this.replayOf(req.eventId, me, "meta");
+      const prior = await this.replayOf(req.eventId, me, "meta", (e) => e.rotated !== true);
       if (prior instanceof Response) return prior;
-      // The metaVersion of that write isn't kept; the current one is the best answer.
-      if (prior) return this.json({ seq: prior.seq, metaVersion: meta.metaVersion }, 200);
+      // The metaVersion that write produced (stored on its event).
+      if (prior) return this.json({ seq: prior.seq, metaVersion: prior.metaVersion ?? meta.metaVersion }, 200);
     }
     if (me.memberId !== meta.ownerMemberId) return this.json({ error: "not_owner" }, 403);
     if (meta.state !== "open") return this.json({ error: "group_closed" }, 403);
@@ -825,7 +911,7 @@ export class GroupRoom {
     const seq = meta.seq + 1;
     meta.metaVersion += 1;
     if (req.joinPolicy) meta.joinPolicy = req.joinPolicy;
-    const metaEv: NewEvent = { eventId: req.eventId, type: "meta", authorMemberId: me.memberId, epoch: meta.epoch, createdAt: this.now() };
+    const metaEv: NewEvent = { eventId: req.eventId, type: "meta", authorMemberId: me.memberId, epoch: meta.epoch, metaVersion: meta.metaVersion, createdAt: this.now() };
     const anonIds = req.removeAnonymous ? meta.members.filter((m) => m.kind === "anon").map((m) => m.memberId) : [];
     await this.removeMembers(meta, anonIds, "kick", { by: me.memberId, before: [metaEv], extraWrites: { metacipher: req.metaCipher } });
     return this.json({ seq, metaVersion: meta.metaVersion }, 201);
@@ -928,7 +1014,7 @@ export class GroupRoom {
     }
     if (removed.length && reason !== "replace") meta.rotationDue = true;
     events.push(...(opts.after ?? []));
-    const deletes = removed.length ? await this.memberKeys(new Set(removed.map((m) => m.memberId))) : [];
+    const deletes = removed.length ? await this.memberKeys(removed, reason) : [];
     await this.appendEvent(meta, events, opts.extraWrites, deletes);
     for (const m of removed) {
       this.closeMember(m.memberId);
