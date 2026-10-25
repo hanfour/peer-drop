@@ -215,6 +215,13 @@ async function inBackground(deps: GroupRouteDeps, label: string, task: () => Pro
   else await p;
 }
 
+/** Does the room still seat this account? Throws on a room error. */
+async function roomSeatsAccount(env: Env, groupId: string, accountId: string): Promise<boolean> {
+  const r = await doCall(env, groupId, "/account-member", { accountId });
+  if (!r.ok) throw new Error("account-member check failed");
+  return (await r.json() as { member: boolean }).member;
+}
+
 /**
  * Brings the D1 row (accountId, groupId) in line with the room: DELETE it
  * first, THEN ask the room whether the account still holds a seat and put
@@ -222,30 +229,36 @@ async function inBackground(deps: GroupRouteDeps, label: string, task: () => Pro
  * lost: a join always INSERTs after its DO write, so either its INSERT
  * lands after this DELETE, or this check already sees the seat. (Checking
  * first and deleting after could delete a just-rejoined account's row.)
- * Throws on a D1 or room error.
+ * A row that is put back keeps the `joined_at` it had (GET /v3/groups is
+ * ordered by it). Throws on a D1 or room error.
  */
 export async function reconcileAccountIndex(env: Env, groupId: string, accountId: string): Promise<void> {
   const db = env.ACCOUNTS_DB;
+  const prior = await db.prepare("SELECT joined_at FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(accountId, groupId).first<{ joined_at: number }>();
   await db.prepare("DELETE FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(accountId, groupId).run();
-  const r = await doCall(env, groupId, "/account-member", { accountId });
-  if (!r.ok) throw new Error("account-member check failed");
-  const { member } = await r.json() as { member: boolean };
-  if (member) {
-    await db.prepare("INSERT OR IGNORE INTO group_members (account_id, group_id, joined_at) VALUES (?1, ?2, ?3)").bind(accountId, groupId, Date.now()).run();
+  if (await roomSeatsAccount(env, groupId, accountId)) {
+    await db.prepare("INSERT OR IGNORE INTO group_members (account_id, group_id, joined_at) VALUES (?1, ?2, ?3)")
+      .bind(accountId, groupId, prior?.joined_at ?? Date.now()).run();
   }
 }
 
 /**
  * The room said this account isn't (or is no longer) in it while D1 may
  * still list the group for it — a kick/leave whose DELETE failed, a retry
- * that could no longer name the account. Repair when D1 has the row. A
- * Ruling-12 takeover's old device lands here too; reconcile keeps the row.
+ * that could no longer name the account. Repair when D1 has the row. Asks
+ * the room FIRST and leaves the row untouched while the account still holds
+ * a seat — the common case: a Ruling-12 takeover's old device, whose
+ * account's newer seat is very much alive — so that path writes nothing.
+ * Only when the room says "no seat" does it run the delete-then-re-ask
+ * reconcile (which still covers a rejoin racing in between).
  * Best effort: never changes the response.
  */
 async function reconcileIfIndexed(env: Env, groupId: string, accountId: string): Promise<void> {
   try {
     const row = await env.ACCOUNTS_DB.prepare("SELECT 1 AS x FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(accountId, groupId).first();
-    if (row) await reconcileAccountIndex(env, groupId, accountId);
+    if (!row) return;
+    if (await roomSeatsAccount(env, groupId, accountId)) return;
+    await reconcileAccountIndex(env, groupId, accountId);
   } catch (e) {
     console.error("group: index repair failed", String(e));
   }

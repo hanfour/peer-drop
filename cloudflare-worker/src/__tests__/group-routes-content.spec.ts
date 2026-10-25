@@ -313,6 +313,16 @@ describe("/v3/groups content routes", () => {
     const dMember = await joinAsAccountOk(d, r.groupId, r.inviteCode);
     const dh = asMember(bearer(d), dMember);
     const h = harness();
+    // A non-member claiming D's seat, with D's whole budget still unspent:
+    // refused every time, and none of it comes out of D's budget.
+    const stranger = await acct("rk-x");
+    for (let i = 0; i < 8; i++) {
+      const sr = await h.call("POST", `/v3/groups/${r.groupId}/request-key`, asMember(bearer(stranger), dMember));
+      expect(sr.status).toBe(403);
+      expect(await sr.json()).toEqual({ error: "not_member" });
+    }
+    await h.flush();
+    expect(h.calls).toHaveLength(0);
     for (let i = 0; i < 6; i++) {
       const resp = await h.call("POST", `/v3/groups/${r.groupId}/request-key`, dh);
       expect(resp.status).toBe(204);
@@ -330,10 +340,6 @@ describe("/v3/groups content routes", () => {
     expect(await limited.json()).toEqual({ error: "rate_limited" });
     await h.flush();
     expect(h.calls).toHaveLength(18);
-    // a non-member's claim doesn't spend the member's budget
-    const stranger = await acct("rk-x");
-    const sr = await h.call("POST", `/v3/groups/${r.groupId}/request-key`, asMember(bearer(stranger), r.bMember));
-    expect(sr.status).toBe(403);
   });
 
   it("ws upgrade ignores Authorization and forged internal fields; only the ticket counts", async () => {

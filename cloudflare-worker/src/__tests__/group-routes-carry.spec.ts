@@ -148,6 +148,46 @@ describe("carry-over: D1 index follows the room", () => {
     expect(await rowCount(b.accountId, groupId)).toBe(1);
   });
 
+  it("a takeover's old device hearing not_member asks the room first: no DELETE, joined_at kept", async () => {
+    const owner = await acct("take2-o"), b = await acct("take2-b");
+    const { groupId, inviteCode } = await createGroupOk(owner);
+    const oldMember = await joinAsAccountOk(b, groupId, inviteCode);
+    await joinAsAccountOk(b, groupId, inviteCode);
+    await env.ACCOUNTS_DB.prepare("UPDATE group_members SET joined_at = 4242 WHERE account_id = ?1 AND group_id = ?2").bind(b.accountId, groupId).run();
+    // Record every statement the route issues against D1.
+    const sql: string[] = [];
+    const real = env.ACCOUNTS_DB;
+    const spyDb = new Proxy(real, {
+      get(t, k) {
+        if (k === "prepare") return (q: string) => { sql.push(q); return t.prepare(q); };
+        const v = Reflect.get(t, k);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    });
+    const spyEnv = { ...env, ACCOUNTS_DB: spyDb } as unknown as Env;
+    const req = new Request(`https://example.com/v3/groups/${groupId}`, { headers: asMember(bearer(b), oldMember) });
+    const resp = await handleGroupRoute(req, new URL(req.url), `/v3/groups/${groupId}`, spyEnv, {
+      push: { send: (async () => ({ ok: true, status: 200 })) as never, topicFor: () => "t" },
+      authorize: (r) => authorizeGroupCaller(r, spyEnv),
+    });
+    expect(resp.status).toBe(403);
+    expect(await resp.json()).toEqual({ error: "not_member" });
+    expect(sql.filter((q) => /^\s*(DELETE|INSERT)/i.test(q))).toEqual([]);
+    const row = await env.ACCOUNTS_DB.prepare("SELECT joined_at FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(b.accountId, groupId).first<{ joined_at: number }>();
+    expect(row?.joined_at).toBe(4242);
+    expect(await (await listGroups(bearer(b))).json()).toEqual([{ groupId, joinedAt: 4242 }]);
+  });
+
+  it("reconcile puts a still-seated account's row back with its original joined_at", async () => {
+    const owner = await acct("rcj-o"), b = await acct("rcj-b");
+    const { groupId, inviteCode } = await createGroupOk(owner);
+    await joinAsAccountOk(b, groupId, inviteCode);
+    await env.ACCOUNTS_DB.prepare("UPDATE group_members SET joined_at = 777 WHERE account_id = ?1 AND group_id = ?2").bind(b.accountId, groupId).run();
+    await reconcileAccountIndex(env as unknown as Env, groupId, b.accountId);
+    const row = await env.ACCOUNTS_DB.prepare("SELECT joined_at FROM group_members WHERE account_id = ?1 AND group_id = ?2").bind(b.accountId, groupId).first<{ joined_at: number }>();
+    expect(row?.joined_at).toBe(777);
+  });
+
   it("a non-member leave drops a stale row", async () => {
     const owner = await acct("lv-o"), b = await acct("lv-b");
     const { groupId, inviteCode } = await createGroupOk(owner);
