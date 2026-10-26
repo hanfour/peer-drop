@@ -26,7 +26,9 @@ public struct GroupIdentity: Codable, Equatable {
 }
 
 /// Stores each group's local identity and encrypted room keys by epoch.
+/// Writes are serialized by an internal lock (a room key for epoch N and N+1 can arrive together).
 public final class GroupSecretsStore {
+    private let lock = NSLock()
     public let directory: URL
     public let encryptor: ChatDataEncryptor
 
@@ -38,7 +40,8 @@ public final class GroupSecretsStore {
 
     /// Returns nil when the identity is absent, unreadable, or has an invalid private-key length.
     public func identity(for groupId: String) -> GroupIdentity? {
-        guard let data = try? encryptor.readAndDecrypt(from: identityURL(for: groupId)),
+        guard (try? requireSafe(groupId)) != nil,
+              let data = try? encryptor.readAndDecrypt(from: identityURL(for: groupId)),
               let identity = try? JSONDecoder().decode(GroupIdentity.self, from: data),
               identity.roomPrivateKey.count == 32 else { return nil }
         return identity
@@ -47,6 +50,8 @@ public final class GroupSecretsStore {
     /// Encrypts and atomically saves the group's local identity.
     public func saveIdentity(_ identity: GroupIdentity, for groupId: String) throws {
         guard identity.roomPrivateKey.count == 32 else { throw GroupSecretsStoreError.invalidKeyLength }
+        try requireSafe(groupId)
+        lock.lock(); defer { lock.unlock() }
         let url = identityURL(for: groupId)
         try createGroupDirectory(for: groupId)
         try encryptor.encryptAndWrite(JSONEncoder().encode(identity), to: url)
@@ -66,7 +71,10 @@ public final class GroupSecretsStore {
         let keyData = key.withUnsafeBytes { Data($0) }
         guard keyData.count == 32 else { throw GroupSecretsStoreError.invalidKeyLength }
 
-        var stored = storedRoomKeys(for: groupId) ?? [:]
+        try requireSafe(groupId)
+        lock.lock(); defer { lock.unlock() }
+        // A missing file starts empty; a file that exists but cannot be read must not be overwritten (it holds older epochs).
+        var stored = try loadRoomKeysForUpdate(groupId)
         stored[String(epoch)] = keyData.base64EncodedString()
         let url = keysURL(for: groupId)
         try createGroupDirectory(for: groupId)
@@ -91,6 +99,8 @@ public final class GroupSecretsStore {
 
     /// Removes all locally stored secrets for a group; absent groups are ignored.
     public func remove(group groupId: String) throws {
+        try requireSafe(groupId)
+        lock.lock(); defer { lock.unlock() }
         let url = groupDirectory(for: groupId)
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
@@ -130,12 +140,33 @@ public final class GroupSecretsStore {
         )
     }
 
+    /// Group ids become path components: reject empty ids (would resolve to the store root) and anything with a separator or `..`.
+    private func requireSafe(_ groupId: String) throws {
+        guard !groupId.isEmpty, !groupId.contains("/"), !groupId.contains("\\"), groupId != ".", groupId != ".." else {
+            throw GroupSecretsStoreError.invalidGroupId
+        }
+    }
+
+    private func loadRoomKeysForUpdate(_ groupId: String) throws -> [String: String] {
+        let url = keysURL(for: groupId)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        do {
+            return try JSONDecoder().decode([String: String].self, from: try encryptor.readAndDecrypt(from: url))
+        } catch {
+            throw GroupSecretsStoreError.unreadableKeys
+        }
+    }
+
     private func storedRoomKeys(for groupId: String) -> [String: String]? {
+        guard (try? requireSafe(groupId)) != nil else { return nil }
         guard let data = try? encryptor.readAndDecrypt(from: keysURL(for: groupId)) else { return nil }
         return try? JSONDecoder().decode([String: String].self, from: data)
     }
 }
 
-private enum GroupSecretsStoreError: Error {
+public enum GroupSecretsStoreError: Error, Equatable {
     case invalidKeyLength
+    case invalidGroupId
+    /// `keys.enc` exists but cannot be decrypted or decoded; saving would destroy the other epochs.
+    case unreadableKeys
 }

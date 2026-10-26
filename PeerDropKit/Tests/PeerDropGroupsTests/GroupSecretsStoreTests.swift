@@ -124,5 +124,66 @@ final class GroupSecretsStoreTests: XCTestCase {
 
         XCTAssertNil(encryptedIdentity.range(of: privateKey))
         XCTAssertNil(encryptedKeys.range(of: roomKey))
+        XCTAssertNil(encryptedKeys.range(of: Data(roomKey.base64EncodedString().utf8)))
+    }
+
+    func testGroupsAreIsolatedAndEpochsDoNotLeak() throws {
+        let store = GroupSecretsStore(directory: tempDir, encryptor: encryptor)
+        let a = SymmetricKey(data: Data(repeating: 0xA1, count: 32))
+        let b = SymmetricKey(data: Data(repeating: 0xB2, count: 32))
+        try store.saveRoomKey(a, for: "G1", epoch: 1)
+        try store.saveRoomKey(b, for: "G2", epoch: 1)
+
+        XCTAssertNil(store.roomKey(for: "G1", epoch: 2))
+        XCTAssertEqual(store.roomKey(for: "G1", epoch: 1).map { $0.withUnsafeBytes { Data($0) } }, Data(repeating: 0xA1, count: 32))
+        try store.remove(group: "G1")
+        XCTAssertNil(store.roomKey(for: "G1", epoch: 1))
+        XCTAssertEqual(store.roomKey(for: "G2", epoch: 1).map { $0.withUnsafeBytes { Data($0) } }, Data(repeating: 0xB2, count: 32))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("G1").path))
+        XCTAssertNoThrow(try store.remove(group: "never-existed"))
+    }
+
+    func testSameEpochOverwriteKeepsLatestValue() throws {
+        let store = GroupSecretsStore(directory: tempDir, encryptor: encryptor)
+        try store.saveRoomKey(SymmetricKey(data: Data(repeating: 1, count: 32)), for: "G1", epoch: 1)
+        try store.saveRoomKey(SymmetricKey(data: Data(repeating: 2, count: 32)), for: "G1", epoch: 1)
+        XCTAssertEqual(store.roomKey(for: "G1", epoch: 1).map { $0.withUnsafeBytes { Data($0) } }, Data(repeating: 2, count: 32))
+        XCTAssertEqual(store.epochs(for: "G1"), [1])
+    }
+
+    func testWrongKeyLengthsAndUnsafeIdsAreRejected() throws {
+        let store = GroupSecretsStore(directory: tempDir, encryptor: encryptor)
+        XCTAssertThrowsError(try store.saveRoomKey(SymmetricKey(data: Data(repeating: 1, count: 16)), for: "G1", epoch: 1)) {
+            XCTAssertEqual($0 as? GroupSecretsStoreError, .invalidKeyLength)
+        }
+        let identity = GroupIdentity(memberId: "M", kind: .anon, roomPrivateKey: Data(repeating: 1, count: 31), createdAt: Date(), isOwner: false)
+        XCTAssertThrowsError(try store.saveIdentity(identity, for: "G1")) {
+            XCTAssertEqual($0 as? GroupSecretsStoreError, .invalidKeyLength)
+        }
+        for bad in ["", "../x", "a/b", ".."] {
+            XCTAssertThrowsError(try store.remove(group: bad)) { XCTAssertEqual($0 as? GroupSecretsStoreError, .invalidGroupId) }
+        }
+    }
+
+    func testUnreadableKeysFileIsNotOverwritten() throws {
+        let store = GroupSecretsStore(directory: tempDir, encryptor: encryptor)
+        try store.saveRoomKey(SymmetricKey(data: Data(repeating: 1, count: 32)), for: "G1", epoch: 1)
+        let file = tempDir.appendingPathComponent("G1").appendingPathComponent("keys.enc")
+        try Data("garbage".utf8).write(to: file)
+
+        XCTAssertThrowsError(try store.saveRoomKey(SymmetricKey(data: Data(repeating: 2, count: 32)), for: "G1", epoch: 2)) {
+            XCTAssertEqual($0 as? GroupSecretsStoreError, .unreadableKeys)
+        }
+        XCTAssertEqual(try Data(contentsOf: file), Data("garbage".utf8))
+    }
+
+    func testCorruptIdentityReadsAsNilAndNoTempFilesRemain() throws {
+        let store = GroupSecretsStore(directory: tempDir, encryptor: encryptor)
+        try store.saveRoomKey(SymmetricKey(data: Data(repeating: 1, count: 32)), for: "G1", epoch: 1)
+        let dir = tempDir.appendingPathComponent("G1")
+        try Data("not json".utf8).write(to: dir.appendingPathComponent("identity.enc"))
+        XCTAssertNil(store.identity(for: "G1"))
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        XCTAssertFalse(names.contains { $0.hasSuffix(".tmp") })
     }
 }
