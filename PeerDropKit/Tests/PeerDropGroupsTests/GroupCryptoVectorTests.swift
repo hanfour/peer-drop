@@ -16,7 +16,7 @@ final class GroupCryptoVectorTests: XCTestCase {
 
         XCTAssertEqual(message, Data(hex: vector.messageHex))
         XCTAssertTrue(GroupCrypto.verify(signature: Data(hex: vector.signatureHex), message: message, signingPublicKey: Data(hex: vectors.signing.publicKeyHex)))
-        // CryptoKit Ed25519 signing is randomized, so a fresh signature is checked by verifying it, not by byte equality.
+        // CryptoKit's Ed25519 signature did not byte-match the vector (observed), so verify the fresh signature instead.
         let fresh = GroupCrypto.sign(message, with: privateKey)
         XCTAssertTrue(GroupCrypto.verify(signature: fresh, message: message, signingPublicKey: Data(hex: vectors.signing.publicKeyHex)))
 

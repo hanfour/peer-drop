@@ -8,6 +8,10 @@ public enum GroupCryptoError: Error, Equatable {
     case oversized
 }
 
+/// Pure crypto for group rooms (wire format: `cloudflare-worker/GROUPS.md`).
+/// - wrapped room key: ephemeralPub(32) ‖ nonce(12) ‖ AES-GCM ciphertext(32) ‖ tag(16) = 92 bytes.
+/// - message AAD: groupId ‖ authorMemberId ‖ eventId ‖ UInt32BE(epoch); meta AAD: groupId ‖ UInt32BE(epoch) ‖ "meta".
+/// - every `seal*`/`wrap` draws a fresh random nonce unless a test injects one.
 public enum GroupCrypto {
     private static let nonceLength = 12
     private static let tagLength = 16
@@ -177,6 +181,7 @@ public enum GroupCrypto {
         return publicKey.isValidSignature(signature, for: message)
     }
 
+    /// Returns empty `Data` if signing fails (callers are tests and key re-wrapping, which verify the result).
     public static func sign(_ message: Data, with key: Curve25519.Signing.PrivateKey) -> Data {
         (try? key.signature(for: message)) ?? Data()
     }
