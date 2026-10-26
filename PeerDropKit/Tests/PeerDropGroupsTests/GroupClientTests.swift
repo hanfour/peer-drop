@@ -126,7 +126,7 @@ final class GroupClientTests: XCTestCase {
     }
 
     func testInvalidGroupIdsAreRejectedBeforeRequest() async {
-        for invalidId in ["GROUP/ID", "../GROUP"] {
+        for invalidId in ["GROUP/ID", "../GROUP", "", groupId.lowercased(), groupId + "\n", String(groupId.dropLast()) + "?", String(groupId.dropLast()) + "#"] {
             do {
                 _ = try await client.view(id: invalidId, memberId: memberId)
                 XCTFail("expected .badId")
@@ -149,7 +149,18 @@ final class GroupClientTests: XCTestCase {
             (413, "too_large", .tooLarge),
             (429, "rate_limited", .transient("rate_limited")),
             (503, "busy", .transient("http_503")),
-            (404, "not_found", .notFound)
+            (404, "not_found", .notFound),
+            (403, "not_keyed", .awaitingKey),
+            (403, "not_owner", .notOwner),
+            (403, "group_closed", .closed),
+            (403, "banned", .banned),
+            (403, "bad_code", .badCode),
+            (403, "account_required", .accountRequired),
+            (409, "group_exists", .exists),
+            (409, "event_id_taken", .server("event_id_taken")),
+            (400, "bad_payload", .server("bad_payload")),
+            (403, "denied", .server("denied")),
+            (418, "weird_unknown_code", .network("http_418"))
         ]
 
         for (status, code, expected) in failures {

@@ -114,7 +114,8 @@ public struct WrapIn: Codable, Equatable, Sendable {
     }
 }
 
-public struct GroupListRow: Codable, Equatable, Sendable {
+/// Decoded by hand from the list response (`joinedAt` is epoch milliseconds on the wire), hence not `Codable`.
+public struct GroupListRow: Equatable, Sendable {
     public let groupId: String
     public let joinedAt: Date
 

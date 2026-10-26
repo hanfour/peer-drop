@@ -236,8 +236,10 @@ public actor GroupClient {
 
     private static let groupIdPattern = "^[0-9A-HJKMNP-TV-Z]{26}$"
 
+    /// The id goes into a URL path, so it is checked against the server's ULID shape first
+    /// (rejects `/`, `?`, `#`, whitespace and a trailing newline that `$` would let through).
     private static func pathSafeGroupId(_ id: String) throws -> String {
-        guard id.range(of: groupIdPattern, options: .regularExpression) != nil else {
+        guard id.count == 26, id.range(of: groupIdPattern, options: .regularExpression) != nil else {
             throw GroupError.badId
         }
         return id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id

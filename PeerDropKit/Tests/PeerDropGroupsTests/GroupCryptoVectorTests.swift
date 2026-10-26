@@ -86,10 +86,17 @@ final class GroupCryptoVectorTests: XCTestCase {
         let vector = try loadVectors().metaCipher
         let key = SymmetricKey(data: Data(hex: vector.roomKeyHex))
         let nonce = try AES.GCM.Nonce(data: Data(hex: vector.nonceHex))
-        let meta = GroupMetaPlaintext(name: "週末爬山", category: "興趣")
-        let sealed = try GroupCrypto.sealMeta(meta, key: key, groupId: vector.groupId, epoch: UInt32(vector.epoch), nonce: nonce)
-
+        // JSONEncoder key order is not stable, so the byte match uses the vector's own plaintext.
+        let sealed = try GroupCrypto.sealRaw(
+            plaintext: Data(vector.plaintext.utf8),
+            key: key,
+            aad: GroupCrypto.metaAAD(groupId: vector.groupId, epoch: UInt32(vector.epoch)),
+            nonce: nonce
+        )
         XCTAssertEqual(sealed, Data(base64Encoded: vector.metaCipherB64)!)
+        let meta = GroupMetaPlaintext(name: "週末爬山", category: "興趣")
+        let roundTrip = try GroupCrypto.sealMeta(meta, key: key, groupId: vector.groupId, epoch: UInt32(vector.epoch))
+        XCTAssertEqual(try GroupCrypto.openMeta(roundTrip, key: key, groupId: vector.groupId, epoch: UInt32(vector.epoch)), meta)
         let opened = try GroupCrypto.openMeta(Data(base64Encoded: vector.metaCipherB64)!, key: key, groupId: vector.groupId, epoch: UInt32(vector.epoch))
         XCTAssertEqual(opened.name, "週末爬山")
         XCTAssertEqual(opened.category, "興趣")
@@ -163,6 +170,7 @@ private struct GroupCryptoVectors: Decodable {
         let roomKeyHex: String
         let nonceHex: String
         let metaCipherB64: String
+        let plaintext: String
     }
 }
 
