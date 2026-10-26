@@ -123,7 +123,22 @@ final class GroupEventLogTests: XCTestCase {
         XCTAssertEqual(result.events.map(\.seq), [1, 2])
         XCTAssertEqual(result.droppedTailBytes, dangling.count)
         XCTAssertEqual(try Data(contentsOf: logURL).count, completeFileSize)
-        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: tempDir.path).contains { $0.hasSuffix(".tmp") })
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: tempDir.path), ["events.log"])
+    }
+
+    func testPartialLengthPrefixIsDroppedAndAppendAfterRepairKeepsAllEvents() throws {
+        let log = GroupEventLog(url: logURL, encryptor: encryptor)
+        try log.append(event(1))
+        let handle = try FileHandle(forWritingTo: logURL)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data([0x00, 0x00]))
+        try handle.close()
+
+        try log.append(event(2))
+
+        let result = log.load()
+        XCTAssertEqual(result.events.map(\.seq), [1, 2])
+        XCTAssertEqual(result.droppedTailBytes, 0)
     }
 
     func testAppendDoesNotReplaceAnUnreadableExistingPath() throws {
@@ -136,6 +151,6 @@ final class GroupEventLogTests: XCTestCase {
             XCTAssertEqual($0 as? GroupEventLog.EventLogError, .unreadableFile)
         }
         XCTAssertEqual(try Data(contentsOf: sentinelURL), Data("preserve".utf8))
-        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: tempDir.path).contains { $0.hasSuffix(".tmp") })
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: tempDir.path), ["events.log"])
     }
 }

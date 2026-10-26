@@ -3,7 +3,11 @@ import os
 import PeerDropSecurity
 
 /// Stores encrypted group events as independently framed records in an append-only log.
-/// File operations are serialized across instances so duplicate checks and tail repair stay consistent.
+/// Each record is a UInt32 big-endian length followed by an independently encrypted JSON `WireEvent`.
+/// A frame that fails to decrypt or decode is skipped; a short or overlong tail is truncated to the last
+/// complete frame. A corrupted length prefix mid-file therefore drops the frames after it, which server
+/// replay recovers. File operations are serialized process-wide (one static lock) so duplicate checks and
+/// tail repair stay consistent across instances; `load()` reads the whole file, so keep it off the main actor.
 public final class GroupEventLog: @unchecked Sendable {
     private static let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "GroupEventLog")
     private static let ioLock = NSLock()
@@ -56,7 +60,7 @@ public final class GroupEventLog: @unchecked Sendable {
         do {
             return try readLog(throwOnRepairFailure: false)
         } catch {
-            Self.logger.error("failed to read group event log")
+            Self.logger.error("failed to read group event log: \(error.localizedDescription, privacy: .public)")
             return LoadResult(events: [], droppedTailBytes: 0)
         }
     }
