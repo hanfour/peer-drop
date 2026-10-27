@@ -365,7 +365,8 @@ public final class GroupStore: ObservableObject {
             let summary = GroupSummary(
                 groupId: result.groupId, name: existing?.summary.name,
                 memberCount: existing?.summary.memberCount ?? 1, unread: existing?.summary.unread ?? 0,
-                lastActivity: existing?.summary.lastActivity, state: Self.groupState(result.state), awaitingKey: true
+                lastActivity: existing?.summary.lastActivity, state: Self.groupState(result.state),
+                awaitingKey: secrets.roomKey(for: result.groupId, epoch: result.epoch) == nil
             )
             let record = PersistedGroup(
                 groupId: result.groupId, summary: summary, inviteCode: code, meta: existing?.meta,
@@ -378,7 +379,7 @@ public final class GroupStore: ObservableObject {
             try clearPending(at: pendingJoinURL)
             apply(record: record, members: [GroupMember(
                 memberId: identity.memberId, kind: kind, accountId: account?.accountId,
-                hasKey: false, isOwner: owner, pubKeyVerified: kind == .account
+                hasKey: !summary.awaitingKey, isOwner: owner, pubKeyVerified: kind == .account
             )])
 
             do {
@@ -395,6 +396,8 @@ public final class GroupStore: ObservableObject {
                     var keyedRecord = try existingRecord(result.groupId) ?? record
                     keyedRecord.summary.awaitingKey = false
                     keyedRecord.pendingIdentityNickname = nil
+                    // Cleared only now so a failed write above retries with the same event id.
+                    keyedRecord.identityEventId = nil
                     try writeRecord(keyedRecord)
                     apply(record: keyedRecord, members: [GroupMember(
                         memberId: identity.memberId, kind: kind, accountId: account?.accountId,
@@ -404,7 +407,7 @@ public final class GroupStore: ObservableObject {
             } catch {
                 let groupError = Self.mapError(error)
                 var retryRecord = (try? existingRecord(result.groupId)) ?? record
-                retryRecord.summary.awaitingKey = true
+                retryRecord.summary.awaitingKey = secrets.roomKey(for: result.groupId, epoch: result.epoch) == nil
                 if kind == .anon { retryRecord.pendingIdentityNickname = nickname ?? retryRecord.pendingIdentityNickname }
                 try? writeRecord(retryRecord)
                 apply(record: retryRecord, members: [GroupMember(
@@ -597,11 +600,6 @@ public final class GroupStore: ObservableObject {
             id: groupId, memberId: identity.memberId, eventId: eventId, epoch: epoch,
             payloadCipher: cipher.base64EncodedString()
         )
-        if var record = try readRecord(groupId) {
-            record.identityEventId = nil
-            record.pendingIdentityNickname = nil
-            try writeRecord(record)
-        }
     }
 
     private func makeState(from record: PersistedGroup) -> GroupState {
@@ -652,7 +650,7 @@ public final class GroupStore: ObservableObject {
 
     private func removeLocalData(_ groupId: String) throws {
         guard Self.isValidGroupId(groupId), secrets != nil else { throw GroupError.badId }
-        try removeSecretsUnlessUnreadable(groupId)
+        guard try removeSecretsUnlessUnreadable(groupId) else { throw GroupError.network("local_storage_unreadable") }
         let directory = groupDirectory(groupId)
         if FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.removeItem(at: directory)
@@ -669,18 +667,22 @@ public final class GroupStore: ObservableObject {
         }
     }
 
-    private func removeSecretsUnlessUnreadable(_ groupId: String) throws {
+    /// Removes a group's secrets unless they exist but cannot be read; returns false in that case so the
+    /// caller can decide whether leaving them behind is acceptable (cleanup) or must be reported (leave).
+    @discardableResult
+    private func removeSecretsUnlessUnreadable(_ groupId: String) throws -> Bool {
         guard let secrets else { throw GroupError.network("mock") }
         let groupDirectory = secrets.directory.appendingPathComponent(groupId, isDirectory: true)
         let identityURL = groupDirectory.appendingPathComponent("identity.enc")
         let keysURL = groupDirectory.appendingPathComponent("keys.enc")
         if FileManager.default.fileExists(atPath: identityURL.path), secrets.identity(for: groupId) == nil {
-            return
+            return false
         }
         if FileManager.default.fileExists(atPath: keysURL.path), secrets.epochs(for: groupId).isEmpty {
-            return
+            return false
         }
         try secrets.remove(group: groupId)
+        return true
     }
 
     private func readEncrypted<T: Decodable>(_ type: T.Type, url: URL) throws -> T? {
@@ -714,6 +716,8 @@ public final class GroupStore: ObservableObject {
         }
     }
 
+    /// Moves an undecryptable pending record aside so create/join are not blocked forever. Trade-off: a
+    /// keychain failure looks the same as corruption, so a resend may then start with fresh ids.
     private func readPending<T: Decodable>(_ type: T.Type, url: URL) throws -> T? {
         do {
             return try readEncrypted(type, url: url)

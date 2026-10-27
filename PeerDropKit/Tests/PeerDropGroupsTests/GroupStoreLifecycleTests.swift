@@ -573,6 +573,54 @@ final class GroupStoreLifecycleTests: XCTestCase {
     }
 
     @MainActor
+    func testRejoiningKeyedGroupWithoutWrapKeepsKeyedState() async throws {
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path == "/v3/groups" {
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+            }
+            if request.url?.path.hasSuffix("/join") == true {
+                let memberId = (try! self.body(request))["memberId"] as! String
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"01ARZ3NDEKTSV4RRFFQ69G5FAY\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{\"wraps\":[]}")
+        }
+        let groupStore = store()
+        _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+
+        _ = try await groupStore.join(
+            link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .account, nickname: nil
+        )
+
+        XCTAssertEqual(groupStore.groups.first?.awaitingKey, false)
+        XCTAssertEqual(groupStore.states[GroupTestFixtures.groupId]?.members.first?.hasKey, true)
+    }
+
+    @MainActor
+    func testLeaveReportsUnreadableSecretsInsteadOfDroppingTheirOnlyReference() async throws {
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path == "/v3/groups" {
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+            }
+            return .init(status: 204, body: Data())
+        }
+        let groupStore = store()
+        _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+        let keysURL = secretsDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("keys.enc")
+        let original = Data("unreadable keys".utf8)
+        try original.write(to: keysURL)
+
+        do {
+            try await groupStore.leave(GroupTestFixtures.groupId)
+            XCTFail("expected local storage error")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .network("local_storage_unreadable"))
+        }
+
+        XCTAssertEqual(try Data(contentsOf: keysURL), original)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent(GroupTestFixtures.groupId).path))
+    }
+
+    @MainActor
     func testLeaveRemovesLocalKeysButKeepsNothingSecret() async throws {
         GroupTestURLProtocol.handler = { request in
             if request.url?.path == "/v3/groups" {
