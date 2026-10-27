@@ -69,6 +69,7 @@ public final class GroupStore: ObservableObject {
         var epoch: UInt32
         var rotationDue: Bool
         var identityEventId: String?
+        var pendingIdentityNickname: String?
     }
 
     /// Creates a live store and restores its encrypted local group list.
@@ -162,8 +163,8 @@ public final class GroupStore: ObservableObject {
 
     /// Joins a group by invite code when its id is not known yet.
     public func join(code: String, as kind: IdentityKind, nickname: String?) async throws -> String {
+        guard kind == .anon else { throw GroupError.unsupported }
         guard !code.isEmpty else { throw GroupError.badCode }
-        guard kind == .anon else { throw GroupError.network("account_code_join_requires_group_id") }
         return try await withOperationLock { [self] in
             try await performJoin(groupId: nil, code: code, kind: kind, nickname: nickname)
         }
@@ -227,7 +228,8 @@ public final class GroupStore: ObservableObject {
                     saved.joinPolicy == joinPolicy {
                     pending = saved
                 } else {
-                    try secrets.remove(group: saved.groupId)
+                    // Changing parameters can orphan a created group if its create response was lost.
+                    try removeSecretsUnlessUnreadable(saved.groupId)
                     try clearPending(at: pendingCreateURL)
                     pending = try makePendingCreate(name: name, description: description, category: category, joinPolicy: joinPolicy, account: account)
                 }
@@ -277,8 +279,8 @@ public final class GroupStore: ObservableObject {
             )
         } catch {
             let groupError = Self.mapError(error)
-            if !Self.isRetryable(groupError) {
-                try? secrets.remove(group: pending.groupId)
+            if Self.isExplicitRejection(groupError) {
+                try? removeSecretsUnlessUnreadable(pending.groupId)
                 try? clearPending(at: pendingCreateURL)
             }
             lastError = Self.safeErrorDescription(groupError)
@@ -293,7 +295,7 @@ public final class GroupStore: ObservableObject {
         let record = PersistedGroup(
             groupId: pending.groupId, summary: summary, inviteCode: response.inviteCode, meta: pending.meta,
             myMemberId: pending.memberId, identityKind: .account, joinPolicy: pending.joinPolicy,
-            isOwner: true, epoch: 1, rotationDue: false, identityEventId: nil
+            isOwner: true, epoch: 1, rotationDue: false, identityEventId: nil, pendingIdentityNickname: nil
         )
         do {
             try writeRecord(record)
@@ -328,7 +330,7 @@ public final class GroupStore: ObservableObject {
             let publicKeySignature: String?
             if kind == .account {
                 guard let account else { throw GroupError.accountRequired }
-                guard let groupId else { throw GroupError.network("account_code_join_requires_group_id") }
+                guard let groupId else { throw GroupError.unsupported }
                 let message = GroupCrypto.memberKeyMessage(
                     groupId: groupId, memberId: identity.memberId,
                     accountId: account.accountId, pubKey: publicKey
@@ -359,14 +361,18 @@ public final class GroupStore: ObservableObject {
 
             let actualIdentity = try moveIdentity(identity, from: pending.storageGroupId, to: result.groupId)
             let owner = result.ownerMemberId == identity.memberId
+            let existing = try existingRecord(result.groupId)
             let summary = GroupSummary(
-                groupId: result.groupId, name: nil, memberCount: 1, state: Self.groupState(result.state), awaitingKey: true
+                groupId: result.groupId, name: existing?.summary.name,
+                memberCount: existing?.summary.memberCount ?? 1, unread: existing?.summary.unread ?? 0,
+                lastActivity: existing?.summary.lastActivity, state: Self.groupState(result.state), awaitingKey: true
             )
             let record = PersistedGroup(
-                groupId: result.groupId, summary: summary, inviteCode: code, meta: nil,
-                myMemberId: identity.memberId, identityKind: kind, joinPolicy: "", isOwner: owner,
-                epoch: result.epoch, rotationDue: false,
-                identityEventId: try existingRecord(result.groupId)?.identityEventId
+                groupId: result.groupId, summary: summary, inviteCode: code, meta: existing?.meta,
+                myMemberId: identity.memberId, identityKind: kind, joinPolicy: existing?.joinPolicy ?? "", isOwner: owner,
+                epoch: result.epoch, rotationDue: existing?.rotationDue ?? false,
+                identityEventId: existing?.identityEventId,
+                pendingIdentityNickname: kind == .anon ? (nickname ?? existing?.pendingIdentityNickname) : nil
             )
             try writeRecord(record)
             try clearPending(at: pendingJoinURL)
@@ -375,29 +381,46 @@ public final class GroupStore: ObservableObject {
                 hasKey: false, isOwner: owner, pubKeyVerified: kind == .account
             )])
 
-            if let roomKey = try await loadCurrentRoomKey(
-                groupId: result.groupId, identity: actualIdentity, epoch: result.epoch
-            ) {
-                try secrets.saveRoomKey(roomKey, for: result.groupId, epoch: result.epoch)
-                let keyedSummary = GroupSummary(
-                    groupId: result.groupId, name: nil, memberCount: states[result.groupId]?.members.count ?? 1,
-                    state: Self.groupState(result.state), awaitingKey: false
-                )
-                var keyedRecord = record
-                keyedRecord.summary = keyedSummary
-                try writeRecord(keyedRecord)
-                apply(record: keyedRecord, members: [GroupMember(
+            do {
+                if let roomKey = try await loadCurrentRoomKey(
+                    groupId: result.groupId, identity: actualIdentity, epoch: result.epoch
+                ) {
+                    try secrets.saveRoomKey(roomKey, for: result.groupId, epoch: result.epoch)
+                    if kind == .anon {
+                        try await postIdentity(
+                            result.groupId, identity: actualIdentity,
+                            nickname: record.pendingIdentityNickname, epoch: result.epoch
+                        )
+                    }
+                    var keyedRecord = try existingRecord(result.groupId) ?? record
+                    keyedRecord.summary.awaitingKey = false
+                    keyedRecord.pendingIdentityNickname = nil
+                    try writeRecord(keyedRecord)
+                    apply(record: keyedRecord, members: [GroupMember(
+                        memberId: identity.memberId, kind: kind, accountId: account?.accountId,
+                        hasKey: true, isOwner: owner, pubKeyVerified: kind == .account
+                    )])
+                }
+            } catch {
+                let groupError = Self.mapError(error)
+                var retryRecord = (try? existingRecord(result.groupId)) ?? record
+                retryRecord.summary.awaitingKey = true
+                if kind == .anon { retryRecord.pendingIdentityNickname = nickname ?? retryRecord.pendingIdentityNickname }
+                try? writeRecord(retryRecord)
+                apply(record: retryRecord, members: [GroupMember(
                     memberId: identity.memberId, kind: kind, accountId: account?.accountId,
-                    hasKey: true, isOwner: owner, pubKeyVerified: kind == .account
+                    hasKey: secrets.roomKey(for: result.groupId, epoch: result.epoch) != nil,
+                    isOwner: owner, pubKeyVerified: kind == .account
                 )])
-                if kind == .anon { try await postIdentity(result.groupId, identity: actualIdentity, nickname: nickname) }
+                lastError = Self.safeErrorDescription(groupError)
+                return result.groupId
             }
             lastError = nil
             return result.groupId
         } catch {
             let groupError = Self.mapError(error)
-            if !joined, let pending, !Self.isRetryable(groupError) {
-                if pending.createdIdentity { try? secrets.remove(group: pending.storageGroupId) }
+            if !joined, let pending, Self.isExplicitRejection(groupError) {
+                if pending.createdIdentity { try? removeSecretsUnlessUnreadable(pending.storageGroupId) }
                 try? clearPending(at: pendingJoinURL)
             }
             lastError = Self.safeErrorDescription(groupError)
@@ -435,10 +458,10 @@ public final class GroupStore: ObservableObject {
             try writePending(pending, to: pendingCreateURL)
             return pending
         } catch let error as GroupError {
-            try? secrets.remove(group: groupId)
+            try? removeSecretsUnlessUnreadable(groupId)
             throw error
         } catch {
-            try? secrets.remove(group: groupId)
+            try? removeSecretsUnlessUnreadable(groupId)
             throw GroupError.network("local_storage")
         }
     }
@@ -455,7 +478,7 @@ public final class GroupStore: ObservableObject {
         }
 
         if let old = try readPending(PendingJoin.self, url: pendingJoinURL) {
-            if old.createdIdentity { try secrets.remove(group: old.storageGroupId) }
+            if old.createdIdentity { try removeSecretsUnlessUnreadable(old.storageGroupId) }
             try clearPending(at: pendingJoinURL)
         }
 
@@ -502,7 +525,7 @@ public final class GroupStore: ObservableObject {
         do {
             try writePending(pending, to: pendingJoinURL)
         } catch {
-            if createdIdentity { try? secrets.remove(group: storedGroupId) }
+            if createdIdentity { try? removeSecretsUnlessUnreadable(storedGroupId) }
             throw GroupError.network("local_storage")
         }
         return pending
@@ -516,7 +539,7 @@ public final class GroupStore: ObservableObject {
             }
             try ensureIdentityWritable(destination)
             if secrets.identity(for: destination) == nil { try secrets.saveIdentity(identity, for: destination) }
-            try secrets.remove(group: source)
+            try removeSecretsUnlessUnreadable(source)
         }
         return identity
     }
@@ -549,9 +572,9 @@ public final class GroupStore: ObservableObject {
         )
     }
 
-    private func postIdentity(_ groupId: String, identity: GroupIdentity, nickname: String?) async throws {
+    private func postIdentity(_ groupId: String, identity: GroupIdentity, nickname: String?, epoch: UInt32) async throws {
         guard identity.kind == .anon, let client, let secrets,
-              let roomKey = secrets.roomKey(for: groupId, epoch: 1) else { return }
+              let roomKey = secrets.roomKey(for: groupId, epoch: epoch) else { return }
         let eventId: String
         if var record = try readRecord(groupId) {
             if let savedId = record.identityEventId {
@@ -568,14 +591,15 @@ public final class GroupStore: ObservableObject {
         let payload = GroupMessagePayload(kind: .identity, nickname: nickname)
         let cipher = try GroupCrypto.sealMessage(
             payload, key: roomKey, groupId: groupId, memberId: identity.memberId,
-            eventId: eventId, epoch: 1
+            eventId: eventId, epoch: epoch
         )
         _ = try await client.postMessage(
-            id: groupId, memberId: identity.memberId, eventId: eventId, epoch: 1,
+            id: groupId, memberId: identity.memberId, eventId: eventId, epoch: epoch,
             payloadCipher: cipher.base64EncodedString()
         )
         if var record = try readRecord(groupId) {
             record.identityEventId = nil
+            record.pendingIdentityNickname = nil
             try writeRecord(record)
         }
     }
@@ -627,8 +651,8 @@ public final class GroupStore: ObservableObject {
     }
 
     private func removeLocalData(_ groupId: String) throws {
-        guard Self.isValidGroupId(groupId), let secrets else { throw GroupError.badId }
-        try secrets.remove(group: groupId)
+        guard Self.isValidGroupId(groupId), secrets != nil else { throw GroupError.badId }
+        try removeSecretsUnlessUnreadable(groupId)
         let directory = groupDirectory(groupId)
         if FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.removeItem(at: directory)
@@ -643,6 +667,20 @@ public final class GroupStore: ObservableObject {
         if FileManager.default.fileExists(atPath: identityURL.path), secrets.identity(for: groupId) == nil {
             throw GroupError.network("identity_unreadable")
         }
+    }
+
+    private func removeSecretsUnlessUnreadable(_ groupId: String) throws {
+        guard let secrets else { throw GroupError.network("mock") }
+        let groupDirectory = secrets.directory.appendingPathComponent(groupId, isDirectory: true)
+        let identityURL = groupDirectory.appendingPathComponent("identity.enc")
+        let keysURL = groupDirectory.appendingPathComponent("keys.enc")
+        if FileManager.default.fileExists(atPath: identityURL.path), secrets.identity(for: groupId) == nil {
+            return
+        }
+        if FileManager.default.fileExists(atPath: keysURL.path), secrets.epochs(for: groupId).isEmpty {
+            return
+        }
+        try secrets.remove(group: groupId)
     }
 
     private func readEncrypted<T: Decodable>(_ type: T.Type, url: URL) throws -> T? {
@@ -677,7 +715,20 @@ public final class GroupStore: ObservableObject {
     }
 
     private func readPending<T: Decodable>(_ type: T.Type, url: URL) throws -> T? {
-        try readEncrypted(type, url: url)
+        do {
+            return try readEncrypted(type, url: url)
+        } catch let error as GroupError where error == .network("local_storage_unreadable") {
+            let corruptURL = url.appendingPathExtension("corrupt")
+            do {
+                if FileManager.default.fileExists(atPath: corruptURL.path) {
+                    try FileManager.default.removeItem(at: corruptURL)
+                }
+                try FileManager.default.moveItem(at: url, to: corruptURL)
+                return nil
+            } catch {
+                throw GroupError.network("local_storage")
+            }
+        }
     }
 
     private func writePending<T: Encodable>(_ value: T, to url: URL) throws {
@@ -719,10 +770,14 @@ public final class GroupStore: ObservableObject {
         return GroupError.from(error)
     }
 
-    private static func isRetryable(_ error: GroupError) -> Bool {
-        if case .transient = error { return true }
-        if case .cancelled = error { return true }
-        return false
+    private static func isExplicitRejection(_ error: GroupError) -> Bool {
+        switch error {
+        case .badCode, .notFound, .closed, .banned, .membersFull, .groupLimit, .exists,
+             .tooLarge, .badId, .badSignature, .accountRequired, .notMember:
+            return true
+        default:
+            return false
+        }
     }
 
     private static func safeErrorDescription(_ error: GroupError) -> String {
@@ -744,6 +799,7 @@ public final class GroupStore: ObservableObject {
         case .badSignature: return "bad_signature"
         case .notFound: return "not_found"
         case .badId: return "bad_id"
+        case .unsupported: return "unsupported"
         case .transient: return "transient"
         case .network: return "network"
         case .server: return "server_error"

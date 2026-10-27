@@ -122,6 +122,51 @@ final class GroupStoreLifecycleTests: XCTestCase {
     }
 
     @MainActor
+    func testCreateKeepsIdentityOnBearerRequired() async throws {
+        GroupTestURLProtocol.handler = { _ in GroupTestFixtures.json("{\"error\":\"unauthorized\"}", status: 401) }
+        let groupStore = store()
+
+        do {
+            _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+            XCTFail("expected bearerRequired")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .bearerRequired)
+        }
+
+        XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
+    func testCreateKeepsIdentityOnInvalidResponse() async throws {
+        GroupTestURLProtocol.handler = { _ in GroupTestFixtures.json("not json") }
+        let groupStore = store()
+
+        do {
+            _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+            XCTFail("expected invalidResponse")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .network("invalid_response"))
+        }
+
+        XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
+    func testCreateKeepsIdentityOnServerError() async throws {
+        GroupTestURLProtocol.handler = { _ in GroupTestFixtures.json("{}", status: 500) }
+        let groupStore = store()
+
+        do {
+            _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+            XCTFail("expected transient server error")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .transient("http_500"))
+        }
+
+        XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
     func testJoinAnonymousSendsIdentityMessageAfterJoin() async throws {
         let ownerMemberId = "01ARZ3NDEKTSV4RRFFQ69G5FAY"
         let ownerAccountId = "PDRP0002"
@@ -143,19 +188,19 @@ final class GroupStoreLifecycleTests: XCTestCase {
                 joiningPublicKey = publicKey
                 let recipient = try! Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicKey)
                 let wrapped = try! GroupCrypto.wrap(
-                    roomKey: roomKey, groupId: GroupTestFixtures.groupId, epoch: 1,
+                    roomKey: roomKey, groupId: GroupTestFixtures.groupId, epoch: 2,
                     recipientMemberId: memberId, recipientPublicKey: recipient
                 )
                 wrappedKey = wrapped
                 wrapSignature = GroupCrypto.sign(
-                    GroupCrypto.wrapMessage(groupId: GroupTestFixtures.groupId, epoch: 1, target: memberId, wrapper: ownerMemberId, wrapped: wrapped),
+                    GroupCrypto.wrapMessage(groupId: GroupTestFixtures.groupId, epoch: 2, target: memberId, wrapper: ownerMemberId, wrapped: wrapped),
                     with: ownerSigning
                 )
-                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"\(ownerMemberId)\"}", status: 201)
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":2,\"state\":\"open\",\"ownerMemberId\":\"\(ownerMemberId)\"}", status: 201)
             case "/v3/groups/\(GroupTestFixtures.groupId)/keys":
                 let key = wrappedKey!.base64EncodedString()
                 let signature = wrapSignature!.base64EncodedString()
-                return GroupTestFixtures.json("{\"wraps\":[{\"epoch\":1,\"wrapped\":\"\(key)\",\"wrappedBy\":\"\(ownerMemberId)\",\"sig\":\"\(signature)\"}]}")
+                return GroupTestFixtures.json("{\"wraps\":[{\"epoch\":2,\"wrapped\":\"\(key)\",\"wrappedBy\":\"\(ownerMemberId)\",\"sig\":\"\(signature)\"}]}")
             case "/v3/groups/\(GroupTestFixtures.groupId)":
                 let ownerPubKey = ownerRoom.publicKey.rawRepresentation
                 let ownerMemberSignature = GroupCrypto.sign(
@@ -166,7 +211,7 @@ final class GroupStoreLifecycleTests: XCTestCase {
                 let memberPubKey = joiningPublicKey!.base64EncodedString()
                 let owner = "{\"memberId\":\"\(ownerMemberId)\",\"kind\":\"account\",\"accountId\":\"\(ownerAccountId)\",\"joinedAt\":1,\"pubKey\":\"\(ownerPubKey.base64EncodedString())\",\"pubKeySig\":\"\(ownerMemberSignature.base64EncodedString())\",\"hasKey\":true}"
                 let joining = "{\"memberId\":\"\(memberId)\",\"kind\":\"anon\",\"joinedAt\":1,\"pubKey\":\"\(memberPubKey)\",\"hasKey\":true}"
-                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"ownerMemberId\":\"\(ownerMemberId)\",\"members\":[\(owner),\(joining)],\"joinPolicy\":\"anyone\",\"state\":\"open\",\"epoch\":1,\"seq\":1,\"firstSeq\":1,\"metaVersion\":1,\"rotationDue\":false}")
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"ownerMemberId\":\"\(ownerMemberId)\",\"members\":[\(owner),\(joining)],\"joinPolicy\":\"anyone\",\"state\":\"open\",\"epoch\":2,\"seq\":1,\"firstSeq\":1,\"metaVersion\":1,\"rotationDue\":false}")
             case "/v3/groups/\(GroupTestFixtures.groupId)/events":
                 identityEventBody = try! self.body(request)
                 return GroupTestFixtures.json("{\"seq\":2}", status: 201)
@@ -190,13 +235,14 @@ final class GroupStoreLifecycleTests: XCTestCase {
         ])
         let messageBody = try XCTUnwrap(identityEventBody)
         let payloadCipher = try XCTUnwrap(Data(base64Encoded: messageBody["payloadCipher"] as! String))
+        XCTAssertLessThan(payloadCipher.count, 8 * 1024)
         let payload = try GroupCrypto.openMessage(
             payloadCipher, key: roomKey, groupId: GroupTestFixtures.groupId,
-            memberId: joiningMemberId!, eventId: messageBody["eventId"] as! String, epoch: 1
+            memberId: joiningMemberId!, eventId: messageBody["eventId"] as! String, epoch: 2
         )
         XCTAssertEqual(payload.kind, .identity)
         XCTAssertEqual(payload.nickname, "Hiker")
-        XCTAssertEqual(messageBody["epoch"] as? Int, 1)
+        XCTAssertEqual(messageBody["epoch"] as? Int, 2)
     }
 
     @MainActor
@@ -246,6 +292,284 @@ final class GroupStoreLifecycleTests: XCTestCase {
         }
 
         XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
+    func testJoinKeepsIdentityOnBearerRequired() async throws {
+        GroupTestURLProtocol.handler = { _ in GroupTestFixtures.json("{\"error\":\"unauthorized\"}", status: 401) }
+        let groupStore = store()
+
+        do {
+            _ = try await groupStore.join(link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .anon, nickname: "Hiker")
+            XCTFail("expected bearerRequired")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .bearerRequired)
+        }
+
+        XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
+    func testJoinKeepsIdentityOnInvalidResponse() async throws {
+        GroupTestURLProtocol.handler = { _ in GroupTestFixtures.json("not json") }
+        let groupStore = store()
+
+        do {
+            _ = try await groupStore.join(link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .anon, nickname: "Hiker")
+            XCTFail("expected invalidResponse")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .network("invalid_response"))
+        }
+
+        XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
+    func testJoinReturnsGroupWhenKeyLookupFailsAfterServerJoin() async throws {
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path.hasSuffix("/join") == true {
+                let memberId = (try! self.body(request))["memberId"] as! String
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"01ARZ3NDEKTSV4RRFFQ69G5FAY\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{}", status: 500)
+        }
+        let groupStore = store(ids: [GroupTestFixtures.memberId, GroupTestFixtures.eventId])
+
+        let returnedGroupId = try await groupStore.join(
+            link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .anon, nickname: "Hiker"
+        )
+
+        XCTAssertEqual(returnedGroupId, GroupTestFixtures.groupId)
+        XCTAssertEqual(groupStore.groups.first?.groupId, GroupTestFixtures.groupId)
+        XCTAssertEqual(groupStore.groups.first?.awaitingKey, true)
+        XCTAssertEqual(groupStore.lastError, "transient")
+        let recordURL = rootDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("group.enc")
+        let recordData = try encryptor.readAndDecrypt(from: recordURL)
+        let record = try XCTUnwrap(JSONSerialization.jsonObject(with: recordData) as? [String: Any])
+        XCTAssertEqual(record["pendingIdentityNickname"] as? String, "Hiker")
+    }
+
+    @MainActor
+    func testJoinByCodeAccountIsUnsupportedWithoutCreatingIdentity() async {
+        let groupStore = GroupStore(
+            client: GroupTestFixtures.makeClient(), directory: StubGroupDirectory(signingKeys: [:]), secrets: secrets,
+            rootDirectory: rootDirectory, localAccount: { nil }, newId: { GroupTestFixtures.memberId }
+        )
+
+        do {
+            _ = try await groupStore.join(code: "JOIN1234", as: .account, nickname: nil)
+            XCTFail("expected unsupported")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .unsupported)
+        }
+
+        XCTAssertTrue(GroupTestURLProtocol.requests.isEmpty)
+        XCTAssertNil(secrets.identity(for: GroupTestFixtures.groupId))
+    }
+
+    @MainActor
+    func testJoinAccountSignatureVerifies() async throws {
+        var joinBody: [String: Any]?
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path.hasSuffix("/join") == true {
+                joinBody = try! self.body(request)
+                let memberId = joinBody!["memberId"] as! String
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"01ARZ3NDEKTSV4RRFFQ69G5FAY\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{\"wraps\":[]}")
+        }
+        let groupStore = store()
+
+        _ = try await groupStore.join(
+            link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .account, nickname: nil
+        )
+
+        let requestBody = try XCTUnwrap(joinBody)
+        let memberId = try XCTUnwrap(requestBody["memberId"] as? String)
+        let pubKey = try XCTUnwrap(Data(base64Encoded: requestBody["pubKey"] as! String))
+        let signature = try XCTUnwrap(Data(base64Encoded: requestBody["pubKeySig"] as! String))
+        let message = GroupCrypto.memberKeyMessage(
+            groupId: GroupTestFixtures.groupId, memberId: memberId,
+            accountId: GroupTestFixtures.accountId, pubKey: pubKey
+        )
+        let signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x31, count: 32))
+
+        XCTAssertTrue(GroupCrypto.verify(signature: signature, message: message, signingPublicKey: signingKey.publicKey.rawRepresentation))
+    }
+
+    @MainActor
+    func testJoinMergesExistingGroupRecord() async throws {
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path == "/v3/groups" {
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+            }
+            if request.url?.path.hasSuffix("/join") == true {
+                let memberId = (try! self.body(request))["memberId"] as! String
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"01ARZ3NDEKTSV4RRFFQ69G5FAY\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{\"wraps\":[]}")
+        }
+        let groupStore = store()
+        _ = try await groupStore.create(name: "Hike", description: "Saturday", category: "outdoors", joinPolicy: "accountOnly")
+
+        _ = try await groupStore.join(
+            link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .account, nickname: nil
+        )
+
+        XCTAssertEqual(groupStore.groups.first?.name, "Hike")
+        XCTAssertEqual(groupStore.groups.first?.memberCount, 1)
+        XCTAssertEqual(groupStore.states[GroupTestFixtures.groupId]?.meta?.description, "Saturday")
+    }
+
+    @MainActor
+    func testLoadRestoresGroupsAndStatesWithFreshStore() async throws {
+        GroupTestURLProtocol.handler = { _ in
+            GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+        }
+        _ = try await store().create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+        let recordURL = rootDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("group.enc")
+        var record = try XCTUnwrap(JSONSerialization.jsonObject(with: encryptor.readAndDecrypt(from: recordURL)) as? [String: Any])
+        record.removeValue(forKey: "pendingIdentityNickname")
+        try encryptor.encryptAndWrite(JSONSerialization.data(withJSONObject: record), to: recordURL)
+
+        let restored = store()
+
+        XCTAssertEqual(restored.groups.first?.name, "Hike")
+        XCTAssertEqual(restored.states[GroupTestFixtures.groupId]?.meta?.name, "Hike")
+        XCTAssertEqual(restored.states[GroupTestFixtures.groupId]?.myMemberId, GroupTestFixtures.memberId)
+    }
+
+    @MainActor
+    func testLeaveTransientErrorKeepsLocalData() async throws {
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path == "/v3/groups" {
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{}", status: 500)
+        }
+        let groupStore = store()
+        _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+
+        do {
+            try await groupStore.leave(GroupTestFixtures.groupId)
+            XCTFail("expected transient leave error")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .transient("http_500"))
+        }
+
+        XCTAssertNotNil(secrets.identity(for: GroupTestFixtures.groupId))
+        XCTAssertNotNil(secrets.roomKey(for: GroupTestFixtures.groupId, epoch: 1))
+        XCTAssertEqual(groupStore.groups.first?.groupId, GroupTestFixtures.groupId)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("group.enc").path))
+    }
+
+    @MainActor
+    func testUnreadableIdentityIsNotOverwritten() async throws {
+        let identityURL = secretsDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("identity.enc")
+        try FileManager.default.createDirectory(at: identityURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let original = Data("unreadable identity".utf8)
+        try original.write(to: identityURL)
+        GroupTestURLProtocol.handler = { _ in GroupTestFixtures.json("{}", status: 201) }
+
+        do {
+            _ = try await store().join(link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .anon, nickname: nil)
+            XCTFail("expected local storage error")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .network("local_storage"))
+        }
+
+        XCTAssertEqual(try Data(contentsOf: identityURL), original)
+        XCTAssertTrue(GroupTestURLProtocol.requests.isEmpty)
+    }
+
+    @MainActor
+    func testUnreadableRoomKeysAreNotDeletedWhenCreateCannotResume() async throws {
+        let keysURL = secretsDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("keys.enc")
+        try FileManager.default.createDirectory(at: keysURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let original = Data("unreadable room keys".utf8)
+        try original.write(to: keysURL)
+
+        do {
+            _ = try await store().create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+            XCTFail("expected local storage error")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .network("local_storage"))
+        }
+
+        XCTAssertEqual(try Data(contentsOf: keysURL), original)
+        XCTAssertTrue(GroupTestURLProtocol.requests.isEmpty)
+    }
+
+    @MainActor
+    func testUnreadableGroupMetadataIsNotOverwritten() async throws {
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path == "/v3/groups" {
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+            }
+            if request.url?.path.hasSuffix("/join") == true {
+                let memberId = (try! self.body(request))["memberId"] as! String
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"01ARZ3NDEKTSV4RRFFQ69G5FAY\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{\"wraps\":[]}")
+        }
+        let groupStore = store()
+        _ = try await groupStore.create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+        let metadataURL = rootDirectory.appendingPathComponent(GroupTestFixtures.groupId, isDirectory: true).appendingPathComponent("group.enc")
+        let original = Data("unreadable metadata".utf8)
+        try original.write(to: metadataURL)
+
+        do {
+            _ = try await groupStore.join(link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .account, nickname: nil)
+            XCTFail("expected local storage error")
+        } catch {
+            XCTAssertEqual(error as? GroupError, .network("local_storage_unreadable"))
+        }
+
+        XCTAssertEqual(try Data(contentsOf: metadataURL), original)
+    }
+
+    @MainActor
+    func testCorruptPendingCreateIsArchivedAndCreateContinues() async throws {
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        let pendingURL = rootDirectory.appendingPathComponent("pending-create.enc")
+        let corruptURL = URL(fileURLWithPath: pendingURL.path + ".corrupt")
+        let original = Data("corrupt pending create".utf8)
+        try original.write(to: pendingURL)
+        try Data("old archive".utf8).write(to: corruptURL)
+        GroupTestURLProtocol.handler = { _ in
+            GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"inviteCode\":\"JOIN1234\"}", status: 201)
+        }
+
+        _ = try await store().create(name: "Hike", description: nil, category: nil, joinPolicy: "accountOnly")
+
+        XCTAssertEqual(try Data(contentsOf: corruptURL), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pendingURL.path))
+        XCTAssertEqual(GroupTestURLProtocol.requests.count, 1)
+    }
+
+    @MainActor
+    func testCorruptPendingJoinIsArchivedAndJoinContinues() async throws {
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        let pendingURL = rootDirectory.appendingPathComponent("pending-join.enc")
+        let corruptURL = URL(fileURLWithPath: pendingURL.path + ".corrupt")
+        let original = Data("corrupt pending join".utf8)
+        try original.write(to: pendingURL)
+        try Data("old archive".utf8).write(to: corruptURL)
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path.hasSuffix("/join") == true {
+                let memberId = (try! self.body(request))["memberId"] as! String
+                return GroupTestFixtures.json("{\"groupId\":\"\(GroupTestFixtures.groupId)\",\"memberId\":\"\(memberId)\",\"epoch\":1,\"state\":\"open\",\"ownerMemberId\":\"01ARZ3NDEKTSV4RRFFQ69G5FAY\"}", status: 201)
+            }
+            return GroupTestFixtures.json("{\"wraps\":[]}")
+        }
+
+        _ = try await store(ids: [GroupTestFixtures.memberId, GroupTestFixtures.eventId]).join(
+            link: GroupInviteLink.make(groupId: GroupTestFixtures.groupId, code: "JOIN1234"), as: .anon, nickname: "Hiker"
+        )
+
+        XCTAssertEqual(try Data(contentsOf: corruptURL), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pendingURL.path))
+        XCTAssertEqual(GroupTestURLProtocol.requests.first?.url?.path, "/v3/groups/\(GroupTestFixtures.groupId)/join")
     }
 
     @MainActor

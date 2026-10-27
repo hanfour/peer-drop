@@ -19,6 +19,8 @@ public enum GroupError: Error, Equatable, Sendable {
     case badSignature
     case notFound
     case badId
+    /// The requested client operation is not supported by the server contract.
+    case unsupported
     case transient(String)
     case network(String)
     /// A server error code this client has no dedicated case for (e.g. `event_id_taken`, `bad_payload`).
@@ -72,6 +74,8 @@ public enum GroupError: Error, Equatable, Sendable {
         case AccountClientError.insufficientStorage(let code):
             return .transient(code)
         case AccountClientError.invalidResponse:
+            return .network("invalid_response")
+        case is DecodingError:
             return .network("invalid_response")
         case let urlError as URLError where urlError.code == .cancelled:
             return .cancelled
