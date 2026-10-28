@@ -223,10 +223,18 @@ extension GroupStore {
             return
         }
 
-        var updated = record
         let members = await makeMembers(
             view.members, groupId: id, ownerMemberId: view.ownerMemberId, existing: states[id]?.members ?? []
         )
+        // The awaits above can interleave with markRead/leave/rotate, so write back onto a fresh record.
+        var updated: PersistedGroup
+        do {
+            guard let fresh = try readRecord(id), fresh.summary.state != .removed else { return }
+            updated = fresh
+        } catch {
+            lastError = Self.safeErrorDescription(Self.mapError(error))
+            return
+        }
         updated.epoch = view.epoch
         updated.rotationDue = view.rotationDue
         updated.joinPolicy = view.joinPolicy
