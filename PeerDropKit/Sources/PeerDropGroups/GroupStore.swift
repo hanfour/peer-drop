@@ -29,7 +29,7 @@ public final class GroupStore: ObservableObject {
     let directory: GroupDirectory?
     let secrets: GroupSecretsStore?
     let rootDirectory: URL?
-    private let localAccount: () -> LocalAccount?
+    let localAccount: () -> LocalAccount?
     let newId: () -> String
     let now: () -> Date
     let isMock: Bool

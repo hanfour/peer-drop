@@ -288,7 +288,32 @@ extension GroupStore {
                 )
             }
             rebuildFromLog(id, record: current, events: allEvents)
-            if current.summary.awaitingKey, let onSyncNeedsKeys {
+
+            var keyLifecycleError: GroupError?
+            let needsKey = current.summary.awaitingKey || secrets.roomKey(for: id, epoch: view.epoch) == nil
+            if needsKey {
+                do {
+                    try await installKeys(for: id, using: view)
+                } catch {
+                    keyLifecycleError = Self.mapError(error)
+                }
+            }
+            do {
+                try await relayKeys(for: id, force: false, using: view)
+            } catch {
+                if keyLifecycleError == nil { keyLifecycleError = Self.mapError(error) }
+            }
+            do {
+                try await rotateIfNeeded(id, using: view)
+            } catch {
+                if keyLifecycleError == nil { keyLifecycleError = Self.mapError(error) }
+            }
+            if let keyLifecycleError {
+                lastError = Self.safeErrorDescription(keyLifecycleError)
+            }
+            if let currentRecord = try readRecord(id),
+               currentRecord.summary.awaitingKey,
+               let onSyncNeedsKeys {
                 await onSyncNeedsKeys(id)
             }
         } catch {
