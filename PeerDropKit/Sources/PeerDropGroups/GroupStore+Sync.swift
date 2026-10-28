@@ -298,6 +298,11 @@ extension GroupStore {
                     keyLifecycleError = Self.mapError(error)
                 }
             }
+            if needsKey, secrets.roomKey(for: id, epoch: view.epoch) != nil,
+               let refreshed = try readRecord(id), refreshed.summary.state != .removed {
+                // Keys installed above can unlock events that were counted as pending during the first rebuild.
+                rebuildFromLog(id, record: refreshed, events: log.load().events)
+            }
             do {
                 try await relayKeys(for: id, force: false, using: view)
             } catch {

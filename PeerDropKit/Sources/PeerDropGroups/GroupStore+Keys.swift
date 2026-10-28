@@ -279,8 +279,9 @@ extension GroupStore {
                         wrapFailure = true
                     }
                 }
+                // A member whose key cannot be verified right now (e.g. directory outage) blocks rotation; retry on the next sync.
                 guard !wrapFailure, !view.members.isEmpty, wraps.count == view.members.count, wraps.count <= 50 else {
-                    throw GroupError.badSignature
+                    throw GroupError.transient("rotation_incomplete")
                 }
                 guard let rotationRecord = try readRecord(id), rotationRecord.summary.state != .removed,
                       rotationRecord.myMemberId == identity.memberId else { return }
@@ -294,6 +295,8 @@ extension GroupStore {
                     epoch: nextEpoch, metaCipher: metaCipher, wraps: wraps
                 )
                 guard result.epoch == nextEpoch else { throw GroupError.network("epoch_mismatch") }
+                // Persist the key before the confirming view so a failed view cannot lose it.
+                try secrets.saveRoomKey(newRoomKey, for: id, epoch: result.epoch)
 
                 let confirmedView = try await client.view(id: id, memberId: identity.memberId)
                 guard confirmedView.groupId == id, confirmedView.epoch >= result.epoch else {
@@ -301,7 +304,6 @@ extension GroupStore {
                 }
                 guard var updated = try readRecord(id), updated.summary.state != .removed,
                       updated.myMemberId == identity.memberId else { return }
-                try secrets.saveRoomKey(newRoomKey, for: id, epoch: result.epoch)
 
                 updated.epoch = confirmedView.epoch
                 updated.rotationDue = confirmedView.rotationDue
