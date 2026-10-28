@@ -248,7 +248,8 @@ public enum GroupCrypto {
         if let text = payload.text, text.unicodeScalars.count > GroupLimits.messageScalars {
             throw GroupCryptoError.oversized
         }
-        if let nickname = payload.nickname, nickname.unicodeScalars.count > GroupLimits.nicknameScalars {
+        if let nickname = payload.nickname,
+           nickname.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.count > GroupLimits.nicknameScalars {
             throw GroupCryptoError.oversized
         }
     }

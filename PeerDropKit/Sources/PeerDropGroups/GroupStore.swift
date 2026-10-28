@@ -20,20 +20,26 @@ public final class GroupStore: ObservableObject {
         }
     }
 
-    @Published public private(set) var groups: [GroupSummary] = []
-    @Published public private(set) var states: [String: GroupState] = [:]
-    @Published public private(set) var lastError: String?
+    @Published public internal(set) var groups: [GroupSummary] = []
+    @Published public internal(set) var states: [String: GroupState] = [:]
+    @Published public internal(set) var lastError: String?
     @Published public private(set) var unknownGroupIds: Set<String> = []
 
-    private let client: GroupClient?
-    private let directory: GroupDirectory?
-    private let secrets: GroupSecretsStore?
-    private let rootDirectory: URL?
+    let client: GroupClient?
+    let directory: GroupDirectory?
+    let secrets: GroupSecretsStore?
+    let rootDirectory: URL?
     private let localAccount: () -> LocalAccount?
-    private let newId: () -> String
-    private let now: () -> Date
-    private let isMock: Bool
+    let newId: () -> String
+    let now: () -> Date
+    let isMock: Bool
     private var operationGate: Task<Void, Never>?
+    var syncTasks: [String: Task<Void, Never>] = [:]
+    var syncRerunRequests: Set<String> = []
+    let blockList: GroupBlockList?
+
+    /// Lets a later key lifecycle feature request missing room keys after a sync.
+    public var onSyncNeedsKeys: ((String) async -> Void)?
 
     private struct PendingCreate: Codable {
         let groupId: String
@@ -57,7 +63,7 @@ public final class GroupStore: ObservableObject {
         let createdIdentity: Bool
     }
 
-    private struct PersistedGroup: Codable {
+    struct PersistedGroup: Codable {
         var groupId: String
         var summary: GroupSummary
         var inviteCode: String?
@@ -70,6 +76,10 @@ public final class GroupStore: ObservableObject {
         var rotationDue: Bool
         var identityEventId: String?
         var pendingIdentityNickname: String?
+        var metaVersion: Int? = nil
+        var lastReadSeq: Int? = nil
+        var membershipSeq: Int? = nil
+        var supersededElsewhere: Bool? = nil
     }
 
     /// Creates a live store and restores its encrypted local group list.
@@ -86,6 +96,7 @@ public final class GroupStore: ObservableObject {
         self.directory = directory
         self.secrets = secrets
         self.rootDirectory = rootDirectory
+        self.blockList = GroupBlockList(directory: rootDirectory, encryptor: secrets.encryptor)
         self.localAccount = localAccount
         self.newId = newId
         self.now = now
@@ -99,6 +110,7 @@ public final class GroupStore: ObservableObject {
         self.directory = nil
         self.secrets = nil
         self.rootDirectory = nil
+        self.blockList = nil
         self.localAccount = { nil }
         self.newId = { "" }
         self.now = Date.init
@@ -315,13 +327,14 @@ public final class GroupStore: ObservableObject {
     private func performJoin(groupId: String?, code: String, kind: IdentityKind, nickname: String?) async throws -> String {
         guard !isMock, let client, let secrets else { throw GroupError.network("mock") }
         guard kind == .anon || localAccount() != nil else { throw GroupError.accountRequired }
-        guard (nickname?.unicodeScalars.count ?? 0) <= GroupLimits.nicknameScalars else { throw GroupError.tooLarge }
+        let normalizedNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (normalizedNickname?.unicodeScalars.count ?? 0) <= GroupLimits.nicknameScalars else { throw GroupError.tooLarge }
         if let groupId, !Self.isValidGroupId(groupId) { throw GroupError.badId }
 
         var joined = false
         var pending: PendingJoin?
         do {
-            pending = try prepareJoin(groupId: groupId, code: code, kind: kind, nickname: nickname)
+            pending = try prepareJoin(groupId: groupId, code: code, kind: kind, nickname: normalizedNickname)
             guard let pending else { throw GroupError.network("local_identity_missing") }
             guard let identity = secrets.identity(for: pending.storageGroupId) else { throw GroupError.network("local_identity_missing") }
             let privateKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: identity.roomPrivateKey)
@@ -408,7 +421,7 @@ public final class GroupStore: ObservableObject {
                 let groupError = Self.mapError(error)
                 var retryRecord = (try? existingRecord(result.groupId)) ?? record
                 retryRecord.summary.awaitingKey = secrets.roomKey(for: result.groupId, epoch: result.epoch) == nil
-                if kind == .anon { retryRecord.pendingIdentityNickname = nickname ?? retryRecord.pendingIdentityNickname }
+                if kind == .anon { retryRecord.pendingIdentityNickname = normalizedNickname ?? retryRecord.pendingIdentityNickname }
                 try? writeRecord(retryRecord)
                 apply(record: retryRecord, members: [GroupMember(
                     memberId: identity.memberId, kind: kind, accountId: account?.accountId,
@@ -612,35 +625,48 @@ public final class GroupStore: ObservableObject {
             groupId: record.groupId, meta: record.meta, members: [member],
             isOwner: record.isOwner, myMemberId: record.myMemberId,
             identityKind: record.identityKind, joinPolicy: record.joinPolicy,
-            state: record.summary.state, epoch: record.epoch, rotationDue: record.rotationDue
+            state: record.summary.state, epoch: record.epoch, rotationDue: record.rotationDue,
+            supersededElsewhere: record.supersededElsewhere ?? false
         )
     }
 
-    private func apply(record: PersistedGroup, members: [GroupMember]) {
+    func apply(record: PersistedGroup, members: [GroupMember]) {
         if let index = groups.firstIndex(where: { $0.groupId == record.groupId }) {
             groups[index] = record.summary
         } else {
             groups.append(record.summary)
         }
         groups.sort { $0.groupId < $1.groupId }
-        states[record.groupId] = GroupState(
+        var state = states[record.groupId] ?? GroupState(
             groupId: record.groupId, meta: record.meta, members: members,
             isOwner: record.isOwner, myMemberId: record.myMemberId,
             identityKind: record.identityKind, joinPolicy: record.joinPolicy,
-            state: record.summary.state, epoch: record.epoch, rotationDue: record.rotationDue
+            state: record.summary.state, epoch: record.epoch, rotationDue: record.rotationDue,
+            supersededElsewhere: record.supersededElsewhere ?? false
         )
+        state.meta = record.meta
+        state.members = members
+        state.isOwner = record.isOwner
+        state.myMemberId = record.myMemberId
+        state.identityKind = record.identityKind
+        state.joinPolicy = record.joinPolicy
+        state.state = record.summary.state
+        state.epoch = record.epoch
+        state.rotationDue = record.rotationDue
+        state.supersededElsewhere = record.supersededElsewhere ?? false
+        states[record.groupId] = state
     }
 
     private func existingRecord(_ groupId: String) throws -> PersistedGroup? {
         try readRecord(groupId)
     }
 
-    private func readRecord(_ groupId: String) throws -> PersistedGroup? {
+    func readRecord(_ groupId: String) throws -> PersistedGroup? {
         guard Self.isValidGroupId(groupId) else { throw GroupError.badId }
         return try readEncrypted(PersistedGroup.self, url: metadataURL(groupId))
     }
 
-    private func writeRecord(_ record: PersistedGroup) throws {
+    func writeRecord(_ record: PersistedGroup) throws {
         guard Self.isValidGroupId(record.groupId), record.summary.groupId == record.groupId else { throw GroupError.badId }
         if let existing = try readRecord(record.groupId), existing.groupId != record.groupId {
             throw GroupError.network("local_metadata_mismatch")
@@ -746,10 +772,10 @@ public final class GroupStore: ObservableObject {
 
     private var pendingCreateURL: URL { rootDirectory!.appendingPathComponent("pending-create.enc") }
     private var pendingJoinURL: URL { rootDirectory!.appendingPathComponent("pending-join.enc") }
-    private func groupDirectory(_ groupId: String) -> URL { rootDirectory!.appendingPathComponent(groupId, isDirectory: true) }
+    func groupDirectory(_ groupId: String) -> URL { rootDirectory!.appendingPathComponent(groupId, isDirectory: true) }
     private func metadataURL(_ groupId: String) -> URL { groupDirectory(groupId).appendingPathComponent("group.enc") }
 
-    private func withOperationLock<T>(_ body: @MainActor @escaping () async throws -> T) async throws -> T {
+    func withOperationLock<T>(_ body: @MainActor @escaping () async throws -> T) async throws -> T {
         let previous = operationGate
         let work = Task<T, Error> { @MainActor in
             _ = await previous?.value
@@ -761,15 +787,15 @@ public final class GroupStore: ObservableObject {
 
     private static let groupIdPattern = "^[0-9A-HJKMNP-TV-Z]{26}$"
 
-    private static func isValidGroupId(_ id: String) -> Bool {
+    static func isValidGroupId(_ id: String) -> Bool {
         id.range(of: groupIdPattern, options: .regularExpression) != nil
     }
 
-    private static func groupState(_ wireState: String) -> GroupSummary.State {
+    static func groupState(_ wireState: String) -> GroupSummary.State {
         wireState == "closed" ? .closed : .open
     }
 
-    private static func mapError(_ error: Error) -> GroupError {
+    static func mapError(_ error: Error) -> GroupError {
         if let groupError = error as? GroupError { return groupError }
         return GroupError.from(error)
     }
@@ -784,7 +810,7 @@ public final class GroupStore: ObservableObject {
         }
     }
 
-    private static func safeErrorDescription(_ error: GroupError) -> String {
+    static func safeErrorDescription(_ error: GroupError) -> String {
         switch error {
         case .notMember: return "not_member"
         case .awaitingKey: return "awaiting_key"
