@@ -71,6 +71,7 @@ extension GroupStore {
 
         guard var record = try readRecord(id) else { throw GroupError.notFound }
         guard record.summary.state != .removed else { throw GroupError.notMember }
+        guard record.summary.state != .closed else { throw GroupError.closed }
         guard !record.summary.awaitingKey else { throw GroupError.awaitingKey }
         let epoch = record.epoch
         guard let roomKey = secrets.roomKey(for: id, epoch: epoch) else { throw GroupError.awaitingKey }
