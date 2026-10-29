@@ -88,6 +88,7 @@ public actor GroupSocket {
     private let jitter: @Sendable (TimeInterval) -> TimeInterval
     private var activeSocket: GroupWebSocket?
     private var runTask: Task<Void, Never>?
+    private var frameCount = 0
     private var started = false
     private var stopped = false
 
@@ -164,7 +165,10 @@ public actor GroupSocket {
 
             let socket = factory.make(url: url)
             activeSocket = socket
-            let result = await receive(from: socket, isReconnect: hasConnected)
+            // The server sends nothing on open, so tell the store right away to backfill the gap since the last connection.
+            if hasConnected { onClosed(.reconnected) }
+            hasConnected = true
+            let result = await receive(from: socket)
             activeSocket = nil
             socket.close()
             guard !stopped, !Task.isCancelled else { return }
@@ -176,10 +180,7 @@ public actor GroupSocket {
             case .stopped:
                 return
             case .disconnected(let receivedFrame):
-                if receivedFrame {
-                    hasConnected = true
-                    backoffIndex = 0
-                }
+                if receivedFrame { backoffIndex = 0 }
                 guard await waitToRetry(delays[backoffIndex]) else { return }
                 backoffIndex = min(backoffIndex + 1, delays.count - 1)
             }
@@ -192,12 +193,20 @@ public actor GroupSocket {
         case disconnected(receivedFrame: Bool)
     }
 
-    private func receive(from socket: GroupWebSocket, isReconnect: Bool) async -> ConnectionResult {
+    private func receive(from socket: GroupWebSocket) async -> ConnectionResult {
+        frameCount = 0
         let keepalive = Task { [clock] in
             do {
+                var framesAtLastPing: Int?
                 while !Task.isCancelled {
                     try await clock.sleep(for: 30)
                     try Task.checkCancellation()
+                    // The server answers every ping; a whole interval of silence means a half-open connection.
+                    if let framesAtLastPing, framesAtLastPing == frameCount {
+                        socket.close()
+                        return
+                    }
+                    framesAtLastPing = frameCount
                     try await socket.send(text: "ping")
                 }
             } catch {
@@ -210,10 +219,8 @@ public actor GroupSocket {
         do {
             while !stopped && !Task.isCancelled {
                 let frame = try await socket.receive()
-                if !receivedFrame {
-                    receivedFrame = true
-                    if isReconnect { onClosed(.reconnected) }
-                }
+                receivedFrame = true
+                frameCount += 1
                 handle(frame)
             }
             return .stopped

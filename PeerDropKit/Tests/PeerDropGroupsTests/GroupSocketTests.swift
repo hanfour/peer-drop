@@ -43,6 +43,45 @@ final class GroupSocketTests: XCTestCase {
         await socket.stop()
     }
 
+    func testSilentConnectionIsClosedAndReconnected() async throws {
+        let clock = ManualGroupSocketClock()
+        let factory = FakeGroupWebSocketFactory()
+        factory.echoesPong = false
+        let socket = makeSocket(factory: factory, clock: clock)
+
+        await socket.start()
+        await eventually { factory.socketCount == 1 }
+        await eventually { await clock.hasSleeper(for: 30) }
+        await clock.advance(by: 30)
+        await eventually { factory.socket(at: 0)?.sentTexts == ["ping"] }
+        await eventually { await clock.hasSleeper(for: 30) }
+        // No pong arrived during the whole interval, so the connection is treated as half-open and replaced.
+        await clock.advance(by: 30)
+        await eventually { await clock.hasSleeper(for: 1) }
+        await clock.advance(by: 1)
+        await eventually { factory.socketCount == 2 }
+        await socket.stop()
+    }
+
+    func testReconnectIsSignalledEvenWhenFirstConnectionDroppedBeforeAnyFrame() async throws {
+        let clock = ManualGroupSocketClock()
+        let factory = FakeGroupWebSocketFactory()
+        let observer = SocketObserver()
+        let socket = makeSocket(factory: factory, clock: clock, observer: observer)
+
+        await socket.start()
+        await eventually { factory.socketCount == 1 }
+        factory.socket(at: 0)?.fail(URLError(.networkConnectionLost))
+        await eventually { await clock.hasSleeper(for: 1) }
+        await clock.advance(by: 1)
+        await eventually { factory.socketCount == 2 }
+        await eventually { await observer.closeReasons.count == 1 }
+
+        let reasons = await observer.closeReasons.map { "\($0)" }
+        XCTAssertEqual(reasons, ["reconnected"])
+        await socket.stop()
+    }
+
     func testValidEventFrameCallsOnEventOnce() async throws {
         let factory = FakeGroupWebSocketFactory()
         let observer = SocketObserver()
@@ -443,6 +482,7 @@ private final class FakeGroupWebSocket: GroupWebSocket, @unchecked Sendable {
         case failure(Error)
     }
 
+    var echoesPong = true
     private let lock = NSLock()
     private var receiver: CheckedContinuation<String, Error>?
     private var received: [Result] = []
@@ -455,7 +495,7 @@ private final class FakeGroupWebSocket: GroupWebSocket, @unchecked Sendable {
 
     func send(text: String) async throws {
         appendSent(text)
-        if text == "ping" { push("pong") }
+        if text == "ping", echoesPong { push("pong") }
     }
 
     private func appendSent(_ text: String) {
@@ -529,8 +569,11 @@ private final class FakeGroupWebSocketFactory: GroupWebSocketFactory, @unchecked
         return sockets.indices.contains(index) ? sockets[index] : nil
     }
 
+    var echoesPong = true
+
     func make(url: URL) -> GroupWebSocket {
         let socket = FakeGroupWebSocket()
+        socket.echoesPong = echoesPong
         lock.lock()
         sockets.append(socket)
         madeURLs.append(url)
