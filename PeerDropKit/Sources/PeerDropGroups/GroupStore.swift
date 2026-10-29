@@ -3,6 +3,7 @@ import Combine
 import CryptoKit
 import PeerDropAccount
 import PeerDropSecurity
+import PeerDropTransport
 
 /// Coordinates local group identities, membership requests, and encrypted list metadata.
 @MainActor
@@ -37,6 +38,10 @@ public final class GroupStore: ObservableObject {
     var syncTasks: [String: Task<Void, Never>] = [:]
     var syncRerunRequests: Set<String> = []
     let blockList: GroupBlockList?
+    var liveSockets: [String: GroupSocket] = [:]
+    var liveSocketFactory: GroupWebSocketFactory = URLSessionGroupWebSocketFactory()
+    var liveSocketClock: GroupSocketClock = GroupSocketSystemClock()
+    var liveSocketBaseURL: URL = WorkerURL.current()
 
     /// Lets a later key lifecycle feature request missing room keys after a sync.
     public var onSyncNeedsKeys: ((String) async -> Void)?

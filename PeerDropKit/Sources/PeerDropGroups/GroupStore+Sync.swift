@@ -327,7 +327,7 @@ extension GroupStore {
         }
     }
 
-    private func handleSyncError(_ error: Error, groupId: String) {
+    func handleSyncError(_ error: Error, groupId: String) {
         let groupError = Self.mapError(error)
         if groupError == .notMember {
             do {
