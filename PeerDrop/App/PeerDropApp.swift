@@ -4,6 +4,7 @@ import PeerDropTransport
 import PeerDropSecurity
 import PeerDropPlatform
 import PeerDropDiary
+import PeerDropGroups
 
 @main
 struct PeerDropApp: App {
@@ -125,6 +126,7 @@ struct PeerDropApp: App {
                 // the diary/diaryKey sync directly instead of racing the
                 // background-fetch completion handler against it.
                 appDelegate.connectionManager = connectionManager
+                PushNotificationManager.shared.setGroupPushHandler(connectionManager.groupStore)
 
                 // Wire SecurityPolicyStore + CryptoHardeningMetrics into ConnectionManager.
                 // Done at .onAppear (not @StateObject lazy init) because the lazy
@@ -266,6 +268,8 @@ struct PeerDropApp: App {
                     NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: ["diaryId": diaryId])
                 }
             }
+        case "group":
+            connectionManager.groupStore.setPendingInvite(from: url)
         default:
             break
         }

@@ -6641,6 +6641,41 @@
         }
       }
     },
+    "GROUP_MESSAGE": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New message"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有新訊息"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "有新消息"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "新着メッセージがあります"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "새 메시지가 있습니다"
+          }
+        }
+      }
+    },
     "IP Address or Hostname": {
       "extractionState": "manual",
       "localizations": {

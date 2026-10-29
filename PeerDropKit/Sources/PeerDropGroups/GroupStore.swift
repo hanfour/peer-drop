@@ -25,6 +25,7 @@ public final class GroupStore: ObservableObject {
     @Published public internal(set) var states: [String: GroupState] = [:]
     @Published public internal(set) var lastError: String?
     @Published public private(set) var unknownGroupIds: Set<String> = []
+    @Published public private(set) var pendingInvite: (groupId: String, code: String)? = nil
 
     let client: GroupClient?
     let directory: GroupDirectory?
@@ -147,6 +148,13 @@ public final class GroupStore: ObservableObject {
         }
         groups = loadedGroups.sorted { $0.groupId < $1.groupId }
         states = loadedStates
+    }
+
+    @discardableResult
+    public func setPendingInvite(from url: URL) -> Bool {
+        guard let invite = GroupInviteLink.parse(url) else { return false }
+        pendingInvite = invite
+        return true
     }
 
     /// Finds account groups without automatically adding unknown server memberships locally.
