@@ -434,7 +434,7 @@ public final class ConnectionManager: ObservableObject {
     public let deviceStore = DeviceRecordStore()
     public let chatManager = ChatManager()
     public let deviceGroupStore = DeviceGroupStore()
-    /// Friend categories (Project F1). Built from the legacy `groupStore.groups`
+    /// Friend categories (Project F1). Built from the legacy `deviceGroupStore.groups`
     /// so old DeviceGroups migrate once into categories.
     public let categoryStore: FriendCategoryStore
     /// Project F2: the instant and calendar presence is judged at (seams for
