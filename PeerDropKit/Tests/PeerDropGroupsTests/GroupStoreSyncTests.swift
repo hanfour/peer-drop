@@ -124,6 +124,32 @@ final class GroupStoreSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testBackfillDoesNotSkipEventsBeforeLocallyIngestedEvent() async throws {
+        let groupStore = store()
+        try await createGroup(GroupTestFixtures.groupId, in: groupStore)
+        let peerId = "01ARZ3NDEKTSV4RRFFQ69G5B00"
+        let earlier = event(1, id: "01ARZ3NDEKTSV4RRFFQ69G5B01", author: peerId,
+                            cipher: try sealedText("earlier", eventId: "01ARZ3NDEKTSV4RRFFQ69G5B01", author: peerId))
+        let later = event(2, id: "01ARZ3NDEKTSV4RRFFQ69G5B02",
+                          cipher: try sealedText("later", eventId: "01ARZ3NDEKTSV4RRFFQ69G5B02"))
+        groupStore.ingest([later], into: GroupTestFixtures.groupId)
+        var cursors: [String] = []
+        GroupTestURLProtocol.handler = { request in
+            if request.url?.path == "/v3/groups/\(GroupTestFixtures.groupId)" { return self.response(self.view(peers: [peerId], seq: 2)) }
+            if request.url?.path == "/v3/groups/\(GroupTestFixtures.groupId)/events" {
+                let since = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "since" })?.value ?? ""
+                cursors.append(since)
+                return self.eventsPage(since == "0" ? [earlier, later] : [])
+            }
+            return GroupTestFixtures.json("{}", status: 500)
+        }
+        await groupStore.sync(GroupTestFixtures.groupId)
+        await groupStore.sync(GroupTestFixtures.groupId)
+        XCTAssertEqual(cursors, ["0", "2"])
+        XCTAssertEqual(groupStore.states[GroupTestFixtures.groupId]?.messages.map(\.text), ["earlier", "later"])
+    }
+
+    @MainActor
     func testBackfillDecryptsAndOrdersBySeq() async throws {
         let groupStore = store()
         try await createGroup(GroupTestFixtures.groupId, in: groupStore)

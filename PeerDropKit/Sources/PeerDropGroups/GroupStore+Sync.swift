@@ -246,7 +246,7 @@ extension GroupStore {
         updated.membershipSeq = view.seq
 
         let log = eventLog(id, encryptor: secrets.encryptor)
-        if log.lastSeq < view.firstSeq - 1 {
+        if (updated.backfillSeq ?? 0) < view.firstSeq - 1 {
             states[id]?.hasGap = true
         }
         do {
@@ -258,7 +258,9 @@ extension GroupStore {
             return
         }
 
-        var cursor = log.lastSeq
+        // Locally sent or socket events can be ahead of missing server events.
+        // Only a successfully persisted backfill page may advance this cursor.
+        var cursor = updated.backfillSeq ?? 0
         while true {
             let page: EventsPage
             do {
@@ -271,7 +273,18 @@ extension GroupStore {
                 states[id]?.hasGap = true
             }
             if !page.events.isEmpty {
-                ingest(page.events, into: id)
+                do {
+                    for event in page.events.sorted(by: Self.eventOrder) {
+                        try log.append(event)
+                    }
+                    guard var current = try readRecord(id), current.summary.state != .removed else { return }
+                    current.backfillSeq = max(cursor, page.events.map(\.seq).max() ?? cursor)
+                    try writeRecord(current)
+                    rebuildFromLog(id, record: current, events: log.load().events)
+                } catch {
+                    lastError = Self.safeErrorDescription(.network("local_storage"))
+                    return
+                }
             }
             guard let nextSince = page.nextSince else { break }
             guard nextSince > cursor else { break }

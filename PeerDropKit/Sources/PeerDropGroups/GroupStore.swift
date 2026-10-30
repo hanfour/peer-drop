@@ -85,6 +85,7 @@ public final class GroupStore: ObservableObject {
         var metaVersion: Int? = nil
         var lastReadSeq: Int? = nil
         var membershipSeq: Int? = nil
+        var backfillSeq: Int? = nil
         var supersededElsewhere: Bool? = nil
     }
 
