@@ -43,6 +43,8 @@ targets:
         product: PeerDropNotes
       - package: PeerDropKit
         product: PeerDropDiary
+      - package: PeerDropKit
+        product: PeerDropGroups
     settings:
       base:
         INFOPLIST_FILE: PeerDrop/App/Info.plist
@@ -206,6 +208,8 @@ targets:
         product: PeerDropNotes
       - package: PeerDropKit
         product: PeerDropDiary
+      - package: PeerDropKit
+        product: PeerDropGroups
     settings:
       base:
         INFOPLIST_FILE: PeerDropMac/App/Info.plist

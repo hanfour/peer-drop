@@ -4,6 +4,7 @@ import Foundation
 import PeerDropCore
 import PeerDropSecurity
 import PeerDropDiary
+import PeerDropGroups
 import os
 
 /// Routes `peerdrop://` URL-scheme deep links into the same code paths
@@ -56,6 +57,8 @@ enum MacDeepLinkHandler {
             return handleInvite(url, connectionManager: connectionManager)
         case "diary":
             return handleDiary(url, connectionManager: connectionManager)
+        case "group":
+            return handleGroup(url, connectionManager: connectionManager)
         default:
             logger.warning("Unknown peerdrop:// host: \(url.host ?? "<nil>", privacy: .public)")
             return false
@@ -189,6 +192,14 @@ enum MacDeepLinkHandler {
             if let diaryId = try? await connectionManager.diaryStore.join(link: url) {
                 NotificationCenter.default.post(name: .openDiary, object: nil, userInfo: ["diaryId": diaryId])
             }
+        }
+        return true
+    }
+
+    private static func handleGroup(_ url: URL, connectionManager: ConnectionManager) -> Bool {
+        guard connectionManager.groupStore.setPendingInvite(from: url) else {
+            logger.warning("Invalid peerdrop://group URL")
+            return false
         }
         return true
     }
