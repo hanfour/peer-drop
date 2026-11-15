@@ -19,7 +19,7 @@ import {
 } from "./deviceToken";
 import type { TokenPayload } from "./deviceToken";
 import { scopeForDevice, accountIdFromScope, generateAccountId, validateNickname, verifyRegistrationSignature, classifyRegisterError, findAccountByHandle } from "./account";
-import { verifyPoW } from "./pow";
+import { verifyPoW, verifyBoundPoW, boundPoWDifficulty } from "./pow";
 import { handleNotesRoute } from "./notes";
 import { handleAccountSettingsRoute } from "./accountSettings";
 import { handleDiaryRoute } from "./diary";
@@ -57,6 +57,11 @@ export interface Env {
   // When unset (local dev, vitest) the lane falls back to API_KEY so no
   // extra binding is needed to exercise it.
   MAC_CLIENT_KEY?: string;
+  // Leading zero bits for the server-issued mailbox PoW (default 16, 1..32).
+  POW_DIFFICULTY?: string;
+  // "off" rejects the legacy client-chosen mailbox PoW. Anything else keeps accepting it so shipped
+  // clients keep working; flip to "off" once the pow-legacy counter has stayed at zero.
+  POW_LEGACY?: string;
   APNS_KEY_P8: string;
   APNS_KEY_ID: string;
   APNS_TEAM_ID: string;
@@ -976,22 +981,52 @@ export default {
       return await fetchAndConsumePreKeyBundle(env, mailboxId);
     }
 
+    // POST /v2/messages/:mailboxId/challenge — issue a single-use, mailbox-bound PoW challenge.
+    const powChallengeMatch = path.match(/^\/v2\/messages\/([a-z0-9]+)\/challenge$/);
+    if (powChallengeMatch && request.method === "POST") {
+      const challengeBytes = new Uint8Array(32);
+      crypto.getRandomValues(challengeBytes);
+      const challenge = arrayBufferToBase64(challengeBytes);
+      await env.V2_STORE.put(`powm:${challenge}`, powChallengeMatch[1], { expirationTtl: 300 });
+      return jsonResponse({ challenge, difficulty: boundPoWDifficulty(env.POW_DIFFICULTY), expiresInSeconds: 300 }, 201);
+    }
+
     // POST /v2/messages/:mailboxId — Deliver encrypted message to target
     const msgDeliverMatch = path.match(/^\/v2\/messages\/([a-z0-9]+)$/);
     if (msgDeliverMatch && request.method === "POST") {
       const mailboxId = msgDeliverMatch[1];
-      const body = await request.json() as {
-        ciphertext?: string;
-        pow?: { challenge: string; proof: number };
-      };
+      const body = await request.json().catch(() => null) as {
+        ciphertext?: unknown;
+        pow?: { challenge?: unknown; proof?: unknown };
+      } | null;
 
-      if (!body.ciphertext || !body.pow) {
+      if (!body || typeof body.ciphertext !== "string" || !body.ciphertext || !body.pow
+          || typeof body.pow.challenge !== "string" || typeof body.pow.proof !== "number") {
         return jsonResponse({ error: "Missing ciphertext or pow" }, 400);
       }
+      const { challenge, proof } = body.pow as { challenge: string; proof: number };
 
-      // Verify PoW
-      if (!(await verifyPoW(body.pow.challenge, body.pow.proof, 16))) {
-        return jsonResponse({ error: "Invalid proof of work" }, 403);
+      // A challenge this server issued is single-use (deleted before verifying, so a wrong proof burns it),
+      // tied to this mailbox, and the proof must cover the exact ciphertext. Anything else is the legacy
+      // client-chosen challenge, accepted only while POW_LEGACY is not "off".
+      const issuedKey = `powm:${challenge}`;
+      const issuedFor = await env.V2_STORE.get(issuedKey);
+      if (issuedFor !== null) {
+        await env.V2_STORE.delete(issuedKey);
+        if (issuedFor !== mailboxId) return jsonResponse({ error: "Invalid proof of work" }, 403);
+        if (!(await verifyBoundPoW(challenge, mailboxId, body.ciphertext, proof, boundPoWDifficulty(env.POW_DIFFICULTY)))) {
+          return jsonResponse({ error: "Invalid proof of work" }, 403);
+        }
+      } else {
+        if (env.POW_LEGACY === "off") return jsonResponse({ error: "Invalid proof of work" }, 403);
+        if (!(await verifyPoW(challenge, proof, 16))) return jsonResponse({ error: "Invalid proof of work" }, 403);
+        try {
+          const legacyKey = `pow-legacy:${new Date().toISOString().slice(0, 10)}`;
+          const seen = parseInt(await env.V2_STORE.get(legacyKey) || "0");
+          await env.V2_STORE.put(legacyKey, String(seen + 1), { expirationTtl: 30 * 86400 });
+        } catch (e) {
+          console.error("pow-legacy counter failed", String(e));
+        }
       }
 
       // Rate limit: 200 messages/day per mailbox
