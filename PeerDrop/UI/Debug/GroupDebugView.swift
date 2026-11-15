@@ -103,6 +103,7 @@ private struct GroupDebugRoom: View {
     @ObservedObject var store: GroupStore
     let groupId: String
     @State private var draft = ""
+    @State private var sending = false
     @State private var status: String?
 
     private var state: GroupState? { store.states[groupId] }
@@ -146,8 +147,13 @@ private struct GroupDebugRoom: View {
 
             Section("Send") {
                 TextField("Message", text: $draft)
-                Button("Send") { run("send") { try await store.send(groupId, text: draft); draft = "" } }
-                    .disabled(draft.isEmpty)
+                Button("Send") {
+                    let text = draft
+                    draft = ""
+                    sending = true
+                    run("send") { defer { sending = false }; try await store.send(groupId, text: text) }
+                }
+                .disabled(draft.isEmpty || sending)
             }
 
             Section("Actions") {
