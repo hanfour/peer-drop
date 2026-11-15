@@ -159,13 +159,47 @@ private struct GroupDebugRoom: View {
             }
         }
         .navigationTitle(state?.meta?.name ?? groupId.prefix(8).description)
-        .task { await store.sync(groupId); store.markRead(groupId) }
+        .task {
+            await store.sync(groupId)
+            store.markRead(groupId)
+            if let link = store.inviteLink(for: groupId) { print("GROUPHARNESS invite \(link.absoluteString)") }
+        }
+        .onChange(of: state?.messages.count ?? 0) { _ in
+            print("GROUPHARNESS messages \(state?.messages.map { "\($0.isMine ? "me" : "peer"):\($0.text)" } ?? [])")
+        }
     }
 
     private func run(_ label: String, _ work: @escaping () async throws -> Void) {
         Task {
             do { try await work(); status = "\(label): ok" }
             catch { status = "\(label) failed: \(error)" }
+        }
+    }
+}
+
+/// Scripted second member for simulator runs, driven by launch arguments:
+/// `-groupHarnessJoin <invite link> [-groupHarnessNick <name>] [-groupHarnessSend <text>]`.
+enum GroupHarnessAutorun {
+    @MainActor
+    static func runIfRequested(_ store: GroupStore) async {
+        let defaults = UserDefaults.standard
+        guard let raw = defaults.string(forKey: "groupHarnessJoin"), let link = URL(string: raw) else { return }
+        do {
+            let id = try await store.join(link: link, as: .anon, nickname: defaults.string(forKey: "groupHarnessNick"))
+            print("GROUPHARNESS joined \(id)")
+            await store.connect(id)
+            if let text = defaults.string(forKey: "groupHarnessSend") {
+                try await store.send(id, text: text)
+                print("GROUPHARNESS sent \(text)")
+            }
+            for _ in 0..<60 {
+                try await Task.sleep(nanoseconds: 3_000_000_000)
+                await store.sync(id)
+                let lines = store.states[id]?.messages.map { "\($0.isMine ? "me" : "peer"):\($0.text)" } ?? []
+                print("GROUPHARNESS messages \(lines) members \(store.states[id]?.members.count ?? 0) error \(store.lastError ?? "-")")
+            }
+        } catch {
+            print("GROUPHARNESS failed \(error)")
         }
     }
 }

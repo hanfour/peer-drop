@@ -127,6 +127,9 @@ struct PeerDropApp: App {
                 // background-fetch completion handler against it.
                 appDelegate.connectionManager = connectionManager
                 PushNotificationManager.shared.setGroupPushHandler(connectionManager.groupStore)
+                #if DEBUG
+                Task { await GroupHarnessAutorun.runIfRequested(connectionManager.groupStore) }
+                #endif
 
                 // Wire SecurityPolicyStore + CryptoHardeningMetrics into ConnectionManager.
                 // Done at .onAppear (not @StateObject lazy init) because the lazy
