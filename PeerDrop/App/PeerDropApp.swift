@@ -127,7 +127,7 @@ struct PeerDropApp: App {
                 // background-fetch completion handler against it.
                 appDelegate.connectionManager = connectionManager
                 PushNotificationManager.shared.setGroupPushHandler(connectionManager.groupStore)
-                #if DEBUG
+                #if DEBUG && os(iOS)
                 Task { await GroupHarnessAutorun.runIfRequested(connectionManager.groupStore) }
                 #endif
 
