@@ -190,15 +190,23 @@ enum GroupHarnessAutorun {
             let id = try await store.join(link: link, as: .anon, nickname: defaults.string(forKey: "groupHarnessNick"))
             print("GROUPHARNESS joined \(id)")
             await store.connect(id)
-            if let text = defaults.string(forKey: "groupHarnessSend") {
-                try await store.send(id, text: text)
-                print("GROUPHARNESS sent \(text)")
-            }
-            for _ in 0..<60 {
-                try await Task.sleep(nanoseconds: 3_000_000_000)
+            let text = defaults.string(forKey: "groupHarnessSend")
+            var sent = false
+            for round in 0..<100 {
                 await store.sync(id)
+                if !sent, let text {
+                    do {
+                        try await store.send(id, text: text)
+                        sent = true
+                        print("GROUPHARNESS sent \(text)")
+                    } catch {
+                        if round % 5 == 0 { try? await store.requestKey(id) }
+                        print("GROUPHARNESS send pending: \(error)")
+                    }
+                }
                 let lines = store.states[id]?.messages.map { "\($0.isMine ? "me" : "peer"):\($0.text)" } ?? []
                 print("GROUPHARNESS messages \(lines) members \(store.states[id]?.members.count ?? 0) error \(store.lastError ?? "-")")
+                try await Task.sleep(nanoseconds: 3_000_000_000)
             }
         } catch {
             print("GROUPHARNESS failed \(error)")
