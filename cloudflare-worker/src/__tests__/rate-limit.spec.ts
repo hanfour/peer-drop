@@ -9,8 +9,8 @@
  * (route class + keyed IP hash + minute window), so the budget is shared
  * across isolates/colos.
  *
- * Limits: RATE_LIMIT_MAX_REQUESTS = 30 / RATE_LIMIT_WINDOW_MS = 60_000ms,
- * per (IP, route class). Keyed by `CF-Connecting-IP`; the header-absent
+ * Limits: 30 requests per RATE_LIMIT_WINDOW_MS = 60_000ms by default (120 for
+ * the `groups` class, see `rateLimitMax`), per (IP, route class). Keyed by `CF-Connecting-IP`; the header-absent
  * "unknown" case is intentionally NOT limited (it only occurs off-edge / in
  * tests — Cloudflare always populates CF-Connecting-IP for real traffic, so a
  * shared "unknown" bucket would only merge unrelated callers).
@@ -21,8 +21,10 @@
 
 import { SELF, env } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
+import { rateLimitMax } from "../index";
 
 const API_KEY = "test-api-key-12345";
+// Default per-class limit; the groups cases below assert 120 explicitly.
 const RATE_LIMIT_MAX_REQUESTS = 30;
 
 async function pingRoom(ip: string): Promise<Response> {
@@ -44,6 +46,37 @@ async function pingDebugReport(ip: string): Promise<Response> {
     body: JSON.stringify({ type: "test", error: "x" }),
   });
 }
+
+async function pingV3Path(path: string, ip: string): Promise<Response> {
+  // The limiter runs before /v3 auth, so no credentials are sent on purpose.
+  return await SELF.fetch(`https://example.com${path}`, {
+    headers: { "CF-Connecting-IP": ip },
+  });
+}
+
+describe("rate-limit — route-class budgets", () => {
+  it("returns the configured limit for groups and the default for other classes", () => {
+    expect(rateLimitMax("groups")).toBe(120);
+    expect(rateLimitMax("v3")).toBe(30);
+    expect(rateLimitMax("unknown-class")).toBe(30);
+  });
+
+  it("allows 120 group requests and returns 429 on the 121st", async () => {
+    const ip = "10.0.0.220";
+    for (let i = 0; i < 120; i++) {
+      expect((await pingV3Path("/v3/groups", ip)).status).not.toBe(429);
+    }
+    expect((await pingV3Path("/v3/groups", ip)).status).toBe(429);
+  });
+
+  it("keeps the v3 diaries limit at 30 requests", async () => {
+    const ip = "10.0.0.221";
+    for (let i = 0; i < RATE_LIMIT_MAX_REQUESTS; i++) {
+      expect((await pingV3Path("/v3/diaries", ip)).status).not.toBe(429);
+    }
+    expect((await pingV3Path("/v3/diaries", ip)).status).toBe(429);
+  });
+});
 
 describe("rate-limit — per-IP counter", () => {
   it("allows 30 sequential requests from the same IP", async () => {

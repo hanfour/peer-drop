@@ -188,11 +188,11 @@ public actor AccountClient {
     /// retry after invalidating the device token, and the worker's error
     /// codes mapped to `AccountClientError`. Pass `Optional<EmptyBody>.none`
     /// for body-less requests; use `EmptyBody` as `R` for 204/empty replies.
-    public func request<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?) async throws -> R {
-        try await send(method, path, body: body, retrying: true)
+    public func request<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, headers: [String: String] = [:]) async throws -> R {
+        try await send(method, path, body: body, headers: headers, retrying: true)
     }
 
-    private func send<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, retrying: Bool) async throws -> R {
+    private func send<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, headers: [String: String], retrying: Bool) async throws -> R {
         // `lookup` feeds a user-typed handle into `path`; percent-encoding
         // it can still leave a string URL(string:) rejects, and a force
         // unwrap there would crash the app on a malformed search rather
@@ -207,6 +207,9 @@ public actor AccountClient {
             let enc = JSONEncoder()
             enc.dataEncodingStrategy = .base64
             request.httpBody = try enc.encode(body)
+        }
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
         }
         await authProvider(&request)
 
@@ -224,7 +227,7 @@ public actor AccountClient {
         case 401:
             if retrying {
                 await tokenInvalidator()
-                return try await send(method, path, body: body, retrying: false)
+                return try await send(method, path, body: body, headers: headers, retrying: false)
             }
             throw AccountClientError.unauthorized
         case 403:

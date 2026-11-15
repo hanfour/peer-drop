@@ -1,14 +1,23 @@
 import Foundation
 import PeerDropTransport
 import PeerDropPlatform
+import PeerDropGroups
 import UserNotifications
 import os.log
+
+@MainActor
+public protocol GroupPushHandling: AnyObject {
+    func handlePush(kind: String, groupId: String) async
+}
+
+extension GroupStore: GroupPushHandling {}
 
 /// Handles APNs registration and invite push payload parsing.
 @MainActor
 public final class PushNotificationManager: NSObject, ObservableObject {
     public static let shared = PushNotificationManager()
     private let logger = Logger(subsystem: "com.hanfour.peerdrop", category: "PushNotificationManager")
+    private var groupPushHandler: GroupPushHandling?
 
     /// Emits when a push-delivered invite arrives (App in background or tap on notification).
     @Published public var receivedInvite: RelayInvite?
@@ -40,7 +49,14 @@ public final class PushNotificationManager: NSObject, ObservableObject {
     /// Called by InboxService when it flushes queued invites after push-triggered reconnect.
     var onInboxFlush: ((RelayInvite) -> Void)?
 
-    private override init() { super.init() }
+    public init(groupPushHandler: GroupPushHandling? = nil) {
+        self.groupPushHandler = groupPushHandler
+        super.init()
+    }
+
+    public func setGroupPushHandler(_ handler: GroupPushHandling?) {
+        groupPushHandler = handler
+    }
 
     /// Re-read permission status from the system. Cheap; safe to call
     /// every time the app foregrounds. Catches the case where the user
@@ -134,6 +150,9 @@ public final class PushNotificationManager: NSObject, ObservableObject {
     /// Triggers InboxService reconnect to fetch the full invite from the DO queue.
     public func handleRemoteNotification(_ userInfo: [AnyHashable: Any], inboxService: InboxService) {
         switch RelayPushKind.classify(userInfo) {
+        case .group:
+            Task { await handleGroupPush(userInfo) }
+            return
         case .note(let itemId):
             logger.info("Push received for a note")
             NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": itemId ?? ""])
@@ -157,7 +176,11 @@ public final class PushNotificationManager: NSObject, ObservableObject {
             logger.info("Push received for a diary key relay")
             NotificationCenter.default.post(name: .didReceiveNotePush, object: nil, userInfo: ["inboxItemId": ""])
             return
-        case .chatInvite, .other:
+        case .other:
+            if let type = userInfo["type"] as? String,
+               type == "groupMessage" || type == "groupKeyRequest" { return }
+            break
+        case .chatInvite:
             break
         }
         guard let roomCode = userInfo["roomCode"] as? String else {
@@ -183,6 +206,12 @@ public final class PushNotificationManager: NSObject, ObservableObject {
             senderId: senderId,
             source: .apns
         )
+    }
+
+    public func handleGroupPush(_ userInfo: [AnyHashable: Any]) async {
+        guard case .group(let kind, let groupId) = RelayPushKind.classify(userInfo),
+              let groupPushHandler else { return }
+        await groupPushHandler.handlePush(kind: kind, groupId: groupId)
     }
 }
 
@@ -213,6 +242,7 @@ public enum RelayPushKind: Equatable {
     /// The silent `{type:"diaryKey"}` relay-note wake-up (spec §3.3/§4) —
     /// carries no diaryId of its own; it just means "run NotesStore.sync()".
     case diaryKey
+    case group(kind: String, groupId: String)
     case chatInvite(roomCode: String)
     case other
 
@@ -232,6 +262,13 @@ public enum RelayPushKind: Equatable {
             if type == "diaryKey" { return .diaryKey }
             if diaryKinds.contains(type) {
                 return .diary(kind: type, diaryId: userInfo["diaryId"] as? String ?? "", seq: userInfo["seq"] as? Int)
+            }
+            if type == "groupMessage" || type == "groupKeyRequest" {
+                guard let groupId = userInfo["groupId"] as? String,
+                      groupId.range(of: "^[0-9A-HJKMNP-TV-Z]{26}$", options: .regularExpression) != nil else {
+                    return .other
+                }
+                return .group(kind: type, groupId: groupId)
             }
         }
         if let room = userInfo["roomCode"] as? String { return .chatInvite(roomCode: room) }

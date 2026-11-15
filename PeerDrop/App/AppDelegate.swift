@@ -29,6 +29,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        if notification.request.content.userInfo["type"] as? String == "groupKeyRequest" {
+            completionHandler([])
+            return
+        }
         completionHandler([.banner, .sound])
     }
 
@@ -96,6 +100,19 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
                 // The push itself is the "data" — a sync timeout/failure is
                 // never reported as `.failed`, and the handler fires
                 // exactly once on every path through this method.
+                completionHandler(.newData)
+            }
+        case .group:
+            guard let connectionManager else {
+                NotificationCenter.default.post(
+                    name: .didReceiveRelayPush, object: nil, userInfo: userInfo as? [String: Any] ?? [:])
+                completionHandler(.newData)
+                return
+            }
+            Task {
+                await Self.runBounded(seconds: 25) {
+                    await connectionManager.handleGroupPush(userInfo: userInfo)
+                }
                 completionHandler(.newData)
             }
         case .note, .chatInvite, .other:

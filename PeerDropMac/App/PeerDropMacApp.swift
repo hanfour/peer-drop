@@ -69,6 +69,7 @@ struct PeerDropMacApp: App {
                 .onAppear {
                     // Wire AppDelegate's weak refs so lifecycle hooks (terminate flush) can reach ConnectionManager.
                     appDelegate.connectionManager = connectionManager
+                    PushNotificationManager.shared.setGroupPushHandler(connectionManager.groupStore)
 
                     // Round 11 audit fix: wire ConnectionContext to the
                     // live data sources NearbyTab + GuidanceCard read.

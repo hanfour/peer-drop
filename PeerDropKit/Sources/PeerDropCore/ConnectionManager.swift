@@ -6,6 +6,7 @@ import PeerDropPlatform
 import PeerDropAccount
 import PeerDropNotes
 import PeerDropDiary
+import PeerDropGroups
 import Network
 import Combine
 import CryptoKit
@@ -432,8 +433,8 @@ public final class ConnectionManager: ObservableObject {
     public private(set) var voiceCallManager: VoiceCallManager?
     public let deviceStore = DeviceRecordStore()
     public let chatManager = ChatManager()
-    public let groupStore = DeviceGroupStore()
-    /// Friend categories (Project F1). Built from the legacy `groupStore.groups`
+    public let deviceGroupStore = DeviceGroupStore()
+    /// Friend categories (Project F1). Built from the legacy `deviceGroupStore.groups`
     /// so old DeviceGroups migrate once into categories.
     public let categoryStore: FriendCategoryStore
     /// Project F2: the instant and calendar presence is judged at (seams for
@@ -621,6 +622,44 @@ public final class ConnectionManager: ObservableObject {
         return store
     }()
 
+    public private(set) lazy var groupStore: GroupStore = {
+        if ScreenshotModeProvider.shared.isActive {
+            return GroupStore(mock: [], states: [:])
+        }
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(PeerDropPersistence.scopedKey("groups"), isDirectory: true)
+        let account = AccountClient()
+        let identityManager = IdentityKeyManager.shared
+        return GroupStore(
+            client: GroupClient(account: account),
+            directory: LiveGroupDirectory(account: account),
+            secrets: GroupSecretsStore(directory: dir, encryptor: ChatDataEncryptor.shared),
+            rootDirectory: dir,
+            localAccount: { [weak self] in
+                guard let localAccount = self?.accountManager.account else { return nil }
+                return GroupStore.LocalAccount(
+                    accountId: localAccount.accountId.raw,
+                    signingPublicKey: identityManager.signingPublicKey.rawRepresentation,
+                    sign: { try identityManager.sign($0) })
+            },
+            newId: { Self.generateGroupULID() })
+    }()
+
+    private static func generateGroupULID() -> String {
+        let alphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+        var timestamp = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
+        var timeCharacters = [Character](repeating: "0", count: 10)
+        for index in stride(from: 9, through: 0, by: -1) {
+            timeCharacters[index] = alphabet[Int(timestamp % 32)]
+            timestamp /= 32
+        }
+        var random = SystemRandomNumberGenerator()
+        let randomCharacters = (0..<16).map { _ in
+            alphabet[Int(UInt8.random(in: 0...255, using: &random)) % 32]
+        }
+        return String(timeCharacters + randomCharacters)
+    }
+
     /// The ONLY way anything outside the Notes UI should drive an inbox
     /// sync (review round 4, I2).
     ///
@@ -664,9 +703,15 @@ public final class ConnectionManager: ObservableObject {
             await diaryStore.handlePush(kind: kind, diaryId: diaryId, accountId: accountId)
         case .diaryKey:
             await syncNotes()
-        case .note, .chatInvite, .other:
+        case .group, .note, .chatInvite, .other:
             break
         }
+    }
+
+    @MainActor
+    public func handleGroupPush(userInfo: [AnyHashable: Any]) async {
+        guard case .group(let kind, let groupId) = RelayPushKind.classify(userInfo) else { return }
+        await groupStore.handlePush(kind: kind, groupId: groupId)
     }
 
     // MARK: - Security Policy (Task 1.10 / PR3 / PR5 / PR6)
@@ -835,7 +880,7 @@ public final class ConnectionManager: ObservableObject {
     ) {
         self.categoryStore = categoryStore ?? FriendCategoryStore(
             storageKey: PeerDropPersistence.scopedKey("categories"),
-            legacyGroups: groupStore.groups)
+            legacyGroups: deviceGroupStore.groups)
         // One-time migration off the pre-6.1 MailboxClient-only UserDefaults
         // key onto the canonical `WorkerURL.defaultsKey`, before anything
         // below reads the worker base URL.
@@ -3848,7 +3893,7 @@ public final class ConnectionManager: ObservableObject {
                 // must be a member of a local group with that id (Task 5 m-4);
                 // local peers keep the old behaviour.
                 if peerConnection.isRendezvous {
-                    guard groupStore.groups.contains(where: {
+                    guard deviceGroupStore.groups.contains(where: {
                         $0.id == groupID && ($0.deviceIDs.contains(boundSenderID) || $0.deviceIDs.contains(peerID))
                     }) else { return }
                 }
@@ -4877,7 +4922,7 @@ public final class ConnectionManager: ObservableObject {
 
     /// Broadcast a text message to all connected members of a group.
     public func broadcastTextMessage(_ text: String, toGroup groupID: String) {
-        guard let group = groupStore.groups.first(where: { $0.id == groupID }) else { return }
+        guard let group = deviceGroupStore.groups.first(where: { $0.id == groupID }) else { return }
 
         // Save the outgoing group message
         let saved = chatManager.saveGroupOutgoing(

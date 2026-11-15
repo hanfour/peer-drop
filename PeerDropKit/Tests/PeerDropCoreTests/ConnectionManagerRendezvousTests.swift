@@ -1363,10 +1363,10 @@ extension ConnectionManagerRendezvousTests {
         _ = await poll { (self.cm.chatManager.unreadCounts[id] ?? 0) >= 1 }
         XCTAssertFalse(cm.chatManager.groupMessages.contains { $0.groupID == unknownGroup })
 
-        cm.groupStore.add(name: "Ours \(UUID().uuidString.prefix(4))")
-        let group = try XCTUnwrap(cm.groupStore.groups.last)
-        defer { cm.groupStore.remove(id: group.id) }
-        cm.groupStore.addDevice(id, toGroup: group.id)
+        cm.deviceGroupStore.add(name: "Ours \(UUID().uuidString.prefix(4))")
+        let group = try XCTUnwrap(cm.deviceGroupStore.groups.last)
+        defer { cm.deviceGroupStore.remove(id: group.id) }
+        cm.deviceGroupStore.addDevice(id, toGroup: group.id)
         try await peer.send(try PeerMessage.textMessage(
             TextMessagePayload(text: "member says hi", groupID: group.id, senderName: "Mika", messageID: UUID().uuidString),
             senderID: id))
@@ -1390,11 +1390,11 @@ extension ConnectionManagerRendezvousTests {
                                     localIdentity: cm.localIdentity, state: .connected)
         cm._setConnectionForTesting(peerID: directID, direct)
 
-        cm.groupStore.add(name: "Mixed \(UUID().uuidString.prefix(4))")
-        let created = try XCTUnwrap(cm.groupStore.groups.last)
-        defer { cm.groupStore.remove(id: created.id) }
-        for d in [rvID, directID, "offline-\(UUID().uuidString)"] { cm.groupStore.addDevice(d, toGroup: created.id) }
-        let group = try XCTUnwrap(cm.groupStore.groups.first { $0.id == created.id })
+        cm.deviceGroupStore.add(name: "Mixed \(UUID().uuidString.prefix(4))")
+        let created = try XCTUnwrap(cm.deviceGroupStore.groups.last)
+        defer { cm.deviceGroupStore.remove(id: created.id) }
+        for d in [rvID, directID, "offline-\(UUID().uuidString)"] { cm.deviceGroupStore.addDevice(d, toGroup: created.id) }
+        let group = try XCTUnwrap(cm.deviceGroupStore.groups.first { $0.id == created.id })
 
         XCTAssertEqual(cm.groupConnectionStatus(group).connected, 1, "only the direct member counts")
         cm.broadcastTextMessage("hi all", toGroup: group.id)

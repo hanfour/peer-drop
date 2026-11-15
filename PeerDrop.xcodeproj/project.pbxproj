@@ -236,6 +236,7 @@
 		9A235E33827AC9E33BECB54C /* ConnectionE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52261C190C8AD9BEA9B35F /* ConnectionE2ETests.swift */; };
 		9AB9031195827D7DA62154B2 /* DiaryCommentsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5152E4CBF0AB120099E9A0C6 /* DiaryCommentsSheet.swift */; };
 		9AE17D46F8D4E3E40C3CF348 /* PeerDropDiary in Frameworks */ = {isa = PBXBuildFile; productRef = AD6351A12E79AF62F1E109F1 /* PeerDropDiary */; };
+		9C01F615560FAEF7E9FA55F7 /* PeerDropGroups in Frameworks */ = {isa = PBXBuildFile; productRef = 8127D89FEADC765E57DB07D4 /* PeerDropGroups */; };
 		9C46933AE9ED40CF1729A0D9 /* LoopbackIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C0C643F928C7A196A12C3C /* LoopbackIntegrationTests.swift */; };
 		9D130FED28374CD0B195708C /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F4A49D91838BC9DB3C3054 /* UserProfileView.swift */; };
 		9DBC64FFC93E27D66F127FA2 /* NotePreferencesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B786E98B385619902A96AFA1 /* NotePreferencesSection.swift */; };
@@ -253,6 +254,7 @@
 		A26D03AAD1A5F03215DC0DF0 /* PushStatusRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C289C69763702A9A2CBCB12 /* PushStatusRow.swift */; };
 		A2BCE995A9704C75366CCF15 /* WorkerSignalingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137D4C965D7DFC2C55F1346F /* WorkerSignalingTests.swift */; };
 		A31C96C072B1CDD392201E15 /* HapticManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */; };
+		A3C2B91FE693FF1137BDD3CF /* GroupWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AA50D8BA0310FDC88E31F9B /* GroupWiringTests.swift */; };
 		A4204A84826DA88AC65EA05E /* CategoryStatusSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399C2D71E6B4F22C1EACDF3C /* CategoryStatusSection.swift */; };
 		A47E2ACA684896D18753EC52 /* CategoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD9E627FA0A3916C7AF1B0D9 /* CategoryRow.swift */; };
 		A4E7342F564232714C806AD3 /* PINVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8028C21C80DCFB5B48F3A7EB /* PINVerificationView.swift */; };
@@ -318,6 +320,7 @@
 		C8B2A8F25C866B521585A1B8 /* PeerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09411CC81953144963CB18 /* PeerRowView.swift */; };
 		C90779775E285D4D1D4D26EB /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F97E28AE05420CF10F681A8 /* ToastView.swift */; };
 		C9430870CEECA6E54B1F6086 /* ConsentFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5109FA0E4C4ED974F8FDDFE5 /* ConsentFlowUITests.swift */; };
+		C955C53CD44BA2E0516FD264 /* PeerDropGroups in Frameworks */ = {isa = PBXBuildFile; productRef = 3C7D27D5790894A541D93743 /* PeerDropGroups */; };
 		C9B70AA2CD7DC0FEBB1D3ECE /* MessageReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10480B57B5AB5F6CD342177 /* MessageReplyTests.swift */; };
 		CB35303F8B4A0268C0C90829 /* TailnetPeersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A7A24E192618BE5D8716A7 /* TailnetPeersView.swift */; };
 		CC842905F9E584D928A4F003 /* CircuitBreakerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E8D448DEC6736EA30703D2 /* CircuitBreakerTests.swift */; };
@@ -438,6 +441,7 @@
 		09172CEE390C95A62A857CDD /* TypingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorView.swift; sourceTree = "<group>"; };
 		09B6B8665870A10303CFA05D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0A0AEE09EE2CA9EE8D29644B /* InviteBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteBanner.swift; sourceTree = "<group>"; };
+		0AA50D8BA0310FDC88E31F9B /* GroupWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupWiringTests.swift; sourceTree = "<group>"; };
 		0D07F428C53DEAA477E05F88 /* MacAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAudioSession.swift; sourceTree = "<group>"; };
 		0D4DE23F4DC70DE5619071BA /* TrustBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustBadgeView.swift; sourceTree = "<group>"; };
 		0D66F32C1146402F70397940 /* RetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryPolicyTests.swift; sourceTree = "<group>"; };
@@ -468,6 +472,7 @@
 		28CD7A07E4B0EE99182B2EA3 /* GuidanceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceCard.swift; sourceTree = "<group>"; };
 		292B61B8F513A9E2BF8E7417 /* RelayConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayConnectView.swift; sourceTree = "<group>"; };
 		29FC4B36F260E62D2C0C49CC /* ConnectionErrorPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionErrorPolicyTests.swift; sourceTree = "<group>"; };
+		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		2A5381B0E1109D3B362E48DD /* OutboundRetryQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundRetryQueueTests.swift; sourceTree = "<group>"; };
 		2C60B2E85560183DBA4CFDB3 /* FileNameSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNameSanitizerTests.swift; sourceTree = "<group>"; };
 		2E188F98137CC86BA3F87F9E /* ConnectionTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionTimeoutTests.swift; sourceTree = "<group>"; };
@@ -493,7 +498,6 @@
 		416DB98405C8FC675675BA72 /* FirstContactVerificationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstContactVerificationSheet.swift; sourceTree = "<group>"; };
 		41DCF1ACEEF25E8262FC1291 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		427D0E241EFDF4C6FDFD4070 /* NoteRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRowView.swift; sourceTree = "<group>"; };
-		71060D2244B026D50B454D62 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		464E327397A28A5447B9E7D2 /* ClipboardShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardShareView.swift; sourceTree = "<group>"; };
 		46652C6101A4F1D53ACAAAF2 /* PeerMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerMessageTests.swift; sourceTree = "<group>"; };
 		46984ED073D1B5356FEAEF0A /* PerformanceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceE2ETests.swift; sourceTree = "<group>"; };
@@ -739,6 +743,7 @@
 				8B8DA92E60D440AA8C8A3CD3 /* PeerDropAccount in Frameworks */,
 				4F2B1D72E1F3244E4B80B685 /* PeerDropNotes in Frameworks */,
 				9AE17D46F8D4E3E40C3CF348 /* PeerDropDiary in Frameworks */,
+				9C01F615560FAEF7E9FA55F7 /* PeerDropGroups in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -754,6 +759,7 @@
 				7C0EAEB1398C988C8C8A0A06 /* PeerDropAccount in Frameworks */,
 				4A783BCB5D6FAD751BF1AEBE /* PeerDropNotes in Frameworks */,
 				17A167C74A3D58625130FE30 /* PeerDropDiary in Frameworks */,
+				C955C53CD44BA2E0516FD264 /* PeerDropGroups in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -905,6 +911,7 @@
 				D2960B43A95AAF464A94524C /* FileTransferIntegrationTests.swift */,
 				90A9DA5F16B00839A9012834 /* FileTransferTests.swift */,
 				86A44B4BE21C89356292B4D0 /* FirstContactVerificationTests.swift */,
+				0AA50D8BA0310FDC88E31F9B /* GroupWiringTests.swift */,
 				E311324A946309CD33925432 /* GuidanceCardSnapshotTests.swift */,
 				712B1A451CA2B1DD0FF90462 /* HapticManagerTests.swift */,
 				A57B9658D84C80BE6C2DD854 /* HashVerifierTests.swift */,
@@ -1292,15 +1299,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
-			isa = PBXGroup;
-			children = (
-				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
-			);
-			name = "peer-drop";
-			path = .;
-			sourceTree = "<group>";
-		};
 		CE49B580FF5FD25E8461F508 /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
@@ -1341,6 +1339,15 @@
 				38C2478F20C10D5FB383E756 /* TransferProgressView.swift */,
 			);
 			path = Transfer;
+			sourceTree = "<group>";
+		};
+		9EC0E908E1A38EE0458CEC1B /* peer-drop */ = {
+			isa = PBXGroup;
+			children = (
+				71060D2244B026D50B454D62 /* Secrets.xcconfig */,
+			);
+			name = "peer-drop";
+			path = .;
 			sourceTree = "<group>";
 		};
 		EDA45E9AABDD6FF9EF7F0511 /* Core */ = {
@@ -1387,6 +1394,7 @@
 				73AA3E4C71F38EF3887765C3 /* PeerDropAccount */,
 				972557EDF2B2F29E1045EC3A /* PeerDropNotes */,
 				AD6351A12E79AF62F1E109F1 /* PeerDropDiary */,
+				8127D89FEADC765E57DB07D4 /* PeerDropGroups */,
 			);
 			productName = PeerDrop;
 			productReference = F0CD101AC57C1B89B5BCEF8B /* PeerDrop.app */;
@@ -1414,6 +1422,7 @@
 				CC9AC9FD6F090EF984B0838D /* PeerDropAccount */,
 				BC8F951930D9BD4D14087057 /* PeerDropNotes */,
 				D107E545B50632A0EC5E0C2D /* PeerDropDiary */,
+				3C7D27D5790894A541D93743 /* PeerDropGroups */,
 			);
 			productName = PeerDropMac;
 			productReference = 5F4FC5F3178F8C9D62BF46CC /* PeerDropMac.app */;
@@ -1646,6 +1655,7 @@
 				4AFFE47EBC8AB46AC62B9364 /* FileTransferIntegrationTests.swift in Sources */,
 				F04BBD59F93EF3F40E93A713 /* FileTransferTests.swift in Sources */,
 				108EADB923B64158D93DEC6A /* FirstContactVerificationTests.swift in Sources */,
+				A3C2B91FE693FF1137BDD3CF /* GroupWiringTests.swift in Sources */,
 				B8F9E453A9F2F1CB96266282 /* GuidanceCardSnapshotTests.swift in Sources */,
 				A31C96C072B1CDD392201E15 /* HapticManagerTests.swift in Sources */,
 				D5E5261C0767F72FDBAAE03F /* HashVerifierTests.swift in Sources */,
@@ -2393,6 +2403,10 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = PeerDropPlatform;
 		};
+		3C7D27D5790894A541D93743 /* PeerDropGroups */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropGroups;
+		};
 		4D87F8E58A8731C9059C3ABD /* PeerDropProtocol */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PeerDropProtocol;
@@ -2412,6 +2426,10 @@
 		7D956D3F0B546F8A036FC44C /* PeerDropCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PeerDropCore;
+		};
+		8127D89FEADC765E57DB07D4 /* PeerDropGroups */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeerDropGroups;
 		};
 		8EB4547F381A228E30EC05C3 /* PeerDropSecurity */ = {
 			isa = XCSwiftPackageProductDependency;
