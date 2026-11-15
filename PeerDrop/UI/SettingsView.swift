@@ -85,6 +85,9 @@ struct SettingsView: View {
                     Button { showDocumentPicker = true } label: { Label("Import Archive", systemImage: "square.and.arrow.down") }
                         .accessibilityHint("Imports data from a previously exported archive")
                 } header: { Text("Archive") } footer: { Text("Export or import your device records, transfer history, and chat data.") }
+                #if DEBUG && os(iOS)
+                Section("Debug") { NavigationLink("Group chat harness") { GroupDebugView() } }
+                #endif
                 Section { LabeledContent("Version", value: appVersion) } header: { Text("About") }
             }
             .navigationTitle("Settings")
