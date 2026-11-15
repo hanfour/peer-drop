@@ -121,7 +121,14 @@ private struct GroupDebugRoom: View {
             if let state {
                 Section("Members (\(state.members.count)) · epoch \(state.epoch)") {
                     ForEach(state.members, id: \.memberId) { member in
-                        Text("\(member.nickname ?? member.memberId.prefix(8).description)\(member.isOwner ? " 👑" : "")\(member.hasKey ? "" : " (no key)")")
+                        HStack {
+                            Text("\(member.nickname ?? member.memberId.prefix(8).description)\(member.isOwner ? " 👑" : "")\(member.hasKey ? "" : " (no key)")")
+                            Spacer()
+                            if state.isOwner && member.memberId != state.myMemberId {
+                                Button("Kick", role: .destructive) { run("kick") { try await store.kick(groupId, memberId: member.memberId) } }
+                                    .buttonStyle(.borderless)
+                            }
+                        }
                     }
                 }
                 Section("Messages (\(state.messages.count))") {
@@ -166,6 +173,9 @@ private struct GroupDebugRoom: View {
             store.markRead(groupId)
             if let link = store.inviteLink(for: groupId) { print("GROUPHARNESS invite \(link.absoluteString)") }
         }
+        .onChange(of: state?.epoch ?? 0) { _ in
+            print("GROUPHARNESS epoch \(state?.epoch ?? 0) members \(state?.members.count ?? 0) state \(state?.state.rawValue ?? "-")")
+        }
         .onChange(of: state?.messages.count ?? 0) { _ in
             print("GROUPHARNESS messages \(state?.messages.map { "\($0.isMine ? "me" : "peer"):\($0.text)" } ?? [])")
         }
@@ -197,7 +207,8 @@ enum GroupHarnessAutorun {
             await store.connect(id)
             let text = defaults.string(forKey: "groupHarnessSend")
             var sent = false
-            for round in 0..<100 {
+            let every = max(0, defaults.integer(forKey: "groupHarnessSendEvery"))
+            for round in 1..<200 {
                 await store.sync(id)
                 if !sent, let text {
                     do {
@@ -209,8 +220,13 @@ enum GroupHarnessAutorun {
                         print("GROUPHARNESS send pending: \(error)")
                     }
                 }
+                if sent, every > 0, round % every == 0 {
+                    let tick = "tick \(round)"
+                    do { try await store.send(id, text: tick); print("GROUPHARNESS sent \(tick)") }
+                    catch { print("GROUPHARNESS tick failed: \(error)") }
+                }
                 let lines = store.states[id]?.messages.map { "\($0.isMine ? "me" : "peer"):\($0.text)" } ?? []
-                print("GROUPHARNESS messages \(lines) members \(store.states[id]?.members.count ?? 0) error \(store.lastError ?? "-")")
+                print("GROUPHARNESS messages \(lines.count) last \(lines.last ?? "-") members \(store.states[id]?.members.count ?? 0) epoch \(store.states[id]?.epoch ?? 0) state \(store.states[id]?.state.rawValue ?? "-") error \(store.lastError ?? "-")")
                 try await Task.sleep(nanoseconds: 3_000_000_000)
             }
         } catch {
