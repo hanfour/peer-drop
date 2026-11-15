@@ -187,7 +187,12 @@ enum GroupHarnessAutorun {
         let defaults = UserDefaults.standard
         guard let raw = defaults.string(forKey: "groupHarnessJoin"), let link = URL(string: raw) else { return }
         do {
-            let id = try await store.join(link: link, as: .anon, nickname: defaults.string(forKey: "groupHarnessNick"))
+            let id: String
+            if let invite = GroupInviteLink.parse(link), store.groups.contains(where: { $0.groupId == invite.groupId }) {
+                id = invite.groupId
+            } else {
+                id = try await store.join(link: link, as: .anon, nickname: defaults.string(forKey: "groupHarnessNick"))
+            }
             print("GROUPHARNESS joined \(id)")
             await store.connect(id)
             let text = defaults.string(forKey: "groupHarnessSend")
