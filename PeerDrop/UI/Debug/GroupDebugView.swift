@@ -16,6 +16,7 @@ struct GroupDebugView: View {
 private struct GroupDebugRoot: View {
     @ObservedObject var store: GroupStore
     @State private var newName = ""
+    @State private var allowAnonymous = true
     @State private var joinInput = ""
     @State private var nickname = ""
     @State private var busy = false
@@ -25,8 +26,9 @@ private struct GroupDebugRoot: View {
         List {
             Section("Create") {
                 TextField("Group name", text: $newName)
+                Toggle("Allow anonymous members", isOn: $allowAnonymous)
                 Button("Create group") { run("create") {
-                    let id = try await store.create(name: newName, description: nil, category: nil, joinPolicy: "invite")
+                    let id = try await store.create(name: newName, description: nil, category: nil, joinPolicy: (allowAnonymous ? JoinPolicy.anonymousAllowed : .accountOnly).rawValue)
                     newName = ""
                     return "created \(id.prefix(8))"
                 } }
