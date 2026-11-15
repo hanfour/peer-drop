@@ -172,13 +172,18 @@ private struct GroupDebugRoom: View {
             await store.sync(groupId)
             store.markRead(groupId)
             if let link = store.inviteLink(for: groupId) { print("GROUPHARNESS invite \(link.absoluteString)") }
+            print("GROUPHARNESS events \(describe(state?.messages ?? []))")
         }
         .onChange(of: state?.epoch ?? 0) { _ in
             print("GROUPHARNESS epoch \(state?.epoch ?? 0) members \(state?.members.count ?? 0) state \(state?.state.rawValue ?? "-")")
         }
         .onChange(of: state?.messages.count ?? 0) { _ in
-            print("GROUPHARNESS messages \(state?.messages.map { "\($0.isMine ? "me" : "peer"):\($0.text)" } ?? [])")
+            print("GROUPHARNESS events \(describe(state?.messages ?? []))")
         }
+    }
+
+    private func describe(_ messages: [GroupMessage]) -> String {
+        messages.map { "#\($0.seq) \($0.eventId.prefix(8)) \($0.isMine ? "me" : "peer"):\($0.text)" }.joined(separator: " | ")
     }
 
     private func run(_ label: String, _ work: @escaping () async throws -> Void) {
