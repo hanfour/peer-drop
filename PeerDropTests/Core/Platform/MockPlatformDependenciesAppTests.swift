@@ -56,25 +56,39 @@ final class DeviceNameInjectionTests: XCTestCase {
 
 @MainActor
 final class ClipboardSyncManagerInjectionTests: XCTestCase {
-    func test_buildPayload_readsFromInjectedPasteboard() {
+    private let enabledKey = "peerDropClipboardSyncEnabled"
+    private var savedEnabled: Any?
+
+    override func setUp() {
+        super.setUp()
+        savedEnabled = UserDefaults.standard.object(forKey: enabledKey)
+        UserDefaults.standard.set(true, forKey: enabledKey)
+    }
+
+    override func tearDown() {
+        if let savedEnabled {
+            UserDefaults.standard.set(savedEnabled, forKey: enabledKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: enabledKey)
+        }
+        super.tearDown()
+    }
+
+    /// iOS asks "Allow paste?" whenever an app reads content another app copied, so even with clipboard
+    /// sync switched on, monitoring must never read the injected pasteboard on a change.
+    func test_iOS_neverAutoReadsInjectedPasteboard_evenWhenSyncIsEnabled() {
         let mock = MockPasteboard()
         mock.stringContent = "https://example.com/test"
         let manager = ClipboardSyncManager(pasteboard: mock)
 
-        let exp = expectation(description: "payload arrives")
-        var received: ClipboardSyncPayload?
-        manager.onClipboardChanged = {
-            received = $0
-            exp.fulfill()
-        }
+        let exp = expectation(description: "no payload on iOS")
+        exp.isInverted = true
+        manager.onClipboardChanged = { _ in exp.fulfill() }
         manager.startMonitoring()
         defer { manager.stopMonitoring() }
 
         mock.simulateChange(string: "https://example.com/test")
 
-        wait(for: [exp], timeout: 2.0)
-
-        XCTAssertEqual(received?.contentType, .url)
-        XCTAssertEqual(received?.textContent, "https://example.com/test")
+        wait(for: [exp], timeout: 0.5)
     }
 }
