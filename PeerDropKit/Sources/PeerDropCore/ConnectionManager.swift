@@ -855,15 +855,7 @@ public final class ConnectionManager: ObservableObject {
             ratchetMessage: encrypted
         )
         let envelopeData = try JSONEncoder().encode(envelope)
-        let challenge = UUID().uuidString
-        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
-            throw MailboxError.invalidResponse
-        }
-        try await MailboxClient().sendMessage(
-            to: entry.recipientMailboxId,
-            ciphertext: envelopeData,
-            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
-        )
+        try await MailboxClient().sendMessage(to: entry.recipientMailboxId, ciphertext: envelopeData)
     }
 
     // MARK: - Typing Indicator State
@@ -2043,16 +2035,7 @@ public final class ConnectionManager: ObservableObject {
         )
 
         let envelopeData = try JSONEncoder().encode(envelope)
-        let challenge = UUID().uuidString
-        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
-            throw MailboxError.invalidResponse
-        }
-
-        try await MailboxClient().sendMessage(
-            to: peerMailboxId,
-            ciphertext: envelopeData,
-            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
-        )
+        try await MailboxClient().sendMessage(to: peerMailboxId, ciphertext: envelopeData)
 
         // Save as outgoing message in chat history
         chatManager.saveOutgoing(
@@ -2138,16 +2121,7 @@ public final class ConnectionManager: ObservableObject {
         )
 
         let envelopeData = try JSONEncoder().encode(envelope)
-        let challenge = UUID().uuidString
-        guard let pow = await ProofOfWork.generate(challenge: challenge) else {
-            throw MailboxError.invalidResponse
-        }
-
-        try await MailboxClient().sendMessage(
-            to: invite.mailboxId,
-            ciphertext: envelopeData,
-            pow: ProofOfWorkToken(challenge: challenge, proof: pow)
-        )
+        try await MailboxClient().sendMessage(to: invite.mailboxId, ciphertext: envelopeData)
     }
 
     enum RemoteInviteError: LocalizedError {

@@ -11,11 +11,15 @@ public actor MailboxClient {
     private let baseURL: URL
     private let session: URLSession
 
-    public init(baseURL: URL? = nil) {
+    public init(baseURL: URL? = nil, session: URLSession? = nil) {
         self.baseURL = baseURL ?? WorkerURL.current()
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        self.session = URLSession(configuration: config)
+        if let session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 30
+            self.session = URLSession(configuration: config)
+        }
     }
 
     // MARK: - Pre-Key Management
@@ -48,18 +52,42 @@ public actor MailboxClient {
 
     // MARK: - Message Delivery
 
-    public func sendMessage(to mailboxId: String, ciphertext: Data, pow: ProofOfWorkToken) async throws {
-        let url = baseURL.appendingPathComponent("v2/messages/\(mailboxId)")
-        var request = URLRequest(url: url)
+    /// Delivers `ciphertext` with a proof of work. A worker that issues challenges (`POST .../challenge`) gets a
+    /// single-use, content-bound proof; a worker that predates that endpoint answers 404 and gets the legacy
+    /// client-chosen challenge, which that worker still accepts.
+    public func sendMessage(to mailboxId: String, ciphertext: Data) async throws {
+        let encoded = ciphertext.base64EncodedString()
+        if let issued = try await requestChallenge(for: mailboxId) {
+            let difficulty = min(max(issued.difficulty, 1), Self.maxServerDifficulty)
+            guard let proof = await MailboxProofOfWork.generate(
+                challenge: issued.challenge, mailboxId: mailboxId, ciphertext: encoded, difficulty: difficulty
+            ) else { throw MailboxError.invalidResponse }
+            try await deliver(to: mailboxId, ciphertext: encoded, pow: ProofOfWorkToken(challenge: issued.challenge, proof: proof))
+            return
+        }
+        let challenge = UUID().uuidString
+        guard let proof = await ProofOfWork.generate(challenge: challenge) else { throw MailboxError.invalidResponse }
+        try await deliver(to: mailboxId, ciphertext: encoded, pow: ProofOfWorkToken(challenge: challenge, proof: proof))
+    }
+
+    /// A worker cannot make the client grind longer than this many leading zero bits.
+    private static let maxServerDifficulty = 24
+
+    private func requestChallenge(for mailboxId: String) async throws -> IssuedChallenge? {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v2/messages/\(mailboxId)/challenge"))
+        request.httpMethod = "POST"
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw MailboxError.invalidResponse }
+        if http.statusCode == 404 { return nil }
+        guard (200...299).contains(http.statusCode) else { throw MailboxError.httpError(http.statusCode) }
+        return try JSONDecoder().decode(IssuedChallenge.self, from: data)
+    }
+
+    private func deliver(to mailboxId: String, ciphertext: String, pow: ProofOfWorkToken) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v2/messages/\(mailboxId)"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = SendMessageRequest(
-            ciphertext: ciphertext.base64EncodedString(),
-            pow: pow
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
+        request.httpBody = try JSONEncoder().encode(SendMessageRequest(ciphertext: ciphertext, pow: pow))
         let (_, response) = try await session.data(for: request)
         try validateResponse(response)
     }
@@ -135,6 +163,11 @@ public struct FetchedPreKeyBundle: Codable, Equatable, Sendable {
         self.oneTimePreKey = oneTimePreKey
         self.signedPreKeyTimestamp = signedPreKeyTimestamp; self.signedPreKeyTimestampSignature = signedPreKeyTimestampSignature
     }
+}
+
+private struct IssuedChallenge: Decodable {
+    let challenge: String
+    let difficulty: Int
 }
 
 public struct SendMessageRequest: Codable {
