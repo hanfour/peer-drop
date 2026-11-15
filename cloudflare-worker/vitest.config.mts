@@ -24,6 +24,8 @@ export default defineConfig({
           // isKeyLane).
           MAC_CLIENT_KEY: "test-mac-client-key-67890",
           ANALYTICS_KEY: "test-analytics-key-67890",
+          // Keep the server-issued mailbox PoW cheap to mine in tests (production default is 16).
+          POW_DIFFICULTY: "8",
           TURN_KEY_ID: "",
           TURN_API_TOKEN: "",
           APNS_KEY_P8: "",
